@@ -3,6 +3,7 @@ package pasta;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -98,8 +99,10 @@ public class WebSocketServer {
 					padded[9] = (byte)(strData.length & 0xFF);
 				}
 				System.arraycopy(strData, 0, padded, 1 + lenPart, strData.length);
-				System.out.println("Chunk " + chunk +", msglen " + strData.length + " , lenPart " + lenPart);
-				System.out.println("Writing " + Arrays.toString(Arrays.copyOfRange(padded, 0, Math.min(padded.length, 16))) +"..");
+				
+//				System.out.println("Chunk " + chunk +", msglen " + strData.length + " , lenPart " + lenPart);
+//				System.out.println("Writing " + Arrays.toString(Arrays.copyOfRange(padded, 0, Math.min(padded.length, 16))) +"..");
+				
 				dst.write(padded);
 				dst.flush();
 //				try {
@@ -146,8 +149,8 @@ public class WebSocketServer {
 				padded[9] = (byte)(strData.length & 0xFF);
 			}
 			System.arraycopy(strData, 0, padded, 1 + lenPart, strData.length);
-			System.out.println("msglen " + strData.length + " , lenPart " + lenPart);
-			System.out.println("Writing " + Arrays.toString(Arrays.copyOfRange(padded, 0, Math.min(padded.length, 16))) +"..");
+//			System.out.println("msglen " + strData.length + " , lenPart " + lenPart);
+//			System.out.println("Writing " + Arrays.toString(Arrays.copyOfRange(padded, 0, Math.min(padded.length, 16))) +"..");
 			dst.write(padded);
 			dst.flush();
 		}
@@ -269,7 +272,7 @@ public class WebSocketServer {
 
 	static void start(List<Runnable> onJarChangeListeners, Function<JSONObject, String> onQuery) {
 		final int port = 8080;
-		try (ServerSocket server = new ServerSocket(port)) {
+		try (ServerSocket server = new ServerSocket(port, 0, InetAddress.getByName(null))) {
 			System.out.println("Started WebSocket server on port " + port);
 			while (true) {
 				Socket s = server.accept();

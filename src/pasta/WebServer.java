@@ -5,6 +5,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.NoSuchAlgorithmException;
@@ -39,6 +40,8 @@ public class WebServer {
 
 	private static void handleRequest(Socket socket)
 			throws IOException, NoSuchAlgorithmException {
+		System.out.println("Incoming HTTP request from: " + socket.getRemoteSocketAddress());
+//		socket.getRemoteSocketAddress()
 		InputStream in = socket.getInputStream();
 		OutputStream out = socket.getOutputStream();
 		@SuppressWarnings("resource")
@@ -100,7 +103,7 @@ public class WebServer {
 
 	static void start() {
 		final int port = 8000;
-		try (ServerSocket server = new ServerSocket(port)) {
+		try (ServerSocket server = new ServerSocket(port, 0, InetAddress.getByName(null))) {
 			System.out.println("Started web server on port " + port + ", visit http://localhost:8000/ in your browser");
 			while (true) {
 				Socket s = server.accept();

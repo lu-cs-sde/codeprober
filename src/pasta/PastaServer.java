@@ -13,6 +13,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -64,7 +67,7 @@ public class PastaServer {
 				obj.put("start", nodePos.start);
 				obj.put("end", nodePos.end);
 				obj.put("type", astNode.getClass().getSimpleName());
-				obj.put("pretty", Reflect.invoke0(astNode, "prettyPrint"));
+//				obj.put("pretty", Reflect.invoke0(astNode, "prettyPrint"));
 				out.add(obj);
 			}
 		}
@@ -76,7 +79,15 @@ public class PastaServer {
 	private static JSONObject buildLocator(Object astNode, PositionRecoveryStrategy recoveryStrategy)
 			throws NoSuchMethodException, InvocationTargetException {
 		// TODO add position recovery things here(?)
-		final RobustNodeId id = RobustNodeId.extract(astNode, recoveryStrategy);
+		final RobustNodeId id;
+
+		try {
+			id = RobustNodeId.extract(astNode, recoveryStrategy);
+		} catch (RuntimeException e) {
+			System.out.println("Failed to extract locator for " + astNode);
+			e.printStackTrace();
+			return null;
+		}
 
 		final JSONObject robustRoot = new JSONObject();
 		robustRoot.put("start", id.root.position.start);
@@ -102,56 +113,109 @@ public class PastaServer {
 		return robust;
 	}
 
-	private static void encodeValue(JSONArray out, Object value, Object ast,
-			PositionRecoveryStrategy recoveryStrategy) {
-		if (value instanceof Collection<?>) {
-			Collection<?> coll = (Collection<?>) value;
-//			out.append("[\n");
-			for (Object o : coll) {
-				encodeValue(out, o, ast, recoveryStrategy);
-//				out.append(" " + o + "\n");
-			}
+	private static void encodeValue(JSONArray out, Object value, Class<?> baseAstType, PositionRecoveryStrategy recoveryStrategy,
+			HashSet<Object> alreadyVisitedNodes) {
+		if (value == null) {
+			out.put("null");
+//			new IdentityHashMap<>()
 			return;
-//			out.append("]\n");
 		}
-		if (value != null && value.getClass().getPackage().equals(ast.getClass().getPackage())) {
+		// Clone to avoid showing 'already visited' when this encoding 'branch' hasn't
+		// visited at all
+		alreadyVisitedNodes = new HashSet<Object>(alreadyVisitedNodes);
+
+//		if (value instanceof Collection<?>) {
+//			Collection<?> coll = (Collection<?>) value;
+////			out.append("[\n");
+//			for (Object o : coll) {
+//				encodeValue(out, o, ast, recoveryStrategy);
+////				out.append(" " + o + "\n");
+//			}
+//			return;
+////			out.append("]\n");
+//		}
+		if (value != null && baseAstType.isInstance(value)) {
+			if (alreadyVisitedNodes.contains(value)) {
+				out.put("<< reference loop to already visited value " + value + " >>");
+				return;
+			}
 			try {
 				Object preferredView = Reflect.throwingInvoke0(value, "pastaView");
-				encodeValue(out, preferredView, ast, recoveryStrategy);
+				alreadyVisitedNodes.add(value);
+				encodeValue(out, preferredView, baseAstType, recoveryStrategy, alreadyVisitedNodes);
 				return;
 			} catch (NoSuchMethodException | InvocationTargetException e) {
 				// Fall down to default view
 			}
-			if (value.getClass().getSimpleName().equals("List")) {
-				out.put("List[" + Reflect.invoke0(value, "getNumChild") + "]");
-				for (Object child : (Iterable<?>) Reflect.invoke0(value, "astChildren")) {
-					encodeValue(out, child, ast, recoveryStrategy);
-					out.put("");
-				}
-				return;
-			}
 
 			try {
-				JSONObject wrapper = new JSONObject();
-				wrapper.put("type", "node");
-				wrapper.put("value", buildLocator(value, recoveryStrategy));
-				out.put(wrapper);
+				final JSONObject locator = buildLocator(value, recoveryStrategy);
+				if (locator != null) {
+					JSONObject wrapper = new JSONObject();
+					wrapper.put("type", "node");
+					wrapper.put("value", locator);
+					out.put(wrapper);
 
-				out.put("\n");
+					out.put("\n");
+					if (value.getClass().getSimpleName().equals("List")) {
+						final int numEntries = (Integer) Reflect.invoke0(value, "getNumChild");
+						out.put("");
+						if (numEntries == 0) {
+							out.put("<empty list>");
+						} else {
+							out.put("List contents [" + numEntries + "]:");
+							for (Object child : (Iterable<?>) Reflect.invoke0(value, "astChildren")) {
+								alreadyVisitedNodes.add(value);
+								encodeValue(out, child, baseAstType, recoveryStrategy, alreadyVisitedNodes);
+							}
+						}
+						return;
+					}
+
 //				out.put(robust.toString(2));
-				return;
+					return;
+				}
 			} catch (NoSuchMethodException | InvocationTargetException e) {
 				// No getStart - this isn't an AST Node!
 				// It is just some class that happens to reside in the same package
 				// Fall down to default toString encoding below
 			}
 		}
+
+		if (value instanceof Iterable<?>) {
+			if (alreadyVisitedNodes.contains(value)) {
+				out.put("<< reference loop to already visited value " + value + " >>");
+				return;
+			}
+			alreadyVisitedNodes.add(value);
+			out.put("Iterable [");
+			Iterable<?> iter = (Iterable<?>) value;
+			for (Object o : iter) {
+				encodeValue(out, o, baseAstType, recoveryStrategy, alreadyVisitedNodes);
+			}
+			out.put("]");
+			return;
+		}
+		if (value instanceof Iterator<?>) {
+			if (alreadyVisitedNodes.contains(value)) {
+				out.put("<< reference loop to already visited value " + value + " >>");
+				return;
+			}
+			alreadyVisitedNodes.add(value);
+			out.put("Iterator [");
+			Iterator<?> iter = (Iterator<?>) value;
+			while (iter.hasNext()) {
+				encodeValue(out, iter.next(), baseAstType, recoveryStrategy, alreadyVisitedNodes);
+			}
+			out.put("]");
+			return;
+		}
 		try {
 			if (value.getClass().getMethod("toString").getDeclaringClass() == Object.class) {
 //				if (value.getClass().isEnum()) {
 //					out.put(value.toString());
 //				}
-				out.put("Seems to be missing toString in " + value.getClass().getName());
+				out.put("No toString or pastaView() implementation in " + value.getClass().getName());
 			}
 		} catch (NoSuchMethodException e) {
 			System.err.println("No toString implementation for " + value.getClass());
@@ -268,7 +332,7 @@ public class PastaServer {
 
 			final File tmp;
 			try {
-				tmp = File.createTempFile("pasta-server", ".tmp");
+				tmp = File.createTempFile("pasta-server", ".java");
 			} catch (IOException e) {
 				e.printStackTrace();
 				throw new RuntimeException(e);
@@ -303,19 +367,18 @@ public class PastaServer {
 
 					final boolean parsed = ASTProvider.parseAst(jarPath, withFile, (ast, loadCls) -> {
 						if (ast == null) {
-							bodyBuilder.put("Failed to parse..");
+							bodyBuilder.put("Failed to parse, but got 'onParse' callback?!");
+							bodyBuilder.put("This feels like a bug, tell whoever is developing the pasta server.");
 							return;
 						}
 						System.out.println("Parsed, got: " + ast);
-						System.out.println("ast pkg: " + ast.getClass().getPackage());
+//						System.out.println("ast pkg: " + ast.getClass().getPackage());
 						Object matchedNode = null;
 
 						final JSONObject locator = queryBody.getJSONObject("locator");
 						final String rootNodeType = locator.getJSONObject("root").getString("type");
 						final int rootStart = locator.getJSONObject("root").getInt("start");
-						final int rootEnd = locator.getJSONObject("root").getInt("start");
-						System.out.println("RootNodeType : " + rootNodeType);
-						System.out.println("ast type: " + ast.getClass().getSimpleName());
+						final int rootEnd = locator.getJSONObject("root").getInt("end");
 						// Gradually increase search span a few columns in either direction
 						if (rootNodeType.equals(ast.getClass().getSimpleName())) {
 							// Assume that an AST has a unique root type
@@ -403,7 +466,10 @@ public class PastaServer {
 //						retBuilder.put("matchStart", matchStart);
 //						retBuilder.put("matchEnd", matchEnd);
 						try {
-							retBuilder.put("locator", buildLocator(matchedNode, recoveryStrategy));
+							final JSONObject matchedNodeLocator = buildLocator(matchedNode, recoveryStrategy);
+							if (matchedNodeLocator != null) {
+								retBuilder.put("locator", matchedNodeLocator);
+							}
 						} catch (JSONException | NoSuchMethodException | InvocationTargetException e1) {
 							// TODO Auto-generated catch block
 							e1.printStackTrace();
@@ -540,7 +606,15 @@ public class PastaServer {
 									}
 									value = Reflect.invokeN(matchedNode, queryAttrName, argTypes, argValues);
 								}
-								encodeValue(bodyBuilder, value, ast, recoveryStrategy);
+								Class<?> baseAstType = ast.getClass();
+								while (true) {
+									Class<?> parentType = baseAstType.getSuperclass();
+									if (parentType == null || !parentType.getPackage().getName().equals(baseAstType.getPackage().getName())) {
+										break;
+									}
+									baseAstType = parentType;
+								}
+								encodeValue(bodyBuilder, value, baseAstType, recoveryStrategy, new HashSet<>());
 							} catch (InvocationTargetException e) {
 								if (e.getCause() != null) {
 									e.getCause().printStackTrace();
@@ -559,14 +633,13 @@ public class PastaServer {
 									probeInterceptor.flush();
 									probeInterceptor.restore();
 								}
-								System.out.println("Restored out spy..");
 							}
 						}
 						}
-
-//					System.out.println(invoke0(ast, "userPresentableAttrs"));
 					});
-					System.out.println("Done, parsed: " + parsed);
+					if (!parsed) {
+						System.out.println("Parsing failed..");
+					}
 					if (!parsed && retBuilder.length() > 0) {
 						bodyBuilder.put("🍝 Probe error");
 					}

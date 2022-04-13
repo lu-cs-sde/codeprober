@@ -65,11 +65,12 @@ define("ui/create/createLoadingSpinner", ["require", "exports"], function (requi
     };
     exports.default = createLoadingSpinner;
 });
-define("ui/create/attachDragToMove", ["require", "exports"], function (require, exports) {
+define("ui/create/attachDragToX", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.modalZIndexGenerator = void 0;
+    exports.lastKnownMousePos = exports.modalZIndexGenerator = void 0;
     let lastKnownMousePos = { x: 0, y: 0 };
+    exports.lastKnownMousePos = lastKnownMousePos;
     window.onmousemove = (e) => {
         lastKnownMousePos.x = e.x;
         lastKnownMousePos.y = e.y;
@@ -92,47 +93,28 @@ define("ui/create/attachDragToMove", ["require", "exports"], function (require, 
         return () => counter++;
     })();
     exports.modalZIndexGenerator = modalZIndexGenerator;
-    const attachDragToMove = (element, initialPos, onFinishedMove) => {
-        var _a, _b;
-        let posX = (_a = initialPos === null || initialPos === void 0 ? void 0 : initialPos.x) !== null && _a !== void 0 ? _a : lastKnownMousePos.x;
-        let posY = (_b = initialPos === null || initialPos === void 0 ? void 0 : initialPos.y) !== null && _b !== void 0 ? _b : lastKnownMousePos.y;
-        const refreshPos = (newX, newY) => {
-            posX = newX !== null && newX !== void 0 ? newX : posX;
-            posY = newY !== null && newY !== void 0 ? newY : posY;
-            if (posY < 0) {
-                posY = 0;
-            }
-            else {
-                posY = Math.min(document.body.clientHeight - element.clientHeight, posY);
-            }
-            if (posX < 0) {
-                posX = 0;
-            }
-            else {
-                posX = Math.min(document.body.clientWidth - element.clientWidth, posX);
-            }
-            element.style.top = `${posY}px`;
-            // if (anchor === 'top-right') {
-            //   element.style.left = `${posX - element.clientWidth}px`;
-            // } else {
-            element.style.left = `${posX}px`;
-            // }
-        };
+    const attachDragToX = (element, onBegin, onUpdate, onFinishedMove) => {
+        const refreshPos = (newX, newY) => onUpdate(newX !== null && newX !== void 0 ? newX : 0, newY !== null && newY !== void 0 ? newY : 0);
         let mouse = { down: false, x: 0, y: 0 };
         element.onmousedown = (e) => {
             setCurrentMouseDown(mouse);
+            // e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            e.cancelBubble = true;
             mouse.down = true;
             element.style.zIndex = `${modalZIndexGenerator()}`;
-            mouse.x = e.x;
-            mouse.y = e.y;
+            mouse.x = e.screenX;
+            mouse.y = e.screenY;
+            onBegin();
         };
         const onMouseMove = (e) => {
             if (mouse.down) {
-                let dx = e.x - mouse.x;
-                let dy = e.y - mouse.y;
-                refreshPos(posX + dx, posY + dy);
-                mouse.x = e.x;
-                mouse.y = e.y;
+                let dx = e.screenX - mouse.x;
+                let dy = e.screenY - mouse.y;
+                refreshPos(dx, dy);
+                // mouse.x = e.x;
+                // mouse.y = e.y;
             }
         };
         document.addEventListener('mousemove', onMouseMove);
@@ -140,28 +122,70 @@ define("ui/create/attachDragToMove", ["require", "exports"], function (require, 
             mouse.down = false;
             onFinishedMove === null || onFinishedMove === void 0 ? void 0 : onFinishedMove();
         };
-        refreshPos();
+        // refreshPos();
         return {
-            getPos: () => ({ x: posX, y: posY }),
             cleanup: () => {
                 document.removeEventListener('mousemove', onMouseMove);
             }
         };
     };
-    exports.default = attachDragToMove;
+    exports.default = attachDragToX;
 });
-define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMove"], function (require, exports, attachDragToMove_1) {
+define("ui/create/attachDragToMove", ["require", "exports", "ui/create/attachDragToX"], function (require, exports, attachDragToX_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    attachDragToMove_1 = __importStar(attachDragToMove_1);
+    attachDragToX_1 = __importStar(attachDragToX_1);
+    const attachDragToMove = (element, initialPos, onFinishedMove) => {
+        var _a, _b;
+        const elemPos = { x: (_a = initialPos === null || initialPos === void 0 ? void 0 : initialPos.x) !== null && _a !== void 0 ? _a : attachDragToX_1.lastKnownMousePos.x, y: (_b = initialPos === null || initialPos === void 0 ? void 0 : initialPos.y) !== null && _b !== void 0 ? _b : attachDragToX_1.lastKnownMousePos.y };
+        const startPos = { ...elemPos };
+        const onBegin = () => {
+            startPos.x = elemPos.x;
+            startPos.y = elemPos.y;
+        };
+        const onUpdate = (dx, dy) => {
+            let newX = startPos.x + dx;
+            let newY = startPos.y + dy;
+            if (newY < 0) {
+                newY = 0;
+            }
+            else {
+                newY = Math.min(document.body.clientHeight - element.clientHeight, newY);
+            }
+            if (newX < 0) {
+                newX = 0;
+            }
+            else {
+                newX = Math.min(document.body.clientWidth - element.clientWidth, newX);
+            }
+            element.style.top = `${newY}px`;
+            element.style.left = `${newX}px`;
+            elemPos.x = newX;
+            elemPos.y = newY;
+        };
+        onUpdate(0, 0);
+        const cleanup = (0, attachDragToX_1.default)(element, onBegin, onUpdate, onFinishedMove).cleanup;
+        return {
+            cleanup,
+            getPos: () => elemPos
+        };
+    };
+    exports.default = attachDragToMove;
+});
+define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMove", "ui/create/attachDragToX"], function (require, exports, attachDragToMove_1, attachDragToX_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    attachDragToMove_1 = __importDefault(attachDragToMove_1);
+    attachDragToX_2 = __importStar(attachDragToX_2);
     const showWindow = (args) => {
         console.log('new and shiny showModal..', args);
-        const { render, pos: initialPos, rootStyle } = args;
+        const { render, pos: initialPos, rootStyle, resizable } = args;
         const root = document.createElement('div');
         root.tabIndex = 0;
         root.classList.add('modalWindow');
         root.style = `${rootStyle || ''}`;
-        root.style.zIndex = `${(0, attachDragToMove_1.modalZIndexGenerator)()}`;
+        root.style.zIndex = `${(0, attachDragToX_2.modalZIndexGenerator)()}`;
+        root.style.maxWidth = '40vw';
         root.onkeydown = (e) => {
             var _a;
             if (e.key === 'Escape') {
@@ -173,19 +197,65 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
             }
         };
         let lastCancelToken = {};
-        render(root, lastCancelToken);
+        const contentRoot = document.createElement('div');
+        contentRoot.classList.add('HELLO-FIND-ME');
+        contentRoot.style.overflow = 'auto';
+        contentRoot.style.position = 'relative';
+        contentRoot.style.top = '0px';
+        contentRoot.style.left = '0px';
+        // contentRoot.style.display = 'contents';
+        // contentRoot.style.minHeight = '4rem';
+        // contentRoot.style.overflow = 'inherit';
+        // contentRoot.style.display = 'contents';
+        render(contentRoot, lastCancelToken);
+        root.appendChild(contentRoot);
+        let reiszeCleanup = null;
+        if (resizable) {
+            const resizePositioner = document.createElement('div');
+            // resizePositioner.style.position = 'absolute';
+            resizePositioner.style.right = '0px';
+            resizePositioner.style.bottom = '0px';
+            resizePositioner.style.cursor = 'nwse-resize';
+            resizePositioner.style.width = 'fit-contents';
+            resizePositioner.style.height = '0px';
+            resizePositioner.style.position = 'sticky';
+            const resizeButton = document.createElement('div');
+            resizeButton.style.position = 'absolute';
+            resizeButton.style.right = '0px';
+            resizeButton.style.bottom = '0px';
+            resizeButton.style.height = '0.25rem';
+            resizeButton.style.width = '0.25rem';
+            resizeButton.style.borderRight = '4px solid gray';
+            resizeButton.style.borderBottom = '4px solid gray';
+            resizePositioner.appendChild(resizeButton);
+            root.appendChild(resizePositioner);
+            const size = { w: 1, h: 1 };
+            reiszeCleanup = (0, attachDragToX_2.default)(resizePositioner, () => {
+                size.w = root.clientWidth;
+                size.h = root.clientHeight;
+            }, (dx, dy) => {
+                const newW = Math.max(32, size.w + dx);
+                const newH = Math.max(32, size.h + dy);
+                // console.log('setting ', `${root.clientWidth + dx}px`);
+                root.style.width = `${newW}px`;
+                root.style.height = `${newH}px`;
+                root.style.maxWidth = 'fit-content';
+                root.style.maxHeight = 'fit-content';
+            }).cleanup;
+        }
         document.body.appendChild(root);
         const dragToMove = (0, attachDragToMove_1.default)(root, initialPos, args.onFinishedMove);
         return {
             remove: () => {
                 root.remove();
                 dragToMove.cleanup();
+                reiszeCleanup === null || reiszeCleanup === void 0 ? void 0 : reiszeCleanup();
             },
             refresh: () => {
                 lastCancelToken.cancelled = true;
                 lastCancelToken = {};
                 // root.innerHTML = '';
-                render(root, lastCancelToken);
+                render(contentRoot, lastCancelToken);
             },
             getPos: dragToMove.getPos,
         };
@@ -290,7 +360,7 @@ define("ui/create/createTextSpanIndicator", ["require", "exports", "ui/create/re
         indicator.style.color = 'gray';
         indicator.style.marginLeft = '0.25rem';
         indicator.style.marginRight = '0.25rem';
-        indicator.innerText = `[${span.lineStart}:${span.colStart}→${span.lineEnd}:${span.colEnd}]`;
+        indicator.innerText = `[${span.lineStart}:${span.colStart}→${span.lineEnd}:${span.colEnd}]${span.lineStart === 0 && span.colStart === 0 && span.lineEnd === 0 && span.colEnd === 0 ? '⚠️' : ''}`;
         if (onHover) {
             indicator.classList.add('highlightOnHover');
             (0, registerOnHover_1.default)(indicator, onHover);
@@ -439,7 +509,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
     };
     exports.default = displayArgModal;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayProbeModal_2, showWindow_3, displayArgModal_1, formatAttr_2) {
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayProbeModal_2, showWindow_3, displayArgModal_1, formatAttr_2, createTextSpanIndicator_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
@@ -448,6 +518,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     showWindow_3 = __importDefault(showWindow_3);
     displayArgModal_1 = __importDefault(displayArgModal_1);
     formatAttr_2 = __importDefault(formatAttr_2);
+    createTextSpanIndicator_1 = __importDefault(createTextSpanIndicator_1);
     const displayAttributeModal = (env, modalPos, locator) => {
         let filter = '';
         let attrs = null;
@@ -474,6 +545,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                         // headAttr.style.fontStyle= 'italic';
                         container.appendChild(headType);
                         container.appendChild(headAttr);
+                        container.appendChild((0, createTextSpanIndicator_1.default)(startEndToSpan(locator.result.start, locator.result.end), on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null)));
                     },
                     onClose: () => {
                         popup.remove();
@@ -641,14 +713,6 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                     name: 'pastaAttrs'
                 },
                 locator: locator,
-                // id: {
-                //   root: {
-                //     type: type,
-                //     start: (span.lineStart << 12) + span.colStart,
-                //     end: (span.lineEnd << 12) + span.colEnd,
-                //   },
-                //   steps: [],
-                // },
             },
         })
             .then((result) => {
@@ -679,12 +743,12 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     };
     exports.default = displayAttributeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/create/registerOnHover", "ui/popup/formatAttr", "ui/popup/displayArgModal"], function (require, exports, createLoadingSpinner_2, createModalTitle_3, createTextSpanIndicator_1, displayAttributeModal_1, showWindow_4, registerOnHover_2, formatAttr_3, displayArgModal_2) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/create/registerOnHover", "ui/popup/formatAttr", "ui/popup/displayArgModal"], function (require, exports, createLoadingSpinner_2, createModalTitle_3, createTextSpanIndicator_2, displayAttributeModal_1, showWindow_4, registerOnHover_2, formatAttr_3, displayArgModal_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
     createModalTitle_3 = __importDefault(createModalTitle_3);
-    createTextSpanIndicator_1 = __importDefault(createTextSpanIndicator_1);
+    createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
     displayAttributeModal_1 = __importDefault(displayAttributeModal_1);
     showWindow_4 = __importDefault(showWindow_4);
     registerOnHover_2 = __importDefault(registerOnHover_2);
@@ -775,7 +839,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         }
                         e.stopPropagation();
                     };
-                    const locIndicator = (0, createTextSpanIndicator_1.default)(startEndToSpan(locator.result.start, locator.result.end), on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null));
                     container.appendChild(headType);
                     container.appendChild(headAttr);
                     // TODO add edit pen here?
@@ -797,7 +860,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         // editHolder.appendChild(editButton);
                         container.appendChild(editButton);
                     }
-                    container.appendChild(locIndicator);
+                    container.appendChild((0, createTextSpanIndicator_2.default)(startEndToSpan(locator.result.start, locator.result.end), on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null)));
                 },
                 onClose: () => {
                     queryWindow.remove();
@@ -813,8 +876,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             pos: modalPos,
             rootStyle: `
       min-width: 20rem;
-      min-height: 4rem;
+      min-height: fit-content;
     `,
+            resizable: true,
             onFinishedMove: () => env.triggerWindowSave(),
             render: (root, cancelToken) => {
                 if (lastSpinner != null) {
@@ -952,7 +1016,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                         lineStart: (start >>> 12), colStart: (start & 0xFFF),
                                         lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
                                     };
-                                    container.appendChild((0, createTextSpanIndicator_1.default)(span));
+                                    container.appendChild((0, createTextSpanIndicator_2.default)(span));
                                     const typeNode = document.createElement('span');
                                     typeNode.classList.add('syntax-type');
                                     typeNode.innerText = type;
@@ -963,6 +1027,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     (0, registerOnHover_2.default)(container, on => {
                                         env.updateSpanHighlight(on ? span : null);
                                     });
+                                    container.onmousedown = (e) => {
+                                        e.stopPropagation();
+                                    };
                                     container.onclick = () => {
                                         (0, displayAttributeModal_1.default)(env, null, line.value);
                                     };
@@ -1057,15 +1124,26 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
     registerOnHover_3 = __importDefault(registerOnHover_3);
     showWindow_5 = __importDefault(showWindow_5);
     const displayRagModal = (env, line, col) => {
+        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const cleanup = () => {
+            delete env.onChangeListeners[queryId];
+            popup.remove();
+        };
         const popup = (0, showWindow_5.default)({
             rootStyle: `
         min-width: 12rem;
-        min-height: 8rem;
+        min-height: 4rem;
         max-height: 32rem;
       `,
             render: (root, cancelToken) => {
+                while (root.firstChild) {
+                    root.firstChild.remove();
+                }
                 // root.innerText = 'Loading..';
+                root.style.display = 'contents';
                 const spinner = (0, createLoadingSpinner_3.default)();
+                // spinner.style.width = '16rem';
+                // spinner.style.height = '4rem';
                 spinner.classList.add('absoluteCenter');
                 root.appendChild(spinner);
                 const rootProgramLocator = {
@@ -1107,7 +1185,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                             container.appendChild(headType);
                         },
                         onClose: () => {
-                            popup.remove();
+                            cleanup();
                         },
                     }).element);
                     // const needle = 'SpansAndNodeTypes :: ';
@@ -1128,7 +1206,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         (0, registerOnHover_3.default)(node, on => env.updateSpanHighlight(on ? span : null));
                         node.onmousedown = (e) => { e.stopPropagation(); };
                         node.onclick = () => {
-                            popup.remove();
+                            cleanup();
                             env.updateSpanHighlight(null);
                             const node = {
                                 start: (span.lineStart << 12) + span.colStart,
@@ -1153,10 +1231,20 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                     root.style.textAlign = 'center';
                     root.style.color = '#F88';
                     root.innerText = 'No AST node\nat this location..';
-                    setTimeout(() => popup.remove(), 1000);
+                    setTimeout(() => cleanup(), 1000);
                 });
             }
         });
+        env.onChangeListeners[queryId] = (adjusters) => {
+            if (adjusters) {
+                adjusters.forEach((adj) => {
+                    const [l, c] = adj(line, col);
+                    line = l;
+                    col = c;
+                });
+            }
+            popup.refresh();
+        };
     };
     exports.default = displayRagModal;
 });
@@ -1206,6 +1294,33 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
                     add('syntax-string', '"reference"', '');
                     add('', ');', '');
                 }
+                const exampleView = document.createElement('div');
+                {
+                    const add = (...args) => exampleView.appendChild(createSyntaxNode(args[0], args[1], args[2]));
+                    exampleView.appendChild(document.createTextNode('Example: '));
+                    // syn  Function.pastaAttrs() = Arrays.asList("eval", "references");
+                    add('syntax-modifier', 'syn', 'right');
+                    add('syntax-type', 'Object IntType');
+                    add('syntax-attr', '.pastaView', '');
+                    add('', '() =', 'right');
+                    add('syntax-string', '"int"');
+                    add('', ';', '');
+                }
+                const viewDefault = document.createElement('pre');
+                viewDefault.style.marginTop = '2px';
+                viewDefault.style.marginLeft = '2px';
+                viewDefault.style.fontSize = '0.875rem';
+                viewDefault.innerText = `
+encode(value):
+  if (value is ASTNode):
+    if (value has 'pastaView'): encode(value.pastaView())
+    else: output(value.location, value.type)
+
+  if (value is Iterator or Iterable):
+    for (entry in value): encode(entry)
+
+  if no case above matched: output(value.toString())
+`.trim();
                 return [
                     `PASTA : Probe-AST-Attributes 🍝 🤌`,
                     `Right click on some text in the editor to get started`,
@@ -1218,17 +1333,15 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
                     // `Example: syn boolean List.pastaVisible() = false;`,
                     exampleVisible,
                     ``,
-                    `2) 'pastaAttrs', This controls what attributes are visible in the attr menu.`,
-                    `Default: all attributes with zero arguments visible.`,
+                    `2) 'pastaAttrs', A filter that can be used to specify which attributes should be visible.`,
+                    `Default: all public functions with "simple" argument types (String, int, boolean) visible.`,
                     // `Example: syn java.util.List<String> Function.pastaAttrs() = Arrays.asList("eval", "references");`,
                     exampleAttrs,
                     ``,
                     `3) 'pastaView', This controls how a value is printed.`,
-                    `Default: depends on value type:`,
-                    `-- Collection => pastaView() called recursively on each element`,
-                    `--    ASTNode => text location and node type added`,
-                    `--    default => toString()`,
-                    `Example: syn Object IntType.pastaView() = "int";`,
+                    `Default: encodes one or more options in order. In pseudocode:`,
+                    viewDefault,
+                    exampleView,
                     ``,
                     `Contributions welcome at [url]`,
                     `Version: abc-123`,
@@ -1245,7 +1358,7 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
                     ['Child', 'search recursively downwards through child nodes, using the equivalent of "node.getChild(0)"'],
                     ['Parent->Child', 'Try "Parent". If no position is found, try "Child".'],
                     ['Child->Parent', 'Try "Child". If no position is found, try "Parent".'],
-                    ['Zigsag', 'Similar to "Parent->Child", but only search one step in one direction, then try the other direction, then another step in the first direction, etc. Initially searches one step upwards.'],
+                    ['Zigzag', 'Similar to "Parent->Child", but only search one step in one direction, then try the other direction, then another step in the first direction, etc. Initially searches one step upwards.'],
                 ].forEach(([head, tail]) => {
                     const headNode = document.createElement('span');
                     headNode.style.textAlign = 'right';
@@ -1266,7 +1379,7 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
                     '1) Fix your parser',
                     'Usually position information is missing because of how you structured your parser.',
                     'Maybe you do some sort of desugaring in the parser, and create multiple AST nodes in a single production rule.',
-                    'E.g Beaver will only give a single node position information per production rule, so if you create multiple then this leads to the problem at hand.',
+                    'Beaver, for example, will only give a single node position information per production rule, so if you create multiple then this leads to the problem at hand.',
                     '',
                     '2) Use a recovery strategy',
                     'If a node is missing location information, then we can sometimes get it from nearby nodes.',
@@ -1274,7 +1387,8 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
                     'Settings:',
                     settingsExplanation,
                     '',
-                    'No strategy guarantees success. If position is missing, it will be marked with "⚠️" in the node list window, and you\'ll likely run into problems when using it',
+                    'No strategy guarantees success. If position is missing, it will be marked with "⚠️", and you\'ll likely run into problems when using it',
+                    'If you are unsure of what to use, "Zigzag" is usually a pretty good option.',
                 ];
             }
         }
@@ -1288,6 +1402,7 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
       width: 32rem;
       min-height: 12rem;
     `,
+            resizable: true,
             render: (root) => {
                 root.appendChild((0, createModalTitle_5.default)({
                     renderLeft: (container) => {
@@ -1314,7 +1429,7 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
                     }
                     const node = document.createElement('p');
                     // node.style.whiteSpace = 'pre';
-                    node.style.maxWidth = '31rem';
+                    // node.style.maxWidth = '31rem';
                     // const leadingWhitespace = p.length - p.trimStart().length;
                     // if (leadingWhitespace) {
                     //   let ws = '';
@@ -1560,6 +1675,34 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     probeWindowStateSavers,
                     triggerWindowSave,
                 };
+                // const inputHeader = document.getElementById('input-header');
+                // onChangeListeners['passive-bg-listener'] = () => {
+                //   // If you have more than 100k lines in this editor and the program node starts after that,
+                //   // then I don't know what to tell you.
+                //   const rootLocator: TypeAtLoc = {
+                //     start: 0,
+                //     end: (100000 << 12) + 100,
+                //     type: 'Program',
+                //   };
+                //   performRpcQuery({
+                //     type: 'query',
+                //     // ...span,
+                //     text: modalEnv.getLocalState(),
+                //     query: {
+                //       nodeType: 'Program',
+                //       attr: {
+                //         name: 'pasta_containingSpansAndNodeTypes',
+                //       },
+                //       locator: {
+                //         root: rootLocator,
+                //         result: rootLocator,
+                //         steps: []
+                //       },
+                //     },
+                //   }).then((res) => {
+                //     console.log('PASSIVE:', res);
+                //   });
+                // };
                 window.displayGeneralHelp = () => (0, displayHelp_1.default)('general', disabled => document.getElementById('display-help').disabled = disabled);
                 window.displayRecoveryStrategyHelp = () => (0, displayHelp_1.default)('recovery-strategy', disabled => document.getElementById('control-position-recovery-strategy-help').disabled = disabled);
                 setTimeout(() => {
