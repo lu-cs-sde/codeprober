@@ -14,9 +14,9 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -113,8 +113,8 @@ public class PastaServer {
 		return robust;
 	}
 
-	private static void encodeValue(JSONArray out, Object value, Class<?> baseAstType, PositionRecoveryStrategy recoveryStrategy,
-			HashSet<Object> alreadyVisitedNodes) {
+	private static void encodeValue(JSONArray out, Object value, Class<?> baseAstType,
+			PositionRecoveryStrategy recoveryStrategy, HashSet<Object> alreadyVisitedNodes) {
 		if (value == null) {
 			out.put("null");
 //			new IdentityHashMap<>()
@@ -188,12 +188,13 @@ public class PastaServer {
 				return;
 			}
 			alreadyVisitedNodes.add(value);
-			out.put("Iterable [");
+
+			JSONArray indent = new JSONArray();
 			Iterable<?> iter = (Iterable<?>) value;
 			for (Object o : iter) {
-				encodeValue(out, o, baseAstType, recoveryStrategy, alreadyVisitedNodes);
+				encodeValue(indent, o, baseAstType, recoveryStrategy, alreadyVisitedNodes);
 			}
-			out.put("]");
+			out.put(indent);
 			return;
 		}
 		if (value instanceof Iterator<?>) {
@@ -202,20 +203,37 @@ public class PastaServer {
 				return;
 			}
 			alreadyVisitedNodes.add(value);
-			out.put("Iterator [");
+			JSONArray indent = new JSONArray();
 			Iterator<?> iter = (Iterator<?>) value;
 			while (iter.hasNext()) {
-				encodeValue(out, iter.next(), baseAstType, recoveryStrategy, alreadyVisitedNodes);
+				encodeValue(indent, iter.next(), baseAstType, recoveryStrategy, alreadyVisitedNodes);
 			}
-			out.put("]");
+			out.put(indent);
 			return;
 		}
+//		if (value instanceof Object[]) {
+//			if (alreadyVisitedNodes.contains(value)) {
+//				out.put("<< reference loop to already visited value " + value + " >>");
+//				return;
+//			}
+//			alreadyVisitedNodes.add(value);
+//			
+//			final JSONArray indent = new JSONArray();
+//			for (Object child : (Object[])value) {
+//				encodeValue(indent, child, baseAstType, recoveryStrategy, alreadyVisitedNodes, false);
+//			}
+//			final JSONObject indentObj = new JSONObject();
+//			indentObj.put("type", "indent");
+//			indentObj.put("value", indent);
+//			out.put(indentObj);
+//			return;
+//		}
 		try {
 			if (value.getClass().getMethod("toString").getDeclaringClass() == Object.class) {
 //				if (value.getClass().isEnum()) {
 //					out.put(value.toString());
 //				}
-				out.put("No toString or pastaView() implementation in " + value.getClass().getName());
+				out.put("No toString() or pastaView() implementation in " + value.getClass().getName());
 			}
 		} catch (NoSuchMethodException e) {
 			System.err.println("No toString implementation for " + value.getClass());
@@ -283,17 +301,18 @@ public class PastaServer {
 	}
 
 	private static boolean onlySimpleParameters(Parameter[] params) {
-		final Type[] primitives = new Type[] { Boolean.TYPE, Integer.TYPE, };
+		final Type[] primitives = new Type[] { Boolean.TYPE, Integer.TYPE };
 		findBadParameter: for (Parameter param : params) {
 			final Class<?> type = param.getType();
 			for (Type prim : primitives) {
-				if (type == prim.getClass()) {
+				if (type == prim) {
 					continue findBadParameter;
 				}
 			}
 			if (type == String.class) {
 				continue;
 			}
+			System.out.println("Unknown parameter type: " + param.getType());
 			// Else, possibly AST Node but we don't support that yet
 			return false;
 		}
@@ -349,12 +368,25 @@ public class PastaServer {
 
 					@Override
 					public void onLine(boolean stdout, String line) {
-						final Matcher matcher = Pattern.compile("ERR@(\\d+);(\\d+);(.*)").matcher(line);
-						if (matcher.matches()) {
-							final int start = Integer.parseInt(matcher.group(1));
-							final int end = Integer.parseInt(matcher.group(2));
-							final String msg = matcher.group(3);
+						final Matcher squiggly = Pattern
+								.compile("(ERR|WARN|INFO|LINE-PP|LINE-AA|LINE-AP|LINE-PA)@(\\d+);(\\d+);(.*)")
+								.matcher(line);
+						if (squiggly.matches()) {
+							final int start = Integer.parseInt(squiggly.group(2));
+							final int end = Integer.parseInt(squiggly.group(3));
+							final String msg = squiggly.group(4);
 							final JSONObject obj = new JSONObject();
+							switch (squiggly.group(1)) {
+							case "ERR":
+								obj.put("severity", "error");
+								break;
+							case "WARN":
+								obj.put("severity", "warning");
+								break;
+							default:
+								obj.put("severity", squiggly.group(1).toLowerCase(Locale.ENGLISH));
+								break;
+							}
 							obj.put("start", start);
 							obj.put("end", end);
 							obj.put("msg", msg);
@@ -519,11 +551,12 @@ public class PastaServer {
 								if (!java.lang.reflect.Modifier.isPublic(m.getModifiers())) {
 									continue;
 								}
-								final Parameter[] parameters = m.getParameters();
-								if (!onlySimpleParameters(parameters)) {
+								if (Pattern.compile(".*(\\$|_).*").matcher(m.getName()).matches()) {
 									continue;
 								}
-								if (Pattern.compile(".*(\\$).*").matcher(m.getName()).matches()) {
+								final Parameter[] parameters = m.getParameters();
+								if (!onlySimpleParameters(parameters)) {
+									System.out.println("Skipping " + m + ", unknown param types");
 									continue;
 								}
 								if (parameters.length > 0) {
@@ -597,6 +630,16 @@ public class PastaServer {
 											argValues[i] = arg.optString("value"); // opt to allow nullable values
 											break;
 										}
+										case "int": {
+											argTypes[i] = Integer.TYPE;
+											argValues[i] = arg.getInt("value");
+											break;
+										}
+										case "boolean": {
+											argTypes[i] = Boolean.TYPE;
+											argValues[i] = arg.getBoolean("value");
+											break;
+										}
 										default: {
 											bodyBuilder
 													.put("Cannot use attribute type '" + arg.getString("type") + "'");
@@ -609,7 +652,8 @@ public class PastaServer {
 								Class<?> baseAstType = ast.getClass();
 								while (true) {
 									Class<?> parentType = baseAstType.getSuperclass();
-									if (parentType == null || !parentType.getPackage().getName().equals(baseAstType.getPackage().getName())) {
+									if (parentType == null || !parentType.getPackage().getName()
+											.equals(baseAstType.getPackage().getName())) {
 										break;
 									}
 									baseAstType = parentType;

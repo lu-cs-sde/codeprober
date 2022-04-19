@@ -354,11 +354,14 @@ define("ui/create/createTextSpanIndicator", ["require", "exports", "ui/create/re
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     registerOnHover_1 = __importDefault(registerOnHover_1);
-    const createTextSpanIndicator = (span, onHover) => {
+    const createTextSpanIndicator = (args) => {
+        const { span, marginLeft, onHover } = args;
         const indicator = document.createElement('span');
         indicator.style.fontSize = '0.75rem';
         indicator.style.color = 'gray';
-        indicator.style.marginLeft = '0.25rem';
+        if (marginLeft) {
+            indicator.style.marginLeft = '0.25rem';
+        }
         indicator.style.marginRight = '0.25rem';
         indicator.innerText = `[${span.lineStart}:${span.colStart}→${span.lineEnd}:${span.colEnd}]${span.lineStart === 0 && span.colStart === 0 && span.lineEnd === 0 && span.colEnd === 0 ? '⚠️' : ''}`;
         if (onHover) {
@@ -545,7 +548,11 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                         // headAttr.style.fontStyle= 'italic';
                         container.appendChild(headType);
                         container.appendChild(headAttr);
-                        container.appendChild((0, createTextSpanIndicator_1.default)(startEndToSpan(locator.result.start, locator.result.end), on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null)));
+                        container.appendChild((0, createTextSpanIndicator_1.default)({
+                            span: startEndToSpan(locator.result.start, locator.result.end),
+                            marginLeft: true,
+                            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
+                        }));
                     },
                     onClose: () => {
                         popup.remove();
@@ -860,7 +867,11 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         // editHolder.appendChild(editButton);
                         container.appendChild(editButton);
                     }
-                    container.appendChild((0, createTextSpanIndicator_2.default)(startEndToSpan(locator.result.start, locator.result.end), on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null)));
+                    container.appendChild((0, createTextSpanIndicator_2.default)({
+                        span: startEndToSpan(locator.result.start, locator.result.end),
+                        marginLeft: true,
+                        onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
+                    }));
                 },
                 onClose: () => {
                     queryWindow.remove();
@@ -942,8 +953,8 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     let refreshMarkers = localErrors.length > 0;
                     localErrors.length = 0;
                     console.log('probe errors:', parsed.errors);
-                    parsed.errors.forEach(({ start: errStart, end: errEnd, msg }) => {
-                        localErrors.push({ errStart, errEnd, msg });
+                    parsed.errors.forEach(({ severity, start: errStart, end: errEnd, msg }) => {
+                        localErrors.push({ severity, errStart, errEnd, msg });
                     });
                     if (parsed.locator) {
                         refreshMarkers = true;
@@ -965,30 +976,30 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     }
                     const titleRow = createTitle();
                     root.append(titleRow.element);
-                    const pre = document.createElement('pre');
-                    pre.style.margin = '0px';
-                    pre.style.padding = '0.5rem';
-                    pre.style.fontSize = '0.75rem';
-                    // pre.innerHtml = lines.slice(outputStart + 1).join('\n').trim();
-                    body
-                        .filter((line, lineIdx, arr) => {
-                        // Keep empty lines only if they are followed by a non-empty line
-                        // Removes two empty lines in a row, and removes trailing empty lines
-                        if (!line && !arr[lineIdx + 1]) {
-                            return false;
-                        }
-                        return true;
-                    })
-                        .forEach((line, lineIdx) => {
+                    const encodeLine = (target, line, respectIndent = false) => {
                         if (typeof line === 'string') {
                             const trimmed = line.trimStart();
                             if (trimmed.length !== line.length) {
-                                pre.appendChild(document.createTextNode(' '.repeat(line.length - trimmed.length)));
+                                target.appendChild(document.createTextNode(' '.repeat(line.length - trimmed.length)));
                             }
                             if (line.trim()) {
-                                pre.appendChild(document.createTextNode(line.trim()));
+                                target.appendChild(document.createTextNode(line.trim()));
                             }
-                            pre.appendChild(document.createElement('br'));
+                            target.appendChild(document.createElement('br'));
+                        }
+                        else if (Array.isArray(line)) {
+                            if (!respectIndent) {
+                                // First level indent, 'inline' it
+                                line.forEach(sub => encodeLine(target, sub, true));
+                            }
+                            else {
+                                // >=2 level indent, respect it
+                                const deeper = document.createElement('pre');
+                                // deeper.style.borderLeft = '1px solid #88888877';
+                                deeper.style.marginLeft = '1rem';
+                                line.forEach(sub => encodeLine(deeper, sub, true));
+                                target.appendChild(deeper);
+                            }
                         }
                         else {
                             switch (line.type) {
@@ -996,16 +1007,16 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     const span = document.createElement('span');
                                     span.classList.add('captured-stdout');
                                     span.innerText = `> ${line.value}`;
-                                    pre.appendChild(span);
-                                    pre.appendChild(document.createElement('br'));
+                                    target.appendChild(span);
+                                    target.appendChild(document.createElement('br'));
                                     break;
                                 }
                                 case "stderr": {
                                     const span = document.createElement('span');
                                     span.classList.add('captured-stderr');
                                     span.innerText = `> ${line.value}`;
-                                    pre.appendChild(span);
-                                    pre.appendChild(document.createElement('br'));
+                                    target.appendChild(span);
+                                    target.appendChild(document.createElement('br'));
                                     break;
                                 }
                                 case "node": {
@@ -1016,7 +1027,10 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                         lineStart: (start >>> 12), colStart: (start & 0xFFF),
                                         lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
                                     };
-                                    container.appendChild((0, createTextSpanIndicator_2.default)(span));
+                                    container.appendChild((0, createTextSpanIndicator_2.default)({
+                                        span,
+                                        marginLeft: false,
+                                    }));
                                     const typeNode = document.createElement('span');
                                     typeNode.classList.add('syntax-type');
                                     typeNode.innerText = type;
@@ -1033,7 +1047,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     container.onclick = () => {
                                         (0, displayAttributeModal_1.default)(env, null, line.value);
                                     };
-                                    pre.appendChild(container);
+                                    target.appendChild(container);
                                     break;
                                 }
                                 default: {
@@ -1042,6 +1056,23 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                 }
                             }
                         }
+                    };
+                    const pre = document.createElement('pre');
+                    pre.style.margin = '0px';
+                    pre.style.padding = '0.5rem';
+                    pre.style.fontSize = '0.75rem';
+                    // pre.innerHtml = lines.slice(outputStart + 1).join('\n').trim();
+                    body
+                        .filter((line, lineIdx, arr) => {
+                        // Keep empty lines only if they are followed by a non-empty line
+                        // Removes two empty lines in a row, and removes trailing empty lines
+                        if (!line && !arr[lineIdx + 1]) {
+                            return false;
+                        }
+                        return true;
+                    })
+                        .forEach((line) => {
+                        encodeLine(pre, line);
                         // '\n'
                     });
                     root.appendChild(pre);
@@ -1265,7 +1296,30 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
         retNode.innerText = text;
         return retNode;
     };
-    const getParagraphs = (type) => {
+    const getHelpTitle = (type) => ({
+        'general': 'How to use',
+        'recovery-strategy': 'Position recovery',
+    })[type];
+    const getHelpContents = (type) => {
+        const createHeader = (text) => {
+            const header = document.createElement('span');
+            header.classList.add('syntax-attr');
+            header.innerText = text;
+            return header;
+        };
+        const joinElements = (...parts) => {
+            const wrapper = document.createElement('div');
+            parts.forEach(p => {
+                if (typeof p === 'string') {
+                    wrapper.appendChild(document.createTextNode(p));
+                }
+                else {
+                    wrapper.appendChild(p);
+                }
+                return p;
+            });
+            return wrapper;
+        };
         switch (type) {
             case 'general': {
                 const exampleVisible = document.createElement('div');
@@ -1326,19 +1380,19 @@ encode(value):
                     `Right click on some text in the editor to get started`,
                     `There are three magic attributes you may want to add:`,
                     ``,
-                    `1) 'pastaVisible'. This controls whether or not a node will appear in the "RAG Query" menu.`,
+                    joinElements(`1) '`, createHeader('pastaVisible'), `'. This controls whether or not a node will appear in the "RAG Query" menu.`),
                     `Default: `,
                     `--    false: for 'List' and 'Opt'. Note: this is only default, you can override it.`,
                     `--     true: for all other types`,
                     // `Example: syn boolean List.pastaVisible() = false;`,
                     exampleVisible,
                     ``,
-                    `2) 'pastaAttrs', A filter that can be used to specify which attributes should be visible.`,
+                    joinElements(`2) '`, createHeader('pastaAttrs'), `'. A filter that can be used to specify which attributes should be visible.`),
                     `Default: all public functions with "simple" argument types (String, int, boolean) visible.`,
                     // `Example: syn java.util.List<String> Function.pastaAttrs() = Arrays.asList("eval", "references");`,
                     exampleAttrs,
                     ``,
-                    `3) 'pastaView', This controls how a value is printed.`,
+                    joinElements(`3) '`, createHeader('pastaView'), `'. This controls how a value is printed`),
                     `Default: encodes one or more options in order. In pseudocode:`,
                     viewDefault,
                     exampleView,
@@ -1379,7 +1433,7 @@ encode(value):
                     '1) Fix your parser',
                     'Usually position information is missing because of how you structured your parser.',
                     'Maybe you do some sort of desugaring in the parser, and create multiple AST nodes in a single production rule.',
-                    'Beaver, for example, will only give a single node position information per production rule, so if you create multiple then this leads to the problem at hand.',
+                    'Beaver, for example, will only give a single node position information per production rule, so try to ony create a single node per rule.',
                     '',
                     '2) Use a recovery strategy',
                     'If a node is missing location information, then we can sometimes get it from nearby nodes.',
@@ -1407,7 +1461,7 @@ encode(value):
                 root.appendChild((0, createModalTitle_5.default)({
                     renderLeft: (container) => {
                         const header = document.createElement('span');
-                        header.innerText = `How to use`;
+                        header.innerText = getHelpTitle(type);
                         container.appendChild(header);
                     },
                     onClose: () => {
@@ -1417,7 +1471,7 @@ encode(value):
                 }).element);
                 const textHolder = document.createElement('div');
                 textHolder.style.padding = '0.5rem';
-                const paragraphs = getParagraphs(type);
+                const paragraphs = getHelpContents(type);
                 paragraphs.forEach(p => {
                     if (!p) {
                         textHolder.appendChild(document.createElement('br'));
@@ -1625,8 +1679,8 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     activeMarkers.forEach(m => { var _a; return (_a = m === null || m === void 0 ? void 0 : m.clear) === null || _a === void 0 ? void 0 : _a.call(m); });
                     activeMarkers.length = 0;
                     const deduplicator = new Set();
-                    const filteredAddMarker = (start, end, msg) => {
-                        const uniqId = [start, end, msg].join(' | ');
+                    const filteredAddMarker = (severity, start, end, msg) => {
+                        const uniqId = [severity, start, end, msg].join(' | ');
                         ;
                         if (deduplicator.has(uniqId)) {
                             return;
@@ -1636,10 +1690,10 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         const colStart = start & 0xFFF;
                         const lineEnd = (end >>> 12);
                         const colEnd = end & 0xFFF;
-                        activeMarkers.push(markText({ lineStart, colStart, lineEnd, colEnd, message: msg }));
+                        activeMarkers.push(markText({ severity, lineStart, colStart, lineEnd, colEnd, message: msg }));
                     };
                     console.log('probeMarkers:', JSON.stringify(probeMarkers, null, 2));
-                    Object.values(probeMarkers).forEach(arr => arr.forEach(({ errStart, errEnd, msg }) => filteredAddMarker(errStart, errEnd, msg)));
+                    Object.values(probeMarkers).forEach(arr => arr.forEach(({ severity, errStart, errEnd, msg }) => filteredAddMarker(severity, errStart, errEnd, msg)));
                 };
                 const captureStdoutCheckbox = document.getElementById('control-capture-stdout');
                 captureStdoutCheckbox.checked = settings_1.default.shouldCaptureStdio();
