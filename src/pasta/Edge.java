@@ -5,6 +5,8 @@ import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import pasta.protocol.SerializableParameter;
+
 public abstract class Edge {
 
 	public final TypeAtLoc source;
@@ -49,38 +51,38 @@ public abstract class Edge {
 		}
 	}
 
-	public static class ZeroArgNtaEdge extends Edge {
-		public final String ntaName;
-
-		public ZeroArgNtaEdge(TypeAtLoc source, TypeAtLoc target, String ntaName) {
-			super(source, target);
-			this.ntaName = ntaName;
-		}
-
-		@Override
-		public String toString() {
-			return "nta:" + ntaName;
-		}
-
-		@Override
-		public boolean canBeCollapsed() {
-			return false;
-		}
-
-		@Override
-		public void encode(JSONArray out) {
-			final JSONObject obj = new JSONObject();
-			obj.put("type", "znta");
-			obj.put("value", ntaName);
-			out.put(obj);
-		}
-	}
+//	public static class ZeroArgNtaEdge extends Edge {
+//		public final String ntaName;
+//
+//		public ZeroArgNtaEdge(TypeAtLoc source, TypeAtLoc target, String ntaName) {
+//			super(source, target);
+//			this.ntaName = ntaName;
+//		}
+//
+//		@Override
+//		public String toString() {
+//			return "nta:" + ntaName;
+//		}
+//
+//		@Override
+//		public boolean canBeCollapsed() {
+//			return false;
+//		}
+//
+//		@Override
+//		public void encode(JSONArray out) {
+//			final JSONObject obj = new JSONObject();
+//			obj.put("type", "znta");
+//			obj.put("value", ntaName);
+//			out.put(obj);
+//		}
+//	}
 
 	public static class ParameterizedNtaEdge extends Edge {
 		public final String ntaName;
-		public final List<String> arguments;
+		public final List<SerializableParameter> arguments;
 
-		public ParameterizedNtaEdge(TypeAtLoc source, TypeAtLoc target, String ntaName, List<String> arguments) {
+		public ParameterizedNtaEdge(TypeAtLoc source, TypeAtLoc target, String ntaName, List<SerializableParameter> arguments) {
 			super(source, target);
 			this.ntaName = ntaName;
 			this.arguments = arguments;
@@ -99,11 +101,13 @@ public abstract class Edge {
 		@Override
 		public void encode(JSONArray out) {
 			final JSONObject obj = new JSONObject();
-			obj.put("type", "pnta");
+			obj.put("type", "nta");
 			
 			final JSONArray arr = new JSONArray();
-			for (String arg : arguments) {
-				arr.put(arg);
+			for (SerializableParameter arg : arguments) {
+				final JSONObject argObj = new JSONObject();
+				arg.serializeTo(argObj);
+				arr.put(argObj);
 			}
 
 			final JSONObject value = new JSONObject();

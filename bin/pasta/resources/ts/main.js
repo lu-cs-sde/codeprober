@@ -388,15 +388,39 @@ define("ui/popup/formatAttr", ["require", "exports"], function (require, exports
         : '')}`;
     exports.default = formatAttr;
 });
-define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModalTitle", "ui/create/showWindow", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, createModalTitle_1, showWindow_2, displayProbeModal_1, formatAttr_1) {
+define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerOnHover", "ui/create/showWindow", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, createModalTitle_1, createTextSpanIndicator_1, registerOnHover_2, showWindow_2, displayProbeModal_1, formatAttr_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createModalTitle_1 = __importDefault(createModalTitle_1);
+    createTextSpanIndicator_1 = __importDefault(createTextSpanIndicator_1);
+    registerOnHover_2 = __importDefault(registerOnHover_2);
     showWindow_2 = __importDefault(showWindow_2);
     displayProbeModal_1 = __importDefault(displayProbeModal_1);
     formatAttr_1 = __importStar(formatAttr_1);
+    const cancelLocatorRequest = () => {
+        if (!window.ActiveLocatorRequest) {
+            return;
+        }
+        document.body.classList.remove('locator-request-active');
+        delete window.ActiveLocatorRequest;
+    };
+    const startLocatorRequest = (onSelected) => {
+        document.body.classList.add('locator-request-active');
+        const callback = {
+            submit: (loc) => {
+                cancelLocatorRequest();
+                onSelected(loc);
+            },
+        };
+        window.ActiveLocatorRequest = callback;
+        return callback;
+    };
     const displayArgModal = (env, modalPos, locator, attr) => {
+        let lastLocatorRequest = null;
         const cleanup = () => {
+            if (window.ActiveLocatorRequest === lastLocatorRequest) {
+                cancelLocatorRequest();
+            }
         };
         const args = attr.args;
         if (!args || !args.length) {
@@ -437,6 +461,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
     `,
             render: (root) => {
                 root.appendChild(createTitle().element);
+                console.log('Show arg modal : ', JSON.stringify(attr, null, 2));
                 const attrList = document.createElement('div');
                 attrList.classList.add('attr-arg-list');
                 const argValues = [];
@@ -452,7 +477,6 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
                     });
                 };
                 args.forEach((arg, argIdx) => {
-                    argValues[argIdx] = arg.value || '';
                     // const inpId = generateInputId();
                     // const argRow = document.createElement('div');
                     // argRow.style.display = 'flex';
@@ -465,24 +489,183 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
                     argHeader.appendChild(argType);
                     // argHeader.appendChild(document.createTextNode(` ${arg.name}`));
                     attrList.appendChild(argHeader);
-                    const inp = document.createElement('input');
-                    inp.classList.add('attr-arg-input-text');
-                    // inp.style.marginLeft = '1rem';
-                    inp.type = 'text';
-                    inp.value = argValues[argIdx];
-                    // inp.id = inpId;
-                    inp.placeholder = arg.name;
-                    inp.oninput = () => {
-                        argValues[argIdx] = inp.value;
-                    };
-                    inp.onkeydown = (e) => {
-                        if (e.key === 'Enter') {
-                            proceed();
+                    const setupTextInput = (init) => {
+                        const inp = document.createElement('input');
+                        inp.classList.add('attr-arg-input-text');
+                        init(inp);
+                        inp.placeholder = arg.name;
+                        inp.oninput = () => {
+                            argValues[argIdx] = inp.value;
+                        };
+                        inp.onkeydown = (e) => {
+                            if (e.key === 'Enter') {
+                                proceed();
+                            }
+                        };
+                        if (argIdx === 0) {
+                            setTimeout(() => inp.focus(), 100);
                         }
+                        return inp;
                     };
-                    attrList.appendChild(inp);
-                    if (argIdx === 0) {
-                        setTimeout(() => inp.focus(), 100);
+                    const setupTwoPillInput = (init, getActive, onClick) => {
+                        const inp = document.createElement('div');
+                        inp.style.display = 'grid';
+                        inp.style.justifyItems = 'center';
+                        inp.style.gridGap = '4px';
+                        inp.style.gridTemplateColumns = 'auto auto';
+                        const left = document.createElement('span');
+                        const right = document.createElement('span');
+                        const updateActiveElem = () => {
+                            const set = (target, attr, on) => {
+                                const isOn = target.classList.contains(attr);
+                                console.log('updateActiveELem', isOn, on);
+                                if (isOn === on) {
+                                    return;
+                                }
+                                if (on) {
+                                    target.classList.add(attr);
+                                }
+                                else {
+                                    target.classList.remove(attr);
+                                }
+                            };
+                            const setActive = (target, active) => {
+                                set(target, 'attr-input-twopill-selected', active);
+                                set(target, 'attr-input-twopill-unselected', !active);
+                            };
+                            const active = getActive();
+                            setActive(left, active === 'left');
+                            setActive(right, active === 'right');
+                        };
+                        [left, right].forEach((btn) => {
+                            btn.classList.add('clickHighlightOnHover');
+                            btn.classList.add('attr-input-twopill');
+                            // btn.style.border = '1px solid #888';
+                            btn.style.width = '100%';
+                            btn.style.height = '100%';
+                            btn.style.textAlign = 'center';
+                            // btn.classList.add('syntax-modifier');
+                            btn.onclick = () => {
+                                onClick((btn === left) ? 'left' : 'right', updateActiveElem);
+                            };
+                        });
+                        updateActiveElem();
+                        inp.appendChild(left);
+                        inp.appendChild(right);
+                        init(inp, left, right);
+                        return inp;
+                    };
+                    // inp.style.marginLeft = '1rem';
+                    switch (arg.type) {
+                        case "int": {
+                            argValues[argIdx] = arg.value || '0';
+                            attrList.appendChild(setupTextInput((elem) => {
+                                elem.type = 'number';
+                                elem.value = `${parseInt(`${argValues[argIdx]}`, 10) || ''}`;
+                            }));
+                            break;
+                        }
+                        case "boolean": {
+                            argValues[argIdx] = `${arg.value === 'true'}`;
+                            attrList.appendChild(setupTwoPillInput((parent, left, right) => {
+                                left.innerText = 'true';
+                                right.innerText = 'false';
+                            }, () => argValues[argIdx] === 'true' ? 'left' : 'right', (node, updateActive) => {
+                                argValues[argIdx] = `${node === 'left'}`;
+                                updateActive();
+                            }));
+                            break;
+                        }
+                        default:
+                            if (arg.isNodeType) {
+                                argValues[argIdx] = arg.value || 'null';
+                                let pickedNodePanel = document.createElement('div');
+                                let pickedNodeHighlighter = () => { };
+                                (0, registerOnHover_2.default)(pickedNodePanel, (on) => pickedNodeHighlighter(on));
+                                const refreshPickedNode = () => {
+                                    while (pickedNodePanel.firstChild) {
+                                        pickedNodePanel.firstChild.remove();
+                                    }
+                                    pickedNodePanel.style.fontStyle = 'unset';
+                                    pickedNodePanel.classList.remove('clickHighlightOnHover');
+                                    pickedNodeHighlighter = () => { };
+                                    const state = argValues[argIdx];
+                                    if (state === 'null') {
+                                        pickedNodePanel.style.display = 'hidden';
+                                        pickedNodePanel.style.height = '0px';
+                                        return;
+                                    }
+                                    pickedNodePanel.style.height = '';
+                                    if (state === 'pending') {
+                                        pickedNodePanel.style.display = 'block';
+                                        pickedNodePanel.style.fontStyle = 'italic';
+                                        pickedNodePanel.innerText = 'No node picked yet..';
+                                        return;
+                                    }
+                                    if (typeof state === 'string') {
+                                        console.warn('unknown state', state);
+                                        pickedNodePanel.style.display = 'none';
+                                        return;
+                                    }
+                                    const span = startEndToSpan(state.result.start, state.result.end);
+                                    pickedNodePanel.appendChild((0, createTextSpanIndicator_1.default)({
+                                        span,
+                                    }));
+                                    const typeNode = document.createElement('span');
+                                    typeNode.classList.add('syntax-type');
+                                    typeNode.innerText = state.result.type;
+                                    pickedNodePanel.appendChild(typeNode);
+                                    pickedNodePanel.classList.add('clickHighlightOnHover');
+                                    pickedNodeHighlighter = (on) => env.updateSpanHighlight(on ? span : null);
+                                };
+                                refreshPickedNode();
+                                attrList.appendChild(setupTwoPillInput((parent, left, right) => {
+                                    left.innerText = 'null';
+                                    // right.innerText = '';
+                                    // right.classList.add('locator-symbol');
+                                    right.style.display = 'flex';
+                                    right.style.flexDirection = 'row';
+                                    right.style.justifyContent = 'space-around';
+                                    const lbl = document.createElement('span');
+                                    lbl.innerText = 'Select node';
+                                    lbl.style.margin = 'auto';
+                                    right.appendChild(lbl);
+                                    const icon = document.createElement('img');
+                                    icon.src = '/icons/my_location_white_24dp.svg';
+                                    icon.style.height = '18px';
+                                    icon.style.alignSelf = 'center';
+                                    icon.style.margin = '0 4px 0 0';
+                                    right.appendChild(icon);
+                                }, () => argValues[argIdx] === 'null' ? 'left' : 'right', (node, updateActive) => {
+                                    if (node === 'left') {
+                                        argValues[argIdx] = 'null';
+                                        cancelLocatorRequest();
+                                    }
+                                    else {
+                                        argValues[argIdx] = 'pending';
+                                        lastLocatorRequest = startLocatorRequest(locator => {
+                                            argValues[argIdx] = locator;
+                                            refreshPickedNode();
+                                            updateActive();
+                                        });
+                                    }
+                                    refreshPickedNode();
+                                    updateActive();
+                                }));
+                                attrList.appendChild(document.createElement('span')); // <-- for grid alignment
+                                attrList.appendChild(pickedNodePanel);
+                                break;
+                            }
+                            console.warn('Unknown arg type', arg.type, ', defaulting to string input');
+                        // Fall through
+                        case 'java.lang.String': {
+                            argValues[argIdx] = arg.value || '';
+                            attrList.appendChild(setupTextInput((elem) => {
+                                elem.type = 'text';
+                                elem.value = `${argValues[argIdx]}`;
+                            }));
+                            break;
+                        }
                     }
                     // attrList.appendChild(argRow);
                 });
@@ -492,10 +675,9 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
                 const submit = document.createElement('input');
                 submit.type = 'submit';
                 submit.classList.add('attr-list-submit');
-                submit.style.width = '90%';
                 submit.style.display = 'block';
                 // submit.style.margin = 'auto';
-                submit.style.margin = '0.5rem auto';
+                submit.style.margin = '0.5rem';
                 submit.value = 'OK';
                 submit.onmousedown = (e) => {
                     e.stopPropagation();
@@ -512,7 +694,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
     };
     exports.default = displayArgModal;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayProbeModal_2, showWindow_3, displayArgModal_1, formatAttr_2, createTextSpanIndicator_1) {
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayProbeModal_2, showWindow_3, displayArgModal_1, formatAttr_2, createTextSpanIndicator_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
@@ -521,7 +703,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     showWindow_3 = __importDefault(showWindow_3);
     displayArgModal_1 = __importDefault(displayArgModal_1);
     formatAttr_2 = __importDefault(formatAttr_2);
-    createTextSpanIndicator_1 = __importDefault(createTextSpanIndicator_1);
+    createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
     const displayAttributeModal = (env, modalPos, locator) => {
         let filter = '';
         let attrs = null;
@@ -548,7 +730,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                         // headAttr.style.fontStyle= 'italic';
                         container.appendChild(headType);
                         container.appendChild(headAttr);
-                        container.appendChild((0, createTextSpanIndicator_1.default)({
+                        container.appendChild((0, createTextSpanIndicator_2.default)({
                             span: startEndToSpan(locator.result.start, locator.result.end),
                             marginLeft: true,
                             onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
@@ -750,17 +932,60 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     };
     exports.default = displayAttributeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/create/registerOnHover", "ui/popup/formatAttr", "ui/popup/displayArgModal"], function (require, exports, createLoadingSpinner_2, createModalTitle_3, createTextSpanIndicator_2, displayAttributeModal_1, showWindow_4, registerOnHover_2, formatAttr_3, displayArgModal_2) {
+define("ui/create/registerNodeSelector", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const registerNodeSelector = (elem, getLocator) => {
+        elem.classList.add('nodeLocatorContainer');
+        elem.addEventListener('click', (e) => {
+            if (!window.ActiveLocatorRequest) {
+                return;
+            }
+            e.stopImmediatePropagation();
+            e.stopPropagation();
+            e.preventDefault();
+            window.ActiveLocatorRequest.submit(getLocator());
+        });
+    };
+    exports.default = registerNodeSelector;
+});
+define("ui/adjustSpan", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const adjustTypeAtLoc = (adjuster, tal) => {
+        const span = startEndToSpan(tal.start, tal.end);
+        let [ls, cs] = adjuster(span.lineStart, span.colStart);
+        let [le, ce] = adjuster(span.lineEnd, span.colEnd);
+        if (ls == le && cs == ce) {
+            if (span.lineStart === span.lineEnd && span.colStart === span.colEnd) {
+                // Accept it, despite it being strange
+            }
+            else {
+                // Instead of accepting change to zero-width span, take same line/col diff as before
+                le = ls + (span.lineEnd - span.lineStart);
+                ce = cs + (span.colEnd - span.colStart);
+                // console.log('Ignoring adjustmpent from', span, 'to', { lineStart: ls, colStart: cs, lineEnd: le, colEnd: ce }, 'because it looks very improbable');
+                // return;
+            }
+        }
+        tal.start = (ls << 12) + Math.max(0, cs);
+        tal.end = (le << 12) + ce;
+    };
+    exports.default = adjustTypeAtLoc;
+});
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/create/registerOnHover", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "ui/adjustSpan"], function (require, exports, createLoadingSpinner_2, createModalTitle_3, createTextSpanIndicator_3, displayAttributeModal_1, showWindow_4, registerOnHover_3, formatAttr_3, displayArgModal_2, registerNodeSelector_1, adjustSpan_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
     createModalTitle_3 = __importDefault(createModalTitle_3);
-    createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
+    createTextSpanIndicator_3 = __importDefault(createTextSpanIndicator_3);
     displayAttributeModal_1 = __importDefault(displayAttributeModal_1);
     showWindow_4 = __importDefault(showWindow_4);
-    registerOnHover_2 = __importDefault(registerOnHover_2);
+    registerOnHover_3 = __importDefault(registerOnHover_3);
     formatAttr_3 = __importDefault(formatAttr_3);
     displayArgModal_2 = __importDefault(displayArgModal_2);
+    registerNodeSelector_1 = __importDefault(registerNodeSelector_1);
+    adjustSpan_1 = __importDefault(adjustSpan_1);
     const displayProbeModal = (env, modalPos, locator, attr) => {
         console.log('dPM, env:', env);
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -825,9 +1050,37 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     headAttr.appendChild(node);
                                     break;
                                 }
+                                case 'int': {
+                                    const node = document.createElement('span');
+                                    node.classList.add('syntax-int');
+                                    node.innerText = `${arg.value}`;
+                                    headAttr.appendChild(node);
+                                    break;
+                                }
+                                case 'boolean': {
+                                    const node = document.createElement('span');
+                                    node.classList.add('syntax-modifier');
+                                    node.innerText = `${arg.value}`;
+                                    headAttr.appendChild(node);
+                                    break;
+                                }
                                 default: {
-                                    console.warn('Unsure of how to render', arg.type);
-                                    headAttr.appendChild(document.createTextNode(arg.value));
+                                    if (arg.isNodeType) {
+                                        const node = document.createElement('span');
+                                        node.classList.add('syntax-type');
+                                        if (typeof arg.value === 'string') {
+                                            // Probably null
+                                            node.innerText = arg.value;
+                                        }
+                                        else {
+                                            node.innerText = arg.value.result.type;
+                                        }
+                                        headAttr.appendChild(node);
+                                    }
+                                    else {
+                                        console.warn('Unsure of how to render', arg.type);
+                                        headAttr.appendChild(document.createTextNode(`${arg.value}`));
+                                    }
                                     break;
                                 }
                             }
@@ -867,11 +1120,13 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         // editHolder.appendChild(editButton);
                         container.appendChild(editButton);
                     }
-                    container.appendChild((0, createTextSpanIndicator_2.default)({
+                    const spanIndicator = (0, createTextSpanIndicator_3.default)({
                         span: startEndToSpan(locator.result.start, locator.result.end),
                         marginLeft: true,
                         onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
-                    }));
+                    });
+                    (0, registerNodeSelector_1.default)(spanIndicator, () => locator);
+                    container.appendChild(spanIndicator);
                 },
                 onClose: () => {
                     queryWindow.remove();
@@ -960,17 +1215,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         refreshMarkers = true;
                         locator = parsed.locator;
                     }
-                    // if (parsed.matchStart !== undefined) {
-                    //   const num = +parsed.matchStart;
-                    //   span.lineStart = num >>> 12;
-                    //   span.colStart = num & 0xFFF;
-                    // }
-                    // if (parsed.matchEnd !== undefined) {
-                    //   const num = +parsed.matchEnd;
-                    //   span.lineEnd = num >>> 12;
-                    //   span.colEnd = num & 0xFFF;
-                    // }
-                    if (refreshMarkers) {
+                    if (refreshMarkers || localErrors.length > 0) {
                         console.log('refresh markers!! local:', localErrors);
                         env.updateMarkers();
                     }
@@ -1027,7 +1272,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                         lineStart: (start >>> 12), colStart: (start & 0xFFF),
                                         lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
                                     };
-                                    container.appendChild((0, createTextSpanIndicator_2.default)({
+                                    container.appendChild((0, createTextSpanIndicator_3.default)({
                                         span,
                                         marginLeft: false,
                                     }));
@@ -1038,15 +1283,16 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     container.classList.add('clickHighlightOnHover');
                                     container.style.width = 'fit-content';
                                     container.style.display = 'inline';
-                                    (0, registerOnHover_2.default)(container, on => {
+                                    (0, registerOnHover_3.default)(container, on => {
                                         env.updateSpanHighlight(on ? span : null);
                                     });
                                     container.onmousedown = (e) => {
                                         e.stopPropagation();
                                     };
-                                    container.onclick = () => {
+                                    (0, registerNodeSelector_1.default)(container, () => line.value);
+                                    container.addEventListener('click', () => {
                                         (0, displayAttributeModal_1.default)(env, null, line.value);
-                                    };
+                                    });
                                     target.appendChild(container);
                                     break;
                                 }
@@ -1106,31 +1352,15 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 // console.log('onChange', stickyMarker.getSpan());
                 // console.log('Adjusted span from:', span);
                 adjusters.forEach((adj) => {
-                    const adjust = (tal) => {
-                        const span = startEndToSpan(tal.start, tal.end);
-                        let [ls, cs] = adj(span.lineStart, span.colStart);
-                        let [le, ce] = adj(span.lineEnd, span.colEnd);
-                        if (ls == le && cs == ce) {
-                            if (span.lineStart === span.lineEnd && span.colStart === span.colEnd) {
-                                // Accept it, despite it being strange
-                            }
-                            else {
-                                // Instead of accepting change to zero-width span, take same line/col diff as before
-                                le = ls + (span.lineEnd - span.lineStart);
-                                ce = cs + (span.colEnd - span.colStart);
-                                // console.log('Ignoring adjustmpent from', span, 'to', { lineStart: ls, colStart: cs, lineEnd: le, colEnd: ce }, 'because it looks very improbable');
-                                // return;
-                            }
-                        }
-                        tal.start = (ls << 12) + Math.max(0, cs);
-                        tal.end = (le << 12) + ce;
-                    };
-                    adjust(locator.root);
-                    adjust(locator.result);
+                    (0, adjustSpan_1.default)(adj, locator.root);
+                    (0, adjustSpan_1.default)(adj, locator.result);
                     locator.steps.forEach((step) => {
                         // todo if step is TaL, adjust it
                         // step.
                     });
+                    // TODO if attr args contains locators, adjust them too
+                    // TODO when attributes are resolved, make sure to send refreshed locators back not only for root node, but also for the arg steps.
+                    // TODO check by there is a lreading space added whenever the argModal is opened.
                 });
                 // console.log('Adjusted span to:', span);
             }
@@ -1146,14 +1376,15 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     };
     exports.default = displayProbeModal;
 });
-define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow"], function (require, exports, createLoadingSpinner_3, createModalTitle_4, displayAttributeModal_2, registerOnHover_3, showWindow_5) {
+define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector"], function (require, exports, createLoadingSpinner_3, createModalTitle_4, displayAttributeModal_2, registerOnHover_4, showWindow_5, registerNodeSelector_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_3 = __importDefault(createLoadingSpinner_3);
     createModalTitle_4 = __importDefault(createModalTitle_4);
     displayAttributeModal_2 = __importDefault(displayAttributeModal_2);
-    registerOnHover_3 = __importDefault(registerOnHover_3);
+    registerOnHover_4 = __importDefault(registerOnHover_4);
     showWindow_5 = __importDefault(showWindow_5);
+    registerNodeSelector_2 = __importDefault(registerNodeSelector_2);
     const displayRagModal = (env, line, col) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const cleanup = () => {
@@ -1224,8 +1455,11 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                     if (!parsed.spansAndNodeTypes) {
                         throw new Error("Couldn't find expected line in output");
                     }
+                    const rowsContainer = document.createElement('div');
+                    rowsContainer.style.padding = '2px';
+                    root.appendChild(rowsContainer);
                     // const parsed = JSON.parse(interestingLine.slice(needle.length)) as string[];
-                    const rows = parsed.spansAndNodeTypes.map(({ start, end, type }, entIdx) => {
+                    parsed.spansAndNodeTypes.forEach(({ start, end, type }, entIdx) => {
                         const span = { lineStart: (start >>> 12), colStart: (start & 0xFFF), lineEnd: (end >>> 12), colEnd: (end & 0xFFF) };
                         const node = document.createElement('div');
                         node.classList.add('clickHighlightOnHover');
@@ -1234,19 +1468,21 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                             node.style.borderTop = '1px solid gray';
                         }
                         node.innerText = `${type}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
-                        (0, registerOnHover_3.default)(node, on => env.updateSpanHighlight(on ? span : null));
+                        (0, registerOnHover_4.default)(node, on => env.updateSpanHighlight(on ? span : null));
                         node.onmousedown = (e) => { e.stopPropagation(); };
+                        const nodeTal = {
+                            start: (span.lineStart << 12) + span.colStart,
+                            end: (span.lineEnd << 12) + span.colEnd,
+                            type,
+                        };
+                        const locator = { root: nodeTal, result: nodeTal, steps: [] };
+                        (0, registerNodeSelector_2.default)(node, () => locator);
                         node.onclick = () => {
                             cleanup();
                             env.updateSpanHighlight(null);
-                            const node = {
-                                start: (span.lineStart << 12) + span.colStart,
-                                end: (span.lineEnd << 12) + span.colEnd,
-                                type,
-                            };
-                            (0, displayAttributeModal_2.default)(env, popup.getPos(), { root: node, result: node, steps: [] });
+                            (0, displayAttributeModal_2.default)(env, popup.getPos(), locator);
                         };
-                        root.appendChild(node);
+                        rowsContainer.appendChild(node);
                     });
                 })
                     .catch(err => {
@@ -1676,6 +1912,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 const activeMarkers = [];
                 const probeMarkers = {};
                 const updateMarkers = () => {
+                    console.warn('main - updatemarkers');
                     activeMarkers.forEach(m => { var _a; return (_a = m === null || m === void 0 ? void 0 : m.clear) === null || _a === void 0 ? void 0 : _a.call(m); });
                     activeMarkers.length = 0;
                     const deduplicator = new Set();

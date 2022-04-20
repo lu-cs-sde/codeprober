@@ -71,7 +71,9 @@ body[data-theme-light="true"] #control-panel {
 .attr-arg-list {
   padding: 0.5rem;
   display: grid;
+  row-gap: 0.5rem;
   grid-template-columns: auto auto;
+
 
   /* flex-direction: column; */
 }
@@ -80,9 +82,11 @@ body[data-theme-light="true"] #control-panel {
 /* } */
 .attr-list-submit {
   /* border-color: darkgreen; */
+  width: -webkit-fill-available;
+  width: fill;
   border: 1px solid white;
   border-radius: 0.25rem;
-  padding: 0.25rem 0.125rem;
+  padding: 0 0.125rem;
   background: none;
   cursor: pointer;
   color: white;
@@ -93,7 +97,60 @@ body[data-theme-light="true"] #control-panel {
 .attr-list-submit:active {
   background: #8888;
 }
+.attr-input-twopill {
+  border: 1px solid #888;
+  border-radius: 0.25rem;
+}
+body[data-theme-light="true"] .attr-input-twopill {
+  border-color: #aaa;
 
+}
+
+body.locator-request-active .nodeLocatorContainer {
+  position: relative;
+}
+body.locator-request-active .nodeLocatorContainer::after {
+  content: ' ';
+  position: absolute;
+  z-index: 99;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  /* width: calc(-webkit-fill-available + 10px); */
+  height: 100%;
+  transform: translate(-50%, -50%);
+  /* height: calc(-webkit-fill-available + 32px); */
+  border: 2px dashed red;
+  animation: nodeLocatorContainerBlink infinite 1s;
+}
+@keyframes nodeLocatorContainerBlink{
+  0% { border-color: red; }
+  50% { border-color: white; }
+}
+body.locator-request-active  .nodeLocatorContainer:hover::after {
+  background: #F77A;
+  cursor: pointer;
+}
+
+.attr-input-twopill-selected {
+  background-color: #7774;
+  border-color: cyan;
+}
+body[data-theme-light="true"] .attr-input-twopill-selected {
+  border-color: cyan;
+}
+body[data-theme-light="true"] .attr-input-twopill-selected {
+  background-color: #aaa4;
+
+}
+.attr-input-twopill-unselected {
+  color: gray;
+  border-color: gray;
+}
+
+.locator-symbol::after {
+
+}
 body[data-theme-light="true"] .attr-list-submit {
   border-color: #333;
   color: black;
@@ -204,6 +261,9 @@ body[data-theme-light="true"]   .syntax-string { color: #A31515; }
 
                               .syntax-modifier { color: #569CD6; }
 body[data-theme-light="true"] .syntax-modifier { color: #0000FF; }
+
+                                   .syntax-int { color: #B5CEA8; }
+body[data-theme-light="true"]      .syntax-int { color: #098658; }
 
 .bg-syntax-attr-dim,
 .syntax-attr-dim-focus:focus {

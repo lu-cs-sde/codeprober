@@ -14,6 +14,9 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.function.Consumer;
 
+import pasta.protocol.SerializableParameter;
+import pasta.protocol.SerializableParameterType;
+
 public class RobustNodeId {
 	public final TypeAtLoc root;
 	public final List<Edge> steps;
@@ -23,11 +26,12 @@ public class RobustNodeId {
 		this.steps = steps;
 	}
 
-	public static RobustNodeId extract(Object astNode, PositionRecoveryStrategy recoveryStrategy) {
+	public static RobustNodeId extract(Object astNode, PositionRecoveryStrategy recoveryStrategy,
+			Class<?> baseAstClazz) {
 		final List<Edge> res = new ArrayList<>();
 
 		try {
-			extractStepsTo(astNode, res, recoveryStrategy);
+			extractStepsTo(astNode, res, recoveryStrategy, baseAstClazz);
 		} catch (IllegalArgumentException | IllegalAccessException | NoSuchFieldException | SecurityException
 				| NoSuchMethodException | InvocationTargetException e) {
 			e.printStackTrace();
@@ -108,9 +112,9 @@ public class RobustNodeId {
 		return false;
 	}
 
-	private static void extractStepsTo(Object astNode, List<Edge> out, PositionRecoveryStrategy recoveryStrategy)
-			throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException,
-			NoSuchMethodException, InvocationTargetException {
+	private static void extractStepsTo(Object astNode, List<Edge> out, PositionRecoveryStrategy recoveryStrategy,
+			Class<?> baseAstClazz) throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException,
+			SecurityException, NoSuchMethodException, InvocationTargetException {
 		final Object parent;
 		try {
 			parent = Reflect.getParent(astNode);
@@ -142,7 +146,7 @@ public class RobustNodeId {
 				} else {
 					addEdge.accept(new Edge.ChildIndexEdge(source, target, childIdx));
 				}
-				extractStepsTo(parent, out, recoveryStrategy);
+				extractStepsTo(parent, out, recoveryStrategy, baseAstClazz);
 				return;
 			}
 			++childIdx;
@@ -165,8 +169,8 @@ public class RobustNodeId {
 				final Object cachedNtaValue = field.get(parent);
 				// Intentional identity comparison
 				if (cachedNtaValue == astNode) {
-					addEdge.accept(new Edge.ZeroArgNtaEdge(source, target, m.getName()));
-					extractStepsTo(parent, out, recoveryStrategy);
+					addEdge.accept(new Edge.ParameterizedNtaEdge(source, target, m.getName(), Collections.emptyList()));
+					extractStepsTo(parent, out, recoveryStrategy, baseAstClazz);
 					return;
 				}
 			}
@@ -187,7 +191,8 @@ public class RobustNodeId {
 					}
 					Field f;
 					String guessedCacheName = m.getName();
-					for (Parameter p : m.getParameters()) {
+					final Parameter[] mParams = m.getParameters();
+					for (Parameter p : mParams) {
 						guessedCacheName += "_" + p.getType().getSimpleName();
 					}
 					guessedCacheName += "_values";
@@ -203,21 +208,52 @@ public class RobustNodeId {
 					@SuppressWarnings("unchecked")
 					final Map<Object, Object> cache = (Map<Object, Object>) f.get(realParent);
 
-					for (Entry<Object, Object> ent : cache.entrySet()) {
+					checkCacheEntries: for (Entry<Object, Object> ent : cache.entrySet()) {
 						if (ent.getValue() == astNode) {
 							final Object param = ent.getKey();
 
-							if (param.getClass() == String.class) {
-								final TypeAtLoc realSource = TypeAtLoc.from(realParent, recoveryStrategy);
-								addEdge.accept(new Edge.ParameterizedNtaEdge(realSource, target, m.getName(),
-										Arrays.asList(param.toString())));
-								extractStepsTo(realParent, out, recoveryStrategy);
-								return;
+							final List<SerializableParameter> serializableParams = new ArrayList<>();
+							if (mParams.length > 1) {
+								if (!(param instanceof List<?>)) {
+									System.out.println("Method " + m.getName() + " has " + mParams.length
+											+ " params, but cache key isn't a list? It is: " + param);
+									continue checkCacheEntries;
+								}
+								final List<?> argList = (ArrayList<?>) param;
+								int paramIdx = 0;
+								for (Object v : argList) {
+									final SerializableParameter decoded = SerializableParameter
+											.decode(mParams[paramIdx++].getType(), v, recoveryStrategy, baseAstClazz);
+									if (decoded == null) {
+										System.out.println("Unknown parameter " + v);
+										continue checkCacheEntries;
+									}
+									serializableParams.add(decoded);
+								}
 							} else {
-								System.out.println("Found parameterized NTA edge from " + m.getName()
-										+ ", but it takes param '" + param + "' (type=" + param.getClass()
-										+ "), not sure how to encode it");
+								final SerializableParameter decoded = SerializableParameter.decode(mParams[0].getType(),
+										param, recoveryStrategy, baseAstClazz);
+								if (decoded == null) {
+									System.out.println("Unknown parameter " + param);
+									continue checkCacheEntries;
+								}
+								serializableParams.add(decoded);
 							}
+//							final SerializableParameterType serializable = SerializableParameterType
+//									.decode(param.getClass(), baseAstClazz);
+							final TypeAtLoc realSource = TypeAtLoc.from(realParent, recoveryStrategy);
+							addEdge.accept(
+									new Edge.ParameterizedNtaEdge(realSource, target, m.getName(), serializableParams));
+							extractStepsTo(realParent, out, recoveryStrategy, baseAstClazz);
+							return;
+
+//							if (serializable != null) {
+//								return;
+//							} else {
+//								System.out.println("Found parameterized NTA edge from " + m.getName()
+//										+ ", but it takes param '" + param + "' (type=" + param.getClass()
+//										+ "), not sure how to encode it");
+//							}
 
 						}
 					}

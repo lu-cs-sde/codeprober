@@ -25,6 +25,9 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import pasta.ResolveNodeLocator.ResolvedNode;
+import pasta.protocol.SerializableParameter;
+import pasta.protocol.SerializableParameterType;
 import pasta.util.ASTProvider;
 
 public class PastaServer {
@@ -76,43 +79,6 @@ public class PastaServer {
 		}
 	}
 
-	private static JSONObject buildLocator(Object astNode, PositionRecoveryStrategy recoveryStrategy)
-			throws NoSuchMethodException, InvocationTargetException {
-		// TODO add position recovery things here(?)
-		final RobustNodeId id;
-
-		try {
-			id = RobustNodeId.extract(astNode, recoveryStrategy);
-		} catch (RuntimeException e) {
-			System.out.println("Failed to extract locator for " + astNode);
-			e.printStackTrace();
-			return null;
-		}
-
-		final JSONObject robustRoot = new JSONObject();
-		robustRoot.put("start", id.root.position.start);
-		robustRoot.put("end", id.root.position.end);
-		robustRoot.put("type", id.root.type);
-
-		final JSONObject robustResult = new JSONObject();
-		final Position astPos = PositionRecovery.extractPosition(astNode, recoveryStrategy);
-		robustResult.put("start", astPos.start);
-		robustResult.put("end", astPos.end);
-		robustResult.put("type", astNode.getClass().getSimpleName());
-
-		final JSONArray steps = new JSONArray();
-		for (Edge step : id.steps) {
-			step.encode(steps);
-		}
-
-		final JSONObject robust = new JSONObject();
-		robust.put("root", robustRoot);
-		robust.put("result", robustResult);
-		robust.put("steps", steps);
-//		System.out.println("Locator: " + robust.toString(2));
-		return robust;
-	}
-
 	private static void encodeValue(JSONArray out, Object value, Class<?> baseAstType,
 			PositionRecoveryStrategy recoveryStrategy, HashSet<Object> alreadyVisitedNodes) {
 		if (value == null) {
@@ -149,7 +115,7 @@ public class PastaServer {
 			}
 
 			try {
-				final JSONObject locator = buildLocator(value, recoveryStrategy);
+				final JSONObject locator = ResolveNodeLocator.buildLocator(value, recoveryStrategy, baseAstType);
 				if (locator != null) {
 					JSONObject wrapper = new JSONObject();
 					wrapper.put("type", "node");
@@ -244,81 +210,6 @@ public class PastaServer {
 		}
 	}
 
-	static Object bestMatchingNode(Object astNode, Class<?> nodeType, int startPos, int endPos,
-			PositionRecoveryStrategy recoveryStrategy) {
-		final Position nodePos;
-		try {
-			nodePos = PositionRecovery.extractPosition(astNode, recoveryStrategy);
-		} catch (NoSuchMethodException | InvocationTargetException e) {
-			System.out.println("Error while extracting node position");
-			e.printStackTrace();
-			return null;
-		}
-		final int start = nodePos.start;
-		final int end = nodePos.end;
-
-		// TODO this if statements makes ExtendJ not work
-		// However, without it you can select nodes in completely incorrect locations
-		// Not sure what to do here. Special case for start==end==0?
-		if (start != 0 && end != 0 && (start > endPos || end < startPos)) {
-//			System.out.println("bmnode " + nodeType + " " + start + ", " + end + " vs " + startPos + ", " + endPos
-//					+ " : " + astNode.getClass().getName() + ", exiting");
-//			// Assume that a parent only contains children within its own bounds
-			return null;
-		}
-
-		Object bestNode = nodeType.isInstance(astNode) ? astNode : null;
-		int bestError = bestNode != null ? (Math.abs(start - startPos) + Math.abs(end - endPos)) : Integer.MAX_VALUE;
-		for (Object child : (Iterable<?>) Reflect.invoke0(astNode, "astChildren")) {
-			Object recurse = bestMatchingNode(child, nodeType, startPos, endPos, recoveryStrategy);
-			if (recurse != null) {
-				final Position recursePos;
-				try {
-					recursePos = PositionRecovery.extractPosition(recurse, recoveryStrategy);
-					final int recurseError = Math.abs(recursePos.start - startPos) + Math.abs(recursePos.end - endPos);
-					if (recurseError < bestError) {
-						bestNode = recurse;
-						bestError = recurseError;
-//					} else if (recurseError == bestError) {
-//						// Two seemingly identical paths forward
-//						// Heuristic/guess: the one with natural position information is better
-//						final Position nonRecoveredBestPos = Position.from(bestNode);
-//						if (!nonRecoveredBestPos.isMeaningful()) {
-//							final Position nonRecoveredRecursePos = Position.from(recurse);
-//							if (nonRecoveredRecursePos.isMeaningful()) {
-//								bestNode = recurse;
-//								bestError = recurseError;
-//							}
-//						}
-					}
-				} catch (NoSuchMethodException | InvocationTargetException e) {
-					System.out.println("Error while extracting child node position");
-					e.printStackTrace();
-				}
-			}
-		}
-		return bestNode;
-	}
-
-	private static boolean onlySimpleParameters(Parameter[] params) {
-		final Type[] primitives = new Type[] { Boolean.TYPE, Integer.TYPE };
-		findBadParameter: for (Parameter param : params) {
-			final Class<?> type = param.getType();
-			for (Type prim : primitives) {
-				if (type == prim) {
-					continue findBadParameter;
-				}
-			}
-			if (type == String.class) {
-				continue;
-			}
-			System.out.println("Unknown parameter type: " + param.getType());
-			// Else, possibly AST Node but we don't support that yet
-			return false;
-		}
-		return true;
-	}
-
 	public static void main(String[] mainArgs) {
 		System.out.println("Starting debug build..");
 		if (mainArgs.length == 0) {
@@ -399,127 +290,43 @@ public class PastaServer {
 
 					final boolean parsed = ASTProvider.parseAst(jarPath, withFile, (ast, loadCls) -> {
 						if (ast == null) {
-							bodyBuilder.put("Failed to parse, but got 'onParse' callback?!");
-							bodyBuilder.put("This feels like a bug, tell whoever is developing the pasta server.");
+							bodyBuilder.put("Compiler exited normally, but no 'DrAST_root_node' found");
+							bodyBuilder.put(
+									"If you call System.exit(<not zero>) when parsing fails then this message will disappear.");
 							return;
 						}
 						System.out.println("Parsed, got: " + ast);
+
+						Class<?> baseAstType = ast.getClass();
+						while (true) {
+							Class<?> parentType = baseAstType.getSuperclass();
+							if (parentType == null
+									|| !parentType.getPackage().getName().equals(baseAstType.getPackage().getName())) {
+								break;
+							}
+							baseAstType = parentType;
+						}
 //						System.out.println("ast pkg: " + ast.getClass().getPackage());
-						Object matchedNode = null;
 
 						final JSONObject locator = queryBody.getJSONObject("locator");
-						final String rootNodeType = locator.getJSONObject("root").getString("type");
-						final int rootStart = locator.getJSONObject("root").getInt("start");
-						final int rootEnd = locator.getJSONObject("root").getInt("end");
-						// Gradually increase search span a few columns in either direction
-						if (rootNodeType.equals(ast.getClass().getSimpleName())) {
-							// Assume that an AST has a unique root type
-							// For ExtendJ the root type is missing line/col info, which breaks some queries
-							// "Fix" by always matching root 'for free', no matter rootStart/rootEnd
-							matchedNode = ast;
-						}
-						if (matchedNode == null) {
-							for (int offset : Arrays.asList(0, 1, 3, 5, 10)) {
-								matchedNode = bestMatchingNode(ast,
-										loadCls.apply(ast.getClass().getPackage().getName() + "." + rootNodeType),
-										rootStart - offset, rootEnd + offset, recoveryStrategy);
-								if (matchedNode != null) {
-									break;
-								}
-							}
-						}
-						if (matchedNode != null) {
-							final List<Object> matchSequence = new ArrayList<>();
-							final JSONArray steps = locator.getJSONArray("steps");
-							for (int i = 0; i < steps.length(); i++) {
-								matchSequence.add(matchedNode);
-								final JSONObject step = steps.getJSONObject(i);
-								switch (step.getString("type")) {
-								case "znta": {
-									matchedNode = Reflect.invoke0(matchedNode, step.getString("value"));
-									break;
-								}
-								case "pnta": {
-									final JSONObject mth = step.getJSONObject("value");
-									final JSONArray args = mth.getJSONArray("args");
-									final Object[] argsValues = new Object[args.length()];
-									final Class<?>[] argsTypes = new Class<?>[args.length()];
-									for (int j = 0; j < args.length(); ++j) {
-										final String value = args.getString(j);
-										argsValues[j] = value;
-										argsTypes[j] = String.class; // Only support string for now
-									}
-									matchedNode = Reflect.invokeN(matchedNode, mth.getString("name"), argsTypes,
-											argsValues);
-									break;
-								}
-								case "tloc": {
-									final JSONObject tloc = step.getJSONObject("value");
-									matchedNode = bestMatchingNode(matchedNode,
-											loadCls.apply(ast.getClass().getPackage().getName() + "."
-													+ tloc.getString("type")),
-											tloc.getInt("start"), tloc.getInt("end"), recoveryStrategy);
-									break;
-								}
-								case "child": {
-									final int childIndex = step.getInt("value");
-									matchedNode = Reflect.getNthChild(matchedNode, childIndex);
-									break;
-								}
-								default: {
-									throw new RuntimeException("Unknown locator step '" + step.toString(0) + "'");
-								}
-								}
-								if (matchedNode == null) {
-									System.out.println("Failed matching after step " + i);
-									break;
-								}
-							}
-						}
-						Position matchPos = null;
-						if (matchedNode != null) {
-							try {
-								matchPos = PositionRecovery.extractPosition(matchedNode, recoveryStrategy);
-							} catch (NoSuchMethodException | InvocationTargetException e1) {
-								System.out.println("Error while extracting position of matched node");
-								e1.printStackTrace();
-							}
-						}
+						ResolvedNode match = ResolveNodeLocator.resolve(ast, recoveryStrategy, loadCls, locator,
+								baseAstType);
 
-						System.out.println("MatchedNode: " + matchedNode);
-						if (matchedNode == null || matchPos == null) {
+						System.out.println("MatchedNode: " + match);
+						if (match == null) {
 							bodyBuilder.put(
 									"No matching node found\n\nTry remaking the probe\nat a different line/column");
 							return;
 						}
-//						
-//						final int matchStart = matchPos.start;
-//						final int matchEnd = matchPos.end;
-//						retBuilder.put("matchStart", matchStart);
-//						retBuilder.put("matchEnd", matchEnd);
-						try {
-							final JSONObject matchedNodeLocator = buildLocator(matchedNode, recoveryStrategy);
-							if (matchedNodeLocator != null) {
-								retBuilder.put("locator", matchedNodeLocator);
-							}
-						} catch (JSONException | NoSuchMethodException | InvocationTargetException e1) {
-							// TODO Auto-generated catch block
-							e1.printStackTrace();
-						}
-
-//						String queryTail = queryTextParts[1];
-//						for (int i = 2; i < queryTextParts.length; i++) {
-//							queryTail += "." + queryTextParts[i];
-//						}
 
 						final String queryAttrName = queryAttr.getString("name");
 						switch (queryAttrName) {
-						// TODO rename magic attribtues to something that is less likely to collide with
-						// normal AST attrs
 						case "pasta_containingSpansAndNodeTypes": {
 //							JSONArray 
 							final List<JSONObject> arr = new ArrayList<>();
-							getContainingSpansAndNodeTypes(arr, matchedNode, rootStart + (rootEnd - rootStart) / 2,
+							final int rootStart = locator.getJSONObject("root").getInt("start");
+							final int rootEnd = locator.getJSONObject("root").getInt("end");
+							getContainingSpansAndNodeTypes(arr, match.node, rootStart + (rootEnd - rootStart) / 2,
 									recoveryStrategy);
 							JSONArray jsonArr = new JSONArray();
 							for (int i = arr.size() - 1; i >= 0; --i) {
@@ -531,7 +338,7 @@ public class PastaServer {
 						case "pastaAttrs": {
 							List<String> filter = null;
 							try {
-								final Object override = Reflect.throwingInvoke0(matchedNode, "pastaAttrs");
+								final Object override = Reflect.throwingInvoke0(match.node, "pastaAttrs");
 								if (override instanceof Collection<?>) {
 									filter = new ArrayList<String>((Collection<String>) override);
 //									retBuilder.put("pastaAttrs", new JSONArray((Collection<?>) override));
@@ -544,7 +351,7 @@ public class PastaServer {
 							// No attr filter, pick all attrs instead.
 							List<JSONObject> attrs = new ArrayList<>();
 //								attrs.add("[");
-							for (Method m : matchedNode.getClass().getMethods()) {
+							for (Method m : match.node.getClass().getMethods()) {
 								if (filter != null && !filter.contains(m.getName())) {
 									continue;
 								}
@@ -555,23 +362,25 @@ public class PastaServer {
 									continue;
 								}
 								final Parameter[] parameters = m.getParameters();
-								if (!onlySimpleParameters(parameters)) {
+								final SerializableParameterType[] serializableParamTypes = SerializableParameterType
+										.decodeParameters(parameters, baseAstType);
+								if (serializableParamTypes == null) {
 									System.out.println("Skipping " + m + ", unknown param types");
 									continue;
 								}
 								if (parameters.length > 0) {
-									System.out.println("m w/ ars: " + m.toString());
+									System.out.println("m w/ args: " + m.toString());
 								}
 								JSONObject attr = new JSONObject();
 								attr.put("name", m.getName());
 
 								JSONArray args = new JSONArray();
-								for (Parameter p : parameters) {
+
+								for (int i = 0; i < parameters.length; ++i) {
 									JSONObject arg = new JSONObject();
-									arg.put("name", p.getName());
-									arg.put("type", p.getType().getName());
+									arg.put("name", parameters[i].getName());
+									serializableParamTypes[i].serializeTo(arg);
 									args.put(arg);
-//									args.put(p.getName())
 								}
 								attr.put("args", args);
 
@@ -617,46 +426,25 @@ public class PastaServer {
 								final JSONArray args = queryAttr.optJSONArray("args");
 								final Object value;
 								if (args == null) {
-									value = Reflect.throwingInvoke0(matchedNode, queryAttrName);
+									value = Reflect.throwingInvoke0(match.node, queryAttrName);
 								} else {
 									final int numArgs = args.length();
 									final Class<?>[] argTypes = new Class<?>[numArgs];
 									final Object[] argValues = new Object[numArgs];
 									for (int i = 0; i < numArgs; ++i) {
-										final JSONObject arg = args.getJSONObject(i);
-										switch (arg.getString("type")) {
-										case "java.lang.String": {
-											argTypes[i] = String.class;
-											argValues[i] = arg.optString("value"); // opt to allow nullable values
-											break;
+										final SerializableParameter param = SerializableParameter.decode(
+												args.getJSONObject(i), ast, recoveryStrategy, loadCls, baseAstType);
+										if (param == null) {
+											bodyBuilder.put("Failed decoding parameter " + i);
+											if (!captureStdio) {
+												bodyBuilder.put("Click 'Capture stdio' to see more information.");
+											}
+											return;
 										}
-										case "int": {
-											argTypes[i] = Integer.TYPE;
-											argValues[i] = arg.getInt("value");
-											break;
-										}
-										case "boolean": {
-											argTypes[i] = Boolean.TYPE;
-											argValues[i] = arg.getBoolean("value");
-											break;
-										}
-										default: {
-											bodyBuilder
-													.put("Cannot use attribute type '" + arg.getString("type") + "'");
-											break;
-										}
-										}
+										argTypes[i] = param.paramType;
+										argValues[i] = param.value;
 									}
-									value = Reflect.invokeN(matchedNode, queryAttrName, argTypes, argValues);
-								}
-								Class<?> baseAstType = ast.getClass();
-								while (true) {
-									Class<?> parentType = baseAstType.getSuperclass();
-									if (parentType == null || !parentType.getPackage().getName()
-											.equals(baseAstType.getPackage().getName())) {
-										break;
-									}
-									baseAstType = parentType;
+									value = Reflect.invokeN(match.node, queryAttrName, argTypes, argValues);
 								}
 								encodeValue(bodyBuilder, value, baseAstType, recoveryStrategy, new HashSet<>());
 							} catch (InvocationTargetException e) {
@@ -671,7 +459,7 @@ public class PastaServer {
 								}
 							} catch (NoSuchMethodException e) {
 								bodyBuilder.put("No such attribute '" + queryAttrName + "' on "
-										+ matchedNode.getClass().getSimpleName());
+										+ match.node.getClass().getSimpleName());
 							} finally {
 								if (probeInterceptor != null) {
 									probeInterceptor.flush();

@@ -24,6 +24,7 @@ window.defineEditor(
     const coolMarkerDescriptors = {};
     let activeCoolMarkers = {};
     const refreshCoolMarkers = () => {
+      console.warn('refresh markers!! Len:', Object.values(activeCoolMarkers).length);
       // const pendingRemovalMarkers = new Set(Object.keys(activeCoolMarkers));
       Object.values(activeCoolMarkers).forEach(m => m.forEach(dot => dot.remove()));
       activeCoolMarkers = {};
@@ -52,7 +53,7 @@ window.defineEditor(
 
 
           let color = '#F00';
-          if (/^#[A-Z0-9]{4}$/.test(message)) {
+          if (/^#[a-fA-F0-9]{4}$/.test(message)) {
             color = message;
           }
           const ctx = cv.getContext('2d');
@@ -130,7 +131,7 @@ window.defineEditor(
           }
 
           // cv.style.border = `2px solid ${color}`;
-          cv.style.top = `${editorRect.top + startPos.top}px`;
+          cv.style.top = `${editorRect.top + startPos.top + (startPos.height - height) / 2}px`;
           cv.style.left = `${editorRect.left + startPos.left}px`;
           cv.style.transformOrigin = 'left';
 
