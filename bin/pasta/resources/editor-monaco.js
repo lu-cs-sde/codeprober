@@ -352,7 +352,7 @@ window.defineEditor(
       // contextMenuOrder: 2,
       run: (ed) => {
         const pos = ed.getPosition();
-        window.RagQuery && window.RagQuery(pos.lineNumber, pos.column, 'Program');
+        window.RagQuery && window.RagQuery(pos.lineNumber, pos.column, '<ROOT>');
         // console.log('ed @ ', ed, '||', ed.getPosition());
       },
       keybindings: [
@@ -417,15 +417,6 @@ window.defineEditor(
         range: new monaco.Range(span.lineStart, span.colStart, span.lineEnd, span.colEnd + 1),
         options: { inlineClassName: 'monaco-rag-highlight' },
       }]);
-      // if (span) {
-      //   decoIds = [
-      //     {
-      //       range: new monaco.Range(span.lineStart, span.colStart, span.lineEnd, span.colEnd + 1),
-      //       options: { inlineClassName: 'monaco-rag-highlight' }
-      //     }
-      //   ];
-      // }
-      // lastDecorations = editor.deltaDecorations(lastDecorations, decoIds);
       let lastKnownPos = {...span};
       return ({
         // TODO update function so that probeModal can move around if needed

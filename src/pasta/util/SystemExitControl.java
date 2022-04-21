@@ -4,7 +4,8 @@ import java.security.Permission;
 
 class SystemExitControl {
 
-  public static class ExitTrappedException extends SecurityException {
+  @SuppressWarnings("serial")
+public static class ExitTrappedException extends SecurityException {
   }
 
   public static void disableSystemExit() {

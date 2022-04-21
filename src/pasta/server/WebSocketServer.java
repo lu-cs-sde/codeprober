@@ -1,4 +1,4 @@
-package pasta;
+package pasta.server;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -115,46 +115,6 @@ public class WebSocketServer {
 		}
 	}
 
-	private static void writeWsMessageOld(OutputStream dst, String msg) throws IOException {
-		synchronized (dst) {
-			final byte[] strData = msg.getBytes(StandardCharsets.UTF_8);
-			final int lenPart;
-			if (strData.length <= 125) {
-				lenPart = 1;
-			} else if (strData.length < Short.MAX_VALUE) {
-				lenPart = 3;
-			} else {
-				lenPart = 9;
-//				throw new Error("TODO write really long msgs, len: " + strData.length);
-			}
-
-			final byte[] padded = new byte[1 + lenPart + strData.length];
-			padded[0] = (byte) 129;
-			if (strData.length <= 125) {
-				padded[1] = (byte) (strData.length);
-			} else if (strData.length < Short.MAX_VALUE) {
-				padded[1] = (byte) (126);
-				padded[2] = (byte) ((strData.length >> 8) & 0xFF);
-				padded[3] = (byte) (strData.length & 0xFF);
-			} else {
-				padded[1] = (byte) (127);
-				// High bits -> 0
-				for (int i = 2; i < 6; i++) {
-					padded[i] = 0;
-				}
-				// Low bits -> string len
-				padded[6] = (byte)((strData.length >>> 24) & 0xFF);
-				padded[7] = (byte)((strData.length >>> 16) & 0xFF);
-				padded[8] = (byte)((strData.length >>> 8) & 0xFF);
-				padded[9] = (byte)(strData.length & 0xFF);
-			}
-			System.arraycopy(strData, 0, padded, 1 + lenPart, strData.length);
-//			System.out.println("msglen " + strData.length + " , lenPart " + lenPart);
-//			System.out.println("Writing " + Arrays.toString(Arrays.copyOfRange(padded, 0, Math.min(padded.length, 16))) +"..");
-			dst.write(padded);
-			dst.flush();
-		}
-	}
 
 	private static void handleRequest(Socket socket, List<Runnable> onJarChangeListeners,
 			Function<JSONObject, String> onQuery) throws IOException, NoSuchAlgorithmException {
@@ -270,7 +230,7 @@ public class WebSocketServer {
 		System.out.println("Not a get request.. ?" + data);
 	}
 
-	static void start(List<Runnable> onJarChangeListeners, Function<JSONObject, String> onQuery) {
+	public static void start(List<Runnable> onJarChangeListeners, Function<JSONObject, String> onQuery) {
 		final int port = 8080;
 		try (ServerSocket server = new ServerSocket(port, 0, InetAddress.getByName(null))) {
 			System.out.println("Started WebSocket server on port " + port);

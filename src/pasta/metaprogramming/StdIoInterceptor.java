@@ -1,6 +1,10 @@
-package pasta;
+package pasta.metaprogramming;
 
 import java.io.PrintStream;
+import java.util.function.BiFunction;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public abstract class StdIoInterceptor {
 
@@ -40,4 +44,27 @@ public abstract class StdIoInterceptor {
 	}
 
 	public abstract void onLine(boolean stdout, String line);
+	
+	
+	public static JSONArray performCaptured(BiFunction<Boolean, String, JSONObject> lineParser, Runnable body) {
+		final JSONArray ret = new JSONArray();
+		StdIoInterceptor rootInterceptor = new StdIoInterceptor() {
+
+			@Override
+			public void onLine(boolean stdout, String line) {
+				final JSONObject magicMsg = lineParser.apply(stdout, line);
+				if (magicMsg != null) {
+					ret.put(magicMsg);
+				}
+			}
+		};
+		rootInterceptor.install();
+		try {
+			body.run();
+		} finally {
+			rootInterceptor.flush();
+			rootInterceptor.restore();
+		}
+		return ret;
+	}
 }

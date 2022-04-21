@@ -1,9 +1,9 @@
-package pasta;
+package pasta.protocol;
 
 /**
  * Some AST nodes lack position information. This should usually be fixed by
  * restructuring the parser, but can be solved "automatically" to some degree.
- * 
+ * <p>
  * This enum lists some strategies for how to find/recover position information
  * when an AST node is missing it.
  */
@@ -57,11 +57,11 @@ public enum PositionRecoveryStrategy {
 	 */
 	ALTERNATE_PARENT_CHILD;
 
-	static PositionRecoveryStrategy fromRpcParameter(String paramValue) {
+	public static PositionRecoveryStrategy fallbackParse(String paramValue) {
 		try {
 			return PositionRecoveryStrategy.valueOf(paramValue);
 		} catch (IllegalArgumentException e) {
-			System.out.println("Got invalid position recovery from client: " + paramValue);
+			System.out.println("Got invalid position recovery argument: " + paramValue);
 			return FAIL;
 		}
 	}

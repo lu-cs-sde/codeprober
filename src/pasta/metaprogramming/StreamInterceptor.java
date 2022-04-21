@@ -1,4 +1,4 @@
-package pasta;
+package pasta.metaprogramming;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

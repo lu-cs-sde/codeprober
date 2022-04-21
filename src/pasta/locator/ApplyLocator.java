@@ -1,73 +1,39 @@
-package pasta;
+package pasta.locator;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.function.Function;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import pasta.protocol.SerializableParameter;
+import pasta.AstInfo;
+import pasta.metaprogramming.Reflect;
+import pasta.protocol.ParameterValue;
+import pasta.protocol.PositionRecoveryStrategy;
+import pasta.protocol.decode.DecodeValue;
 
-public class ResolveNodeLocator {
+public class ApplyLocator {
 
 	public static class ResolvedNode {
 		public final Object node;
-		public final Position pos;
+		public final Span pos;
 		public final JSONObject nodeLocator;
 
-		public ResolvedNode(Object node, Position pos, JSONObject nodeLocator) {
+		public ResolvedNode(Object node, Span pos, JSONObject nodeLocator) {
 			this.node = node;
 			this.pos = pos;
 			this.nodeLocator = nodeLocator;
 		}
 	}
 
-	public static JSONObject buildLocator(Object astNode, PositionRecoveryStrategy recoveryStrategy, Class<?> baseAstClazz)
-			throws NoSuchMethodException, InvocationTargetException {
-		// TODO add position recovery things here(?)
-		final RobustNodeId id;
-
-		try {
-			id = RobustNodeId.extract(astNode, recoveryStrategy, baseAstClazz);
-		} catch (RuntimeException e) {
-			System.out.println("Failed to extract locator for " + astNode);
-			e.printStackTrace();
-			return null;
-		}
-
-		final JSONObject robustRoot = new JSONObject();
-		robustRoot.put("start", id.root.position.start);
-		robustRoot.put("end", id.root.position.end);
-		robustRoot.put("type", id.root.type);
-
-		final JSONObject robustResult = new JSONObject();
-		final Position astPos = PositionRecovery.extractPosition(astNode, recoveryStrategy);
-		robustResult.put("start", astPos.start);
-		robustResult.put("end", astPos.end);
-		robustResult.put("type", astNode.getClass().getSimpleName());
-
-		final JSONArray steps = new JSONArray();
-		for (Edge step : id.steps) {
-			step.encode(steps);
-		}
-
-		final JSONObject robust = new JSONObject();
-		robust.put("root", robustRoot);
-		robust.put("result", robustResult);
-		robust.put("steps", steps);
-//		System.out.println("Locator: " + robust.toString(2));
-		return robust;
-	}
-
 	private static Object bestMatchingNode(Object astNode, Class<?> nodeType, int startPos, int endPos,
 			PositionRecoveryStrategy recoveryStrategy) {
-		final Position nodePos;
+		final Span nodePos;
 		try {
-			nodePos = PositionRecovery.extractPosition(astNode, recoveryStrategy);
+			nodePos = Span.extractPosition(astNode, recoveryStrategy);
 		} catch (NoSuchMethodException | InvocationTargetException e) {
 			System.out.println("Error while extracting node position");
 			e.printStackTrace();
@@ -86,24 +52,13 @@ public class ResolveNodeLocator {
 		for (Object child : (Iterable<?>) Reflect.invoke0(astNode, "astChildren")) {
 			Object recurse = bestMatchingNode(child, nodeType, startPos, endPos, recoveryStrategy);
 			if (recurse != null) {
-				final Position recursePos;
+				final Span recursePos;
 				try {
-					recursePos = PositionRecovery.extractPosition(recurse, recoveryStrategy);
+					recursePos = Span.extractPosition(recurse, recoveryStrategy);
 					final int recurseError = Math.abs(recursePos.start - startPos) + Math.abs(recursePos.end - endPos);
 					if (recurseError < bestError) {
 						bestNode = recurse;
 						bestError = recurseError;
-//					} else if (recurseError == bestError) {
-//						// Two seemingly identical paths forward
-//						// Heuristic/guess: the one with natural position information is better
-//						final Position nonRecoveredBestPos = Position.from(bestNode);
-//						if (!nonRecoveredBestPos.isMeaningful()) {
-//							final Position nonRecoveredRecursePos = Position.from(recurse);
-//							if (nonRecoveredRecursePos.isMeaningful()) {
-//								bestNode = recurse;
-//								bestError = recurseError;
-//							}
-//						}
 					}
 				} catch (NoSuchMethodException | InvocationTargetException e) {
 					System.out.println("Error while extracting child node position");
@@ -114,26 +69,25 @@ public class ResolveNodeLocator {
 		return bestNode;
 	}
 
-	public static ResolvedNode resolve(Object ast, PositionRecoveryStrategy recoveryStrategy,
-			Function<String, Class<?>> loadCls, JSONObject locator, Class<?> baseAstClazz) {
+	public static ResolvedNode toNode(AstInfo info, JSONObject locator) {
 
 		final String rootNodeType = locator.getJSONObject("root").getString("type");
 		final int rootStart = locator.getJSONObject("root").getInt("start");
 		final int rootEnd = locator.getJSONObject("root").getInt("end");
 		Object matchedNode = null;
 
-		// Gradually increase search span a few columns in either direction
-		if (rootNodeType.equals(ast.getClass().getSimpleName())) {
-			// Assume that an AST has a unique root type
+		if (rootNodeType.equals("<ROOT>") || rootNodeType.equals(info.ast.getClass().getSimpleName())) {
+			// '<ROOT>' is a magic node type that always matches the root node.
 			// For ExtendJ the root type is missing line/col info, which breaks some queries
 			// "Fix" by always matching root 'for free', no matter rootStart/rootEnd
-			matchedNode = ast;
+			matchedNode = info.ast;
 		}
 		if (matchedNode == null) {
+			// Gradually increase search span a few columns in either direction
 			for (int offset : Arrays.asList(0, 1, 3, 5, 10)) {
-				matchedNode = bestMatchingNode(ast,
-						loadCls.apply(ast.getClass().getPackage().getName() + "." + rootNodeType), rootStart - offset,
-						rootEnd + offset, recoveryStrategy);
+				matchedNode = bestMatchingNode(info.ast,
+						info.loadAstClass.apply(info.ast.getClass().getPackage().getName() + "." + rootNodeType),
+						rootStart - offset, rootEnd + offset, info.recoveryStrategy);
 				if (matchedNode != null) {
 					break;
 				}
@@ -155,10 +109,9 @@ public class ResolveNodeLocator {
 					final String ntaName = mth.getString("name");
 					System.out.println("decoding args for nta, argsArr: " + args);
 					for (int j = 0; j < args.length(); ++j) {
-						final SerializableParameter param = SerializableParameter.decode(
-								args.getJSONObject(j), ast, recoveryStrategy, loadCls, baseAstClazz);
+						final ParameterValue param = DecodeValue.decode(info, args.getJSONObject(j));
 						if (param == null) {
-							System.out.println("Failed decoding parameter " + i +" for NTA '" + ntaName +"'");
+							System.out.println("Failed decoding parameter " + i + " for NTA '" + ntaName + "'");
 							return null;
 						}
 						argsValues[j] = param.value;
@@ -167,11 +120,12 @@ public class ResolveNodeLocator {
 					matchedNode = Reflect.invokeN(matchedNode, ntaName, argsTypes, argsValues);
 					break;
 				}
-				case "tloc": {
-					final JSONObject tloc = step.getJSONObject("value");
+				case "tal": {
+					final JSONObject tal = step.getJSONObject("value");
 					matchedNode = bestMatchingNode(matchedNode,
-							loadCls.apply(ast.getClass().getPackage().getName() + "." + tloc.getString("type")),
-							tloc.getInt("start"), tloc.getInt("end"), recoveryStrategy);
+							info.loadAstClass
+									.apply(info.ast.getClass().getPackage().getName() + "." + tal.getString("type")),
+							tal.getInt("start"), tal.getInt("end"), info.recoveryStrategy);
 					break;
 				}
 				case "child": {
@@ -189,10 +143,10 @@ public class ResolveNodeLocator {
 				}
 			}
 		}
-		Position matchPos = null;
+		Span matchPos = null;
 		if (matchedNode != null) {
 			try {
-				matchPos = PositionRecovery.extractPosition(matchedNode, recoveryStrategy);
+				matchPos = Span.extractPosition(matchedNode, info.recoveryStrategy);
 			} catch (NoSuchMethodException | InvocationTargetException e1) {
 				System.out.println("Error while extracting position of matched node");
 				e1.printStackTrace();
@@ -200,11 +154,9 @@ public class ResolveNodeLocator {
 		}
 		JSONObject matchedNodeLocator = null;
 		if (matchedNode != null && matchPos != null) {
+			// Create fresh locator so this node is easier to find in the future
 			try {
-				matchedNodeLocator = buildLocator(matchedNode, recoveryStrategy, baseAstClazz);
-//			if (matchedNodeLocator != null) {
-//				retBuilder.put("locator", matchedNodeLocator);
-//			}
+				matchedNodeLocator = CreateLocator.fromNode(info, matchedNode);
 			} catch (JSONException | NoSuchMethodException | InvocationTargetException e1) {
 				// TODO Auto-generated catch block
 				e1.printStackTrace();

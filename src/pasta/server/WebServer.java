@@ -1,4 +1,4 @@
-package pasta;
+package pasta.server;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -101,7 +101,7 @@ public class WebServer {
 		System.out.println("Not sure how to handle request " + data);
 	}
 
-	static void start() {
+	public static void start() {
 		final int port = 8000;
 		try (ServerSocket server = new ServerSocket(port, 0, InetAddress.getByName(null))) {
 			System.out.println("Started web server on port " + port + ", visit http://localhost:8000/ in your browser");

@@ -893,20 +893,14 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
             },
         });
         env.performRpcQuery({
-            type: 'query',
-            // ...span,
-            text: env.getLocalState(),
-            query: {
-                nodeType: locator.result.type,
-                attr: {
-                    name: 'pastaAttrs'
-                },
-                locator: locator,
+            attr: {
+                name: 'pasta_pastaAttrs'
             },
+            locator: locator,
         })
             .then((result) => {
             // if (cancelToken.cancelled) { return; }
-            const parsed = JSON.parse(result).pastaAttrs;
+            const parsed = result.pastaAttrs;
             if (!parsed) {
                 throw new Error('Unexpected response body "' + result + '"');
             }
@@ -949,7 +943,7 @@ define("ui/create/registerNodeSelector", ["require", "exports"], function (requi
     };
     exports.default = registerNodeSelector;
 });
-define("ui/adjustSpan", ["require", "exports"], function (require, exports) {
+define("model/adjustTypeAtLoc", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     const adjustTypeAtLoc = (adjuster, tal) => {
@@ -973,7 +967,39 @@ define("ui/adjustSpan", ["require", "exports"], function (require, exports) {
     };
     exports.default = adjustTypeAtLoc;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/create/registerOnHover", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "ui/adjustSpan"], function (require, exports, createLoadingSpinner_2, createModalTitle_3, createTextSpanIndicator_3, displayAttributeModal_1, showWindow_4, registerOnHover_3, formatAttr_3, displayArgModal_2, registerNodeSelector_1, adjustSpan_1) {
+define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], function (require, exports, adjustTypeAtLoc_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    adjustTypeAtLoc_1 = __importDefault(adjustTypeAtLoc_1);
+    const adjustLocator = (adj, loc) => {
+        (0, adjustTypeAtLoc_1.default)(adj, loc.root);
+        (0, adjustTypeAtLoc_1.default)(adj, loc.result);
+        const adjustStep = (step) => {
+            switch (step.type) {
+                case 'tal': {
+                    (0, adjustTypeAtLoc_1.default)(adj, step.value);
+                    break;
+                }
+                case 'nta': {
+                    step.value.args.forEach(({ args }) => {
+                        if (args) {
+                            args.forEach(({ value }) => {
+                                if (typeof value === 'object') {
+                                    adjustLocator(adj, value);
+                                }
+                            });
+                        }
+                    });
+                    break;
+                }
+            }
+        };
+        loc.steps.forEach(adjustStep);
+        // TODO when attributes are resolved, make sure to send refreshed locators back not only for root node, but also for the arg steps.
+    };
+    exports.default = adjustLocator;
+});
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/create/registerOnHover", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector"], function (require, exports, createLoadingSpinner_2, createModalTitle_3, createTextSpanIndicator_3, displayAttributeModal_1, showWindow_4, registerOnHover_3, formatAttr_3, displayArgModal_2, registerNodeSelector_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
@@ -985,7 +1011,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     formatAttr_3 = __importDefault(formatAttr_3);
     displayArgModal_2 = __importDefault(displayArgModal_2);
     registerNodeSelector_1 = __importDefault(registerNodeSelector_1);
-    adjustSpan_1 = __importDefault(adjustSpan_1);
     const displayProbeModal = (env, modalPos, locator, attr) => {
         console.log('dPM, env:', env);
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -1170,26 +1195,10 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     console.error('no locator??');
                 }
                 env.performRpcQuery({
-                    type: 'query',
-                    // ...span,
-                    text: env.getLocalState(),
-                    stdout: env.captureStdout(),
-                    query: {
-                        nodeType: locator.result.type,
-                        attr,
-                        locator,
-                        // id: {
-                        //   root: {
-                        //     type: type,
-                        //     start: (span.lineStart << 12) + span.colStart,
-                        //     end: (span.lineEnd << 12) + span.colEnd,
-                        //   },
-                        //   steps: [],
-                        // },
-                    },
+                    attr,
+                    locator,
                 })
-                    .then((res) => {
-                    const parsed = JSON.parse(res);
+                    .then((parsed) => {
                     const body = parsed.body;
                     copyBody = body;
                     loading = false;
@@ -1202,15 +1211,13 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     }
                     while (root.firstChild)
                         root.removeChild(root.firstChild);
-                    // const info = {
-                    //   matchPos: { lineStart, colStart, lineEnd, colEnd }
-                    // };
                     let refreshMarkers = localErrors.length > 0;
                     localErrors.length = 0;
                     console.log('probe errors:', parsed.errors);
                     parsed.errors.forEach(({ severity, start: errStart, end: errEnd, msg }) => {
                         localErrors.push({ severity, errStart, errEnd, msg });
                     });
+                    console.log('parsed.loc?', parsed.locator);
                     if (parsed.locator) {
                         refreshMarkers = true;
                         locator = parsed.locator;
@@ -1349,19 +1356,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         });
         env.onChangeListeners[queryId] = (adjusters) => {
             if (adjusters) {
-                // console.log('onChange', stickyMarker.getSpan());
-                // console.log('Adjusted span from:', span);
-                adjusters.forEach((adj) => {
-                    (0, adjustSpan_1.default)(adj, locator.root);
-                    (0, adjustSpan_1.default)(adj, locator.result);
-                    locator.steps.forEach((step) => {
-                        // todo if step is TaL, adjust it
-                        // step.
-                    });
-                    // TODO if attr args contains locators, adjust them too
-                    // TODO when attributes are resolved, make sure to send refreshed locators back not only for root node, but also for the arg steps.
-                    // TODO check by there is a lreading space added whenever the argModal is opened.
-                });
+                // adjusters.forEach(adj => adjustLocator(adj, locator));
                 // console.log('Adjusted span to:', span);
             }
             if (loading) {
@@ -1409,30 +1404,21 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                 spinner.classList.add('absoluteCenter');
                 root.appendChild(spinner);
                 const rootProgramLocator = {
-                    type: 'Program',
+                    type: '<ROOT>',
                     start: (line << 12) + col,
                     end: (line << 12) + col
                 };
                 env.performRpcQuery({
-                    type: 'query',
-                    lineStart: line,
-                    colStart: col,
-                    lineEnd: line,
-                    colEnd: col,
-                    text: env.getLocalState(),
-                    query: {
-                        nodeType: 'Program',
-                        attr: {
-                            name: 'pasta_containingSpansAndNodeTypes',
-                        },
-                        locator: {
-                            root: rootProgramLocator,
-                            result: rootProgramLocator,
-                            steps: []
-                        },
+                    attr: {
+                        name: 'pasta_spansAndNodeTypes',
+                    },
+                    locator: {
+                        root: rootProgramLocator,
+                        result: rootProgramLocator,
+                        steps: []
                     },
                 })
-                    .then((result) => {
+                    .then((parsed) => {
                     if (cancelToken.cancelled) {
                         return;
                     }
@@ -1451,7 +1437,6 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         },
                     }).element);
                     // const needle = 'SpansAndNodeTypes :: ';
-                    const parsed = JSON.parse(result);
                     if (!parsed.spansAndNodeTypes) {
                         throw new Error("Couldn't find expected line in output");
                     }
@@ -1805,11 +1790,24 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             const posRecoverySelect = document.getElementById('control-position-recovery-strategy');
             console.log('sending rpc', props.query);
             const id = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
-            rpcQuerySocket.send(JSON.stringify({ id, posRecovery: posRecoverySelect.value, ...props }));
+            rpcQuerySocket.send(JSON.stringify({
+                id,
+                posRecovery: posRecoverySelect.value,
+                type: 'query',
+                text: getLocalState(),
+                stdout: settings_1.default.shouldCaptureStdio(),
+                query: props
+            }));
             const cleanup = () => delete rpcHandlers[id];
-            rpcHandlers[id] = ({ result }) => {
+            rpcHandlers[id] = ({ error, result }) => {
                 cleanup();
-                res(result);
+                if (error) {
+                    console.warn('RPC request failed', error);
+                    rej(error);
+                }
+                else {
+                    res(result);
+                }
             };
             setTimeout(() => {
                 cleanup();
@@ -1935,6 +1933,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 const captureStdoutCheckbox = document.getElementById('control-capture-stdout');
                 captureStdoutCheckbox.checked = settings_1.default.shouldCaptureStdio();
                 captureStdoutCheckbox.oninput = () => {
+                    settings_1.default.setShouldCaptureStdio(captureStdoutCheckbox.checked);
                     notifyLocalChangeListeners();
                 };
                 const recoveryStrategySelector = document.getElementById('control-position-recovery-strategy');

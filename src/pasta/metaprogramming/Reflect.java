@@ -1,4 +1,4 @@
-package pasta;
+package pasta.metaprogramming;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -9,14 +9,15 @@ public class Reflect {
 	void f() {
 	}
 
-	static Object getParent(Object astNode) throws NoSuchMethodException, InvocationTargetException {
+	public static Object getParent(Object astNode) throws NoSuchMethodException, InvocationTargetException {
 		return Reflect.throwingInvoke0(astNode, "getParent");
 	}
 
-	static Object getFirstChild(Object astNode) {
+	public static Object getFirstChild(Object astNode) {
 		return getNthChild(astNode, 0);
 	}
-	static Object getNthChild(Object astNode, int n) {
+
+	public static Object getNthChild(Object astNode, int n) {
 		int numCh = (Integer) invoke0(astNode, "getNumChild");
 		if (n >= numCh) {
 			return null;
@@ -24,7 +25,7 @@ public class Reflect {
 		return invokeN(astNode, "getChild", new Class<?>[] { Integer.TYPE }, new Object[] { n });
 	}
 
-	static Object invokeN(Object astNode, String mth, Class<?>[] argTypes, Object[] argValues) {
+	public static Object invokeN(Object astNode, String mth, Class<?>[] argTypes, Object[] argValues) {
 		try {
 			return astNode.getClass().getMethod(mth, argTypes).invoke(astNode, argValues);
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException
@@ -40,17 +41,7 @@ public class Reflect {
 		}
 	}
 
-	private static Object throwingInvokeN(Object astNode, String mth, Class<?>[] argTypes, Object[] argValues)
-			throws InvocationTargetException, NoSuchMethodException {
-		try {
-			return astNode.getClass().getMethod(mth, argTypes).invoke(astNode, argValues);
-		} catch (IllegalAccessException | IllegalArgumentException | SecurityException e) {
-			e.printStackTrace();
-			throw new RuntimeException(e);
-		}
-	}
-
-	static Object invoke0(Object astNode, String mth) {
+	public static Object invoke0(Object astNode, String mth) {
 		try {
 			return astNode.getClass().getMethod(mth).invoke(astNode);
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException
@@ -60,7 +51,7 @@ public class Reflect {
 		}
 	}
 
-	static Object throwingInvoke0(Object astNode, String mth)
+	public static Object throwingInvoke0(Object astNode, String mth)
 			throws NoSuchMethodException, InvocationTargetException {
 		try {
 			return astNode.getClass().getMethod(mth).invoke(astNode);
@@ -69,5 +60,5 @@ public class Reflect {
 			throw new RuntimeException(e);
 		}
 	}
-	
+
 }
