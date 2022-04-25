@@ -1,6 +1,5 @@
 package pasta.locator;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
@@ -12,15 +11,17 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import pasta.AstInfo;
+import pasta.ast.AstNode;
+import pasta.metaprogramming.InvokeProblem;
 import pasta.metaprogramming.Reflect;
 import pasta.protocol.ParameterType;
 import pasta.protocol.create.CreateType;
 
 public class AttrsInNode {
 
-	public static JSONArray get(AstInfo info, Object node, List<String> blacklistFilter) {
+	public static JSONArray get(AstInfo info, AstNode node, List<String> blacklistFilter) {
 		List<JSONObject> attrs = new ArrayList<>();
-		for (Method m : node.getClass().getMethods()) {
+		for (Method m : node.underlyingAstNode.getClass().getMethods()) {
 			if (blacklistFilter != null && !blacklistFilter.contains(m.getName())) {
 				continue;
 			}
@@ -55,9 +56,9 @@ public class AttrsInNode {
 		return new JSONArray(attrs);
 	}
 
-	public static List<String> extractFilter(AstInfo info, Object node) {
+	public static List<String> extractFilter(AstInfo info, AstNode node) {
 		try {
-			final Object override = Reflect.throwingInvoke0(node, "pastaAttrs");
+			final Object override = Reflect.invoke0(node.underlyingAstNode, "pastaAttrs");
 			if (override instanceof Collection<?>) {
 				@SuppressWarnings("unchecked")
 				final Collection<String> cast = (Collection<String>) override;
@@ -65,11 +66,13 @@ public class AttrsInNode {
 			} else {
 				System.out.println("'pastaAttrs' is expected to be a collection, got " + override);
 			}
-		} catch (NoSuchMethodException e) {
-			// Expected in many cases
-		} catch (InvocationTargetException e) {
-			System.out.println("Error when evaluating pastaAttrs");
-			e.printStackTrace();
+		} catch (InvokeProblem e) {
+			if (e.getCause() instanceof NoSuchMethodException) {
+				// Ignore, this is expected in many cases
+			} else {
+				System.out.println("Error when evaluating pastaAttrs");
+				e.printStackTrace();
+			}
 		}
 		return null;
 	}

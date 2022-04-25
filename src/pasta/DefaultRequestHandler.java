@@ -2,7 +2,6 @@ package pasta;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
@@ -13,10 +12,12 @@ import java.util.function.Function;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import pasta.ast.AstNode;
 import pasta.locator.ApplyLocator;
 import pasta.locator.ApplyLocator.ResolvedNode;
 import pasta.locator.AttrsInNode;
 import pasta.locator.NodesAtPosition;
+import pasta.metaprogramming.InvokeProblem;
 import pasta.metaprogramming.Reflect;
 import pasta.metaprogramming.StdIoInterceptor;
 import pasta.protocol.ParameterValue;
@@ -45,9 +46,10 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			return;
 		}
 		System.out.println("Parsed, got: " + ast);
+		AstNode astNode = new AstNode(ast);
 
-		final AstInfo info = new AstInfo(ast, PositionRecoveryStrategy.fallbackParse(queryObj.getString("posRecovery")),
-				loadAstClass);
+		final AstInfo info = new AstInfo(astNode,
+				PositionRecoveryStrategy.fallbackParse(queryObj.getString("posRecovery")), loadAstClass);
 
 		final JSONObject queryBody = queryObj.getJSONObject("query");
 		final JSONObject locator = queryBody.getJSONObject("locator");
@@ -58,7 +60,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			bodyBuilder.put("No matching node found\n\nTry remaking the probe\nat a different line/column");
 			return;
 		}
-		
+
 		retBuilder.put("locator", match.nodeLocator);
 
 		final JSONObject queryAttr = queryBody.getJSONObject("attr");
@@ -86,7 +88,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				final JSONArray args = queryAttr.optJSONArray("args");
 				final Object value;
 				if (args == null) {
-					value = Reflect.throwingInvoke0(match.node, queryAttrName);
+					value = Reflect.invoke0(match.node.underlyingAstNode, queryAttrName);
 				} else {
 					final int numArgs = args.length();
 					final Class<?>[] argTypes = new Class<?>[numArgs];
@@ -101,24 +103,27 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 							return;
 						}
 						argTypes[i] = param.paramType;
-						argValues[i] = param.value;
+						argValues[i] = param.getUnpackedIfNode();
 					}
-					value = Reflect.invokeN(match.node, queryAttrName, argTypes, argValues);
+					value = Reflect.invokeN(match.node.underlyingAstNode, queryAttrName, argTypes, argValues);
 				}
 				EncodeResponseValue.encode(info, bodyBuilder, value, new HashSet<>());
-			} catch (InvocationTargetException e) {
-				if (e.getCause() != null) {
-					e.getCause().printStackTrace();
+			} catch (InvokeProblem e) {
+				final Throwable cause = e.getCause();
+				if (cause instanceof NoSuchMethodException) {
+					bodyBuilder.put(
+							"No such attribute '" + queryAttrName + "' on " + match.node.getClass().getSimpleName());
 				} else {
-					e.printStackTrace();
+					if (cause != null && cause.getCause() != null) {
+						cause.getCause().printStackTrace();
+					} else {
+						(cause != null ? cause : e).printStackTrace();
+					}
+					bodyBuilder.put("Exception thrown while evaluating attribute.");
+					if (!captureStdio) {
+						bodyBuilder.put("Click 'Capture stdio' to see full error.");
+					}
 				}
-				bodyBuilder.put("Exception thrown while evaluating attribute.");
-				if (!captureStdio) {
-					bodyBuilder.put("Click 'Capture stdio' to see full error.");
-				}
-			} catch (NoSuchMethodException e) {
-				bodyBuilder
-						.put("No such attribute '" + queryAttrName + "' on " + match.node.getClass().getSimpleName());
 			}
 		};
 		if (captureStdio) {

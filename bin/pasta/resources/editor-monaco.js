@@ -24,7 +24,7 @@ window.defineEditor(
     const coolMarkerDescriptors = {};
     let activeCoolMarkers = {};
     const refreshCoolMarkers = () => {
-      console.warn('refresh markers!! Len:', Object.values(activeCoolMarkers).length);
+      // console.warn('refresh markers!! Len:', Object.values(activeCoolMarkers).length);
       // const pendingRemovalMarkers = new Set(Object.keys(activeCoolMarkers));
       Object.values(activeCoolMarkers).forEach(m => m.forEach(dot => dot.remove()));
       activeCoolMarkers = {};

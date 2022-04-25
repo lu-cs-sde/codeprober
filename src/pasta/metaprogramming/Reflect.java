@@ -9,8 +9,8 @@ public class Reflect {
 	void f() {
 	}
 
-	public static Object getParent(Object astNode) throws NoSuchMethodException, InvocationTargetException {
-		return Reflect.throwingInvoke0(astNode, "getParent");
+	public static Object getParent(Object astNode) {
+		return Reflect.invoke0(astNode, "getParent");
 	}
 
 	public static Object getFirstChild(Object astNode) {
@@ -37,7 +37,7 @@ public class Reflect {
 					System.out.println("param types: " + Arrays.toString(m.getParameterTypes()));
 				}
 			}
-			throw new RuntimeException(e);
+			throw new InvokeProblem(e);
 		}
 	}
 
@@ -46,19 +46,19 @@ public class Reflect {
 			return astNode.getClass().getMethod(mth).invoke(astNode);
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException
 				| SecurityException e) {
-			e.printStackTrace();
-			throw new RuntimeException(e);
+//			e.printStackTrace();
+			throw new InvokeProblem(e);
 		}
 	}
 
-	public static Object throwingInvoke0(Object astNode, String mth)
-			throws NoSuchMethodException, InvocationTargetException {
-		try {
-			return astNode.getClass().getMethod(mth).invoke(astNode);
-		} catch (IllegalAccessException | IllegalArgumentException | SecurityException e) {
-			e.printStackTrace();
-			throw new RuntimeException(e);
-		}
-	}
+//	public static Object throwingInvoke0(Object astNode, String mth) throws InvokeProblem {
+//		try {
+//			return astNode.getClass().getMethod(mth).invoke(astNode);
+//		} catch (IllegalAccessException | IllegalArgumentException | SecurityException | InvocationTargetException
+//				| NoSuchMethodException e) {
+//			e.printStackTrace();
+//			throw new InvokeProblem(e);
+//		}
+//	}
 
 }

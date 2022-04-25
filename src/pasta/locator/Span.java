@@ -1,9 +1,9 @@
 package pasta.locator;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.Objects;
 
-import pasta.metaprogramming.Reflect;
+import pasta.ast.AstNode;
+import pasta.metaprogramming.InvokeProblem;
 import pasta.protocol.PositionRecoveryStrategy;
 
 public class Span {
@@ -35,10 +35,10 @@ public class Span {
 		return end == other.end && start == other.start;
 	}
 
-	static Span extractPositionDownwards(Object astNode) throws NoSuchMethodException, InvocationTargetException {
-		final Span ownPos = from(astNode);
+	static Span extractPositionDownwards(AstNode astNode) {
+		final Span ownPos = astNode.getRawSpan();
 		if (!ownPos.isMeaningful()) {
-			final Object child = Reflect.getFirstChild(astNode);
+			final AstNode child = astNode.getNthChild(0);
 			if (child != null) {
 				return extractPositionDownwards(child);
 			}
@@ -46,10 +46,10 @@ public class Span {
 		return ownPos;
 	}
 
-	static Span extractPositionUpwards(Object astNode) throws NoSuchMethodException, InvocationTargetException {
-		final Span ownPos = from(astNode);
+	static Span extractPositionUpwards(AstNode astNode) {
+		final Span ownPos = astNode.getRawSpan();
 		if (!ownPos.isMeaningful()) {
-			final Object parent = Reflect.throwingInvoke0(astNode, "getParent");
+			final AstNode parent = astNode.parent();
 			if (parent != null) {
 				return extractPositionUpwards(parent);
 			}
@@ -57,10 +57,9 @@ public class Span {
 		return ownPos;
 	}
 
-	public static Span extractPosition(Object astNode, PositionRecoveryStrategy recoveryStrategy)
-			throws NoSuchMethodException, InvocationTargetException {
-		final Span ownPos = new Span((Integer) Reflect.throwingInvoke0(astNode, "getStart"),
-				(Integer) Reflect.throwingInvoke0(astNode, "getEnd"));
+	public static Span extractPosition(AstNode astNode, PositionRecoveryStrategy recoveryStrategy)
+			throws InvokeProblem {
+		final Span ownPos = astNode.getRawSpan();
 		if (ownPos.isMeaningful()) {
 			return ownPos;
 		}
@@ -80,22 +79,22 @@ public class Span {
 			return parent.isMeaningful() ? parent : Span.extractPositionUpwards(astNode);
 		}
 		case ALTERNATE_PARENT_CHILD: {
-			Object parent = astNode;
-			Object child = astNode;
+			AstNode parent = astNode;
+			AstNode child = parent;
 			while (parent != null || child != null) {
 				if (parent != null) {
-					parent = Reflect.getParent(parent);
+					parent = parent.parent();
 					if (parent != null) {
-						final Span parPos = from(parent);
+						final Span parPos = parent.getRawSpan();
 						if (parPos.isMeaningful()) {
 							return parPos;
 						}
 					}
 				}
 				if (child != null) {
-					child = Reflect.getFirstChild(child);
+					child = child.getNumChildren() > 0 ? child.getNthChild(0) : null;
 					if (child != null) {
-						final Span childPos = from(child);
+						final Span childPos = child.getRawSpan();
 						if (childPos.isMeaningful()) {
 							return childPos;
 						}
@@ -109,10 +108,5 @@ public class Span {
 			return ownPos;
 		}
 		}
-	}
-
-	static Span from(Object astNode) throws NoSuchMethodException, InvocationTargetException {
-		return new Span((Integer) Reflect.throwingInvoke0(astNode, "getStart"),
-				(Integer) Reflect.throwingInvoke0(astNode, "getEnd"));
 	}
 }

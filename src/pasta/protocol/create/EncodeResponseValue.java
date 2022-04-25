@@ -1,6 +1,5 @@
 package pasta.protocol.create;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.HashSet;
 import java.util.Iterator;
 
@@ -8,7 +7,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import pasta.AstInfo;
+import pasta.ast.AstNode;
 import pasta.locator.CreateLocator;
+import pasta.metaprogramming.InvokeProblem;
 import pasta.metaprogramming.Reflect;
 
 public class EncodeResponseValue {
@@ -16,29 +17,34 @@ public class EncodeResponseValue {
 	public static void encode(AstInfo info, JSONArray out, Object value, HashSet<Object> alreadyVisitedNodes) {
 		if (value == null) {
 			out.put("null");
-//			new IdentityHashMap<>()
 			return;
 		}
 		// Clone to avoid showing 'already visited' when this encoding 'branch' hasn't
-		// visited at all
+		// visited it.
 		alreadyVisitedNodes = new HashSet<Object>(alreadyVisitedNodes);
 
 		if (value != null && info.basAstClazz.isInstance(value)) {
-			if (alreadyVisitedNodes.contains(value)) {
+			value = new AstNode(value);
+		}
+
+		if (value instanceof AstNode) {
+			AstNode node = (AstNode) value;
+			if (alreadyVisitedNodes.contains(node.underlyingAstNode)) {
 				out.put("<< reference loop to already visited value " + value + " >>");
 				return;
 			}
 			try {
-				Object preferredView = Reflect.throwingInvoke0(value, "pastaView");
+				Object preferredView = Reflect.invoke0(node.underlyingAstNode, "pastaView");
 				alreadyVisitedNodes.add(value);
 				encode(info, out, preferredView, alreadyVisitedNodes);
 				return;
-			} catch (NoSuchMethodException | InvocationTargetException e) {
+			} catch (InvokeProblem e) {
 				// Fall down to default view
 			}
 
 			try {
-				final JSONObject locator = CreateLocator.fromNode(info, value);
+//				final AstNode astNode = new AstNode(value);
+				final JSONObject locator = CreateLocator.fromNode(info, node);
 				if (locator != null) {
 					JSONObject wrapper = new JSONObject();
 					wrapper.put("type", "node");
@@ -46,15 +52,15 @@ public class EncodeResponseValue {
 					out.put(wrapper);
 
 					out.put("\n");
-					if (value.getClass().getSimpleName().equals("List")) {
-						final int numEntries = (Integer) Reflect.invoke0(value, "getNumChild");
+					if (node.isList()) {
+						final int numEntries = node.getNumChildren();
 						out.put("");
 						if (numEntries == 0) {
 							out.put("<empty list>");
 						} else {
+							alreadyVisitedNodes.add(value);
 							out.put("List contents [" + numEntries + "]:");
-							for (Object child : (Iterable<?>) Reflect.invoke0(value, "astChildren")) {
-								alreadyVisitedNodes.add(value);
+							for (AstNode child : node.getChildren()) {
 								encode(info, out, child, alreadyVisitedNodes);
 							}
 						}
@@ -62,9 +68,9 @@ public class EncodeResponseValue {
 					}
 					return;
 				}
-			} catch (NoSuchMethodException | InvocationTargetException e) {
-				// No getStart - this isn't an AST Node!
-				// It is just some class that happens to reside in the same package
+			} catch (InvokeProblem e) {
+				System.err.println("Failed creating locator to " + node);
+				e.printStackTrace();
 				// Fall down to default toString encoding below
 			}
 		}
@@ -98,23 +104,23 @@ public class EncodeResponseValue {
 			out.put(indent);
 			return;
 		}
-//		if (value instanceof Object[]) {
-//			if (alreadyVisitedNodes.contains(value)) {
-//				out.put("<< reference loop to already visited value " + value + " >>");
-//				return;
-//			}
-//			alreadyVisitedNodes.add(value);
-//			
-//			final JSONArray indent = new JSONArray();
-//			for (Object child : (Object[])value) {
-//				encodeValue(indent, child, baseAstType, recoveryStrategy, alreadyVisitedNodes, false);
-//			}
+		if (value instanceof Object[]) {
+			if (alreadyVisitedNodes.contains(value)) {
+				out.put("<< reference loop to already visited value " + value + " >>");
+				return;
+			}
+			alreadyVisitedNodes.add(value);
+
+			final JSONArray indent = new JSONArray();
+			for (Object child : (Object[]) value) {
+				encode(info, indent, child, alreadyVisitedNodes);
+			}
 //			final JSONObject indentObj = new JSONObject();
 //			indentObj.put("type", "indent");
 //			indentObj.put("value", indent);
-//			out.put(indentObj);
-//			return;
-//		}
+			out.put(indent);
+			return;
+		}
 		try {
 			if (value.getClass().getMethod("toString").getDeclaringClass() == Object.class) {
 //				if (value.getClass().isEnum()) {

@@ -16,6 +16,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import pasta.AstInfo;
+import pasta.ast.AstNode;
+import pasta.locator.NodeEdge.NodeEdgeType;
 import pasta.metaprogramming.Reflect;
 import pasta.protocol.ParameterValue;
 import pasta.protocol.create.CreateValue;
@@ -32,13 +34,16 @@ public class CreateLocator {
 		}
 	}
 
-	public static JSONObject fromNode(AstInfo info, Object astNode)
-			throws NoSuchMethodException, InvocationTargetException {
+	public static JSONObject fromNode(AstInfo info, AstNode astNode) {
 		// TODO add position recovery things here(?)
 		final Locator id;
 
 		try {
 			id = extract(info, astNode);
+			if (id == null) {
+				System.out.println("Failed creating locator for " + astNode);
+				return null;
+			}
 		} catch (RuntimeException e) {
 			System.out.println("Failed to extract locator for " + astNode);
 			e.printStackTrace();
@@ -54,7 +59,7 @@ public class CreateLocator {
 		final Span astPos = Span.extractPosition(astNode, info.recoveryStrategy);
 		robustResult.put("start", astPos.start);
 		robustResult.put("end", astPos.end);
-		robustResult.put("type", astNode.getClass().getSimpleName());
+		robustResult.put("type", astNode.underlyingAstNode.getClass().getSimpleName());
 
 		final JSONArray steps = new JSONArray();
 		for (NodeEdge step : id.steps) {
@@ -69,46 +74,50 @@ public class CreateLocator {
 		return robust;
 	}
 
-	public static Locator extract(AstInfo info, Object astNode) {
+	private static Locator extract(AstInfo info, AstNode astNode) {
 		final List<NodeEdge> res = new ArrayList<>();
 
 		try {
 			extractStepsTo(info, astNode, res);
 		} catch (IllegalArgumentException | IllegalAccessException | NoSuchFieldException | SecurityException
 				| NoSuchMethodException | InvocationTargetException e) {
+			System.out.println("Error when resolving path to " + astNode + " from root");
 			e.printStackTrace();
+			return null;
 		}
 
 		if (res.isEmpty()) {
 			// Root node!
-			try {
-				return new Locator(TypeAtLoc.from(astNode, info.recoveryStrategy), Collections.emptyList());
-			} catch (NoSuchMethodException | InvocationTargetException e) {
-				e.printStackTrace();
+			return new Locator(TypeAtLoc.from(astNode, info.recoveryStrategy), Collections.emptyList());
+		}
+		for (NodeEdge edge : res) {
+			if (edge == null) {
+				return null;
 			}
 		}
 
 		Collections.reverse(res);
-		TypeAtLoc root = res.get(0).source;
-
-		for (int i = 0; i < res.size(); i++) {
-			NodeEdge e = res.get(i);
-			if (e.canBeCollapsed()) {
-				root = e.target;
-				res.remove(i);
-				--i;
-			} else {
-				// Assume the following graph (left-to-right):
-				// A tal B nta C tal D tal E nta F tal G
-				// It would be safe to remove quite a lot, down do:
-				// B nta C tal E nta F tal G
-				// This loop prunes after non-removable nodes, e.g 'C tal D'
-				while (i < res.size() - 2 && res.get(i + 1).canBeCollapsed() && res.get(i + 2).canBeCollapsed()) {
-					res.remove(i + 1);
-				}
-				break;
-			}
-		}
+		TypeAtLoc root = res.get(0).sourceLoc;
+//
+//		for (int i = 1; i < res.size(); i++) {
+//			NodeEdge e = res.get(i);
+//			if (e.type)
+//			if (e.type == NodeEdgeType.TypeAtLoc) {
+//				root = e.targetLoc;
+//				res.remove(i);
+//				--i;
+//			} else {
+//				// Assume the following graph (left-to-right):
+//				// A tal B nta C tal D tal E nta F tal G
+//				// It would be safe to remove quite a lot, down do:
+//				// B nta C tal E nta F tal G
+//				// This loop prunes after non-removable nodes, e.g 'C tal D'
+//				while (i < res.size() - 2 && res.get(i + 1).canBeCollapsed() && res.get(i + 2).canBeCollapsed()) {
+//					res.remove(i + 1);
+//				}
+//				break;
+//			}
+//		}
 
 		return new Locator(root, res);
 	}
@@ -126,16 +135,18 @@ public class CreateLocator {
 		return false;
 	}
 
-	private static void extractStepsTo(AstInfo info, Object astNode, List<NodeEdge> out)
+	private static void extractStepsTo(AstInfo info, AstNode astNode, List<NodeEdge> out)
 			throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException,
 			NoSuchMethodException, InvocationTargetException {
-		final Object parent;
-		try {
-			parent = Reflect.getParent(astNode);
-		} catch (NoSuchMethodException | InvocationTargetException e) {
-			e.printStackTrace();
-			throw new RuntimeException(e);
-		}
+//		final Object parent;
+//		try {
+//			parent = Reflect.getParent(astNode);
+//		} catch (NoSuchMethodException | InvocationTargetException e) {
+//			e.printStackTrace();
+//			throw new RuntimeException(e);
+//		}
+
+		final AstNode parent = astNode.parent();
 		if (parent == null) {
 			// No edge
 			return;
@@ -144,30 +155,65 @@ public class CreateLocator {
 		final TypeAtLoc source = TypeAtLoc.from(parent, info.recoveryStrategy);
 		final TypeAtLoc target = TypeAtLoc.from(astNode, info.recoveryStrategy);
 		int childIdxCounter = 0;
-		int foundTargetIndex = -1;
-		boolean ambiguousTarget = false;
-		for (Object child : (Iterable<?>) Reflect.invoke0(parent, "astChildren")) {
-			if (child == astNode) {
-				foundTargetIndex = childIdxCounter;
-			} else {
-				ambiguousTarget |= target.equals(TypeAtLoc.from(child, info.recoveryStrategy));
+//		int foundTargetIndex = -1;
+//		boolean ambiguousTarget = false;
+		for (AstNode child : parent.getChildren()) {
+			if (child.sharesUnderlyingNode(astNode)) {
+				out.add(new NodeEdge.ChildIndexEdge(parent, source, astNode, target, childIdxCounter));
+				final int parentPos = out.size();
+				extractStepsTo(info, parent, out);
+
+				if (target.loc.isMeaningful()) {
+					// We might be able to replace the ChildIndex edge with a TypeAtLoc.
+					// It depends on the nodes that come before us.
+					while (parentPos < out.size()) {
+						final NodeEdge parentEdge = out.get(parentPos);
+						if (parentEdge.type == NodeEdgeType.NTA) {
+							final NodeEdge candidateTal = new NodeEdge.TypeAtLocEdge(parentEdge.targetNode,
+									parentEdge.targetLoc, astNode, target);
+							if (ApplyLocator.isAmbiguousStep(info, parentEdge.targetNode, candidateTal.toJson())) {
+								break;
+							}
+							// Non-ambiguous! Previous step is still necessary, but we can replace our own
+							// with a TAL
+							out.set(parentPos - 1, candidateTal);
+							break;
+						} else {
+
+							final NodeEdge candidateTal = new NodeEdge.TypeAtLocEdge(parentEdge.sourceNode,
+									parentEdge.sourceLoc, astNode, target);
+							if (ApplyLocator.isAmbiguousStep(info, parentEdge.sourceNode, candidateTal.toJson())) {
+								break;
+							}
+							// Non-ambiguous! Previous step is not necessary, and our step can be replaced
+							// with a TAL
+							out.set(parentPos - 1, candidateTal);
+							out.remove(parentPos);
+						}
+					}
+				}
+				return;
+//				foundTargetIndex = childIdxCounter;
+//			} else {
+//				ambiguousTarget |= target.equals(TypeAtLoc.from(child, info.recoveryStrategy));
 			}
 			++childIdxCounter;
 		}
-		if (foundTargetIndex != -1) {
-			// Ambiguous TAL edges can occur for example in NTAs. Assume we have:
-			// nta Foo.bar() { return new List().add(new A()).add(new A()); }
-			// That NTA creates a list of two A's. The two A's are missing location information and have the same position
-			// If we use a TAL edge then we cannot distinguish between them in the future.
-			if (target.loc.isMeaningful() && !ambiguousTarget) {
-				out.add(new NodeEdge.TypeAtLocEdge(source, target));
-			} else {
-				out.add(new NodeEdge.ChildIndexEdge(source, target, foundTargetIndex));
-			}
-			extractStepsTo(info, parent, out);
-			return;
-		}
-		for (Method m : parent.getClass().getMethods()) {
+//		if (foundTargetIndex != -1) {
+//			// Ambiguous TAL edges can occur for example in NTAs. Assume we have:
+//			// nta Foo.bar() { return new List().add(new A()).add(new A()); }
+//			// That NTA creates a list of two A's. The two A's are missing location
+//			// information and have the same position
+//			// If we use a TAL edge then we cannot distinguish between them in the future.
+//			if (target.loc.isMeaningful() && !ambiguousTarget) {
+//				out.add(new NodeEdge.TypeAtLocEdge(parent, source, astNode, target));
+//			} else {
+//				out.add(new NodeEdge.ChildIndexEdge(parent, source, astNode, target, foundTargetIndex));
+//			}
+//			extractStepsTo(info, parent, out);
+//			return;
+//		}
+		for (Method m : parent.underlyingAstNode.getClass().getMethods()) {
 //			if (!m.getName().equals("unknownDecl")) {
 //				// Hack for development, REMOVEME
 //				continue;
@@ -182,23 +228,25 @@ public class CreateLocator {
 			if (m.getParameterCount() == 0) {
 				final Field field = m.getDeclaringClass().getDeclaredField(m.getName() + "_value");
 				field.setAccessible(true);
-				final Object cachedNtaValue = field.get(parent);
+				final Object cachedNtaValue = field.get(parent.underlyingAstNode);
 				// Intentional identity comparison
-				if (cachedNtaValue == astNode) {
-					out.add(new NodeEdge.ParameterizedNtaEdge(source, target, m.getName(), Collections.emptyList()));
+				if (cachedNtaValue == astNode.underlyingAstNode) {
+					out.add(new NodeEdge.ParameterizedNtaEdge(parent, source, astNode, target, m.getName(),
+							Collections.emptyList()));
 					extractStepsTo(info, parent, out);
+
 					return;
 				}
 			}
 		}
 
-		if ((Integer) Reflect.invoke0(parent, "getNumChild") == 0) {
+		if (parent.getNumChildren() == 0) {
 			// Strange proxy node that appears in NTA+param cases
 			// RealParent -> Proxy -> Value
 			// In this case, 'parent' is the proxy. We want the grandparent instead
-			final Object realParent = Reflect.getParent(parent);
+			final AstNode realParent = parent.parent();
 			if (realParent != null) {
-				for (Method m : realParent.getClass().getMethods()) {
+				for (Method m : realParent.underlyingAstNode.getClass().getMethods()) {
 					if (!isNta(m)) {
 						continue;
 					}
@@ -222,10 +270,13 @@ public class CreateLocator {
 					}
 					f.setAccessible(true);
 					@SuppressWarnings("unchecked")
-					final Map<Object, Object> cache = (Map<Object, Object>) f.get(realParent);
+					final Map<Object, Object> cache = (Map<Object, Object>) f.get(realParent.underlyingAstNode);
+					if (cache == null) {
+						continue;
+					}
 
 					checkCacheEntries: for (Entry<Object, Object> ent : cache.entrySet()) {
-						if (ent.getValue() == astNode) {
+						if (ent.getValue() == astNode.underlyingAstNode) {
 							final Object param = ent.getKey();
 
 							final List<ParameterValue> serializableParams = new ArrayList<>();
@@ -258,7 +309,8 @@ public class CreateLocator {
 //							final SerializableParameterType serializable = SerializableParameterType
 //									.decode(param.getClass(), baseAstClazz);
 							final TypeAtLoc realSource = TypeAtLoc.from(realParent, info.recoveryStrategy);
-							out.add(new NodeEdge.ParameterizedNtaEdge(realSource, target, m.getName(), serializableParams));
+							out.add(new NodeEdge.ParameterizedNtaEdge(realParent, realSource, astNode, target,
+									m.getName(), serializableParams));
 							extractStepsTo(info, realParent, out);
 							return;
 
@@ -274,22 +326,22 @@ public class CreateLocator {
 					}
 				}
 			}
-
 		}
 
 		System.out.println("Unknown edge " + parent + " -->" + astNode);
 		System.out.println("other way: " + source + " --> " + target);
-		System.out.println("Parent pretty : " + Reflect.invoke0(parent, "prettyPrint"));
+		System.out.println("Parent pretty : " + Reflect.invoke0(parent.underlyingAstNode, "prettyPrint"));
 		System.out.println("child type " + astNode.getClass());
-		final Field childIndex = astNode.getClass().getDeclaredField("childIndex");
+		final Field childIndex = astNode.underlyingAstNode.getClass().getDeclaredField("childIndex");
 		childIndex.setAccessible(true);
 		System.out.println("value childIndex : " + childIndex.getInt(astNode));
 
-		Object search = parent;
+		AstNode search = parent;
 		while (search != null) {
-			search = Reflect.getParent(search);
+			search = search.parent();
 			System.out.println("Grandparent.. " + search);
 		}
+		out.add(null);
 //		addEdge.accept("UNKNOWN EDGE");
 //		if (parent != null) {
 //			extractStepsTo(parent, out);

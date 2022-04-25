@@ -5,6 +5,7 @@ import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import pasta.ast.AstNode;
 import pasta.protocol.ParameterValue;
 
 /**
@@ -12,39 +13,57 @@ import pasta.protocol.ParameterValue;
  */
 abstract class NodeEdge {
 
-	public final TypeAtLoc source;
-	public final TypeAtLoc target;
-	public final String type;
+	public static enum NodeEdgeType {
+		ChildIndex("child"), NTA("nta"), TypeAtLoc("tal");
+
+		private String jsonRepresentation;
+
+		private NodeEdgeType(String jsonRepresentation) {
+			this.jsonRepresentation = jsonRepresentation;
+
+		}
+	}
+
+	public final AstNode sourceNode;
+	public final TypeAtLoc sourceLoc;
+
+	public final AstNode targetNode;
+	public final TypeAtLoc targetLoc;
+	public final NodeEdgeType type;
 	public final Object value;
 
-	public NodeEdge(TypeAtLoc source, TypeAtLoc target, String type, Object value) {
-		this.source = source;
-		this.target = target;
+	public NodeEdge(AstNode sourceNode, TypeAtLoc sourceLoc, AstNode targetNode, TypeAtLoc targetLoc, NodeEdgeType type,
+			Object value) {
+		this.sourceNode = sourceNode;
+		this.sourceLoc = sourceLoc;
+		this.targetNode = targetNode;
+		this.targetLoc = targetLoc;
 		this.type = type;
 		this.value = value;
 	}
 
 	public boolean canBeCollapsed() {
-		return target.loc.isMeaningful() && type.equals("tal");
+		return targetLoc.loc.isMeaningful() && type == NodeEdgeType.TypeAtLoc;
 	}
 
 	public JSONObject toJson() {
 		final JSONObject obj = new JSONObject();
-		obj.put("type", type);
+		obj.put("type", type.jsonRepresentation);
 		obj.put("value", value);
 		return obj;
 	}
 
 	public static class ChildIndexEdge extends NodeEdge {
-		public ChildIndexEdge(TypeAtLoc source, TypeAtLoc target, int childIndex) {
-			super(source, target, "child", childIndex);
+		public ChildIndexEdge(AstNode sourceNode, TypeAtLoc sourceLoc, AstNode targetNode, TypeAtLoc targetLoc,
+				int childIndex) {
+			super(sourceNode, sourceLoc, targetNode, targetLoc, NodeEdgeType.ChildIndex, childIndex);
 		}
 	}
 
 	public static class ParameterizedNtaEdge extends NodeEdge {
-		public ParameterizedNtaEdge(TypeAtLoc source, TypeAtLoc target, String ntaName,
-				List<ParameterValue> arguments) {
-			super(source, target, "nta", buildMthObj(ntaName, arguments));
+		public ParameterizedNtaEdge(AstNode sourceNode, TypeAtLoc sourceLoc, AstNode targetNode, TypeAtLoc targetLoc,
+				String ntaName, List<ParameterValue> arguments) {
+			super(sourceNode, sourceLoc, targetNode, targetLoc, NodeEdgeType.NTA, buildMthObj(ntaName, arguments));
 		}
 
 		private static JSONObject buildMthObj(String ntaName, List<ParameterValue> arguments) {
@@ -62,8 +81,8 @@ abstract class NodeEdge {
 	}
 
 	public static class TypeAtLocEdge extends NodeEdge {
-		public TypeAtLocEdge(TypeAtLoc source, TypeAtLoc target) {
-			super(source, target, "tal", buildLocatorObj(target));
+		public TypeAtLocEdge(AstNode sourceNode, TypeAtLoc sourceLoc, AstNode targetNode, TypeAtLoc targetLoc) {
+			super(sourceNode, sourceLoc, targetNode, targetLoc, NodeEdgeType.TypeAtLoc, buildLocatorObj(targetLoc));
 		}
 
 		private static JSONObject buildLocatorObj(TypeAtLoc target) {
