@@ -13,6 +13,8 @@ import pasta.util.FileMonitor;
 
 //	/Users/anton/repo/extendj/java8/extendj.jar
 //	/Users/anton/repo/lth/edan65/A6-SimpliC/compiler.jar
+//  /Users/anton/repo/jastadd-fj/fj-compiler.jar
+
 public class PastaServer {
 
 	private static void printUsage() {

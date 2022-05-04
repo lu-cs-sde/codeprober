@@ -1,7 +1,6 @@
 package pasta.locator;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import org.json.JSONArray;
@@ -27,17 +26,22 @@ public class ApplyLocator {
 			this.pos = pos;
 			this.nodeLocator = nodeLocator;
 		}
+		
+		@Override
+		public String toString() {
+			return "@" + pos + ":" + node.toString();
+		}
 	}
 
 	@SuppressWarnings("serial")
 	private static class AmbiguousTal extends RuntimeException {
 	}
 
-	private static AstNode bestMatchingNode(AstNode astNode, Class<?> nodeType, int startPos, int endPos,
+	private static AstNode bestMatchingNode(AstInfo info, AstNode astNode, Class<?> nodeType, int startPos, int endPos,
 			PositionRecoveryStrategy recoveryStrategy, boolean failOnAmbiguity) {
 		final Span nodePos;
 		try {
-			nodePos = Span.extractPosition(astNode, recoveryStrategy);
+			nodePos = Span.extractPosition(info, astNode);
 		} catch (InvokeProblem e) {
 			System.out.println("Error while extracting node position for " + astNode);
 			e.printStackTrace();
@@ -54,11 +58,11 @@ public class ApplyLocator {
 		AstNode bestNode = nodeType.isInstance(astNode.underlyingAstNode) ? astNode : null;
 		int bestError = bestNode != null ? (Math.abs(start - startPos) + Math.abs(end - endPos)) : Integer.MAX_VALUE;
 		for (AstNode child : astNode.getChildren()) {
-			AstNode recurse = bestMatchingNode(child, nodeType, startPos, endPos, recoveryStrategy, failOnAmbiguity);
+			AstNode recurse = bestMatchingNode(info, child, nodeType, startPos, endPos, recoveryStrategy, failOnAmbiguity);
 			if (recurse != null) {
 				final Span recursePos;
 				try {
-					recursePos = Span.extractPosition(recurse, recoveryStrategy);
+					recursePos = Span.extractPosition(info, recurse);
 					final int recurseError = Math.abs(recursePos.start - startPos) + Math.abs(recursePos.end - endPos);
 					if (recurseError < bestError) {
 						bestNode = recurse;
@@ -84,7 +88,7 @@ public class ApplyLocator {
 		case "tal": {
 			final JSONObject tal = step.getJSONObject("value");
 			try {
-				return bestMatchingNode(sourceNode,
+				return bestMatchingNode(info, sourceNode,
 						info.loadAstClass.apply(info.basAstClazz.getPackage().getName() + "." + tal.getString("type")),
 						tal.getInt("start"), tal.getInt("end"), info.recoveryStrategy, true) == null;
 			} catch (AmbiguousTal a) {
@@ -100,29 +104,29 @@ public class ApplyLocator {
 
 	public static ResolvedNode toNode(AstInfo info, JSONObject locator) {
 
-		final String rootNodeType = locator.getJSONObject("root").getString("type");
-		final int rootStart = locator.getJSONObject("root").getInt("start");
-		final int rootEnd = locator.getJSONObject("root").getInt("end");
-		AstNode matchedNode = null;
+//		final String rootNodeType = locator.getJSONObject("root").getString("type");
+//		final int rootStart = locator.getJSONObject("root").getInt("start");
+//		final int rootEnd = locator.getJSONObject("root").getInt("end");
+		AstNode matchedNode = info.ast;
 
-		if (rootNodeType.equals("<ROOT>") || rootNodeType.equals(info.ast.getClass().getSimpleName())) {
-			// '<ROOT>' is a magic node type that always matches the root node.
-			// For ExtendJ the root type is missing line/col info, which breaks some queries
-			// "Fix" by always matching root 'for free', no matter rootStart/rootEnd
-			matchedNode = info.ast;
-		}
-		if (matchedNode == null) {
-			// Gradually increase search span a few columns in either direction
-			for (int offset : Arrays.asList(0, 1, 3, 5, 10)) {
-				matchedNode = bestMatchingNode(info.ast,
-						info.loadAstClass.apply(
-								info.ast.underlyingAstNode.getClass().getPackage().getName() + "." + rootNodeType),
-						rootStart - offset, rootEnd + offset, info.recoveryStrategy, false);
-				if (matchedNode != null) {
-					break;
-				}
-			}
-		}
+//		if (rootNodeType.equals("<ROOT>") || rootNodeType.equals(info.ast.underlyingAstNode.getClass().getSimpleName())) {
+//			// '<ROOT>' is a magic node type that always matches the root node.
+//			// For ExtendJ the root type is missing line/col info, which breaks some queries
+//			// "Fix" by always matching root 'for free', no matter rootStart/rootEnd
+//			matchedNode = info.ast;
+//		}
+//		if (matchedNode == null) {
+//		// Gradually increase search span a few columns in either direction
+//		for (int offset : Arrays.asList(0, 1, 3, 5, 10)) {
+//			matchedNode = bestMatchingNode(info.ast,
+//					info.loadAstClass.apply(
+//							info.ast.underlyingAstNode.getClass().getPackage().getName() + "." + rootNodeType),
+//					rootStart - offset, rootEnd + offset, info.recoveryStrategy, false);
+//			if (matchedNode != null) {
+//				break;
+//			}
+//		}
+//		}
 
 		if (matchedNode != null) {
 			final List<Object> matchSequence = new ArrayList<>();
@@ -152,7 +156,7 @@ public class ApplyLocator {
 				}
 				case "tal": {
 					final JSONObject tal = step.getJSONObject("value");
-					matchedNode = bestMatchingNode(matchedNode,
+					matchedNode = bestMatchingNode(info, matchedNode,
 							info.loadAstClass
 									.apply(info.basAstClazz.getPackage().getName() + "." + tal.getString("type")),
 							tal.getInt("start"), tal.getInt("end"), info.recoveryStrategy, false);
@@ -176,7 +180,7 @@ public class ApplyLocator {
 		Span matchPos = null;
 		if (matchedNode != null) {
 			try {
-				matchPos = Span.extractPosition(matchedNode, info.recoveryStrategy);
+				matchPos = Span.extractPosition(info, matchedNode);
 			} catch (InvokeProblem e1) {
 				System.out.println("Error while extracting position of matched node");
 				e1.printStackTrace();

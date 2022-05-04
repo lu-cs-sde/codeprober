@@ -39,6 +39,9 @@ public class ASTProvider {
 						Method mainMethod = klass.getMethod("main", String[].class);
 						mainMethod.invoke(null, new Object[] { args });
 					} catch (InvocationTargetException e) {
+						System.out.println("ASTPRovider caught " + e);
+						e.printStackTrace();
+						System.out.println("target: " + e.getTargetException());
 						if (!(e.getTargetException() instanceof SystemExitControl.ExitTrappedException)) {
 							e.printStackTrace();
 							System.err.println(

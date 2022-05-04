@@ -31,6 +31,34 @@ public abstract class FileMonitor extends Thread {
 
 	public abstract void onChange();
 
+	private void maybeTriggerDelayedChange() {
+		if (!file.exists()) {
+			// Might have been removed as part of a clean build.
+			return;
+		}
+		final long currMod = file.lastModified();
+		if (currMod == lastModified) {
+			// No change
+			return;
+		}
+		try {
+			Thread.sleep(1000);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		final long newMod = file.lastModified();
+		if (currMod != newMod) {
+			// It is being updated right now, wait a little longer
+			System.out.println("refresh");
+			maybeTriggerDelayedChange();
+			return;
+		}
+		System.out.println("ACTUAL ONCHANGE " + lastModified +" -> " +newMod);
+		lastModified = newMod;
+		onChange();
+	}
+
 	@Override
 	public void run() {
 		try (WatchService watcher = FileSystems.getDefault().newWatchService()) {
@@ -46,14 +74,7 @@ public abstract class FileMonitor extends Thread {
 					return;
 				}
 				if (key == null) {
-					if (file.exists()) {
-						final long newModified = file.lastModified();
-						if (newModified != lastModified) {
-//                			System.out.println("Compiler jar changed!");
-							onChange();
-						}
-						lastModified = newModified;
-					}
+					maybeTriggerDelayedChange();
 					Thread.yield();
 					continue;
 				}
@@ -72,8 +93,7 @@ public abstract class FileMonitor extends Thread {
 						continue;
 					} else if (kind == java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY
 							&& filename.toString().equals(file.getName())) {
-						lastModified = file.lastModified();
-						onChange();
+						maybeTriggerDelayedChange();
 					}
 					boolean valid = key.reset();
 					if (!valid) {

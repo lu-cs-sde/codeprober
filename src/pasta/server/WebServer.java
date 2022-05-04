@@ -13,6 +13,8 @@ import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import pasta.PastaServer;
+
 public class WebServer {
 	private static String guessMimeType(String path) {
 		switch (path.substring(path.lastIndexOf('.') + 1)) {
@@ -71,7 +73,7 @@ public class WebServer {
 					if (path.startsWith("/")) {
 						path = path.substring(1);
 					}
-					stream = WebServer.class.getResourceAsStream("resources/" + path);
+					stream = PastaServer.class.getResourceAsStream("resources/" + path);
 				}
 				if (stream == null) {
 					System.out.println("Found no resource for path '" + path +"' in req " + data);

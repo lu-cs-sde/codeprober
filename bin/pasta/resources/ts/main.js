@@ -372,6 +372,23 @@ define("ui/create/createTextSpanIndicator", ["require", "exports", "ui/create/re
     };
     exports.default = createTextSpanIndicator;
 });
+define("ui/create/registerNodeSelector", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const registerNodeSelector = (elem, getLocator) => {
+        elem.classList.add('nodeLocatorContainer');
+        elem.addEventListener('click', (e) => {
+            if (!window.ActiveLocatorRequest) {
+                return;
+            }
+            e.stopImmediatePropagation();
+            e.stopPropagation();
+            e.preventDefault();
+            window.ActiveLocatorRequest.submit(getLocator());
+        });
+    };
+    exports.default = registerNodeSelector;
+});
 define("ui/popup/formatAttr", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -388,13 +405,15 @@ define("ui/popup/formatAttr", ["require", "exports"], function (require, exports
         : '')}`;
     exports.default = formatAttr;
 });
-define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerOnHover", "ui/create/showWindow", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, createModalTitle_1, createTextSpanIndicator_1, registerOnHover_2, showWindow_2, displayProbeModal_1, formatAttr_1) {
+define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/create/showWindow", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, createModalTitle_1, createTextSpanIndicator_1, registerNodeSelector_1, registerOnHover_2, showWindow_2, displayAttributeModal_1, displayProbeModal_1, formatAttr_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createModalTitle_1 = __importDefault(createModalTitle_1);
     createTextSpanIndicator_1 = __importDefault(createTextSpanIndicator_1);
+    registerNodeSelector_1 = __importDefault(registerNodeSelector_1);
     registerOnHover_2 = __importDefault(registerOnHover_2);
     showWindow_2 = __importDefault(showWindow_2);
+    displayAttributeModal_1 = __importDefault(displayAttributeModal_1);
     displayProbeModal_1 = __importDefault(displayProbeModal_1);
     formatAttr_1 = __importStar(formatAttr_1);
     const cancelLocatorRequest = () => {
@@ -489,13 +508,13 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
                     argHeader.appendChild(argType);
                     // argHeader.appendChild(document.createTextNode(` ${arg.name}`));
                     attrList.appendChild(argHeader);
-                    const setupTextInput = (init) => {
+                    const setupTextInput = (init, cleanupValue) => {
                         const inp = document.createElement('input');
                         inp.classList.add('attr-arg-input-text');
                         init(inp);
                         inp.placeholder = arg.name;
                         inp.oninput = () => {
-                            argValues[argIdx] = inp.value;
+                            argValues[argIdx] = cleanupValue(inp.value);
                         };
                         inp.onkeydown = (e) => {
                             if (e.key === 'Enter') {
@@ -562,7 +581,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
                             attrList.appendChild(setupTextInput((elem) => {
                                 elem.type = 'number';
                                 elem.value = `${parseInt(`${argValues[argIdx]}`, 10) || ''}`;
-                            }));
+                            }, (val) => `${parseInt(val, 10) || 0}`));
                             break;
                         }
                         case "boolean": {
@@ -578,10 +597,11 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
                         }
                         default:
                             if (arg.isNodeType) {
-                                argValues[argIdx] = arg.value || 'null';
+                                argValues[argIdx] = arg.value || null;
                                 let pickedNodePanel = document.createElement('div');
                                 let pickedNodeHighlighter = () => { };
                                 (0, registerOnHover_2.default)(pickedNodePanel, (on) => pickedNodeHighlighter(on));
+                                let state = (argValues[argIdx] && typeof argValues[argIdx] === 'object') ? 'node' : 'null';
                                 const refreshPickedNode = () => {
                                     while (pickedNodePanel.firstChild) {
                                         pickedNodePanel.firstChild.remove();
@@ -589,32 +609,39 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
                                     pickedNodePanel.style.fontStyle = 'unset';
                                     pickedNodePanel.classList.remove('clickHighlightOnHover');
                                     pickedNodeHighlighter = () => { };
-                                    const state = argValues[argIdx];
+                                    // const state = argValues[argIdx];
                                     if (state === 'null') {
                                         pickedNodePanel.style.display = 'hidden';
                                         pickedNodePanel.style.height = '0px';
                                         return;
                                     }
                                     pickedNodePanel.style.height = '';
-                                    if (state === 'pending') {
+                                    const pickedNode = argValues[argIdx];
+                                    if (!pickedNode || typeof pickedNode !== 'object') {
                                         pickedNodePanel.style.display = 'block';
                                         pickedNodePanel.style.fontStyle = 'italic';
                                         pickedNodePanel.innerText = 'No node picked yet..';
                                         return;
                                     }
-                                    if (typeof state === 'string') {
-                                        console.warn('unknown state', state);
-                                        pickedNodePanel.style.display = 'none';
-                                        return;
-                                    }
-                                    const span = startEndToSpan(state.result.start, state.result.end);
-                                    pickedNodePanel.appendChild((0, createTextSpanIndicator_1.default)({
+                                    // if (typeof state !== 'object') {
+                                    //   console.warn('unknown state', state);
+                                    //   pickedNodePanel.style.display = 'none';
+                                    //   return;
+                                    // }
+                                    const nodeWrapper = document.createElement('div');
+                                    (0, registerNodeSelector_1.default)(nodeWrapper, () => pickedNode);
+                                    nodeWrapper.addEventListener('click', () => {
+                                        (0, displayAttributeModal_1.default)(env, null, pickedNode);
+                                    });
+                                    const span = startEndToSpan(pickedNode.result.start, pickedNode.result.end);
+                                    nodeWrapper.appendChild((0, createTextSpanIndicator_1.default)({
                                         span,
                                     }));
                                     const typeNode = document.createElement('span');
                                     typeNode.classList.add('syntax-type');
-                                    typeNode.innerText = state.result.type;
-                                    pickedNodePanel.appendChild(typeNode);
+                                    typeNode.innerText = pickedNode.result.type;
+                                    nodeWrapper.appendChild(typeNode);
+                                    pickedNodePanel.appendChild(nodeWrapper);
                                     pickedNodePanel.classList.add('clickHighlightOnHover');
                                     pickedNodeHighlighter = (on) => env.updateSpanHighlight(on ? span : null);
                                 };
@@ -636,13 +663,14 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
                                     icon.style.alignSelf = 'center';
                                     icon.style.margin = '0 4px 0 0';
                                     right.appendChild(icon);
-                                }, () => argValues[argIdx] === 'null' ? 'left' : 'right', (node, updateActive) => {
+                                }, () => state === 'null' ? 'left' : 'right', (node, updateActive) => {
                                     if (node === 'left') {
-                                        argValues[argIdx] = 'null';
+                                        state = 'null';
+                                        argValues[argIdx] = null;
                                         cancelLocatorRequest();
                                     }
                                     else {
-                                        argValues[argIdx] = 'pending';
+                                        state = 'node';
                                         lastLocatorRequest = startLocatorRequest(locator => {
                                             argValues[argIdx] = locator;
                                             refreshPickedNode();
@@ -663,7 +691,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
                             attrList.appendChild(setupTextInput((elem) => {
                                 elem.type = 'text';
                                 elem.value = `${argValues[argIdx]}`;
-                            }));
+                            }, id => id));
                             break;
                         }
                     }
@@ -926,23 +954,6 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     };
     exports.default = displayAttributeModal;
 });
-define("ui/create/registerNodeSelector", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    const registerNodeSelector = (elem, getLocator) => {
-        elem.classList.add('nodeLocatorContainer');
-        elem.addEventListener('click', (e) => {
-            if (!window.ActiveLocatorRequest) {
-                return;
-            }
-            e.stopImmediatePropagation();
-            e.stopPropagation();
-            e.preventDefault();
-            window.ActiveLocatorRequest.submit(getLocator());
-        });
-    };
-    exports.default = registerNodeSelector;
-});
 define("model/adjustTypeAtLoc", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -972,7 +983,7 @@ define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], f
     Object.defineProperty(exports, "__esModule", { value: true });
     adjustTypeAtLoc_1 = __importDefault(adjustTypeAtLoc_1);
     const adjustLocator = (adj, loc) => {
-        (0, adjustTypeAtLoc_1.default)(adj, loc.root);
+        // adjustTypeAtLoc(adj, loc.root);
         (0, adjustTypeAtLoc_1.default)(adj, loc.result);
         const adjustStep = (step) => {
             switch (step.type) {
@@ -984,7 +995,7 @@ define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], f
                     step.value.args.forEach(({ args }) => {
                         if (args) {
                             args.forEach(({ value }) => {
-                                if (typeof value === 'object') {
+                                if (value && typeof value === 'object') {
                                     adjustLocator(adj, value);
                                 }
                             });
@@ -1334,18 +1345,18 @@ aspect MagicOutputDemo {
     };
     exports.default = displayHelp;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/create/registerOnHover", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, createTextSpanIndicator_3, displayAttributeModal_1, showWindow_5, registerOnHover_3, formatAttr_3, displayArgModal_2, registerNodeSelector_1, adjustLocator_1, displayHelp_1) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/create/registerOnHover", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, createTextSpanIndicator_3, displayAttributeModal_2, showWindow_5, registerOnHover_3, formatAttr_3, displayArgModal_2, registerNodeSelector_2, adjustLocator_1, displayHelp_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
     createModalTitle_4 = __importDefault(createModalTitle_4);
     createTextSpanIndicator_3 = __importDefault(createTextSpanIndicator_3);
-    displayAttributeModal_1 = __importDefault(displayAttributeModal_1);
+    displayAttributeModal_2 = __importDefault(displayAttributeModal_2);
     showWindow_5 = __importDefault(showWindow_5);
     registerOnHover_3 = __importDefault(registerOnHover_3);
     formatAttr_3 = __importDefault(formatAttr_3);
     displayArgModal_2 = __importDefault(displayArgModal_2);
-    registerNodeSelector_1 = __importDefault(registerNodeSelector_1);
+    registerNodeSelector_2 = __importDefault(registerNodeSelector_2);
     adjustLocator_1 = __importDefault(adjustLocator_1);
     displayHelp_1 = __importDefault(displayHelp_1);
     const displayProbeModal = (env, modalPos, locator, attr) => {
@@ -1376,7 +1387,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         },
                     },
                     {
-                        title: 'Copy input clipboard',
+                        title: 'Copy input to clipboard',
                         invoke: () => {
                             navigator.clipboard.writeText(JSON.stringify({ locator, attr }, null, 2));
                         }
@@ -1447,9 +1458,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     if (arg.isNodeType) {
                                         const node = document.createElement('span');
                                         node.classList.add('syntax-type');
-                                        if (typeof arg.value === 'string') {
+                                        if (!arg.value || (typeof arg.value !== 'object')) {
                                             // Probably null
-                                            node.innerText = arg.value;
+                                            node.innerText = `${arg.value}`;
                                         }
                                         else {
                                             node.innerText = arg.value.result.type;
@@ -1469,12 +1480,12 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     headAttr.onmousedown = (e) => { e.stopPropagation(); };
                     headAttr.onclick = (e) => {
                         if (env.duplicateOnAttr()) {
-                            (0, displayAttributeModal_1.default)(env, null, JSON.parse(JSON.stringify(locator)));
+                            (0, displayAttributeModal_2.default)(env, null, JSON.parse(JSON.stringify(locator)));
                         }
                         else {
                             queryWindow.remove();
                             cleanup();
-                            (0, displayAttributeModal_1.default)(env, queryWindow.getPos(), locator);
+                            (0, displayAttributeModal_2.default)(env, queryWindow.getPos(), locator);
                         }
                         e.stopPropagation();
                     };
@@ -1504,7 +1515,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         marginLeft: true,
                         onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
                     });
-                    (0, registerNodeSelector_1.default)(spanIndicator, () => locator);
+                    (0, registerNodeSelector_2.default)(spanIndicator, () => locator);
                     container.appendChild(spanIndicator);
                 },
                 onClose: () => {
@@ -1548,11 +1559,13 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 if (!locator) {
                     console.error('no locator??');
                 }
+                console.log('req attr:', JSON.stringify(attr, null, 2));
                 env.performRpcQuery({
                     attr,
                     locator,
                 })
                     .then((parsed) => {
+                    var _a;
                     const body = parsed.body;
                     copyBody = body;
                     loading = false;
@@ -1572,6 +1585,16 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         localErrors.push({ severity, errStart, errEnd, msg });
                     });
                     console.log('parsed.loc?', parsed.locator);
+                    const updatedArgs = parsed.args;
+                    if (updatedArgs) {
+                        refreshMarkers = true;
+                        (_a = attr.args) === null || _a === void 0 ? void 0 : _a.forEach((arg, argIdx) => {
+                            arg.type = updatedArgs[argIdx].type;
+                            arg.isNodeType = updatedArgs[argIdx].isNodeType;
+                            console.log('updating arg value from', arg.value, 'to', updatedArgs[argIdx].value);
+                            arg.value = updatedArgs[argIdx].value;
+                        });
+                    }
                     if (parsed.locator) {
                         refreshMarkers = true;
                         locator = parsed.locator;
@@ -1603,6 +1626,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                 const deeper = document.createElement('pre');
                                 // deeper.style.borderLeft = '1px solid #88888877';
                                 deeper.style.marginLeft = '1rem';
+                                deeper.style.marginTop = '0.125rem';
                                 line.forEach(sub => encodeLine(deeper, sub, true));
                                 target.appendChild(deeper);
                             }
@@ -1650,9 +1674,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     container.onmousedown = (e) => {
                                         e.stopPropagation();
                                     };
-                                    (0, registerNodeSelector_1.default)(container, () => line.value);
+                                    (0, registerNodeSelector_2.default)(container, () => line.value);
                                     container.addEventListener('click', () => {
-                                        (0, displayAttributeModal_1.default)(env, null, line.value);
+                                        (0, displayAttributeModal_2.default)(env, null, line.value);
                                     });
                                     target.appendChild(container);
                                     break;
@@ -1709,8 +1733,15 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             },
         });
         env.onChangeListeners[queryId] = (adjusters) => {
+            var _a;
             if (adjusters) {
                 adjusters.forEach(adj => (0, adjustLocator_1.default)(adj, locator));
+                (_a = attr.args) === null || _a === void 0 ? void 0 : _a.forEach(({ value }) => {
+                    if (value && typeof value === 'object') {
+                        console.log('adjusting value: ', value);
+                        adjusters.forEach(adj => (0, adjustLocator_1.default)(adj, value));
+                    }
+                });
                 // console.log('Adjusted span to:', span);
             }
             if (loading) {
@@ -1725,15 +1756,15 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     };
     exports.default = displayProbeModal;
 });
-define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector"], function (require, exports, createLoadingSpinner_3, createModalTitle_5, displayAttributeModal_2, registerOnHover_4, showWindow_6, registerNodeSelector_2) {
+define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector"], function (require, exports, createLoadingSpinner_3, createModalTitle_5, displayAttributeModal_3, registerOnHover_4, showWindow_6, registerNodeSelector_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_3 = __importDefault(createLoadingSpinner_3);
     createModalTitle_5 = __importDefault(createModalTitle_5);
-    displayAttributeModal_2 = __importDefault(displayAttributeModal_2);
+    displayAttributeModal_3 = __importDefault(displayAttributeModal_3);
     registerOnHover_4 = __importDefault(registerOnHover_4);
     showWindow_6 = __importDefault(showWindow_6);
-    registerNodeSelector_2 = __importDefault(registerNodeSelector_2);
+    registerNodeSelector_3 = __importDefault(registerNodeSelector_3);
     const displayRagModal = (env, line, col) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const cleanup = () => {
@@ -1758,7 +1789,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                 spinner.classList.add('absoluteCenter');
                 root.appendChild(spinner);
                 const rootProgramLocator = {
-                    type: '<ROOT>',
+                    type: '?',
                     start: (line << 12) + col,
                     end: (line << 12) + col
                 };
@@ -1767,7 +1798,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         name: 'pasta_spansAndNodeTypes',
                     },
                     locator: {
-                        root: rootProgramLocator,
+                        // root: rootProgramLocator,
                         result: rootProgramLocator,
                         steps: []
                     },
@@ -1814,12 +1845,12 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                             end: (span.lineEnd << 12) + span.colEnd,
                             type,
                         };
-                        const locator = { root: nodeTal, result: nodeTal, steps: [] };
-                        (0, registerNodeSelector_2.default)(node, () => locator);
+                        const locator = { result: nodeTal, steps: [{ type: 'tal', value: nodeTal }] };
+                        (0, registerNodeSelector_3.default)(node, () => locator);
                         node.onclick = () => {
                             cleanup();
                             env.updateSpanHighlight(null);
-                            (0, displayAttributeModal_2.default)(env, popup.getPos(), locator);
+                            (0, displayAttributeModal_3.default)(env, popup.getPos(), locator);
                         };
                         rowsContainer.appendChild(node);
                     });
@@ -1890,14 +1921,14 @@ define("settings", ["require", "exports"], function (require, exports) {
     };
     exports.default = settings;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_3, settings_1) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_4, settings_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
     displayProbeModal_3 = __importDefault(displayProbeModal_3);
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_2 = __importDefault(displayHelp_2);
-    displayAttributeModal_3 = __importDefault(displayAttributeModal_3);
+    displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
     settings_1 = __importDefault(settings_1);
     window.clearPastaSettings = () => {
         settings_1.default.set({});
@@ -2143,10 +2174,10 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         console.warn('Invalid probe window state?', e);
                     }
                 }, 300); // JUUUUUUUST in case the stored window state causes issues, this 300ms timeout allows people to click the 'clear state' button
-                window.RagQuery = (line, col, preselectedType) => {
-                    if (preselectedType) {
-                        const node = { type: preselectedType, start: (line << 12) + col - 1, end: (line << 12) + col + 1 };
-                        (0, displayAttributeModal_3.default)(modalEnv, null, { root: node, result: node, steps: [] });
+                window.RagQuery = (line, col, autoSelectRoot) => {
+                    if (autoSelectRoot) {
+                        const node = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1 };
+                        (0, displayAttributeModal_4.default)(modalEnv, null, { result: node, steps: [] });
                     }
                     else {
                         (0, displayRagModal_1.default)(modalEnv, line, col);

@@ -2,9 +2,9 @@ package pasta.locator;
 
 import java.util.Objects;
 
+import pasta.AstInfo;
 import pasta.ast.AstNode;
 import pasta.metaprogramming.InvokeProblem;
-import pasta.protocol.PositionRecoveryStrategy;
 
 public class TypeAtLoc {
 
@@ -21,8 +21,8 @@ public class TypeAtLoc {
 		return type + "@[" + loc.start + ".." + loc.end + "]";
 	}
 
-	public static TypeAtLoc from(AstNode astNode, PositionRecoveryStrategy recoveryStrategy) throws InvokeProblem {
-		return new TypeAtLoc(astNode.underlyingAstNode.getClass().getSimpleName(), Span.extractPosition(astNode, recoveryStrategy));
+	public static TypeAtLoc from(AstInfo info, AstNode astNode) throws InvokeProblem {
+		return new TypeAtLoc(astNode.underlyingAstNode.getClass().getSimpleName(), Span.extractPosition(info, astNode));
 	}
 
 	@Override

@@ -1,10 +1,7 @@
 package pasta.protocol.create;
 
-import org.json.JSONObject;
-
 import pasta.AstInfo;
 import pasta.ast.AstNode;
-import pasta.locator.CreateLocator;
 import pasta.protocol.ParameterType;
 import pasta.protocol.ParameterValue;
 
@@ -16,11 +13,9 @@ public abstract class CreateValue {
 			return null;
 		}
 		if (!type.isNodeType) {
-			return new ParameterValue(type.paramType, type.isNodeType, value);
+			return new ParameterValue(type.paramType, type.isNodeType, info, value);
 		}
-		final JSONObject locator = CreateLocator.fromNode(info, new AstNode(value));
-		return new ParameterValue(type.paramType, type.isNodeType, locator);
-
+		
+		return new ParameterValue(type.paramType, type.isNodeType, info, new AstNode(value));
 	}
-
 }

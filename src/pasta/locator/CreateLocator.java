@@ -25,11 +25,9 @@ import pasta.protocol.create.CreateValue;
 public class CreateLocator {
 
 	private static class Locator {
-		public final TypeAtLoc root;
 		public final List<NodeEdge> steps;
 
-		public Locator(TypeAtLoc root, List<NodeEdge> steps) {
-			this.root = root;
+		public Locator(List<NodeEdge> steps) {
 			this.steps = steps;
 		}
 	}
@@ -50,13 +48,13 @@ public class CreateLocator {
 			return null;
 		}
 
-		final JSONObject robustRoot = new JSONObject();
-		robustRoot.put("start", id.root.loc.start);
-		robustRoot.put("end", id.root.loc.end);
-		robustRoot.put("type", id.root.type);
+//		final JSONObject robustRoot = new JSONObject();
+//		robustRoot.put("start", id.root.loc.start);
+//		robustRoot.put("end", id.root.loc.end);
+//		robustRoot.put("type", id.root.type);
 
 		final JSONObject robustResult = new JSONObject();
-		final Span astPos = Span.extractPosition(astNode, info.recoveryStrategy);
+		final Span astPos = Span.extractPosition(info, astNode);
 		robustResult.put("start", astPos.start);
 		robustResult.put("end", astPos.end);
 		robustResult.put("type", astNode.underlyingAstNode.getClass().getSimpleName());
@@ -67,7 +65,7 @@ public class CreateLocator {
 		}
 
 		final JSONObject robust = new JSONObject();
-		robust.put("root", robustRoot);
+//		robust.put("root", robustRoot);
 		robust.put("result", robustResult);
 		robust.put("steps", steps);
 //		System.out.println("Locator: " + robust.toString(2));
@@ -88,7 +86,7 @@ public class CreateLocator {
 
 		if (res.isEmpty()) {
 			// Root node!
-			return new Locator(TypeAtLoc.from(astNode, info.recoveryStrategy), Collections.emptyList());
+			return new Locator(Collections.emptyList());
 		}
 		for (NodeEdge edge : res) {
 			if (edge == null) {
@@ -97,7 +95,7 @@ public class CreateLocator {
 		}
 
 		Collections.reverse(res);
-		TypeAtLoc root = res.get(0).sourceLoc;
+//		TypeAtLoc root = res.get(0).sourceLoc;
 //
 //		for (int i = 1; i < res.size(); i++) {
 //			NodeEdge e = res.get(i);
@@ -119,7 +117,7 @@ public class CreateLocator {
 //			}
 //		}
 
-		return new Locator(root, res);
+		return new Locator(res);
 	}
 
 	private static boolean isNta(Method m) {
@@ -152,8 +150,8 @@ public class CreateLocator {
 			return;
 		}
 
-		final TypeAtLoc source = TypeAtLoc.from(parent, info.recoveryStrategy);
-		final TypeAtLoc target = TypeAtLoc.from(astNode, info.recoveryStrategy);
+		final TypeAtLoc source = TypeAtLoc.from(info, parent);
+		final TypeAtLoc target = TypeAtLoc.from(info, astNode);
 		int childIdxCounter = 0;
 //		int foundTargetIndex = -1;
 //		boolean ambiguousTarget = false;
@@ -308,7 +306,7 @@ public class CreateLocator {
 							}
 //							final SerializableParameterType serializable = SerializableParameterType
 //									.decode(param.getClass(), baseAstClazz);
-							final TypeAtLoc realSource = TypeAtLoc.from(realParent, info.recoveryStrategy);
+							final TypeAtLoc realSource = TypeAtLoc.from(info, realParent);
 							out.add(new NodeEdge.ParameterizedNtaEdge(realParent, realSource, astNode, target,
 									m.getName(), serializableParams));
 							extractStepsTo(info, realParent, out);

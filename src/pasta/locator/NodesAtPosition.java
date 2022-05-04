@@ -6,24 +6,23 @@ import java.util.List;
 
 import org.json.JSONObject;
 
+import pasta.AstInfo;
 import pasta.ast.AstNode;
 import pasta.metaprogramming.InvokeProblem;
-import pasta.protocol.PositionRecoveryStrategy;
 
 public class NodesAtPosition {
 
-	public static List<JSONObject> get(AstNode astNode, int pos, PositionRecoveryStrategy recoveryStrategy) {
+	public static List<JSONObject> get(AstInfo info, AstNode astNode, int pos) {
 		List<JSONObject> ret = new ArrayList<>();
-		getTo(ret, astNode, pos, recoveryStrategy);
+		getTo(ret, info, astNode, pos);
 		Collections.reverse(ret); // Narrowest/smallest node first inthe list
 		return ret;
 	}
 
-	private static void getTo(List<JSONObject> out, AstNode astNode, int pos,
-			PositionRecoveryStrategy recoveryStrategy) {
+	private static void getTo(List<JSONObject> out, AstInfo info, AstNode astNode, int pos) {
 		final Span nodePos;
 		try {
-			nodePos = Span.extractPosition(astNode, recoveryStrategy);
+			nodePos = Span.extractPosition(info, astNode);
 		} catch (InvokeProblem e1) {
 			e1.printStackTrace();
 			return;
@@ -43,7 +42,7 @@ public class NodesAtPosition {
 			}
 		}
 		for (AstNode child : astNode.getChildren()) {
-			getTo(out, child, pos, recoveryStrategy);
+			getTo(out, info, child, pos);
 		}
 	}
 }

@@ -6,9 +6,6 @@ import java.util.Arrays;
 
 public class Reflect {
 
-	void f() {
-	}
-
 	public static Object getParent(Object astNode) {
 		return Reflect.invoke0(astNode, "getParent");
 	}

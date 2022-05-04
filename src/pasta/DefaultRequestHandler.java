@@ -18,6 +18,7 @@ import pasta.locator.ApplyLocator.ResolvedNode;
 import pasta.locator.AttrsInNode;
 import pasta.locator.NodesAtPosition;
 import pasta.metaprogramming.InvokeProblem;
+import pasta.metaprogramming.PositionRepresentation;
 import pasta.metaprogramming.Reflect;
 import pasta.metaprogramming.StdIoInterceptor;
 import pasta.protocol.ParameterValue;
@@ -41,15 +42,46 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 	private void handleParsedAst(Object ast, Function<String, Class<?>> loadAstClass, JSONObject queryObj,
 			JSONObject retBuilder, JSONArray bodyBuilder) {
 		if (ast == null) {
-			bodyBuilder.put("Compiler exited normally, but no 'DrAST_root_node' found");
-			bodyBuilder.put("If you call System.exit(<not zero>) when parsing fails then this message will disappear.");
+			bodyBuilder.put("Compiler exited, but no 'DrAST_root_node' found.");
+			bodyBuilder
+					.put("If parsing failed, you can draw 'red squigglies' in the code to indicate where it failed.");
+			bodyBuilder.put("See overflow menu (⠇) -> \"Magic output messages help\".");
+			bodyBuilder.put(
+					"If parsing succeeded, make sure you declare and assign the following field in your main class:");
+			bodyBuilder.put("'public static Object DrAST_root_node'");
+//			bodyBuilder
+//			bodyBuilder.put("If you call System.exit(<not zero>) when parsing fails then this message will disappear.");
 			return;
 		}
 		System.out.println("Parsed, got: " + ast);
 		AstNode astNode = new AstNode(ast);
 
+		PositionRepresentation positionRepresentation = null;
+		try {
+			if (Reflect.invoke0(ast, "getStartLine") instanceof Integer) {
+				positionRepresentation = PositionRepresentation.SEPARATE_LINE_COLUMN;
+			}
+		} catch (RuntimeException e) {
+			// Not getStartLine..
+		}
+		if (positionRepresentation == null) {
+			if (Reflect.invoke0(ast, "getStart") instanceof Integer) {
+				positionRepresentation = PositionRepresentation.PACKED_BITS;
+			}
+		}
+		if (positionRepresentation == null) {
+			System.out.println("Unable to determine how position is stored in the AST, exiting. Expected one of:");
+			System.out.println(
+					"1) [getStart, getEnd], should return a packed line/column integer, 20 bits line and 12 bits column, 0xLLLLLCCC");
+			System.out.println(
+					"2) [getStartLine, getEndLine, getStartColumn, getEndColumn] should return line / column respectively.");
+			throw new RuntimeException("Exiting due to unknown position representation");
+		}
+		System.out.println("Going to use posRepr: " + positionRepresentation);
+
 		final AstInfo info = new AstInfo(astNode,
-				PositionRecoveryStrategy.fallbackParse(queryObj.getString("posRecovery")), loadAstClass);
+				PositionRecoveryStrategy.fallbackParse(queryObj.getString("posRecovery")), positionRepresentation,
+				loadAstClass);
 
 		final JSONObject queryBody = queryObj.getJSONObject("query");
 		final JSONObject locator = queryBody.getJSONObject("locator");
@@ -68,10 +100,10 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		// First check for 'magic' methods
 		switch (queryAttrName) {
 		case "pasta_spansAndNodeTypes": {
-			final int rootStart = locator.getJSONObject("root").getInt("start");
-			final int rootEnd = locator.getJSONObject("root").getInt("end");
+			final int rootStart = locator.getJSONObject("result").getInt("start");
+			final int rootEnd = locator.getJSONObject("result").getInt("end");
 			retBuilder.put("spansAndNodeTypes", new JSONArray(NodesAtPosition.get( //
-					match.node, rootStart + (rootEnd - rootStart) / 2, info.recoveryStrategy //
+					info, match.node, rootStart + (rootEnd - rootStart) / 2 //
 			)));
 			return;
 		}
@@ -87,6 +119,9 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			try {
 				final JSONArray args = queryAttr.optJSONArray("args");
 				final Object value;
+
+				// Respond with new args, just like we respond with a new locator
+				JSONArray updatedArgs = new JSONArray();
 				if (args == null) {
 					value = Reflect.invoke0(match.node.underlyingAstNode, queryAttrName);
 				} else {
@@ -104,10 +139,12 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 						}
 						argTypes[i] = param.paramType;
 						argValues[i] = param.getUnpackedIfNode();
+						updatedArgs.put(param.toJson());
 					}
 					value = Reflect.invokeN(match.node.underlyingAstNode, queryAttrName, argTypes, argValues);
 				}
 				EncodeResponseValue.encode(info, bodyBuilder, value, new HashSet<>());
+				retBuilder.put("args", updatedArgs);
 			} catch (InvokeProblem e) {
 				final Throwable cause = e.getCause();
 				if (cause instanceof NoSuchMethodException) {

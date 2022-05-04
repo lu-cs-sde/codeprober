@@ -14,13 +14,13 @@ public abstract class DecodeValue {
 		switch (argTypeStr) {
 		case "java.lang.String": {
 			// 'optString' to allow nullable values
-			return new ParameterValue(String.class, false, serializedForm.optString("value"));
+			return new ParameterValue(String.class, false, info, serializedForm.optString("value"));
 		}
 		case "int": {
-			return new ParameterValue(Integer.TYPE, false, serializedForm.getInt("value"));
+			return new ParameterValue(Integer.TYPE, false, info, serializedForm.getInt("value"));
 		}
 		case "boolean": {
-			return new ParameterValue(Boolean.TYPE, false, serializedForm.getBoolean("value"));
+			return new ParameterValue(Boolean.TYPE, false, info, serializedForm.getBoolean("value"));
 		}
 
 		default: {
@@ -28,7 +28,7 @@ public abstract class DecodeValue {
 				Class<?> type = info.loadAstClass.apply(argTypeStr);
 
 				if (serializedForm.isNull("value")) {
-					return new ParameterValue(type, true, null);
+					return new ParameterValue(type, true, info, null);
 				} else {
 					final ResolvedNode locatedArg = ApplyLocator.toNode(info,
 							serializedForm.getJSONObject("value"));
@@ -36,7 +36,7 @@ public abstract class DecodeValue {
 						System.out.println("Couldn't find node arg in the document. Try remaking the probe");
 						return null;
 					}
-					return new ParameterValue(type, true, locatedArg.node);
+					return new ParameterValue(type, true, info, locatedArg.node);
 				}
 			} else {
 				System.out.println("Unknown attribute type '" + argTypeStr + "'");

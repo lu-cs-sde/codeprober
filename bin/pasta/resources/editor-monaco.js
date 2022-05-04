@@ -34,6 +34,8 @@ window.defineEditor(
 
       Object.entries(coolMarkerDescriptors).forEach(([descriptorId, descriptor]) => {
         const { style: [leftStyle, rightStyle], start, end, message } = descriptor;
+        const startLine = start >>> 12;
+        const endLine = end >>> 12;
         const startPos = editor.getScrolledVisiblePosition({ lineNumber: (start >>> 12), column: start & 0xFFF });
         const endPos = editor.getScrolledVisiblePosition({ lineNumber: (end >>> 12), column: end & 0xFFF });
         console.log('endPos:', endPos)
@@ -45,10 +47,11 @@ window.defineEditor(
         const dots = [];
         {
           const len = 2 + Math.sqrt((Math.abs(startPos.top - endPos.top) ** 2) + ((Math.abs(startPos.left - endPos.left) ** 2)));
-          const height = 12;
+          const height = 6;
+          const vpad = 6;
           const cv = document.createElement('canvas');
           cv.width = len;
-          cv.height = height;
+          cv.height = height + vpad;
           console.log('len:', len, 'from', startPos, endPos)
 
 
@@ -67,16 +70,19 @@ window.defineEditor(
            *          | /
            *          |/
            */
-          const midh = 4;
+          const midh = 2;
 
 
           // ctx.fillRect(0, 4, len, 4);
           // ctx.lineTo(len - 4, 0);
           ctx.beginPath();       // Start a new path
+          ctx.translate(0, vpad / 2);
 
-          const tipw = Math.min(len / 2, 10);
-          const barTop = (height - midh) / 2;
-          const barBot = (height + midh) / 2;
+          const arrowWidth = Math.min(len / 2, 10);
+          const tipWidths = [leftStyle, rightStyle].map(style => style === 'p' ? 2 : arrowWidth);
+          let tipw = tipWidths[0];
+          const barTop = ((height - midh) / 2);
+          const barBot = ((height + midh) / 2);
 
           // const leftStyle = 'a';
           // const rightStyle = 'a';
@@ -99,6 +105,45 @@ window.defineEditor(
               ctx.lineTo(tipw, barTop);
             }
           }
+          const drawCurvedMidsection = startLine === endLine && ((len - (2 * tipw)) > 16);
+          const curvedMidsectionLen = Math.max(6, Math.min(10, len / 3));
+          const drawCurve = (renderer) => {
+            const smoothness = 10;
+            for (let i = 0; i < smoothness; ++i) {
+              const ang = (Math.PI / 2) * (i / (smoothness - 1));
+              renderer(1 - Math.cos(ang), Math.sin(ang));
+            }
+          };
+          if (drawCurvedMidsection) {
+            // If 'long enough' (arbitrary threshold) AND a straight line, curve it slightly to avoid covering the text
+            ctx.lineTo(tipw + 2, barTop);
+
+            // Straight edge:
+            {
+              // ctx.lineTo(tipw + 6, -vpad / 2);
+              // ctx.lineTo(len - tipw - 6, -vpad / 2);
+            }
+            // Curved edge
+            {
+              drawCurve((cos, sin) => {
+                const x = tipw + 2 + (curvedMidsectionLen * cos);
+                const y = barTop + (-vpad/2 - barTop) * sin;
+                ctx.lineTo(x, y);
+              });
+              tipw = tipWidths[1];
+              drawCurve((cos, sin) => {
+                const x = len - tipw - 2 - curvedMidsectionLen + (curvedMidsectionLen * sin);
+                const y = -vpad/2 + (barTop - (-vpad/2)) * cos;
+                ctx.lineTo(x, y);
+              });
+            }
+
+            // ctx.lineTo(len - tipw - 6, -vpad / 2);
+            ctx.lineTo(len - tipw - 2, barTop);
+          } else {
+            tipw = tipWidths[1];
+          }
+
           ctx.lineTo(len - tipw, barTop);
           switch (rightStyle) {
             case 'a': {
@@ -116,11 +161,41 @@ window.defineEditor(
               ctx.lineTo(len - tipw, barBot);
             }
           }
+          if (drawCurvedMidsection) {
+            ctx.lineTo(len - tipw - 2, barBot);
+
+            // Straight edge
+            // {
+            //   ctx.lineTo(len - tipw - 6, barBot - barTop - vpad / 2);
+            //   ctx.lineTo(tipw + 6, barBot - barTop - vpad / 2);
+            // }
+            // Curved edge
+            {
+              // const barOffset = barBot - barBot;
+              drawCurve((cos, sin) => {
+                const x = len - tipw - 2 + (-curvedMidsectionLen * cos);
+                const y = barTop + (-vpad/2 - barTop) * sin;
+                ctx.lineTo(x, midh + y);
+              });
+              tipw = tipWidths[0];
+              drawCurve((cos, sin) => {
+                const x = tipw + 2 + curvedMidsectionLen + (-curvedMidsectionLen * sin);
+                const y = -vpad/2 + (barTop - (-vpad/2)) * cos;
+                ctx.lineTo(x, midh + y);
+              });
+              // drawCurve((cos, sin) => {
+              //   const x = tipw + 2 + (curvedMidsectionLen * cos);
+              //   const y = barTop + (-vpad/2 - barTop) * sin;
+              //   ctx.lineTo(x, barOffset + y);
+              // });
+            }
+            ctx.lineTo(tipw + 2, barBot);
+          } else {
+            tipw = tipWidths[0];
+          }
           ctx.lineTo(tipw, barBot);
+          // ctx.stroke();
           ctx.fill();
-          // ctx.lineTo(len, 4);
-          // ctx.fillRect(len - 4, 0, 4, 4);
-          // const imgData = ctx.getImageData(0, 0, len, 4);
 
 
           cv.style.userSelect = 'none';
@@ -131,7 +206,7 @@ window.defineEditor(
           }
 
           // cv.style.border = `2px solid ${color}`;
-          cv.style.top = `${editorRect.top + startPos.top + (startPos.height - height) / 2}px`;
+          cv.style.top = `${editorRect.top + startPos.top + (startPos.height - cv.height) / 2}px`;
           cv.style.left = `${editorRect.left + startPos.left}px`;
           cv.style.transformOrigin = 'left';
 
@@ -352,7 +427,7 @@ window.defineEditor(
       // contextMenuOrder: 2,
       run: (ed) => {
         const pos = ed.getPosition();
-        window.RagQuery && window.RagQuery(pos.lineNumber, pos.column, '<ROOT>');
+        window.RagQuery && window.RagQuery(pos.lineNumber, pos.column, true);
         // console.log('ed @ ', ed, '||', ed.getPosition());
       },
       keybindings: [

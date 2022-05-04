@@ -2,9 +2,9 @@ package pasta.locator;
 
 import java.util.Objects;
 
+import pasta.AstInfo;
 import pasta.ast.AstNode;
 import pasta.metaprogramming.InvokeProblem;
-import pasta.protocol.PositionRecoveryStrategy;
 
 public class Span {
 	public final int start, end;
@@ -22,6 +22,11 @@ public class Span {
 	public int hashCode() {
 		return Objects.hash(end, start);
 	}
+	
+	@Override
+	public String toString() {
+		return "[" + start +"," + end + "]";
+	}
 
 	@Override
 	public boolean equals(Object obj) {
@@ -35,48 +40,48 @@ public class Span {
 		return end == other.end && start == other.start;
 	}
 
-	static Span extractPositionDownwards(AstNode astNode) {
-		final Span ownPos = astNode.getRawSpan();
+	static Span extractPositionDownwards(AstInfo info, AstNode astNode) {
+		final Span ownPos = astNode.getRawSpan(info);
 		if (!ownPos.isMeaningful()) {
 			final AstNode child = astNode.getNthChild(0);
 			if (child != null) {
-				return extractPositionDownwards(child);
+				return extractPositionDownwards(info, child);
 			}
 		}
 		return ownPos;
 	}
 
-	static Span extractPositionUpwards(AstNode astNode) {
-		final Span ownPos = astNode.getRawSpan();
+	static Span extractPositionUpwards(AstInfo info, AstNode astNode) {
+		final Span ownPos = astNode.getRawSpan(info);
 		if (!ownPos.isMeaningful()) {
 			final AstNode parent = astNode.parent();
 			if (parent != null) {
-				return extractPositionUpwards(parent);
+				return extractPositionUpwards(info, parent);
 			}
 		}
 		return ownPos;
 	}
 
-	public static Span extractPosition(AstNode astNode, PositionRecoveryStrategy recoveryStrategy)
+	public static Span extractPosition(AstInfo info, AstNode astNode)
 			throws InvokeProblem {
-		final Span ownPos = astNode.getRawSpan();
+		final Span ownPos = astNode.getRawSpan(info);
 		if (ownPos.isMeaningful()) {
 			return ownPos;
 		}
-		switch (recoveryStrategy) {
+		switch (info.recoveryStrategy) {
 		case FAIL:
 			return ownPos;
 		case PARENT:
-			return Span.extractPositionUpwards(astNode);
+			return Span.extractPositionUpwards(info, astNode);
 		case CHILD:
-			return Span.extractPositionDownwards(astNode);
+			return Span.extractPositionDownwards(info, astNode);
 		case SEQUENCE_PARENT_CHILD: {
-			final Span parent = Span.extractPositionUpwards(astNode);
-			return parent.isMeaningful() ? parent : Span.extractPositionDownwards(astNode);
+			final Span parent = Span.extractPositionUpwards(info, astNode);
+			return parent.isMeaningful() ? parent : Span.extractPositionDownwards(info, astNode);
 		}
 		case SEQUENCE_CHILD_PARENT: {
-			final Span parent = Span.extractPositionDownwards(astNode);
-			return parent.isMeaningful() ? parent : Span.extractPositionUpwards(astNode);
+			final Span parent = Span.extractPositionDownwards(info, astNode);
+			return parent.isMeaningful() ? parent : Span.extractPositionUpwards(info, astNode);
 		}
 		case ALTERNATE_PARENT_CHILD: {
 			AstNode parent = astNode;
@@ -85,7 +90,7 @@ public class Span {
 				if (parent != null) {
 					parent = parent.parent();
 					if (parent != null) {
-						final Span parPos = parent.getRawSpan();
+						final Span parPos = parent.getRawSpan(info);
 						if (parPos.isMeaningful()) {
 							return parPos;
 						}
@@ -94,7 +99,7 @@ public class Span {
 				if (child != null) {
 					child = child.getNumChildren() > 0 ? child.getNthChild(0) : null;
 					if (child != null) {
-						final Span childPos = child.getRawSpan();
+						final Span childPos = child.getRawSpan(info);
 						if (childPos.isMeaningful()) {
 							return childPos;
 						}
@@ -104,7 +109,7 @@ public class Span {
 			return ownPos;
 		}
 		default: {
-			System.err.println("Unknown recovery strategy " + recoveryStrategy);
+			System.err.println("Unknown recovery strategy " + info.recoveryStrategy);
 			return ownPos;
 		}
 		}
