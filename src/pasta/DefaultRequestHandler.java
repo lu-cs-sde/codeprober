@@ -39,7 +39,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		this.forwardArgs = forwardArgs;
 	}
 
-	private void handleParsedAst(Object ast, Function<String, Class<?>> loadAstClass, JSONObject queryObj,
+	void handleParsedAst(Object ast, Function<String, Class<?>> loadAstClass, JSONObject queryObj,
 			JSONObject retBuilder, JSONArray bodyBuilder) {
 		if (ast == null) {
 			bodyBuilder.put("Compiler exited, but no 'DrAST_root_node' found.");
@@ -148,8 +148,8 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			} catch (InvokeProblem e) {
 				final Throwable cause = e.getCause();
 				if (cause instanceof NoSuchMethodException) {
-					bodyBuilder.put(
-							"No such attribute '" + queryAttrName + "' on " + match.node.getClass().getSimpleName());
+					bodyBuilder.put("No such attribute '" + queryAttrName + "' on "
+							+ match.node.underlyingAstNode.getClass().getSimpleName());
 				} else {
 					if (cause != null && cause.getCause() != null) {
 						cause.getCause().printStackTrace();

@@ -14,6 +14,22 @@ public class Span {
 		this.end = end;
 	}
 
+	public int getStartLine() {
+		return start >>> 12;
+	}
+
+	public int getStartColumn() {
+		return start & 0xFFF;
+	}
+
+	public int getEndLine() {
+		return end >>> 12;
+	}
+
+	public int getEndColumn() {
+		return end & 0xFFF;
+	}
+
 	public boolean isMeaningful() {
 		return start != 0 || end != 0;
 	}
@@ -22,10 +38,10 @@ public class Span {
 	public int hashCode() {
 		return Objects.hash(end, start);
 	}
-	
+
 	@Override
 	public String toString() {
-		return "[" + start +"," + end + "]";
+		return "[" + start + "," + end + "]";
 	}
 
 	@Override
@@ -62,8 +78,7 @@ public class Span {
 		return ownPos;
 	}
 
-	public static Span extractPosition(AstInfo info, AstNode astNode)
-			throws InvokeProblem {
+	public static Span extractPosition(AstInfo info, AstNode astNode) throws InvokeProblem {
 		final Span ownPos = astNode.getRawSpan(info);
 		if (ownPos.isMeaningful()) {
 			return ownPos;

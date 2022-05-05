@@ -161,6 +161,9 @@ public class CreateLocator {
 				final int parentPos = out.size();
 				extractStepsTo(info, parent, out);
 
+				// TODO rewrite to handle "special case" that parent is the root of the AST,
+				// because in that case the "while (parentPos < out.size)" never hits.
+
 				if (target.loc.isMeaningful()) {
 					// We might be able to replace the ChildIndex edge with a TypeAtLoc.
 					// It depends on the nodes that come before us.
@@ -189,6 +192,15 @@ public class CreateLocator {
 							out.remove(parentPos);
 						}
 					}
+
+					// Special case: handle us being immediately below the root of the ast.
+					if (parentPos == out.size()) {
+						final NodeEdge candidateTal = new NodeEdge.TypeAtLocEdge(info.ast,
+								TypeAtLoc.from(info, info.ast), astNode, target);
+						if (!ApplyLocator.isAmbiguousStep(info, info.ast, candidateTal.toJson())) {
+							out.set(parentPos - 1, candidateTal);
+						}
+					}
 				}
 				return;
 //				foundTargetIndex = childIdxCounter;
@@ -197,20 +209,6 @@ public class CreateLocator {
 			}
 			++childIdxCounter;
 		}
-//		if (foundTargetIndex != -1) {
-//			// Ambiguous TAL edges can occur for example in NTAs. Assume we have:
-//			// nta Foo.bar() { return new List().add(new A()).add(new A()); }
-//			// That NTA creates a list of two A's. The two A's are missing location
-//			// information and have the same position
-//			// If we use a TAL edge then we cannot distinguish between them in the future.
-//			if (target.loc.isMeaningful() && !ambiguousTarget) {
-//				out.add(new NodeEdge.TypeAtLocEdge(parent, source, astNode, target));
-//			} else {
-//				out.add(new NodeEdge.ChildIndexEdge(parent, source, astNode, target, foundTargetIndex));
-//			}
-//			extractStepsTo(info, parent, out);
-//			return;
-//		}
 		for (Method m : parent.underlyingAstNode.getClass().getMethods()) {
 //			if (!m.getName().equals("unknownDecl")) {
 //				// Hack for development, REMOVEME
@@ -284,7 +282,7 @@ public class CreateLocator {
 											+ " params, but cache key isn't a list? It is: " + param);
 									continue checkCacheEntries;
 								}
-								final List<?> argList = (ArrayList<?>) param;
+								final List<?> argList = (List<?>) param;
 								int paramIdx = 0;
 								for (Object v : argList) {
 									final ParameterValue decoded = CreateValue.fromInstance(info,

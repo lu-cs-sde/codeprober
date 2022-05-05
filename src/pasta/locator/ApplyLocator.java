@@ -26,7 +26,7 @@ public class ApplyLocator {
 			this.pos = pos;
 			this.nodeLocator = nodeLocator;
 		}
-		
+
 		@Override
 		public String toString() {
 			return "@" + pos + ":" + node.toString();
@@ -58,7 +58,8 @@ public class ApplyLocator {
 		AstNode bestNode = nodeType.isInstance(astNode.underlyingAstNode) ? astNode : null;
 		int bestError = bestNode != null ? (Math.abs(start - startPos) + Math.abs(end - endPos)) : Integer.MAX_VALUE;
 		for (AstNode child : astNode.getChildren()) {
-			AstNode recurse = bestMatchingNode(info, child, nodeType, startPos, endPos, recoveryStrategy, failOnAmbiguity);
+			AstNode recurse = bestMatchingNode(info, child, nodeType, startPos, endPos, recoveryStrategy,
+					failOnAmbiguity);
 			if (recurse != null) {
 				final Span recursePos;
 				try {
@@ -89,8 +90,8 @@ public class ApplyLocator {
 			final JSONObject tal = step.getJSONObject("value");
 			try {
 				return bestMatchingNode(info, sourceNode,
-						info.loadAstClass.apply(info.basAstClazz.getPackage().getName() + "." + tal.getString("type")),
-						tal.getInt("start"), tal.getInt("end"), info.recoveryStrategy, true) == null;
+						info.loadAstClass.apply(info.getQualifiedAstType(tal.getString("type"))), tal.getInt("start"),
+						tal.getInt("end"), info.recoveryStrategy, true) == null;
 			} catch (AmbiguousTal a) {
 				return true;
 			}
@@ -157,9 +158,8 @@ public class ApplyLocator {
 				case "tal": {
 					final JSONObject tal = step.getJSONObject("value");
 					matchedNode = bestMatchingNode(info, matchedNode,
-							info.loadAstClass
-									.apply(info.basAstClazz.getPackage().getName() + "." + tal.getString("type")),
-							tal.getInt("start"), tal.getInt("end"), info.recoveryStrategy, false);
+							info.loadAstClass.apply(info.getQualifiedAstType(tal.getString("type"))), tal.getInt("start"),
+							tal.getInt("end"), info.recoveryStrategy, false);
 					break;
 				}
 				case "child": {

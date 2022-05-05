@@ -7,6 +7,7 @@ import java.util.Set;
 import pasta.AstInfo;
 import pasta.locator.Span;
 import pasta.metaprogramming.InvokeProblem;
+import pasta.metaprogramming.PositionRepresentation;
 import pasta.metaprogramming.Reflect;
 
 public class AstNode {
@@ -43,8 +44,12 @@ public class AstNode {
 	}
 
 	public Span getRawSpan(AstInfo info) throws InvokeProblem {
+		return getRawSpan(info.positionRepresentation);
+	}
+
+	public Span getRawSpan(PositionRepresentation positionRepresentation) throws InvokeProblem {
 		if (this.span == null) {
-			switch (info.positionRepresentation) {
+			switch (positionRepresentation) {
 			case PACKED_BITS: {
 				this.span = new Span((Integer) Reflect.invoke0(underlyingAstNode, "getStart"),
 						(Integer) Reflect.invoke0(underlyingAstNode, "getEnd"));
