@@ -73,6 +73,19 @@ public class EncodeResponseValue {
 				e.printStackTrace();
 				// Fall down to default toString encoding below
 			}
+		} else {
+			if (alreadyVisitedNodes.contains(value)) {
+				out.put("<< reference loop to already visited value " + value + " >>");
+				return;
+			}
+			try {
+				Object preferredView = Reflect.invoke0(value, "pastaView");
+				alreadyVisitedNodes.add(value);
+				encode(info, out, preferredView, alreadyVisitedNodes);
+				return;
+			} catch (InvokeProblem e) {
+				// Fall down to default view
+			}
 		}
 
 		if (value instanceof Iterable<?>) {

@@ -104,14 +104,14 @@ define("ui/create/attachDragToX", ["require", "exports"], function (require, exp
             e.cancelBubble = true;
             mouse.down = true;
             element.style.zIndex = `${modalZIndexGenerator()}`;
-            mouse.x = e.screenX;
-            mouse.y = e.screenY;
+            mouse.x = e.pageX;
+            mouse.y = e.pageY;
             onBegin();
         };
         const onMouseMove = (e) => {
             if (mouse.down) {
-                let dx = e.screenX - mouse.x;
-                let dy = e.screenY - mouse.y;
+                let dx = e.pageX - mouse.x;
+                let dy = e.pageY - mouse.y;
                 refreshPos(dx, dy);
                 // mouse.x = e.x;
                 // mouse.y = e.y;
@@ -821,12 +821,16 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                             console.log('attrs disappeared after a successful load??');
                             return;
                         }
-                        const reg = filter ? new RegExp(`.*${[...filter].map(part => part.trim()).filter(Boolean).join('.*')}.*`, 'i') : null;
+                        function escapeRegex(string) {
+                            return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                        }
+                        const reg = filter ? new RegExp(`.*${[...filter].map(part => part.trim()).filter(Boolean).map(part => escapeRegex(part)).join('.*')}.*`, 'i') : null;
                         const match = (attr) => {
                             if (!reg) {
                                 return false;
                             }
-                            return reg.test(attr.name);
+                            // const formatted =
+                            return reg.test((0, formatAttr_2.default)(attr));
                         };
                         const matches = attrs.filter(match);
                         const misses = attrs.filter(a => !match(a));
@@ -1127,7 +1131,14 @@ encode(value):
                     viewDefault,
                     exampleView,
                     ``,
-                    `Contributions welcome at [url]`,
+                    joinElements(`Contributions welcome at `, (() => {
+                        const a = document.createElement('a');
+                        a.href = 'https://git.cs.lth.se/an6308ri/pasta-server';
+                        a.innerText = 'https://git.cs.lth.se/an6308ri/pasta-server';
+                        a.target = '_blank';
+                        return a;
+                    })()),
+                    // `Contributions welcome at [https://git.cs.lth.se/an6308ri/pasta-server]`,
                     `Version: abc-123`,
                 ];
             }
@@ -1973,10 +1984,19 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             }, 10000);
         });
         const onChangeListeners = {};
+        const probeWindowStateSavers = {};
+        const triggerWindowSave = () => {
+            console.log('triggerWindowsSave...');
+            const states = [];
+            Object.values(probeWindowStateSavers).forEach(v => v(states));
+            console.log('triggerWindowsSave -->', states);
+            settings_1.default.setProbeWindowStates(states);
+        };
         const notifyLocalChangeListeners = (adjusters) => {
             // Short timeout to easier see changes happening. Remove in prod
             // setTimeout(() => {
             Object.values(onChangeListeners).forEach(l => l(adjusters));
+            triggerWindowSave();
             // }, 500);
         };
         function init(editorType) {
@@ -2105,14 +2125,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     settings_1.default.setShouldDuplicateProbeOnAttrClick(duplicateProbeCheckbox.checked);
                 };
                 duplicateProbeCheckbox.checked = settings_1.default.shouldDuplicateProbeOnAttrClick();
-                const probeWindowStateSavers = {};
-                const triggerWindowSave = () => {
-                    console.log('triggerWindowsSave...');
-                    const states = [];
-                    Object.values(probeWindowStateSavers).forEach(v => v(states));
-                    console.log('triggerWindowsSave -->', states);
-                    settings_1.default.setProbeWindowStates(states);
-                };
                 const modalEnv = {
                     performRpcQuery, probeMarkers, onChangeListeners, updateMarkers,
                     getLocalState: () => getLocalState(),
@@ -2224,11 +2236,12 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             });
         }
         window.maybeAutoInit = () => {
-            const idx = location.search.indexOf('editor=');
-            const editorId = location.search.slice(idx + 'editor='.length).split('&')[0];
-            if (editorId) {
-                init(editorId);
-            }
+            // const idx = location.search.indexOf('editor=');
+            // const editorId = location.search.slice(idx + 'editor='.length).split('&')[0];
+            // if (editorId) {
+            //   init(editorId);
+            // }
+            init('Monaco');
         };
         window.init = init;
     };

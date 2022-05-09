@@ -1,0 +1,359 @@
+import createModalTitle from "../create/createModalTitle";
+import showWindow from "../create/showWindow";
+
+type HelpType = 'general' | 'recovery-strategy' | 'probe-window' | 'magic-stdout-messages';
+
+const createSyntaxNode = (type: string, text: string, margins?: string) => {
+  const retNode = document.createElement('span');
+  if (type) {
+    retNode.classList.add(type);
+  }
+  if (margins?.includes('left')) retNode.style.marginLeft = '0.5rem';
+  if (margins?.includes('right')) retNode.style.marginRight = '0.5rem';
+  retNode.innerText = text;
+  return retNode;
+}
+
+const getHelpTitle = (type: HelpType) => ({
+  'general': 'How to use',
+  'recovery-strategy': 'Position recovery',
+  'probe-window': 'Probe help',
+  'magic-stdout-messages': 'Magic stdout messages',
+})[type];
+
+const getHelpContents = (type: HelpType) => {
+  const createHeader = (text: string) => {
+    const header = document.createElement('span');
+    header.classList.add('syntax-attr');
+    header.innerText = text;
+    return header;
+  };
+  const joinElements = (...parts: (string | HTMLElement)[]) => {
+    const wrapper = document.createElement('div');
+    parts.forEach(p => {
+      if (typeof p === 'string') {
+        wrapper.appendChild(document.createTextNode(p));
+      } else {
+        wrapper.appendChild(p);
+      }
+      return p;
+    });
+    return wrapper;
+  }
+  switch (type) {
+
+    case 'general': {
+
+      const exampleVisible = document.createElement('div');
+      {
+        const add = (...args: string[]) => exampleVisible.appendChild(createSyntaxNode(args[0], args[1], args[2]));
+        exampleVisible.appendChild(document.createTextNode('Example: '));
+        add('syntax-modifier', 'syn', 'right');
+        add('syntax-type', 'boolean List');
+        add('syntax-attr', '.pastaVisible', '');
+        add('', '() =', 'right');
+        add('syntax-modifier', 'false', 'false');
+        add('', ';', '');
+      }
+      const exampleAttrs = document.createElement('div');
+      {
+        const add = (...args: string[]) => exampleAttrs.appendChild(createSyntaxNode(args[0], args[1], args[2]));
+        exampleAttrs.appendChild(document.createTextNode('Example: '));
+        add('syntax-modifier', 'syn', 'right');
+        add('syntax-type', 'java.util.List<String> Function');
+        add('syntax-attr', '.pastaAttrs', '');
+        add('', '() =', 'right');
+        add('syntax-type', 'Arrays.asList(', '');
+        add('syntax-string', '"eval"', '');
+        add('', ', ', '');
+        add('syntax-string', '"reference"', '');
+        add('', ');', '');
+      }
+      const exampleView = document.createElement('div');
+      {
+        const add = (...args: string[]) => exampleView.appendChild(createSyntaxNode(args[0], args[1], args[2]));
+        exampleView.appendChild(document.createTextNode('Example: '));
+        add('syntax-modifier', 'syn', 'right');
+        add('syntax-type', 'Object IntType');
+        add('syntax-attr', '.pastaView', '');
+        add('', '() =', 'right');
+        add('syntax-string', '"int"');
+        add('', ';', '');
+      }
+
+      const viewDefault = document.createElement('pre');
+      viewDefault.style.marginTop = '2px';
+      viewDefault.style.marginLeft = '2px';
+      viewDefault.style.fontSize = '0.875rem';
+      viewDefault.innerText = `
+encode(value):
+  if (value is ASTNode):
+    if (value has 'pastaView'): encode(value.pastaView())
+    else: output(value.location, value.type)
+
+  if (value is Iterator or Iterable):
+    for (entry in value): encode(entry)
+
+  if no case above matched: output(value.toString())
+`.trim();
+
+      return [
+        `PASTA : Probe-AST-Attributes 🍝 🤌`,
+        `Right click on some text in the editor and click 'RAG Query' to get started`,
+        `There are three magic attributes you may want to add:`,
+        ``,
+        joinElements(`1) '`, createHeader('pastaVisible'), `'. This controls whether or not a node will appear in the 'RAG Query' menu.`),
+        `Default: `,
+        `--    false: for 'List' and 'Opt'. Note: this is only default, you can override it.`,
+        `--     true: for all other types`,
+        // `Example: syn boolean List.pastaVisible() = false;`,
+        exampleVisible,
+        ``,
+        joinElements(`2) '`, createHeader('pastaAttrs'), `'. A filter that can be used to specify which attributes should be visible.`),
+        `Default: all public functions with serializable argument types (String, int, boolean, AST Nodes) visible.`,
+        exampleAttrs,
+        ``,
+        joinElements(`3) '`, createHeader('pastaView'), `'. This controls how a value is printed`),
+        `Default: encodes one or more options in order. In pseudocode:`,
+        viewDefault,
+        exampleView,
+        ``,
+        joinElements(`Contributions welcome at `, (() => {
+          const a = document.createElement('a');
+          a.href = 'https://git.cs.lth.se/an6308ri/pasta-server';
+          a.innerText = 'https://git.cs.lth.se/an6308ri/pasta-server';
+          a.target = '_blank';
+          return a;
+        })()),
+        // `Contributions welcome at [https://git.cs.lth.se/an6308ri/pasta-server]`,
+        `Version: abc-123`,
+      ];
+    }
+
+    case 'recovery-strategy': {
+      const settingsExplanation = document.createElement('div');
+      settingsExplanation.style.display = 'grid';
+      settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
+      settingsExplanation.style.gridColumnGap = '0.5rem';
+      [
+        [`Fail', 'don\'t try to recover information`],
+        [`Parent', 'search recursively upwards through parent nodes, using the equivalent of 'node.getParent()'`],
+        [`Child', 'search recursively downwards through child nodes, using the equivalent of 'node.getChild(0)'`],
+        [`Parent->Child', 'Try 'Parent'. If no position is found, try 'Child'.`],
+        [`Child->Parent', 'Try 'Child'. If no position is found, try 'Parent'.`],
+        [`Zigzag', 'Similar to 'Parent->Child', but only search one step in one direction, then try the other direction, then another step in the first direction, etc. Initially searches one step upwards.`],
+      ].forEach(([head, tail]) => {
+        const headNode = document.createElement('span');
+        headNode.style.textAlign = 'right';
+        headNode.classList.add('syntax-attr');
+        headNode.innerText = head;
+        settingsExplanation.appendChild(headNode);
+
+        settingsExplanation.appendChild(document.createTextNode('-'));
+
+        const tailNode = document.createElement('span');
+        tailNode.innerText = tail;
+        settingsExplanation.appendChild(tailNode);
+      })
+      return [
+        'Some nodes in your AST might be missing location information',
+        'This editor is built around the idea that all AST nodes have positions, and it is very hard to use for nodes where this isn\'t true',
+        '',
+        'There are two solutions',
+        '',
+        '1) Fix your parser',
+        'Usually position information is missing because of how you structured your parser.',
+        'Maybe you do some sort of desugaring in the parser, and create multiple AST nodes in a single production rule.',
+        'Beaver, for example, will only give a single node position information per production rule, so try to ony create a single node per rule.',
+        `Note that this isn't a solution for nodes generated by NTA's. They will need to use solution 2.`,
+        '',
+        '2) Use a recovery strategy',
+        'If a node is missing location information, then we can sometimes get it from nearby nodes.',
+        'This setting controls just how we search for information. Which option fits best for you depends on how you built your AST.',
+        'Settings:',
+        settingsExplanation,
+        '',
+        `No strategy guarantees success. If position is missing, it will be marked with '⚠️', and you\'ll likely run into problems when using it`,
+        `If you are unsure of what to use, 'Zigzag' is usually a pretty good option.`,
+      ];
+    }
+
+    case 'probe-window': {
+      return [
+        `This window represents an active 'probe'`,
+        `The titlebar shows the input to the probe; namely node type and attribute name.`,
+        `Sometimes you'll also see attribute arguments here, and a pen that lets you edit them.`,
+        `Finally, the title bar show where the probed node exists. You can hover this to highlight the node in the document.`,
+        '',
+        'Below the titlebar is the output of the probe.',
+        `This is the resolved value of the probe, formatted according to the 'pastaView' logic (see general help window for more on this).`,
+        '',
+        `If you check 'Capture stdio' on the top right, you'll also see any messages printed to System.out and System.err in the window.`,
+        'Each probe is evaluated in a fresh compiler instance in isolation, so any values and messages you see in the probe window belongs only to that window.',
+        '',
+        'The probes are automatically reevaluated whenever the document changes.',
+        `The probes also automatically update when the underlying jar file (usually 'compiler.jar') changes.`,
+        `Therefore you can use probes as a sort of automatic test case runner. Write some code, open some probes, then move it to a secondary monitor and continue working on your compiler.`,
+        `Whenever you rebuild your compiler, glance at your probes. They should now display fresh values.`,
+      ];
+    }
+
+      case 'magic-stdout-messages': {
+        const createParent = () => {
+          const parent = document.createElement('div');
+          parent.style.display = 'grid';
+          parent.style.gridTemplateColumns = 'auto 1fr';
+          parent.style.rowGap = '0.125rem';
+          parent.style.columnGap = '0.5rem';
+          return parent;
+        }
+        let entryParent: HTMLElement;
+        const createEntry = (pattern: string, explanation: string) => {
+          const patternHolder = document.createElement('span');
+          patternHolder.classList.add('syntax-string');
+          patternHolder.style.textAlign = 'right';
+          patternHolder.innerText = pattern;
+
+          const explanationHolder = document.createElement('span');
+          explanationHolder.innerText = explanation;
+
+          entryParent.appendChild(patternHolder);
+          entryParent.appendChild(explanationHolder);
+        };
+
+        // TODO rename the patterns a bit? Prefix everything by PASTA- perhaps?
+        const patternsParent = entryParent = createParent();
+        createEntry('ERR@S;E;MSG', 'Show a red squiggly line.');
+        createEntry('WARN@S;E;MSG', 'Show a yellow squiggly line.');
+        createEntry('INFO@S;E;MSG', 'Show a blue squiggly line.');
+        createEntry('LINE-PP@S;E;COL', 'Draw a plain line.');
+        createEntry('LINE-PA@S;E;COL', 'Draw line that starts plain and ends with an arrow.');
+        createEntry('LINE-AP@S;E;COL', 'Draw line that starts with an arrow and ends plain.');
+        createEntry('LINE-AA@S;E;COL', 'Draw line with arrows on both ends.');
+
+        const patternsExamples = entryParent = createParent();
+        createEntry('ERR@40964;40966;Hello', `Red squiggly line on line 10, column 4 to 6. Shows 'Hello' when you hover over it`);
+        createEntry('INFO@16384;32767;Hi', `Blue squiggly line on the entirety of lines 4, 5, 6 and 7. Shows 'Hi' when you hover over it`);
+        createEntry('LINE-PA@4096;20490;#0FFF', `Solid cyan line from start of line 1 to line 5, column 10. Has arrow on the end.`);
+        createEntry('LINE-AA@16388;16396;#0F07', `Semi-transparent green double-sided arrow on line of line 4 from column 4 to 12`);
+
+        const sampleAttr = document.createElement('pre');
+        sampleAttr.style.marginTop = '6px';
+        sampleAttr.style.marginLeft = '2px';
+        sampleAttr.style.fontSize = '0.875rem';
+        sampleAttr.innerText = `
+aspect MagicOutputDemo {
+  void ASTNode.outputMagic(String type, String arg) {
+    System.out.println(type + "@" + getStart() + ";" + getEnd() + ";" + arg);
+  }
+  coll HashSet<ASTNode> Program.thingsToHighlightBlue() root Program;
+  MyNodeType contributes this
+    to Program.thingsToHighlightBlue()
+    for program();
+
+  public void ASTNode.drawBlueSquigglys() {
+    for (ASTNode node : program().thingsToHighlightBlue()) {
+      node.outputMagic("INFO", "This thing is highlighted because [..]");
+    }
+  }
+}
+`.trim();
+        const copyButton = document.createElement('button');
+        copyButton.innerText = 'Copy to clipboard';
+        copyButton.onclick = () => {
+          navigator.clipboard.writeText(sampleAttr.innerText);
+        }
+        return [
+          `There are a number of 'magic' messages you can print to System.out.`,
+          `Whenever probes are evaluated, these messages are intercepted (even if 'Capture stdio' isn't checked!).`,
+          `The patterns and effects of the magic messages are shown below:`,
+          '',
+          patternsParent,
+          '',
+          `'S' and 'E' stand for 'start' and 'end', and are ints containing line and column. 20 bits for line, 12 for column, e.g: 0xLLLLLCCC.`,
+          'Example: 20493 represents line 5 and column 13 (20493 = (5 << 12) + 13).',
+          '',
+          `'MSG' is any string. This string is displayed when you hover over the squiggly lines`,
+          '',
+          `'COL' is a hex-encoded color in the form #RGBA.`,
+          'Example: #F007 (semi-transparent red)',
+          '',
+          'Some example messages and their effects are listed below:',
+          patternsExamples,
+          '',
+          `The arrows don't work (or only partially work) for lines that are connected to offscreen or invalid positions.`,
+          'For example, if you try to draw a line with one end at line 2, column 5, but that line only has 3 characters, then the line will instead point at column 3.',
+          '',
+          `These special messages can be used as a some custom styling/renderer to help understand how your compiler works.`,
+          `The following code can be used as a starting point`,
+          sampleAttr,
+          copyButton,
+          `Once you have the code in an aspect and have recompiled, open a probe for the attribute 'drawBlueSquigglys' to see all instances of 'MyNodeType' have blue lines under them.`,
+          'Note that the squiggly lines (and all other arrows/lines) only remain as long as their related probe window remains open.'
+        ];
+      }
+  }
+}
+
+const displayHelp = (type: HelpType, setHelpButtonDisabled: (disabled: boolean) => void): void => {
+  setHelpButtonDisabled(true);
+  // TODO prevent this if help window already open
+  // Maybe disable the help button, re-enable on close?
+  const helpWindow = showWindow({
+    rootStyle: `
+      width: 32rem;
+      min-height: 12rem;
+    `,
+    resizable: true,
+    render: (root) => {
+      root.appendChild(createModalTitle({
+        renderLeft: (container) => {
+          const header = document.createElement('span');
+          header.innerText = getHelpTitle(type);
+          container.appendChild(header);
+        },
+        onClose: () => {
+          setHelpButtonDisabled(false);
+          helpWindow.remove();
+        },
+      }).element);
+
+      const textHolder = document.createElement('div');
+      textHolder.style.padding = '0.5rem';
+
+      const paragraphs = getHelpContents(type);
+      paragraphs.forEach(p => {
+        if (!p) {
+          textHolder.appendChild(document.createElement('br'));
+          return;
+        }
+        if (typeof p !== 'string') {
+          textHolder.appendChild(p);
+          return;
+        }
+        const node = document.createElement('p');
+        // node.style.whiteSpace = 'pre';
+        // node.style.maxWidth = '31rem';
+        // const leadingWhitespace = p.length - p.trimStart().length;
+        // if (leadingWhitespace) {
+        //   let ws = '';
+        //   for (let i = 0; i < leadingWhitespace; i++) {
+        //     ws = ws + ' ';
+        //   }
+        //   const wsnode = document.createElement('span');
+        //   wsnode.style.whiteSpace = 'pre';
+        //   wsnode.innerText = ws;
+        //   node.appendChild(wsnode);
+        // }
+        node.appendChild(document.createTextNode(p));
+        node.style.marginTop = '0';
+        node.style.marginBottom = '0';
+        textHolder.appendChild(node);
+      });
+
+      root.appendChild(textHolder);
+    }
+  });
+}
+
+export default displayHelp;

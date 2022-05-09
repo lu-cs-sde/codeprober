@@ -61,6 +61,12 @@ body[data-theme-light="true"] {
 #control-panel label {
   user-select: none;
 }
+a {
+  color: cyan;
+}
+body[data-theme-light="true"] a {
+  color: #00E;
+}
 body[data-theme-light="true"] #control-panel {
   border-left-color: #eee;
   border-left-style: groove;

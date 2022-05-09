@@ -1,0 +1,111 @@
+import attachDragToMove from "./attachDragToMove";
+import attachDragToX, { modalZIndexGenerator } from "./attachDragToX";
+
+interface CancelToken {
+  cancelled?: boolean;
+}
+
+interface ShowWindowArgs {
+  render: (container: HTMLElement, cancelToken: CancelToken) => void;
+  pos?: ModalPosition | null;
+  rootStyle?: string;
+  onFinishedMove?: () => void;
+  resizable?: boolean;
+}
+
+const showWindow = (args: ShowWindowArgs) => {
+  console.log('new and shiny showModal..', args);
+  const { render, pos: initialPos, rootStyle, resizable } = args;
+  const root = document.createElement('div');
+  root.tabIndex = 0;
+  root.classList.add('modalWindow');
+  (root.style as any) = `${rootStyle || ''}`;
+  root.style.zIndex = `${modalZIndexGenerator()}`;
+  root.style.maxWidth = '40vw';
+
+  root.onkeydown = (e) => {
+    if (e.key === 'Escape') {
+      const btn = root.querySelector('.modalCloseButton') as HTMLButtonElement;
+      if (btn) {
+        e.stopPropagation();
+        btn.onclick?.(null as any);
+      }
+    }
+
+  }
+
+  let lastCancelToken: CancelToken = {};
+
+  const contentRoot = document.createElement('div');
+  contentRoot.classList.add('HELLO-FIND-ME');
+  contentRoot.style.overflow = 'auto';
+  contentRoot.style.position = 'relative';
+  contentRoot.style.top = '0px';
+  contentRoot.style.left = '0px';
+  // contentRoot.style.display = 'contents';
+  // contentRoot.style.minHeight = '4rem';
+  // contentRoot.style.overflow = 'inherit';
+  // contentRoot.style.display = 'contents';
+  render(contentRoot, lastCancelToken);
+  root.appendChild(contentRoot);
+
+
+  let reiszeCleanup:( () => void) | null = null;
+  if (resizable) {
+    const resizePositioner = document.createElement('div');
+    // resizePositioner.style.position = 'absolute';
+    resizePositioner.style.right = '0px';
+    resizePositioner.style.bottom = '0px';
+    resizePositioner.style.cursor = 'nwse-resize';
+    resizePositioner.style.width = 'fit-contents';
+    resizePositioner.style.height = '0px';
+    resizePositioner.style.position = 'sticky';
+
+    const resizeButton = document.createElement('div');
+    resizeButton.style.position = 'absolute';
+    resizeButton.style.right = '0px';
+    resizeButton.style.bottom = '0px';
+    resizeButton.style.height = '0.25rem';
+    resizeButton.style.width = '0.25rem';
+    resizeButton.style.borderRight = '4px solid gray';
+    resizeButton.style.borderBottom = '4px solid gray';
+    resizePositioner.appendChild(resizeButton);
+
+    root.appendChild(resizePositioner)
+
+    const size = { w: 1, h: 1 };
+    reiszeCleanup = attachDragToX(resizePositioner,
+      () => {
+        size.w = root.clientWidth;
+        size.h = root.clientHeight;
+      },
+      (dx, dy) => {
+        const newW = Math.max(32, size.w + dx);
+        const newH = Math.max(32, size.h + dy);
+        // console.log('setting ', `${root.clientWidth + dx}px`);
+        root.style.width = `${newW}px`;
+        root.style.height = `${newH}px`;
+        root.style.maxWidth = 'fit-content';
+        root.style.maxHeight = 'fit-content';
+      }).cleanup;
+  }
+
+  document.body.appendChild(root);
+  const dragToMove = attachDragToMove(root, initialPos, args.onFinishedMove);
+  return {
+    remove: () => {
+      root.remove();
+      dragToMove.cleanup();
+      reiszeCleanup?.();
+    },
+    refresh: () => {
+      lastCancelToken.cancelled = true;
+      lastCancelToken = {};
+      // root.innerHTML = '';
+      render(contentRoot, lastCancelToken);
+    },
+    getPos: dragToMove.getPos,
+  };
+};
+
+export default showWindow;
