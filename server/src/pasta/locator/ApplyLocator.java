@@ -148,7 +148,7 @@ public class ApplyLocator {
 							System.out.println("Failed decoding parameter " + i + " for NTA '" + ntaName + "'");
 							return null;
 						}
-						argsValues[j] = param.getUnpackedIfNode();
+						argsValues[j] = param.getUnpackedValue();
 						argsTypes[j] = param.paramType;
 					}
 					Object match = Reflect.invokeN(matchedNode.underlyingAstNode, ntaName, argsTypes, argsValues);

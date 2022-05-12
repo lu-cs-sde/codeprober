@@ -15,7 +15,8 @@ public interface JsonRequestHandler {
 			rpcResponse.put("type", "rpc");
 			rpcResponse.put("id", obj.getLong("id"));
 			try {
-				rpcResponse.put("result", handleRequest(obj));
+				final JSONObject encoded = handleRequest(obj);
+				rpcResponse.put("result", encoded == null ? JSONObject.NULL : encoded);
 			} catch (RuntimeException e) {
 				e.printStackTrace();
 				rpcResponse.put("error", "Error while processing request. See server for more info");

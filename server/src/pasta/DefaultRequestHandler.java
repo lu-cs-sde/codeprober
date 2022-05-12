@@ -138,7 +138,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 							return;
 						}
 						argTypes[i] = param.paramType;
-						argValues[i] = param.getUnpackedIfNode();
+						argValues[i] = param.getUnpackedValue();
 						updatedArgs.put(param.toJson());
 					}
 					value = Reflect.invokeN(match.node.underlyingAstNode, queryAttrName, argTypes, argValues);

@@ -59,7 +59,7 @@ public class Span {
 	static Span extractPositionDownwards(AstInfo info, AstNode astNode) {
 		final Span ownPos = astNode.getRawSpan(info);
 		if (!ownPos.isMeaningful()) {
-			final AstNode child = astNode.getNthChild(0);
+			final AstNode child = astNode.getNumChildren() > 0 ? astNode.getNthChild(0) : null;
 			if (child != null) {
 				return extractPositionDownwards(info, child);
 			}

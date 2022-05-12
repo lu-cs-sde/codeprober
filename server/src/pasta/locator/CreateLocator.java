@@ -6,7 +6,10 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -251,16 +254,20 @@ public class CreateLocator {
 					}
 					Field f;
 					String guessedCacheName = m.getName();
-					final Parameter[] mParams = m.getParameters();
-					for (Parameter p : mParams) {
-						guessedCacheName += "_" + p.getType().getSimpleName();
+					final Type[] genParams = m.getGenericParameterTypes();
+					for (Type t : genParams) {
+						guessedCacheName += "_" + convTypeNameToSignature(extractSimpleNames(t));
 					}
 					guessedCacheName += "_values";
+
 					try {
 						f = m.getDeclaringClass().getDeclaredField(guessedCacheName);
 					} catch (NoSuchFieldException e) {
 						System.out.println(
 								"Failed to guess values field name for " + m + ", thought it was " + guessedCacheName);
+
+						System.out.println("reguess: " + guessedCacheName);
+						System.out.println("gens: " + Arrays.toString(genParams));
 						e.printStackTrace();
 						continue;
 					}
@@ -271,6 +278,7 @@ public class CreateLocator {
 						continue;
 					}
 
+					final Parameter[] mParams = m.getParameters();
 					checkCacheEntries: for (Entry<Object, Object> ent : cache.entrySet()) {
 						if (ent.getValue() == astNode.underlyingAstNode) {
 							final Object param = ent.getKey();
@@ -286,18 +294,20 @@ public class CreateLocator {
 								int paramIdx = 0;
 								for (Object v : argList) {
 									final ParameterValue decoded = CreateValue.fromInstance(info,
-											mParams[paramIdx++].getType(), v);
+											mParams[paramIdx].getType(), genParams[paramIdx], v);
+									++paramIdx;
 									if (decoded == null) {
-										System.out.println("Unknown parameter " + v);
+										System.out.println("Unknown parameter at index " + (paramIdx - 1) + ":" + v);
 										continue checkCacheEntries;
 									}
 									serializableParams.add(decoded);
 								}
 							} else {
 								final ParameterValue decoded = CreateValue.fromInstance(info, mParams[0].getType(),
-										param);
+										genParams[0], param);
 								if (decoded == null) {
-									System.out.println("Unknown parameter " + param);
+									System.out.println("Unknown parameter " + param + ", class name: "
+											+ param.getClass().getName());
 									continue checkCacheEntries;
 								}
 								serializableParams.add(decoded);
@@ -342,5 +352,47 @@ public class CreateLocator {
 //		if (parent != null) {
 //			extractStepsTo(parent, out);
 //		}
+	}
+
+	private static String extractSimpleNames(Type type) {
+		if (type instanceof ParameterizedType) {
+			ParameterizedType pt = (ParameterizedType) type;
+			String build = extractSimpleNames(pt.getRawType()) + "<";
+			boolean first = true;
+			for (Type gen : pt.getActualTypeArguments()) {
+				if (!first) {
+					build += ", ";
+				}
+				first = false;
+				build += extractSimpleNames(gen);
+			}
+			return build + ">";
+		}
+		String typestr = type.toString();
+		final int lastDot = typestr.lastIndexOf('.');
+		if (lastDot == -1 || lastDot == typestr.length() - 1) {
+			return typestr;
+		}
+		typestr = typestr.substring(lastDot + 1);
+		final int lastDollar = typestr.lastIndexOf('$');
+		if (lastDollar == -1 || lastDollar == typestr.length() - 1) {
+			return typestr;
+		}
+		return typestr.substring(lastDollar + 1);
+
+	}
+
+	// This function is stolen from JastAdd (src/jastadd/ast/NameBinding.jrag) so
+	// that we can mimic the cache naming convention.
+	private static String convTypeNameToSignature(String s) {
+		s = s.replace('.', '_');
+		s = s.replace(' ', '_');
+		s = s.replace(',', '_');
+		s = s.replace('<', '_');
+		s = s.replace('>', '_');
+		s = s.replace('[', '_');
+		s = s.replace('?', '_');
+		s = s.replace(']', 'a');
+		return s;
 	}
 }

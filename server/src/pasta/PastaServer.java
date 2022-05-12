@@ -19,9 +19,9 @@ public class PastaServer {
 
 	private static void printUsage() {
 		System.out.println(
-				"Usage: java -jar Pasta.jar path/to/your/compiler.jar [args-to-forward-to-compiler-on-each-request]");
+				"Usage: java -jar pasta-server.jar path/to/your/compiler.jar [args-to-forward-to-compiler-on-each-request]");
 	}
-
+	
 	public static void main(String[] mainArgs) {
 		System.out.println("Starting debug build..");
 		if (mainArgs.length == 0) {
