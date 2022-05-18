@@ -33,8 +33,11 @@ public class WebSocketServer {
 	}
 
 	private static void writeWsMessage(OutputStream dst, String msg) throws IOException {
+		System.out.println("Taking lock..");
 		synchronized (dst) {
+			System.out.println("Got lock..");;
 			final byte[] fullStrData = msg.getBytes(StandardCharsets.UTF_8);
+			System.out.println("num out bytes: " + fullStrData.length);
 			if (fullStrData.length == 0) {
 				System.err.println("Writing empty message to client??");
 				dst.write(new byte[] {
@@ -123,8 +126,8 @@ public class WebSocketServer {
 		@SuppressWarnings("resource")
 		Scanner s = new Scanner(in, "UTF-8");
 		String data = s.useDelimiter("\\r\\n\\r\\n").next();
-		System.out.println("data: " + data);
-		System.out.println("---");
+//		System.out.println("data: " + data);
+//		System.out.println("---");
 		Matcher get = Pattern.compile("^GET").matcher(data);
 		if (get.find()) {
 			Matcher webSocketReq = Pattern.compile("Sec-WebSocket-Key: (.*)").matcher(data);
@@ -163,7 +166,7 @@ public class WebSocketServer {
 //				writeWsMessage(out, "{\"hello\": \"world\"}");
 //				writeWsMessage(out, "{\"hello\": \"world\"}");
 				while (true) {
-					System.out.println("Waiting for more data..");
+//					System.out.println("Waiting for more data..");
 					final int first = in.read();
 					if ((first &  8) == 8) {
 						// Close frame, don't worry about the contents, just close
@@ -172,7 +175,7 @@ public class WebSocketServer {
 					}
 					switch (first) {
 					case 129: {
-						System.out.println("Got expected first byte");
+//						System.out.println("Got expected first byte");
 
 						// -128, strip away the 'mask' big
 						final int lenIndicator = in.read() - 128;
@@ -190,10 +193,10 @@ public class WebSocketServer {
 						
 						final byte[] key = new byte[4];
 						readFully(in, key);
-						System.out.println("Reading data..");
+//						System.out.println("Reading data..");
 						readFully(in, reqData);
 
-						System.out.println(Arrays.toString(key));
+//						System.out.println(Arrays.toString(key));
 //						System.out.println(Arrays.toString(reqData));
 
 						// Decode request data
@@ -205,6 +208,7 @@ public class WebSocketServer {
 //						System.out.println("json: " + jobj.toString(2));
 
 						writeWsMessage(out, onQuery.apply(jobj));
+						System.out.println("onQuery response finished writing");
 
 						break;
 					}

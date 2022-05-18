@@ -4,6 +4,8 @@ import displayRagModal from "./ui/popup/displayRagModal";
 import displayHelp from "./ui/popup/displayHelp";
 import displayAttributeModal from "./ui/popup/displayAttributeModal";
 import settings from './settings';
+import StatisticsCollectorImpl from "./model/StatisticsCollectorImpl";
+import displayStatistics from "./ui/popup/displayStatistics";
 
 type HandlerFn = (data: { [key: string]: any }) => void;
 
@@ -26,9 +28,9 @@ const main = () => {
 
     // await new Promise(w => setTimeout(w, 2000)); // Debug slow connection
 
+    let rpcIdGenerator = 1;
     const posRecoverySelect = document.getElementById('control-position-recovery-strategy') as HTMLSelectElement;
-    console.log('sending rpc', props.query);
-        const id = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+        const id = rpcIdGenerator++; //  Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
         rpcQuerySocket.send(JSON.stringify({
           id,
           posRecovery: posRecoverySelect.value,
@@ -52,17 +54,17 @@ const main = () => {
         setTimeout(() => {
           cleanup();
           rej('Timeout');
-        }, 10000);
+        }, 30000);
       });
 
     const onChangeListeners: ModalEnv['onChangeListeners'] = {};
 
     const probeWindowStateSavers: { [key: string]: (target: ProbeWindowState[]) => void } = {};
     const triggerWindowSave = () => {
-      console.log('triggerWindowsSave...');
+      // console.log('triggerWindowsSave...');
       const states: ProbeWindowState[] = [];
       Object.values(probeWindowStateSavers).forEach(v => v(states));
-      console.log('triggerWindowsSave -->', states);
+      // console.log('triggerWindowsSave -->', states);
       settings.setProbeWindowStates(states);
     };
 
@@ -174,7 +176,6 @@ const main = () => {
       const activeMarkers: TextMarker[] = [];
       const probeMarkers: ModalEnv['probeMarkers'] = {};
       const updateMarkers = () => {
-        console.warn('main - updatemarkers');
         activeMarkers.forEach(m => m?.clear?.());
         activeMarkers.length = 0;
 
@@ -192,7 +193,6 @@ const main = () => {
           const colEnd = end & 0xFFF;
           activeMarkers.push(markText({ severity, lineStart, colStart, lineEnd, colEnd, message: msg }));
         }
-        console.log('probeMarkers:', JSON.stringify(probeMarkers, null, 2));
         Object.values(probeMarkers).forEach(arr => arr.forEach(({ severity, errStart, errEnd, msg }) => filteredAddMarker(severity, errStart, errEnd, msg)));
       };
 
@@ -215,6 +215,23 @@ const main = () => {
       }
       duplicateProbeCheckbox.checked = settings.shouldDuplicateProbeOnAttrClick();
 
+
+      const statCollectorImpl = new StatisticsCollectorImpl();
+      window.displayProbeStatistics = () => {
+        displayStatistics(
+          statCollectorImpl,
+          disabled => (document.getElementById('display-statistics') as HTMLButtonElement).disabled = disabled,
+          newContents => {
+            setLocalState(newContents);
+            // notifyLocalChangeListeners();
+          },
+          () => modalEnv.currentlyLoadingModals.size > 0,
+        );
+      };
+      if (location.search.includes('debug=true')) {
+        document.getElementById('secret-debug-panel')!.style.display = 'block';
+      }
+
       const modalEnv: ModalEnv = {
         performRpcQuery, probeMarkers, onChangeListeners, updateMarkers,
         getLocalState: () => getLocalState(),
@@ -224,6 +241,8 @@ const main = () => {
         updateSpanHighlight: (hl) => updateSpanHighlight(hl),
         probeWindowStateSavers,
         triggerWindowSave,
+        statisticsCollector: statCollectorImpl,
+        currentlyLoadingModals: new Set<string>(),
        };
 
       // const inputHeader = document.getElementById('input-header');
@@ -311,7 +330,7 @@ const main = () => {
     // Listen for messages
     socket.addEventListener('message', function (event) {
       didReceiveAtLeastOneMessage = true;
-      console.log('Message from server ', event.data);
+      // console.log('Message from server ', event.data);
       const parsed = JSON.parse(event.data);
       if (handlers[parsed.type]) {
         handlers[parsed.type](parsed);

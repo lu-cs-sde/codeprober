@@ -29,17 +29,16 @@ public class EncodeResponseValue {
 
 		if (value instanceof AstNode) {
 			AstNode node = (AstNode) value;
-			if (alreadyVisitedNodes.contains(node.underlyingAstNode)) {
-				out.put("<< reference loop to already visited value " + value + " >>");
-				return;
-			}
-			try {
-				Object preferredView = Reflect.invoke0(node.underlyingAstNode, "pastaView");
-				alreadyVisitedNodes.add(value);
-				encode(info, out, preferredView, alreadyVisitedNodes);
-				return;
-			} catch (InvokeProblem e) {
-				// Fall down to default view
+
+			if (!alreadyVisitedNodes.contains(node.underlyingAstNode)) {
+				try {
+					Object preferredView = Reflect.invoke0(node.underlyingAstNode, "pastaView");
+					alreadyVisitedNodes.add(node.underlyingAstNode);
+					encode(info, out, preferredView, alreadyVisitedNodes);
+					return;
+				} catch (InvokeProblem e) {
+					// Fall down to default view
+				}
 			}
 
 			try {
@@ -52,13 +51,13 @@ public class EncodeResponseValue {
 					out.put(wrapper);
 
 					out.put("\n");
-					if (node.isList()) {
+					if (node.isList() && !alreadyVisitedNodes.contains(node.underlyingAstNode)) {
 						final int numEntries = node.getNumChildren();
 						out.put("");
 						if (numEntries == 0) {
 							out.put("<empty list>");
 						} else {
-							alreadyVisitedNodes.add(value);
+							alreadyVisitedNodes.add(node.underlyingAstNode);
 							out.put("List contents [" + numEntries + "]:");
 							for (AstNode child : node.getChildren()) {
 								encode(info, out, child, alreadyVisitedNodes);
@@ -74,17 +73,15 @@ public class EncodeResponseValue {
 				// Fall down to default toString encoding below
 			}
 		} else {
-			if (alreadyVisitedNodes.contains(value)) {
-				out.put("<< reference loop to already visited value " + value + " >>");
-				return;
-			}
-			try {
-				Object preferredView = Reflect.invoke0(value, "pastaView");
-				alreadyVisitedNodes.add(value);
-				encode(info, out, preferredView, alreadyVisitedNodes);
-				return;
-			} catch (InvokeProblem e) {
-				// Fall down to default view
+			if (!alreadyVisitedNodes.contains(value)) {
+				try {
+					Object preferredView = Reflect.invoke0(value, "pastaView");
+					alreadyVisitedNodes.add(value);
+					encode(info, out, preferredView, alreadyVisitedNodes);
+					return;
+				} catch (InvokeProblem e) {
+					// Fall down to default view
+				}
 			}
 		}
 

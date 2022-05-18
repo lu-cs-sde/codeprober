@@ -8,7 +8,6 @@ import pasta.ast.AstNode;
 import pasta.ast.TestData;
 import pasta.locator.CreateLocator;
 import pasta.metaprogramming.Reflect;
-import pasta.protocol.PositionRecoveryStrategy;
 
 public class TestDefaultRequestHandler extends TestCase {
 

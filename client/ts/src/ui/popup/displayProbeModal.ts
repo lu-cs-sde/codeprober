@@ -21,6 +21,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
     delete env.onChangeListeners[queryId];
     delete env.probeMarkers[queryId];
     delete env.probeWindowStateSavers[queryId];
+    env.currentlyLoadingModals.delete(queryId);
     env.triggerWindowSave();
     if (localErrors.length > 0) {
       env.updateMarkers();
@@ -213,7 +214,10 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
       if (!locator) {
         console.error('no locator??');
       }
-      console.log('req attr:', JSON.stringify(attr, null, 2));
+      // console.log('req attr:', JSON.stringify(attr, null, 2));
+
+      env.currentlyLoadingModals.add(queryId);
+      const rpcQueryStart = performance.now();
       env.performRpcQuery({
         attr,
         locator,
@@ -226,24 +230,39 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
             refreshOnDone = false;
             queryWindow.refresh();
           }
+          if (typeof parsed.totalTime === 'number'
+            && typeof parsed.parseTime === 'number'
+            && typeof parsed.createLocatorTime === 'number'
+            && typeof parsed.applyLocatorTime === 'number'
+            && typeof parsed.attrEvalTime === 'number' ) {
+            env.statisticsCollector.addProbeEvaluationTime({
+              attrEvalMs: parsed.attrEvalTime,
+              fullRpcMs: Math.max(performance.now() - rpcQueryStart),
+              serverApplyLocatorMs: parsed.applyLocatorTime,
+              serverCreateLocatorMs: parsed.createLocatorTime,
+              serverParseOnlyMs: parsed.parseTime,
+              serverSideMs: parsed.totalTime,
+            });
+          }
           if (cancelToken.cancelled) { return; }
+          if (!refreshOnDone) {
+            env.currentlyLoadingModals.delete(queryId);
+          }
           while (root.firstChild) root.removeChild(root.firstChild);
 
           let refreshMarkers = localErrors.length > 0;
           localErrors.length = 0;
 
-          console.log('probe errors:', parsed.errors);
+          // console.log('probe errors:', parsed.errors);
           (parsed.errors as { severity: ('error' | 'warning' | 'info') ; start: number; end: number; msg: string }[]).forEach(({severity, start: errStart, end: errEnd, msg }) => {
             localErrors.push({ severity, errStart, errEnd, msg });
           })
-          console.log('parsed.loc?', parsed.locator);
           const updatedArgs = parsed.args;
           if (updatedArgs) {
             refreshMarkers = true;
             attr.args?.forEach((arg, argIdx) => {
               arg.type = updatedArgs[argIdx].type;
               arg.isNodeType = updatedArgs[argIdx].isNodeType;
-              console.log('updating arg value from', arg.value, 'to', updatedArgs[argIdx].value);
               arg.value = updatedArgs[argIdx].value;
             })
           }
@@ -252,7 +271,6 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
             locator = parsed.locator;
           }
           if (refreshMarkers || localErrors.length > 0) {
-            console.log('refresh markers!! local:', localErrors);
             env.updateMarkers();
           }
           const titleRow = createTitle();
@@ -301,7 +319,6 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
                 }
                 case "node": {
                   const { start, end, type } = line.value.result;
-                  console.log('node line:', JSON.stringify(line, null, 2));
 
                   const container = document.createElement('div');
                   const span: Span = {
@@ -375,11 +392,13 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
             return;
           }
           if (cancelToken.cancelled) { return; }
+          env.currentlyLoadingModals.delete(queryId);
           console.log('ProbeModal RPC catch', err);
           root.innerHTML = '';
           root.innerText = 'Failed refreshing query..';
           setTimeout(() => {
             queryWindow.remove();
+            cleanup();
           }, 1000);
         })
     },
@@ -390,7 +409,6 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
       adjusters.forEach(adj => adjustLocator(adj, locator));
       attr.args?.forEach(({ value }) => {
         if (value && typeof value === 'object') {
-          console.log('adjusting value: ', value);
           adjusters.forEach(adj => adjustLocator(adj, value));
         }
       })

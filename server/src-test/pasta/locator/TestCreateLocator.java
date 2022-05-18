@@ -113,7 +113,7 @@ public class TestCreateLocator extends TestCase {
 		final JSONObject locator = CreateLocator.fromNode(info, foo);
 
 		final JSONObject res = locator.getJSONObject("result");
-		assertSpan(Span.extractPosition(info, foo), res.getInt("start"), res.getInt("end"));
+		assertSpan(foo.getRecoveredSpan(info), res.getInt("start"), res.getInt("end"));
 		assertEquals("Foo", res.getString("type"));
 
 		final JSONArray steps = locator.getJSONArray("steps");
@@ -138,7 +138,7 @@ public class TestCreateLocator extends TestCase {
 		final JSONObject locator = CreateLocator.fromNode(info, bar);
 
 		final JSONObject res = locator.getJSONObject("result");
-		assertSpan(Span.extractPosition(info, bar), res.getInt("start"), res.getInt("end"));
+		assertSpan(bar.getRecoveredSpan(info), res.getInt("start"), res.getInt("end"));
 		assertEquals("Bar", res.getString("type"));
 
 		final JSONArray steps = locator.getJSONArray("steps");
@@ -163,7 +163,7 @@ public class TestCreateLocator extends TestCase {
 
 		final JSONObject nodeLocator = nodeArg.getJSONObject("value");
 		Consumer<JSONObject> assertFooLocator = (fooLoc) -> {
-			assertSpan(Span.extractPosition(info, info.ast.getNthChild(0)), fooLoc.getInt("start"),
+			assertSpan(info.ast.getNthChild(0).getRecoveredSpan(info), fooLoc.getInt("start"),
 					fooLoc.getInt("end"));
 			assertEquals("Foo", fooLoc.getString("type"));
 		};
@@ -179,5 +179,27 @@ public class TestCreateLocator extends TestCase {
 		final JSONObject childStep = steps.getJSONObject(1);
 		assertEquals("child", childStep.getString("type"));
 		assertEquals(1, childStep.getInt("value"));
+	}
+	
+	public void testAmbiguousUncle() {
+		AstNode root = new AstNode(TestData.getAmbiguousUncle());
+		final AstInfo info = TestData.getInfo(root);
+		final AstNode bar = root.getNthChild(1).getNthChild(0);
+
+		final JSONObject locator = CreateLocator.fromNode(info, bar);
+
+		final JSONObject res = locator.getJSONObject("result");
+		assertSpan(bar.getRawSpan(info), res.getInt("start"), res.getInt("end"));
+		assertEquals("Bar", res.getString("type"));
+
+		final JSONArray steps = locator.getJSONArray("steps");
+		assertEquals(1, steps.length());
+		
+		final JSONObject step = steps.getJSONObject(0);
+		assertEquals("tal", step.getString("type"));
+		
+		final JSONObject tal = step.getJSONObject("value");
+		assertSpan(bar.getRawSpan(info), tal.getInt("start"), tal.getInt("end"));
+		assertEquals("Bar", tal.getString("type"));
 	}
 }

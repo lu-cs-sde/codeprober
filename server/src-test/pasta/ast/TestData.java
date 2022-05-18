@@ -69,13 +69,13 @@ public class TestData {
 			argList.add(arg1);
 			argList.add(arg2);
 			parameterizedNTA_int_Node_values.put(argList, value);
-			
+
 			// Emulate "proxy" behavior from JastAdd
 			// rather than setting parent directly on the value.
 			final Node proxy = new Node(lc(0, 0), lc(0, 0));
 			proxy.parent = this;
 			value.parent = proxy;
-			
+
 			return this;
 		}
 
@@ -86,7 +86,7 @@ public class TestData {
 			argList.add(arg2);
 			return parameterizedNTA_int_Node_values.get(argList);
 		}
-		
+
 		public int timesTwo(int v) {
 			return v * 2;
 		}
@@ -155,8 +155,8 @@ public class TestData {
 	public static Object getAmbiguous() {
 		return new Program(lc(0, 0), lc(4, 0)) //
 				.add(new Foo(lc(1, 2), lc(3, 2)) //
-						.add(new Bar(lc(4, 8), lc(4, 8))) //
-						.add(new Bar(lc(4, 8), lc(4, 8))) //
+						.add(new Bar(lc(2, 8), lc(2, 8))) //
+						.add(new Bar(lc(2, 8), lc(2, 8))) //
 				);
 	}
 
@@ -199,12 +199,31 @@ public class TestData {
 	public static Object getWithParameterizedNta() {
 		final Foo ntaArg = new Foo(lc(1, 2), lc(1, 4));
 		return new Program(lc(0, 0), lc(2, 0)) //
-				.add(ntaArg)
-				.setParameterizedNTA(1, ntaArg, new Foo(lc(0, 0), lc(0, 0)) //
+				.add(ntaArg).setParameterizedNTA(1, ntaArg, new Foo(lc(0, 0), lc(0, 0)) //
 						.add(new Bar(lc(0, 0), lc(0, 0))) //
 						.add(new Bar(lc(0, 0), lc(0, 0))) //
 				) //
 				.setParameterizedNTA(2, ntaArg, new Baz(lc(0, 0), lc(0, 0)));
+	}
+
+	/**
+	 * Get an AST looking like this:
+	 * 
+	 * <pre>
+	 * 1 Program {
+	 * 0   Foo { }
+	 * 3   Foo {
+	 * 4     Bar {   }
+	 * 5   }
+	 * 6 }
+	 * </pre>
+	 */
+	public static Object getAmbiguousUncle() {
+		return new Program(lc(0, 0), lc(6, 0)) //
+				.add(new Foo(0, 0)) //
+				.add(new Foo(lc(3, 2), lc(5, 2)) //
+						.add(new Bar(lc(4, 4), lc(4, 5))));
+
 	}
 
 	public static AstInfo getInfo(AstNode root) {

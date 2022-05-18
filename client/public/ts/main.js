@@ -1380,6 +1380,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             delete env.onChangeListeners[queryId];
             delete env.probeMarkers[queryId];
             delete env.probeWindowStateSavers[queryId];
+            env.currentlyLoadingModals.delete(queryId);
             env.triggerWindowSave();
             if (localErrors.length > 0) {
                 env.updateMarkers();
@@ -1570,7 +1571,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 if (!locator) {
                     console.error('no locator??');
                 }
-                console.log('req attr:', JSON.stringify(attr, null, 2));
+                // console.log('req attr:', JSON.stringify(attr, null, 2));
+                env.currentlyLoadingModals.add(queryId);
+                const rpcQueryStart = performance.now();
                 env.performRpcQuery({
                     attr,
                     locator,
@@ -1584,25 +1587,40 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         refreshOnDone = false;
                         queryWindow.refresh();
                     }
+                    if (typeof parsed.totalTime === 'number'
+                        && typeof parsed.parseTime === 'number'
+                        && typeof parsed.createLocatorTime === 'number'
+                        && typeof parsed.applyLocatorTime === 'number'
+                        && typeof parsed.attrEvalTime === 'number') {
+                        env.statisticsCollector.addProbeEvaluationTime({
+                            attrEvalMs: parsed.attrEvalTime,
+                            fullRpcMs: Math.max(performance.now() - rpcQueryStart),
+                            serverApplyLocatorMs: parsed.applyLocatorTime,
+                            serverCreateLocatorMs: parsed.createLocatorTime,
+                            serverParseOnlyMs: parsed.parseTime,
+                            serverSideMs: parsed.totalTime,
+                        });
+                    }
                     if (cancelToken.cancelled) {
                         return;
+                    }
+                    if (!refreshOnDone) {
+                        env.currentlyLoadingModals.delete(queryId);
                     }
                     while (root.firstChild)
                         root.removeChild(root.firstChild);
                     let refreshMarkers = localErrors.length > 0;
                     localErrors.length = 0;
-                    console.log('probe errors:', parsed.errors);
+                    // console.log('probe errors:', parsed.errors);
                     parsed.errors.forEach(({ severity, start: errStart, end: errEnd, msg }) => {
                         localErrors.push({ severity, errStart, errEnd, msg });
                     });
-                    console.log('parsed.loc?', parsed.locator);
                     const updatedArgs = parsed.args;
                     if (updatedArgs) {
                         refreshMarkers = true;
                         (_a = attr.args) === null || _a === void 0 ? void 0 : _a.forEach((arg, argIdx) => {
                             arg.type = updatedArgs[argIdx].type;
                             arg.isNodeType = updatedArgs[argIdx].isNodeType;
-                            console.log('updating arg value from', arg.value, 'to', updatedArgs[argIdx].value);
                             arg.value = updatedArgs[argIdx].value;
                         });
                     }
@@ -1611,7 +1629,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         locator = parsed.locator;
                     }
                     if (refreshMarkers || localErrors.length > 0) {
-                        console.log('refresh markers!! local:', localErrors);
                         env.updateMarkers();
                     }
                     const titleRow = createTitle();
@@ -1662,7 +1679,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                 }
                                 case "node": {
                                     const { start, end, type } = line.value.result;
-                                    console.log('node line:', JSON.stringify(line, null, 2));
                                     const container = document.createElement('div');
                                     const span = {
                                         lineStart: (start >>> 12), colStart: (start & 0xFFF),
@@ -1734,11 +1750,13 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     if (cancelToken.cancelled) {
                         return;
                     }
+                    env.currentlyLoadingModals.delete(queryId);
                     console.log('ProbeModal RPC catch', err);
                     root.innerHTML = '';
                     root.innerText = 'Failed refreshing query..';
                     setTimeout(() => {
                         queryWindow.remove();
+                        cleanup();
                     }, 1000);
                 });
             },
@@ -1749,7 +1767,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 adjusters.forEach(adj => (0, adjustLocator_1.default)(adj, locator));
                 (_a = attr.args) === null || _a === void 0 ? void 0 : _a.forEach(({ value }) => {
                     if (value && typeof value === 'object') {
-                        console.log('adjusting value: ', value);
                         adjusters.forEach(adj => (0, adjustLocator_1.default)(adj, value));
                     }
                 });
@@ -1932,7 +1949,329 @@ define("settings", ["require", "exports"], function (require, exports) {
     };
     exports.default = settings;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_4, settings_1) {
+define("model/StatisticsCollectorImpl", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    class StatisticsCollectorImpl {
+        constructor() {
+            this.lastMeasurement = null;
+            this.mergedMeasurements = { fullRpcMs: 0, serverSideMs: 0, serverParseOnlyMs: 0, serverCreateLocatorMs: 0, serverApplyLocatorMs: 0, attrEvalMs: 0 };
+            this.numberOfMeasurements = 0;
+            this.onChange = null;
+        }
+        ;
+        addProbeEvaluationTime(measure) {
+            var _a;
+            this.lastMeasurement = measure;
+            this.mergedMeasurements.fullRpcMs += measure.fullRpcMs;
+            this.mergedMeasurements.serverSideMs += measure.serverSideMs;
+            this.mergedMeasurements.serverParseOnlyMs += measure.serverParseOnlyMs;
+            this.mergedMeasurements.serverCreateLocatorMs += measure.serverCreateLocatorMs;
+            this.mergedMeasurements.serverApplyLocatorMs += measure.serverApplyLocatorMs;
+            this.mergedMeasurements.attrEvalMs += measure.attrEvalMs;
+            this.numberOfMeasurements++;
+            (_a = this.onChange) === null || _a === void 0 ? void 0 : _a.call(this);
+        }
+        setOnChange(callback) {
+            this.onChange = callback;
+        }
+        getLastMeasurement() { return this.lastMeasurement; }
+        getMergedMeasurements() { return this.mergedMeasurements; }
+        getNumberOfMeasurements() { return this.numberOfMeasurements; }
+        reset() {
+            var _a;
+            this.lastMeasurement = null;
+            this.mergedMeasurements = { fullRpcMs: 0, serverSideMs: 0, serverParseOnlyMs: 0, serverCreateLocatorMs: 0, serverApplyLocatorMs: 0, attrEvalMs: 0 };
+            this.numberOfMeasurements = 0;
+            (_a = this.onChange) === null || _a === void 0 ? void 0 : _a.call(this);
+        }
+    }
+    exports.default = StatisticsCollectorImpl;
+});
+define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, createModalTitle_6, showWindow_7) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    createModalTitle_6 = __importDefault(createModalTitle_6);
+    showWindow_7 = __importDefault(showWindow_7);
+    ;
+    const displayStatistics = (collector, setStatisticsButtonDisabled, setEditorContentsAndUpdateProbes, anyModalIsLoading) => {
+        let simulateTimer = -1;
+        const onClose = () => {
+            collector.setOnChange(null);
+            helpWindow.remove();
+            setStatisticsButtonDisabled(false);
+            clearInterval(simulateTimer);
+        };
+        setStatisticsButtonDisabled(true);
+        let statLabels = null;
+        let controlButtons = null;
+        const generateMethodGenerator = (cycles) => {
+            return () => {
+                const alreadyGeneratedIds = new Set();
+                const genId = (prefix) => {
+                    let newId;
+                    do {
+                        newId = `${Math.max(10000, Math.floor(Math.random() * 1000000))}`;
+                    } while (alreadyGeneratedIds.has(newId));
+                    alreadyGeneratedIds.add(newId);
+                    return `${prefix}${newId}`;
+                };
+                return [
+                    // ...[...Array(cycles)].map(() => `${['interface', 'abstract class', 'enum'][Math.floor(Math.random() * 3)]} ${genId('Other')} { /* Empty */ }`),
+                    `class ${genId('Benchmark')} {`,
+                    ...[...Array(cycles)].map(() => [
+                        `  ${['interface', 'abstract class', 'enum'][Math.floor(Math.random() * 3)]} ${genId('Other')} { /* Empty */ }`,
+                        `  static void ${genId('f')}(String[] ${genId('arg')}, ${Math.random() > 0.5 ? 'int' : 'byte'} ${genId('arg')}) {`,
+                        `    final long local = System.currentTimeMillis() % ${genId('')}L;`,
+                        `    if (local > ${genId('')}L) { System.out.println(local); }`,
+                        `    else { System.out.println(${genId('')}); }`,
+                        `  }`,
+                    ].join('\n')),
+                    '}',
+                ].join('\n');
+            };
+        };
+        const tests = [
+            {
+                title: 'Java - Tiny',
+                contents: generateMethodGenerator(1),
+                // contents: () =>  [
+                //   `class Benchmark${Math.floor(Math.random() * 1_000_000)} {`,
+                //   ` // ${Math.random()}`,
+                //   '}',
+                // ].join('\n')
+            },
+            {
+                title: 'Java - Medium',
+                contents: generateMethodGenerator(5)
+                // contents: () => {
+                //   const genId = (prefix: string) => `${prefix}${Math.floor(Math.random() * 1_000_000)}`;
+                //   return [
+                //     `${['interface', 'abstract class', 'enum'][Math.floor(Math.random() * 3)]} ${genId('Other')} { /* Empty */ }`,
+                //     `class ${genId('Benchmark')} {`,
+                //     ` static void main(String[] ${genId('args')}) {`,
+                //     `  final long foo = System.currentTimeMillis() % ${genId('')}L;`,
+                //     `  if (foo > ${genId('')}L) { System.out.println(foo); }`,
+                //     `  else { System.out.println(${genId('')}); }`,
+                //     ` }`,
+                //     '}',
+                //   ].join('\n');
+                // }
+            },
+            {
+                title: 'Java - Large',
+                contents: generateMethodGenerator(50),
+            },
+            {
+                title: 'Java - Enormous',
+                contents: generateMethodGenerator(200),
+            },
+        ];
+        let activeTest = tests[0].title;
+        const helpWindow = (0, showWindow_7.default)({
+            rootStyle: `
+      width: 32rem;
+      min-height: 12rem;
+    `,
+            resizable: true,
+            render: (root) => {
+                const merged = collector.getMergedMeasurements();
+                const numMeasurement = collector.getNumberOfMeasurements();
+                const formatNumber = (num) => num.toFixed(1);
+                const computeAverage = () => {
+                    const computeOfTotal = (num) => `${formatNumber(num * 100 / merged.serverSideMs)}%`;
+                    const serverTotalMs = `${formatNumber(merged.serverSideMs / numMeasurement)}ms`;
+                    const parseMs = `${formatNumber(merged.serverParseOnlyMs / numMeasurement)}ms (${computeOfTotal(merged.serverParseOnlyMs)})`;
+                    const rpcMs = `${formatNumber((merged.fullRpcMs - merged.serverSideMs) / numMeasurement)}ms`;
+                    const createLocatorMs = `${formatNumber(merged.serverCreateLocatorMs / numMeasurement)}ms (${computeOfTotal(merged.serverCreateLocatorMs)})`;
+                    const applyLocatorMs = `${formatNumber(merged.serverApplyLocatorMs / numMeasurement)}ms (${computeOfTotal(merged.serverApplyLocatorMs)})`;
+                    const attributeEvalMs = `${formatNumber(merged.attrEvalMs / numMeasurement)}ms (${computeOfTotal(merged.attrEvalMs)})`;
+                    return { serverTotalMs, parseMs, rpcMs, createLocatorMs, applyLocatorMs, attributeEvalMs };
+                };
+                const computeIndividual = (last) => {
+                    const computeOfTotal = (num) => `${formatNumber(num * 100 / last.serverSideMs)}%`;
+                    const serverTotalMs = `${formatNumber(last.serverSideMs)}ms`;
+                    const parseMs = `${formatNumber(last.serverParseOnlyMs)}ms (${computeOfTotal(last.serverParseOnlyMs)})`;
+                    const rpcMs = `${formatNumber(last.fullRpcMs - last.serverSideMs)}ms`;
+                    const createLocatorMs = `${formatNumber(last.serverCreateLocatorMs)}ms (${computeOfTotal(last.serverCreateLocatorMs)})`;
+                    const applyLocatorMs = `${formatNumber(last.serverApplyLocatorMs)}ms (${computeOfTotal(last.serverApplyLocatorMs)})`;
+                    const attributeEvalMs = `${formatNumber(last.attrEvalMs)}ms (${computeOfTotal(last.attrEvalMs)})`;
+                    return { serverTotalMs, parseMs, rpcMs, createLocatorMs, applyLocatorMs, attributeEvalMs };
+                };
+                const last = collector.getLastMeasurement();
+                if (!statLabels || !last) {
+                    statLabels = null;
+                    while (root.firstChild)
+                        root.firstChild.remove();
+                    root.appendChild((0, createModalTitle_6.default)({
+                        renderLeft: (container) => {
+                            const header = document.createElement('span');
+                            header.innerText = 'Statistics';
+                            container.appendChild(header);
+                        },
+                        onClose,
+                    }).element);
+                    const grid = document.createElement('div');
+                    grid.style.display = 'grid';
+                    grid.style.padding = '0.25rem';
+                    // grid.style.justifyItems = 'center';
+                    grid.style.gridGap = '4px';
+                    grid.style.gridTemplateColumns = 'auto 1fr';
+                    const addRow = (title, measurement, boldTitle = false) => {
+                        const titleNode = document.createElement('span');
+                        titleNode.innerText = title;
+                        titleNode.style.textAlign = 'right';
+                        titleNode.style.textAlign = 'right';
+                        if (boldTitle) {
+                            titleNode.style.fontWeight = 'bold';
+                        }
+                        const measurementNode = document.createElement('span');
+                        measurementNode.innerText = measurement;
+                        grid.appendChild(titleNode);
+                        grid.appendChild(measurementNode);
+                        return measurementNode;
+                    };
+                    const addDivider = () => {
+                        const divider = document.createElement('div');
+                        divider.style.borderTop = '1px solid gray';
+                        grid.appendChild(divider);
+                        grid.appendChild(divider.cloneNode(true));
+                    };
+                    const numEvalsLbl = addRow('Num evaluations', `${numMeasurement}`);
+                    addRow('', '');
+                    const addGroup = (measurements) => {
+                        const serverTotalLbl = addRow('Server side total', measurements.serverTotalMs);
+                        const parseLbl = addRow('..of which AST parse', measurements.parseMs);
+                        const createLocatorLbl = addRow('..of which locator create', measurements.createLocatorMs);
+                        const applyLocatorLbl = addRow('..of which locator apply', measurements.applyLocatorMs);
+                        const attrEvalLbl = addRow('..of which attribute eval', measurements.attributeEvalMs);
+                        addRow('', '');
+                        const rpcLbl = addRow('RPC overhead:', measurements.rpcMs);
+                        addDivider();
+                        return { serverTotalLbl, parseLbl, rpcLbl, createLocatorLbl, applyLocatorLbl, attrEvalLbl };
+                    };
+                    let averageLabels = null;
+                    if (numMeasurement > 0) {
+                        addRow('Average', '', true);
+                        averageLabels = addGroup(computeAverage());
+                    }
+                    let mostRecentLabels = null;
+                    if (last) {
+                        addRow('Most recent', '', true);
+                        mostRecentLabels = addGroup(computeIndividual(last));
+                    }
+                    root.appendChild(grid);
+                    if (controlButtons) {
+                        root.appendChild(controlButtons);
+                    }
+                    else {
+                        controlButtons = document.createElement('div');
+                        controlButtons.style.padding = '0.5rem';
+                        root.appendChild(controlButtons);
+                        const addButton = (title, onClick) => {
+                            const btn = document.createElement('button');
+                            btn.innerText = title;
+                            btn.onclick = () => onClick(btn);
+                            btn.style.marginRight = '0.25rem';
+                            controlButtons.appendChild(btn);
+                            return btn;
+                        };
+                        const stopSimulation = () => {
+                            clearInterval(simulateTimer);
+                            simulateTimer = -1;
+                            resetBtn.innerText = 'Reset';
+                            measurementBtn.disabled = false;
+                        };
+                        let resetBtn = addButton('Reset', () => {
+                            if (simulateTimer !== -1) {
+                                stopSimulation();
+                            }
+                            else {
+                                collector.reset();
+                            }
+                        });
+                        const measurementBtn = addButton('Run measurements', (btn) => {
+                            btn.disabled = true;
+                            collector.reset();
+                            clearInterval(simulateTimer);
+                            resetBtn.innerText = 'Stop';
+                            // let expectMeasurements = 0;
+                            const triggerChange = () => {
+                                setEditorContentsAndUpdateProbes(tests.find(({ title }) => title === activeTest).contents());
+                            };
+                            triggerChange();
+                            simulateTimer = setInterval(() => {
+                                if (anyModalIsLoading()) {
+                                    return;
+                                }
+                                // const newMeasurements = collector.getNumberOfMeasurements();
+                                // if (newMeasurements === expectMeasurements) {
+                                //   return;
+                                // }
+                                // expectMeasurements = newMeasurements;
+                                if (collector.getNumberOfMeasurements() >= 10000) {
+                                    stopSimulation();
+                                }
+                                else {
+                                    triggerChange();
+                                }
+                            }, 100);
+                        });
+                    }
+                    root.appendChild(document.createElement('hr'));
+                    const testSuiteHolder = document.createElement('div');
+                    testSuiteHolder.style.padding = '0.25rem';
+                    const testSuiteSelector = document.createElement('select');
+                    testSuiteSelector.style.marginRight = '0.5rem';
+                    testSuiteSelector.id = 'test-type-selector';
+                    console.log('QQ ', activeTest, ' => ', tests.findIndex(({ title }) => title === activeTest));
+                    tests.forEach(({ title }) => {
+                        const option = document.createElement('option');
+                        option.value = title;
+                        option.innerText = title;
+                        testSuiteSelector.appendChild(option);
+                    });
+                    testSuiteSelector.selectedIndex = tests.findIndex(({ title }) => title === activeTest);
+                    testSuiteHolder.appendChild(testSuiteSelector);
+                    testSuiteSelector.oninput = () => {
+                        activeTest = testSuiteSelector.value;
+                    };
+                    const testSuiteLabel = document.createElement('label');
+                    testSuiteLabel.innerText = 'Test type';
+                    testSuiteHolder.setAttribute('for', 'test-type-selector');
+                    testSuiteHolder.appendChild(testSuiteLabel);
+                    root.appendChild(testSuiteHolder);
+                    if (averageLabels && mostRecentLabels) {
+                        statLabels = {
+                            numEvaluations: numEvalsLbl,
+                            average: averageLabels,
+                            mostRecent: mostRecentLabels,
+                        };
+                    }
+                }
+                else {
+                    const apply = (group, val) => {
+                        group.serverTotalLbl.innerText = val.serverTotalMs;
+                        group.createLocatorLbl.innerText = val.createLocatorMs;
+                        group.applyLocatorLbl.innerText = val.applyLocatorMs;
+                        group.parseLbl.innerText = val.parseMs;
+                        group.rpcLbl.innerText = val.rpcMs;
+                        group.attrEvalLbl.innerText = val.attributeEvalMs;
+                    };
+                    statLabels.numEvaluations.innerText = `${collector.getNumberOfMeasurements()}`;
+                    apply(statLabels.average, computeAverage());
+                    apply(statLabels.mostRecent, computeIndividual(last));
+                }
+                // grid.appendChild(document.createTextNode(''));
+                // grid.appendChild(document.createTextNode('' + collector.getNumberOfMeasurements()));
+                // root.appendChild()
+            },
+        });
+        collector.setOnChange(() => helpWindow.refresh());
+    };
+    exports.default = displayStatistics;
+});
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_4, settings_1, StatisticsCollectorImpl_1, displayStatistics_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -1941,6 +2280,8 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     displayHelp_2 = __importDefault(displayHelp_2);
     displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
     settings_1 = __importDefault(settings_1);
+    StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
+    displayStatistics_1 = __importDefault(displayStatistics_1);
     window.clearPastaSettings = () => {
         settings_1.default.set({});
         location.reload();
@@ -1956,9 +2297,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         const rpcHandlers = {};
         const performRpcQuery = (props) => new Promise(async (res, rej) => {
             // await new Promise(w => setTimeout(w, 2000)); // Debug slow connection
+            let rpcIdGenerator = 1;
             const posRecoverySelect = document.getElementById('control-position-recovery-strategy');
-            console.log('sending rpc', props.query);
-            const id = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+            const id = rpcIdGenerator++; //  Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
             rpcQuerySocket.send(JSON.stringify({
                 id,
                 posRecovery: posRecoverySelect.value,
@@ -1981,15 +2322,15 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             setTimeout(() => {
                 cleanup();
                 rej('Timeout');
-            }, 10000);
+            }, 30000);
         });
         const onChangeListeners = {};
         const probeWindowStateSavers = {};
         const triggerWindowSave = () => {
-            console.log('triggerWindowsSave...');
+            // console.log('triggerWindowsSave...');
             const states = [];
             Object.values(probeWindowStateSavers).forEach(v => v(states));
-            console.log('triggerWindowsSave -->', states);
+            // console.log('triggerWindowsSave -->', states);
             settings_1.default.setProbeWindowStates(states);
         };
         const notifyLocalChangeListeners = (adjusters) => {
@@ -2088,7 +2429,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 const activeMarkers = [];
                 const probeMarkers = {};
                 const updateMarkers = () => {
-                    console.warn('main - updatemarkers');
                     activeMarkers.forEach(m => { var _a; return (_a = m === null || m === void 0 ? void 0 : m.clear) === null || _a === void 0 ? void 0 : _a.call(m); });
                     activeMarkers.length = 0;
                     const deduplicator = new Set();
@@ -2105,7 +2445,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         const colEnd = end & 0xFFF;
                         activeMarkers.push(markText({ severity, lineStart, colStart, lineEnd, colEnd, message: msg }));
                     };
-                    console.log('probeMarkers:', JSON.stringify(probeMarkers, null, 2));
                     Object.values(probeMarkers).forEach(arr => arr.forEach(({ severity, errStart, errEnd, msg }) => filteredAddMarker(severity, errStart, errEnd, msg)));
                 };
                 const captureStdoutCheckbox = document.getElementById('control-capture-stdout');
@@ -2125,6 +2464,16 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     settings_1.default.setShouldDuplicateProbeOnAttrClick(duplicateProbeCheckbox.checked);
                 };
                 duplicateProbeCheckbox.checked = settings_1.default.shouldDuplicateProbeOnAttrClick();
+                const statCollectorImpl = new StatisticsCollectorImpl_1.default();
+                window.displayProbeStatistics = () => {
+                    (0, displayStatistics_1.default)(statCollectorImpl, disabled => document.getElementById('display-statistics').disabled = disabled, newContents => {
+                        setLocalState(newContents);
+                        // notifyLocalChangeListeners();
+                    }, () => modalEnv.currentlyLoadingModals.size > 0);
+                };
+                if (location.search.includes('debug=true')) {
+                    document.getElementById('secret-debug-panel').style.display = 'block';
+                }
                 const modalEnv = {
                     performRpcQuery, probeMarkers, onChangeListeners, updateMarkers,
                     getLocalState: () => getLocalState(),
@@ -2134,6 +2483,8 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     updateSpanHighlight: (hl) => updateSpanHighlight(hl),
                     probeWindowStateSavers,
                     triggerWindowSave,
+                    statisticsCollector: statCollectorImpl,
+                    currentlyLoadingModals: new Set(),
                 };
                 // const inputHeader = document.getElementById('input-header');
                 // onChangeListeners['passive-bg-listener'] = () => {
@@ -2212,7 +2563,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             // Listen for messages
             socket.addEventListener('message', function (event) {
                 didReceiveAtLeastOneMessage = true;
-                console.log('Message from server ', event.data);
+                // console.log('Message from server ', event.data);
                 const parsed = JSON.parse(event.data);
                 if (handlers[parsed.type]) {
                     handlers[parsed.type](parsed);

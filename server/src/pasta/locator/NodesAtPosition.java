@@ -22,7 +22,7 @@ public class NodesAtPosition {
 	private static void getTo(List<JSONObject> out, AstInfo info, AstNode astNode, int pos) {
 		final Span nodePos;
 		try {
-			nodePos = Span.extractPosition(info, astNode);
+			nodePos = astNode.getRecoveredSpan(info);
 		} catch (InvokeProblem e1) {
 			e1.printStackTrace();
 			return;

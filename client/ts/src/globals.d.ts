@@ -47,6 +47,19 @@ interface ProbeWindowState {
   attr: AstAttrWithValue
 }
 
+interface ProbeMeasurement {
+  fullRpcMs: number;
+  serverSideMs: number;
+  serverParseOnlyMs: number;
+  serverCreateLocatorMs: number;
+  serverApplyLocatorMs: number;
+  attrEvalMs: number;
+}
+
+interface ProbeStatisticsCollector {
+  addProbeEvaluationTime: (measurement: ProbeMeasurement) => void;
+};
+
 interface ModalEnv {
   performRpcQuery: (args: {
     attr: AstAttrWithValue;
@@ -62,6 +75,8 @@ interface ModalEnv {
   updateMarkers: () => void;
   captureStdout: () => boolean;
   duplicateOnAttr: () => boolean;
+  statisticsCollector: ProbeStatisticsCollector;
+  currentlyLoadingModals: Set<string>;
 }
 
 type RpcBodyLine = string
@@ -118,6 +133,12 @@ interface RpcResponse {
 
   // Expected for request pasta_pastaAttrs
   pastaAttrs?: AstAttr[];
+
+  totalTime?: number;
+  parseTime?: number;
+  createLocatorTime?: number;
+  applyLocatorTime?: number;
+  attrEvalTime?: number;
 }
 
 interface ModalPosition { x: number, y: number };
@@ -133,6 +154,7 @@ interface Window {
   };
   loadPreload: (preloader: EditorPreloader, onDone: () => void) => void;
   displayGeneralHelp: () => void;
+  displayProbeStatistics: () => void;
   displayRecoveryStrategyHelp: () => void;
   maybeAutoInit: () => void;
   init: (editorType: string) => void;

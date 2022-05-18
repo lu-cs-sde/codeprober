@@ -22,7 +22,7 @@ public class TypeAtLoc {
 	}
 
 	public static TypeAtLoc from(AstInfo info, AstNode astNode) throws InvokeProblem {
-		return new TypeAtLoc(astNode.underlyingAstNode.getClass().getSimpleName(), Span.extractPosition(info, astNode));
+		return new TypeAtLoc(astNode.underlyingAstNode.getClass().getSimpleName(), astNode.getRecoveredSpan(info));
 	}
 
 	@Override

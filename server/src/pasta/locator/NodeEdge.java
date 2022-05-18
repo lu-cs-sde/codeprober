@@ -52,6 +52,11 @@ abstract class NodeEdge {
 		obj.put("value", value);
 		return obj;
 	}
+	
+	@Override
+	public String toString() {
+		return type + "<" + targetNode +">";
+	}
 
 	public static class ChildIndexEdge extends NodeEdge {
 		public ChildIndexEdge(AstNode sourceNode, TypeAtLoc sourceLoc, AstNode targetNode, TypeAtLoc targetLoc,

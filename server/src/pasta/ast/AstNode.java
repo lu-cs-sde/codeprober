@@ -9,6 +9,7 @@ import pasta.locator.Span;
 import pasta.metaprogramming.InvokeProblem;
 import pasta.metaprogramming.PositionRepresentation;
 import pasta.metaprogramming.Reflect;
+import pasta.protocol.PositionRecoveryStrategy;
 
 public class AstNode {
 
@@ -21,8 +22,13 @@ public class AstNode {
 
 	private final Set<Object> visitedNodes = new HashSet<>();
 
-	private Span span;
+	private Span rawSpan;
+	
+	private PositionRecoveryStrategy recoveredSpanStrategy;
+	private Span recoveredSpan;
 
+	private Boolean isNonOverlappingSibling = null;
+	
 	public AstNode(Object underlyingAstNode) {
 		if (underlyingAstNode == null) {
 			throw new NullPointerException("Missing underlying node");
@@ -43,20 +49,49 @@ public class AstNode {
 		}
 	}
 
+	public boolean isNonOverlappingSibling(AstInfo info) {
+		if (isNonOverlappingSibling != null) {
+			return isNonOverlappingSibling;
+		}
+		
+		if (parent == null) {
+			isNonOverlappingSibling = false;
+		} else {
+			Span our = getRecoveredSpan(info);
+//			if (!our.isMeaningful()) {
+//				isNonOverlappingSibling = false;
+//				return false;
+//			}
+			boolean foundSelf = false;
+			for (AstNode sibling : parent.getChildren()) {
+				if (sibling.underlyingAstNode == this.underlyingAstNode) {
+					foundSelf = true;
+					continue;
+				}
+				Span their = sibling.getRecoveredSpan(info);
+				if (their.overlaps(our)) {
+					isNonOverlappingSibling = false;
+					return false;
+				}
+			}
+			isNonOverlappingSibling = foundSelf;
+		}
+		return isNonOverlappingSibling;
+	}
 	public Span getRawSpan(AstInfo info) throws InvokeProblem {
 		return getRawSpan(info.positionRepresentation);
 	}
 
 	public Span getRawSpan(PositionRepresentation positionRepresentation) throws InvokeProblem {
-		if (this.span == null) {
+		if (this.rawSpan == null) {
 			switch (positionRepresentation) {
 			case PACKED_BITS: {
-				this.span = new Span((Integer) Reflect.invoke0(underlyingAstNode, "getStart"),
+				this.rawSpan = new Span((Integer) Reflect.invoke0(underlyingAstNode, "getStart"),
 						(Integer) Reflect.invoke0(underlyingAstNode, "getEnd"));
 				break;
 			}
 			case SEPARATE_LINE_COLUMN: {
-				this.span = new Span( //
+				this.rawSpan = new Span( //
 						((Integer) Reflect.invoke0(underlyingAstNode, "getStartLine") << 12)
 								+ ((Number) Reflect.invoke0(underlyingAstNode, "getStartColumn")).intValue(),
 						((Integer) Reflect.invoke0(underlyingAstNode, "getEndLine") << 12)
@@ -68,7 +103,90 @@ public class AstNode {
 			}
 			}
 		}
-		return this.span;
+		return this.rawSpan;
+	}
+
+	public static Span extractPositionDownwards(AstInfo info, AstNode astNode) {
+		final Span ownPos = astNode.getRawSpan(info);
+		if (!ownPos.isMeaningful()) {
+			final AstNode child = astNode.getNumChildren() > 0 ? astNode.getNthChild(0) : null;
+			if (child != null) {
+				return extractPositionDownwards(info, child);
+			}
+		}
+		return ownPos;
+	}
+
+	private static Span extractPositionUpwards(AstInfo info, AstNode astNode) {
+		final Span ownPos = astNode.getRawSpan(info);
+		if (!ownPos.isMeaningful()) {
+			final AstNode parent = astNode.parent();
+			if (parent != null) {
+				return extractPositionUpwards(info, parent);
+			}
+		}
+		return ownPos;
+	}
+	
+	private Span setAndGetRecoveredSpan(AstInfo info, Span recoveredSpan) {
+		this.recoveredSpanStrategy = info.recoveryStrategy;
+		this.recoveredSpan = recoveredSpan;
+		return this.recoveredSpan;
+	}
+	
+	public Span getRecoveredSpan(AstInfo info) {
+		if (this.recoveredSpan != null && this.recoveredSpanStrategy == info.recoveryStrategy) {
+			return this.recoveredSpan;
+		}
+		final Span ownPos = getRawSpan(info);
+		if (ownPos.isMeaningful()) {
+			return setAndGetRecoveredSpan(info, ownPos);
+		}
+		switch (info.recoveryStrategy) {
+		case FAIL:
+			return ownPos;
+		case PARENT:
+			return setAndGetRecoveredSpan(info, extractPositionUpwards(info, this));
+		case CHILD:
+			return setAndGetRecoveredSpan(info, extractPositionDownwards(info, this));
+		case SEQUENCE_PARENT_CHILD: {
+			final Span parent = extractPositionUpwards(info, this);
+			return setAndGetRecoveredSpan(info, parent.isMeaningful() ? parent : extractPositionDownwards(info, this));
+		}
+		case SEQUENCE_CHILD_PARENT: {
+			final Span parent = extractPositionDownwards(info, this);
+			return setAndGetRecoveredSpan(info, parent.isMeaningful() ? parent : extractPositionUpwards(info, this));
+		}
+		case ALTERNATE_PARENT_CHILD: {
+			AstNode parent = this;
+			AstNode child = parent;
+			while (parent != null || child != null) {
+				if (parent != null) {
+					parent = parent.parent();
+					if (parent != null) {
+						final Span parPos = parent.getRawSpan(info);
+						if (parPos.isMeaningful()) {
+							return setAndGetRecoveredSpan(info, parPos);
+						}
+					}
+				}
+				if (child != null) {
+					child = child.getNumChildren() > 0 ? child.getNthChild(0) : null;
+					if (child != null) {
+						final Span childPos = child.getRawSpan(info);
+						if (childPos.isMeaningful()) {
+							return setAndGetRecoveredSpan(info, childPos);
+						}
+					}
+				}
+			}
+			return ownPos;
+		}
+		default: {
+			System.err.println("Unknown recovery strategy " + info.recoveryStrategy);
+			return ownPos;
+		}
+		}
 	}
 
 	public AstNode parent() {

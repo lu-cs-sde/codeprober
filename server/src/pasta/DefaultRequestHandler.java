@@ -27,6 +27,7 @@ import pasta.protocol.create.EncodeResponseValue;
 import pasta.protocol.decode.DecodeValue;
 import pasta.rpc.JsonRequestHandler;
 import pasta.util.ASTProvider;
+import pasta.util.BenchmarkTimer;
 import pasta.util.MagicStdoutMessageParser;
 
 public class DefaultRequestHandler implements JsonRequestHandler {
@@ -87,7 +88,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		final JSONObject locator = queryBody.getJSONObject("locator");
 		ResolvedNode match = ApplyLocator.toNode(info, locator);
 
-		System.out.println("MatchedNode: " + match);
+//		System.out.println("MatchedNode: " + match);
 		if (match == null) {
 			bodyBuilder.put("No matching node found\n\nTry remaking the probe\nat a different line/column");
 			return;
@@ -163,21 +164,29 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				}
 			}
 		};
-		if (captureStdio) {
-			bodyBuilder.putAll(StdIoInterceptor.performCaptured((stdout, line) -> {
-				JSONObject fmt = new JSONObject();
-				fmt.put("type", stdout ? "stdout" : "stderr");
-				fmt.put("value", line);
-				return fmt;
-			}, evaluateAttr));
-		} else {
-			evaluateAttr.run();
+
+		BenchmarkTimer.EVALUATE_ATTR.enter();
+		try {
+			if (captureStdio) {
+				bodyBuilder.putAll(StdIoInterceptor.performCaptured((stdout, line) -> {
+					JSONObject fmt = new JSONObject();
+					fmt.put("type", stdout ? "stdout" : "stderr");
+					fmt.put("value", line);
+					return fmt;
+				}, evaluateAttr));
+			} else {
+				evaluateAttr.run();
+			}
+		} finally {
+			BenchmarkTimer.EVALUATE_ATTR.exit();
 		}
 	}
 
 	@Override
 	public JSONObject handleRequest(JSONObject queryObj) {
-		System.out.println("Incoming query: " + queryObj.toString(2));
+
+//		System.out.println("Incoming query: " + queryObj.toString(2));
+		final long requestStart = System.nanoTime();
 
 		// Root response object
 		final JSONObject retBuilder = new JSONObject();
@@ -202,6 +211,9 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			e.printStackTrace();
 			throw new RuntimeException(e);
 		}
+		BenchmarkTimer.APPLY_LOCATOR.reset();
+		BenchmarkTimer.CREATE_LOCATOR.reset();
+		BenchmarkTimer.EVALUATE_ATTR.reset();
 		final JSONArray errors;
 		try {
 			errors = StdIoInterceptor.performCaptured(MagicStdoutMessageParser::parse, () -> {
@@ -210,8 +222,11 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				System.arraycopy(forwardArgs, 0, astArgs, 1, forwardArgs.length);
 				System.out.println("fwd args: " + Arrays.toString(astArgs));
 
-				final boolean parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs,
-						(ast, loadCls) -> handleParsedAst(ast, loadCls, queryObj, retBuilder, bodyBuilder));
+				final long parseStart = System.nanoTime();
+				final boolean parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs, (ast, loadCls) -> {
+					retBuilder.put("parseTime", (System.nanoTime() - parseStart) / 1_000_000.0);
+					handleParsedAst(ast, loadCls, queryObj, retBuilder, bodyBuilder);
+				});
 				if (!parsed) {
 					System.out.println("Parsing failed..");
 				}
@@ -226,7 +241,12 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		// Somehow extract syntax errors from stdout?
 		retBuilder.put("body", bodyBuilder);
 		retBuilder.put("errors", errors != null ? errors : new JSONArray());
+		retBuilder.put("totalTime", (System.nanoTime() - requestStart) / 1_000_000.0);
+		retBuilder.put("createLocatorTime", BenchmarkTimer.CREATE_LOCATOR.getAccumulatedNano() / 1_000_000.0);
+		retBuilder.put("applyLocatorTime", BenchmarkTimer.APPLY_LOCATOR.getAccumulatedNano() / 1_000_000.0);
+		retBuilder.put("attrEvalTime", BenchmarkTimer.EVALUATE_ATTR.getAccumulatedNano() / 1_000_000.0);
 
+		System.out.println("Request done");
 		return retBuilder;
 	}
 }

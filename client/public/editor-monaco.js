@@ -21,6 +21,7 @@ window.defineEditor(
       scrollBeyondLastLine: false,
       automaticLayout: true,
     });
+
     const coolMarkerDescriptors = {};
     let activeCoolMarkers = {};
     const refreshCoolMarkers = () => {
@@ -233,8 +234,8 @@ window.defineEditor(
             : chg.text.length;
         }
 
-        console.log('handle range change', startLineNumber, startColumn, endLineNumber, endColumn);
-        console.log('tex:', chg.text);
+        // console.log('handle range change', startLineNumber, startColumn, endLineNumber, endColumn);
+        // console.log('tex:', chg.text);
 
         let lineDiff = startLineNumber - endLineNumber;
         let colDiff = startColumn - endColumn;

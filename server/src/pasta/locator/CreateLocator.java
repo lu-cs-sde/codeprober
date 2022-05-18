@@ -24,8 +24,11 @@ import pasta.locator.NodeEdge.NodeEdgeType;
 import pasta.metaprogramming.Reflect;
 import pasta.protocol.ParameterValue;
 import pasta.protocol.create.CreateValue;
+import pasta.util.BenchmarkTimer;
 
 public class CreateLocator {
+
+	private static final boolean useFastTrimAlgorithm = true;
 
 	private static class Locator {
 		public final List<NodeEdge> steps;
@@ -36,43 +39,49 @@ public class CreateLocator {
 	}
 
 	public static JSONObject fromNode(AstInfo info, AstNode astNode) {
-		// TODO add position recovery things here(?)
-		final Locator id;
-
+		BenchmarkTimer.CREATE_LOCATOR.enter();
 		try {
-			id = extract(info, astNode);
-			if (id == null) {
-				System.out.println("Failed creating locator for " + astNode);
+			// TODO add position recovery things here(?)
+			final Locator id;
+
+			try {
+				id = extract(info, astNode);
+				if (id == null) {
+					System.out.println("Failed creating locator for " + astNode);
+					return null;
+				}
+			} catch (RuntimeException e) {
+				System.out.println("Failed to extract locator for " + astNode);
+				e.printStackTrace();
 				return null;
+				
 			}
-		} catch (RuntimeException e) {
-			System.out.println("Failed to extract locator for " + astNode);
-			e.printStackTrace();
-			return null;
-		}
 
 //		final JSONObject robustRoot = new JSONObject();
 //		robustRoot.put("start", id.root.loc.start);
 //		robustRoot.put("end", id.root.loc.end);
 //		robustRoot.put("type", id.root.type);
 
-		final JSONObject robustResult = new JSONObject();
-		final Span astPos = Span.extractPosition(info, astNode);
-		robustResult.put("start", astPos.start);
-		robustResult.put("end", astPos.end);
-		robustResult.put("type", astNode.underlyingAstNode.getClass().getSimpleName());
+			final JSONObject robustResult = new JSONObject();
+			final Span astPos = astNode.getRecoveredSpan(info);
+			robustResult.put("start", astPos.start);
+			robustResult.put("end", astPos.end);
+			robustResult.put("type", astNode.underlyingAstNode.getClass().getSimpleName());
 
-		final JSONArray steps = new JSONArray();
-		for (NodeEdge step : id.steps) {
-			steps.put(step.toJson());
-		}
+			final JSONArray steps = new JSONArray();
+			for (NodeEdge step : id.steps) {
+				steps.put(step.toJson());
+			}
 
-		final JSONObject robust = new JSONObject();
+			final JSONObject robust = new JSONObject();
 //		robust.put("root", robustRoot);
-		robust.put("result", robustResult);
-		robust.put("steps", steps);
+			robust.put("result", robustResult);
+			robust.put("steps", steps);
 //		System.out.println("Locator: " + robust.toString(2));
-		return robust;
+			return robust;
+		} finally {
+			BenchmarkTimer.CREATE_LOCATOR.exit();
+		}
 	}
 
 	private static Locator extract(AstInfo info, AstNode astNode) {
@@ -98,27 +107,43 @@ public class CreateLocator {
 		}
 
 		Collections.reverse(res);
-//		TypeAtLoc root = res.get(0).sourceLoc;
-//
-//		for (int i = 1; i < res.size(); i++) {
-//			NodeEdge e = res.get(i);
-//			if (e.type)
-//			if (e.type == NodeEdgeType.TypeAtLoc) {
-//				root = e.targetLoc;
-//				res.remove(i);
-//				--i;
-//			} else {
-//				// Assume the following graph (left-to-right):
-//				// A tal B nta C tal D tal E nta F tal G
-//				// It would be safe to remove quite a lot, down do:
-//				// B nta C tal E nta F tal G
-//				// This loop prunes after non-removable nodes, e.g 'C tal D'
-//				while (i < res.size() - 2 && res.get(i + 1).canBeCollapsed() && res.get(i + 2).canBeCollapsed()) {
-//					res.remove(i + 1);
-//				}
-//				break;
-//			}
-//		}
+
+		if (useFastTrimAlgorithm) {
+			int trimPos = res.size() - 1;
+			while (trimPos >= 0) {
+				int numPotentialRemovals = 0;
+				NodeEdge disambiguationTarget = res.get(trimPos);
+				for (int i = trimPos; i >= 0; --i) {
+					final NodeEdge parentEdge = res.get(i);
+					if (parentEdge.type == NodeEdgeType.ChildIndex
+							&& (parentEdge.targetNode.isNonOverlappingSibling(info) || //
+									!ApplyLocator.isAmbiguousTal(info, parentEdge.sourceNode,
+											disambiguationTarget.targetLoc, disambiguationTarget.targetNode))) {
+						++numPotentialRemovals;
+						if (parentEdge.targetNode.getRawSpan(info).isMeaningful()) {
+							disambiguationTarget = parentEdge;
+						}
+					} else {
+						break;
+					}
+				}
+				if (numPotentialRemovals == 0) {
+
+					--trimPos;
+					continue;
+				}
+				final NodeEdge top = res.get(trimPos + 1 - numPotentialRemovals);
+				final NodeEdge edge = res.get(trimPos);
+
+				res.set(trimPos,
+						new NodeEdge.TypeAtLocEdge(top.sourceNode, top.sourceLoc, edge.targetNode, edge.targetLoc));
+				for (int i = 1; i < numPotentialRemovals; i++) {
+					res.remove(trimPos - i);
+				}
+				trimPos -= numPotentialRemovals;
+
+			}
+		}
 
 		return new Locator(res);
 	}
@@ -167,6 +192,10 @@ public class CreateLocator {
 				// TODO rewrite to handle "special case" that parent is the root of the AST,
 				// because in that case the "while (parentPos < out.size)" never hits.
 
+				if (useFastTrimAlgorithm) {
+					return;
+				}
+				AstNode safeIgnoreNode = astNode;
 				if (target.loc.isMeaningful()) {
 					// We might be able to replace the ChildIndex edge with a TypeAtLoc.
 					// It depends on the nodes that come before us.
@@ -175,24 +204,25 @@ public class CreateLocator {
 						if (parentEdge.type == NodeEdgeType.NTA) {
 							final NodeEdge candidateTal = new NodeEdge.TypeAtLocEdge(parentEdge.targetNode,
 									parentEdge.targetLoc, astNode, target);
-							if (ApplyLocator.isAmbiguousStep(info, parentEdge.targetNode, candidateTal.toJson())) {
+							if (ApplyLocator.isAmbiguousTal(info, parentEdge.targetNode, target, safeIgnoreNode)) {
 								break;
 							}
 							// Non-ambiguous! Previous step is still necessary, but we can replace our own
 							// with a TAL
 							out.set(parentPos - 1, candidateTal);
-							break;
+							return;
 						} else {
 
 							final NodeEdge candidateTal = new NodeEdge.TypeAtLocEdge(parentEdge.sourceNode,
 									parentEdge.sourceLoc, astNode, target);
-							if (ApplyLocator.isAmbiguousStep(info, parentEdge.sourceNode, candidateTal.toJson())) {
+							if (ApplyLocator.isAmbiguousTal(info, parentEdge.sourceNode, target, safeIgnoreNode)) {
 								break;
 							}
 							// Non-ambiguous! Previous step is not necessary, and our step can be replaced
 							// with a TAL
 							out.set(parentPos - 1, candidateTal);
 							out.remove(parentPos);
+							safeIgnoreNode = parentEdge.sourceNode;
 						}
 					}
 
@@ -200,7 +230,7 @@ public class CreateLocator {
 					if (parentPos == out.size()) {
 						final NodeEdge candidateTal = new NodeEdge.TypeAtLocEdge(info.ast,
 								TypeAtLoc.from(info, info.ast), astNode, target);
-						if (!ApplyLocator.isAmbiguousStep(info, info.ast, candidateTal.toJson())) {
+						if (!ApplyLocator.isAmbiguousTal(info, info.ast, target, safeIgnoreNode)) {
 							out.set(parentPos - 1, candidateTal);
 						}
 					}

@@ -8,9 +8,15 @@
 
 #root {
   display: grid;
-  min-height: 95vh;
+  min-height: 96vh;
+  height: 96vh;
+  max-height: 96vh;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: 2.5rem 1fr;
+  grid-template-rows: 1.5rem 1fr;
+}
+
+.input-Monaco {
+  overflow: auto;
 }
 
 .input-Ace .feedback-highlight {
