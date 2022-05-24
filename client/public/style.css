@@ -5,15 +5,43 @@
   background: cyan !important;
 }
 
-
 #root {
   display: grid;
   min-height: 96vh;
   height: 96vh;
   max-height: 96vh;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 3fr 1fr;
   grid-template-rows: 1.5rem 1fr;
+
 }
+html {overflow: hidden;}
+
+
+body.fullscreen #input-header,
+body.fullscreen #settings-header,
+body.fullscreen #control-panel,
+body.hideModals .modalWindow {
+  display: none;
+}
+
+/* body.fullscreen .modalWindow {
+  display: none;
+} */
+
+
+body.fullscreen #root {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  /* display: inline;
+  width: 99vw;
+  height: 99vh; */
+  /* width: fit-content; */
+  /* height: fit-content; */
+}
+
+/* body.fullscreen #control-panel {
+  min-width: 0rem;;
+} */
 
 .input-Monaco {
   overflow: auto;
@@ -58,7 +86,6 @@ body[data-theme-light="true"] {
 
 #control-panel {
   min-width: 20vw;
-  /* width: 20vw; */
   padding: 0.5rem 0.25rem;
   background: #444;
   color: white;
@@ -67,6 +94,7 @@ body[data-theme-light="true"] {
 #control-panel label {
   user-select: none;
 }
+
 a {
   color: cyan;
 }

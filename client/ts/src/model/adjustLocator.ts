@@ -1,7 +1,6 @@
 import adjustTypeAtLoc from "./adjustTypeAtLoc";
 
 const adjustLocator = (adj: LocationAdjuster, loc: NodeLocator) => {
-  // adjustTypeAtLoc(adj, loc.root);
   adjustTypeAtLoc(adj, loc.result);
 
   const adjustStep = (step: NodeLocatorStep) => {
@@ -25,8 +24,6 @@ const adjustLocator = (adj: LocationAdjuster, loc: NodeLocator) => {
     }
   };
   loc.steps.forEach(adjustStep);
-
-  // TODO when attributes are resolved, make sure to send refreshed locators back not only for root node, but also for the arg steps.
 };
 
 export default adjustLocator;

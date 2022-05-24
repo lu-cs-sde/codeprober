@@ -58,6 +58,13 @@
       // This happens "automatically" when put into the <head> natively
       // When loading dynamically like this, we need this sequential code to make it work.
       loadScriptsSequentially(0);
+
+      if (window.location.search.includes('fullscreen=true')) {
+        document.body.classList.add('fullscreen');
+      }
+      if (window.location.search.includes('hideModals=true')) {
+        document.body.classList.add('hideModals');
+      }
     }
   </script>
 

@@ -131,7 +131,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
         }
         headAttr.onmousedown = (e) => { e.stopPropagation(); }
         headAttr.onclick = (e) => {
-          if (env.duplicateOnAttr()) {
+          if (env.duplicateOnAttr() != e.shiftKey) {
             displayAttributeModal(env, null, JSON.parse(JSON.stringify(locator)));
           } else {
             queryWindow.remove();
@@ -187,7 +187,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
   const queryWindow = showModal({
     pos: modalPos,
     rootStyle: `
-      min-width: 20rem;
+      min-width: 16rem;
       min-height: fit-content;
     `,
     resizable: true,

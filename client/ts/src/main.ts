@@ -24,11 +24,9 @@ const main = () => {
   let rpcQuerySocket: any = null;
   let pastaMode = false;
   const rpcHandlers: { [id: string]: HandlerFn } = {};
+  let rpcIdGenerator = 1;
   const performRpcQuery = (props: { [key: string]: any }) => new Promise(async (res, rej) => {
-
-    // await new Promise(w => setTimeout(w, 2000)); // Debug slow connection
-
-    let rpcIdGenerator = 1;
+    // console.log('send RPC query:', props);
     const posRecoverySelect = document.getElementById('control-position-recovery-strategy') as HTMLSelectElement;
         const id = rpcIdGenerator++; //  Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
         rpcQuerySocket.send(JSON.stringify({
@@ -42,6 +40,7 @@ const main = () => {
 
         const cleanup = () => delete rpcHandlers[id];
         rpcHandlers[id] = ({ error, result }) => {
+          // console.log('rpc response:', { error, result });
           cleanup();
           if (error) {
             console.warn('RPC request failed', error);
@@ -318,7 +317,7 @@ const main = () => {
     handlers['init-pasta'] = () => {
       pastaMode = true;
       delete window.DoAutoComplete;
-      rootElem.style.gridTemplateColumns = '3fr 1fr';
+      // rootElem.style.gridTemplateColumns = '3fr 1fr';
       // handlers.init({ value: '// Hello World!\n\nint main() {\n  print(123);\n  print(456);\n}\n', parser: 'beaver', version: 1 });
       handlers.init({ value: settings.getEditorContents() ?? '// Hello World!\n\class Foo {\n  static void main(String[] args) {\n    System.out.println("Hello World!");\n  }\n}\n', parser: 'beaver', version: 1 });
     };

@@ -475,7 +475,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
         const popup = (0, showWindow_2.default)({
             pos: modalPos,
             rootStyle: `
-      min-width: 20rem;
+      min-width: 16rem;
       min-height: 4rem;
     `,
             render: (root) => {
@@ -741,7 +741,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
             rootStyle: `
       min-width: 16rem;
       min-height: 8rem;
-      max-height: 32rem;
+      80vh;
     `,
             render: (root, cancelToken) => {
                 while (root.firstChild)
@@ -987,7 +987,6 @@ define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], f
     Object.defineProperty(exports, "__esModule", { value: true });
     adjustTypeAtLoc_1 = __importDefault(adjustTypeAtLoc_1);
     const adjustLocator = (adj, loc) => {
-        // adjustTypeAtLoc(adj, loc.root);
         (0, adjustTypeAtLoc_1.default)(adj, loc.result);
         const adjustStep = (step) => {
             switch (step.type) {
@@ -1010,7 +1009,6 @@ define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], f
             }
         };
         loc.steps.forEach(adjustStep);
-        // TODO when attributes are resolved, make sure to send refreshed locators back not only for root node, but also for the arg steps.
     };
     exports.default = adjustLocator;
 });
@@ -1491,7 +1489,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     }
                     headAttr.onmousedown = (e) => { e.stopPropagation(); };
                     headAttr.onclick = (e) => {
-                        if (env.duplicateOnAttr()) {
+                        if (env.duplicateOnAttr() != e.shiftKey) {
                             (0, displayAttributeModal_2.default)(env, null, JSON.parse(JSON.stringify(locator)));
                         }
                         else {
@@ -1543,7 +1541,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         const queryWindow = (0, showWindow_5.default)({
             pos: modalPos,
             rootStyle: `
-      min-width: 20rem;
+      min-width: 16rem;
       min-height: fit-content;
     `,
             resizable: true,
@@ -1803,7 +1801,6 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
             rootStyle: `
         min-width: 12rem;
         min-height: 4rem;
-        max-height: 32rem;
       `,
             render: (root, cancelToken) => {
                 while (root.firstChild) {
@@ -2016,14 +2013,15 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
                     alreadyGeneratedIds.add(newId);
                     return `${prefix}${newId}`;
                 };
+                const pickRandom = (...options) => options[Math.floor(Math.random() * options.length)];
                 return [
                     // ...[...Array(cycles)].map(() => `${['interface', 'abstract class', 'enum'][Math.floor(Math.random() * 3)]} ${genId('Other')} { /* Empty */ }`),
                     `class ${genId('Benchmark')} {`,
                     ...[...Array(cycles)].map(() => [
-                        `  ${['interface', 'abstract class', 'enum'][Math.floor(Math.random() * 3)]} ${genId('Other')} { /* Empty */ }`,
+                        `  ${pickRandom('interface', 'abstract class', 'enum')} ${genId('Other')} { /* Empty */ }`,
                         `  static void ${genId('f')}(String[] ${genId('arg')}, ${Math.random() > 0.5 ? 'int' : 'byte'} ${genId('arg')}) {`,
                         `    final long local = System.currentTimeMillis() % ${genId('')}L;`,
-                        `    if (local > ${genId('')}L) { System.out.println(local); }`,
+                        `    if (local ${pickRandom('<', '>', '==', '!=', '>=', '<=')} ${genId('')}L) { System.out.println(local); }`,
                         `    else { System.out.println(${genId('')}); }`,
                         `  }`,
                     ].join('\n')),
@@ -2190,7 +2188,7 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
                                 collector.reset();
                             }
                         });
-                        const measurementBtn = addButton('Run measurements', (btn) => {
+                        const measurementBtn = addButton('Run benchmark', (btn) => {
                             btn.disabled = true;
                             collector.reset();
                             clearInterval(simulateTimer);
@@ -2199,17 +2197,20 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
                             const triggerChange = () => {
                                 setEditorContentsAndUpdateProbes(tests.find(({ title }) => title === activeTest).contents());
                             };
+                            let prevChangeCounter = collector.getNumberOfMeasurements();
                             triggerChange();
                             simulateTimer = setInterval(() => {
-                                if (anyModalIsLoading()) {
+                                const newChangeCounter = collector.getNumberOfMeasurements();
+                                if (anyModalIsLoading() || newChangeCounter == prevChangeCounter) {
                                     return;
                                 }
+                                prevChangeCounter = newChangeCounter;
                                 // const newMeasurements = collector.getNumberOfMeasurements();
                                 // if (newMeasurements === expectMeasurements) {
                                 //   return;
                                 // }
                                 // expectMeasurements = newMeasurements;
-                                if (collector.getNumberOfMeasurements() >= 10000) {
+                                if (newChangeCounter >= 10000) {
                                     stopSimulation();
                                 }
                                 else {
@@ -2237,7 +2238,7 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
                         activeTest = testSuiteSelector.value;
                     };
                     const testSuiteLabel = document.createElement('label');
-                    testSuiteLabel.innerText = 'Test type';
+                    testSuiteLabel.innerText = 'Benchmark type';
                     testSuiteHolder.setAttribute('for', 'test-type-selector');
                     testSuiteHolder.appendChild(testSuiteLabel);
                     root.appendChild(testSuiteHolder);
@@ -2295,9 +2296,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         let rpcQuerySocket = null;
         let pastaMode = false;
         const rpcHandlers = {};
+        let rpcIdGenerator = 1;
         const performRpcQuery = (props) => new Promise(async (res, rej) => {
-            // await new Promise(w => setTimeout(w, 2000)); // Debug slow connection
-            let rpcIdGenerator = 1;
+            // console.log('send RPC query:', props);
             const posRecoverySelect = document.getElementById('control-position-recovery-strategy');
             const id = rpcIdGenerator++; //  Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
             rpcQuerySocket.send(JSON.stringify({
@@ -2310,6 +2311,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             }));
             const cleanup = () => delete rpcHandlers[id];
             rpcHandlers[id] = ({ error, result }) => {
+                // console.log('rpc response:', { error, result });
                 cleanup();
                 if (error) {
                     console.warn('RPC request failed', error);
@@ -2552,7 +2554,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 var _a;
                 pastaMode = true;
                 delete window.DoAutoComplete;
-                rootElem.style.gridTemplateColumns = '3fr 1fr';
+                // rootElem.style.gridTemplateColumns = '3fr 1fr';
                 // handlers.init({ value: '// Hello World!\n\nint main() {\n  print(123);\n  print(456);\n}\n', parser: 'beaver', version: 1 });
                 handlers.init({ value: (_a = settings_1.default.getEditorContents()) !== null && _a !== void 0 ? _a : '// Hello World!\n\class Foo {\n  static void main(String[] args) {\n    System.out.println("Hello World!");\n  }\n}\n', parser: 'beaver', version: 1 });
             };

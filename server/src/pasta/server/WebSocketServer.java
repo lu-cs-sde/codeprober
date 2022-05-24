@@ -205,7 +205,7 @@ public class WebSocketServer {
 						}
 //						System.out.println(Arrays.toString(reqData));
 						final JSONObject jobj = new JSONObject(new String(reqData, StandardCharsets.UTF_8));
-//						System.out.println("json: " + jobj.toString(2));
+						System.out.println("json: " + jobj.toString(2));
 
 						writeWsMessage(out, onQuery.apply(jobj));
 						System.out.println("onQuery response finished writing");
@@ -231,7 +231,7 @@ public class WebSocketServer {
 				}
 			}
 		}
-		System.out.println("Not a get request.. ?" + data);
+		System.out.println("Not a get request.. ? From " + socket.getRemoteSocketAddress() +" :: " + data);
 	}
 
 	public static void start(List<Runnable> onJarChangeListeners, Function<JSONObject, String> onQuery) {

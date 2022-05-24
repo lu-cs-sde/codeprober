@@ -40,14 +40,15 @@ const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButt
         alreadyGeneratedIds.add(newId);
         return `${prefix}${newId}`;
       };
+      const pickRandom = (...options: string[]) => options[Math.floor(Math.random() * options.length)];
       return [
         // ...[...Array(cycles)].map(() => `${['interface', 'abstract class', 'enum'][Math.floor(Math.random() * 3)]} ${genId('Other')} { /* Empty */ }`),
         `class ${genId('Benchmark')} {`,
         ...[...Array(cycles)].map(() => [
-          `  ${['interface', 'abstract class', 'enum'][Math.floor(Math.random() * 3)]} ${genId('Other')} { /* Empty */ }`,
+          `  ${pickRandom('interface', 'abstract class', 'enum')} ${genId('Other')} { /* Empty */ }`,
           `  static void ${genId('f')}(String[] ${genId('arg')}, ${Math.random() > 0.5 ? 'int' : 'byte'} ${genId('arg')}) {`,
           `    final long local = System.currentTimeMillis() % ${genId('')}L;`,
-          `    if (local > ${genId('')}L) { System.out.println(local); }`,
+          `    if (local ${pickRandom('<', '>', '==', '!=', '>=', '<=')} ${genId('')}L) { System.out.println(local); }`,
           `    else { System.out.println(${genId('')}); }`,
           `  }`,
         ].join('\n')),
@@ -242,7 +243,7 @@ const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButt
               collector.reset();
             }
           });
-          const measurementBtn = addButton('Run measurements', (btn) => {
+          const measurementBtn = addButton('Run benchmark', (btn) => {
             btn.disabled = true;
             collector.reset();
             clearInterval(simulateTimer);
@@ -253,17 +254,20 @@ const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButt
             const triggerChange = () => {
               setEditorContentsAndUpdateProbes(tests.find(({ title }) => title === activeTest)!.contents());
             };
+            let prevChangeCounter = collector.getNumberOfMeasurements();
             triggerChange();
             simulateTimer = setInterval(() => {
-              if (anyModalIsLoading()) {
+              const newChangeCounter = collector.getNumberOfMeasurements();
+              if (anyModalIsLoading() || newChangeCounter == prevChangeCounter) {
                 return;
               }
+              prevChangeCounter = newChangeCounter;
               // const newMeasurements = collector.getNumberOfMeasurements();
               // if (newMeasurements === expectMeasurements) {
               //   return;
               // }
               // expectMeasurements = newMeasurements;
-              if (collector.getNumberOfMeasurements() >= 10_000) {
+              if (newChangeCounter >= 10_000) {
                 stopSimulation();
               } else {
                 triggerChange();
@@ -295,7 +299,7 @@ const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButt
         }
 
         const testSuiteLabel = document.createElement('label');
-        testSuiteLabel.innerText = 'Test type';
+        testSuiteLabel.innerText = 'Benchmark type';
         testSuiteHolder.setAttribute('for', 'test-type-selector');
         testSuiteHolder.appendChild(testSuiteLabel);
 

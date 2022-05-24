@@ -15,7 +15,7 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
     rootStyle: `
       min-width: 16rem;
       min-height: 8rem;
-      max-height: 32rem;
+      80vh;
     `,
     render: (root, cancelToken) => {
       while (root.firstChild) root.firstChild.remove();

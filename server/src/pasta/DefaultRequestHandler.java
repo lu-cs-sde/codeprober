@@ -218,8 +218,9 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		try {
 			errors = StdIoInterceptor.performCaptured(MagicStdoutMessageParser::parse, () -> {
 				final String[] astArgs = new String[1 + forwardArgs.length];
-				astArgs[0] = tmp.getAbsolutePath();
-				System.arraycopy(forwardArgs, 0, astArgs, 1, forwardArgs.length);
+//				astArgs[0] = tmp.getAbsolutePath();
+				System.arraycopy(forwardArgs, 0, astArgs, 0, forwardArgs.length);
+				astArgs[forwardArgs.length] = tmp.getAbsolutePath();
 				System.out.println("fwd args: " + Arrays.toString(astArgs));
 
 				final long parseStart = System.nanoTime();

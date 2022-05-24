@@ -11,9 +11,10 @@ import pasta.server.WebServer;
 import pasta.server.WebSocketServer;
 import pasta.util.FileMonitor;
 
-//	/Users/anton/repo/extendj/java8/extendj.jar
+//	/Users/anton/repo/extendj/java8/extendj.jar -XparseOnly
 //	/Users/anton/repo/lth/edan65/A6-SimpliC/compiler.jar
 //  /Users/anton/repo/jastadd-fj/fj-compiler.jar
+//  /Users/anton/repo/chocopy-ellen-samer/compiler.jar
 
 public class PastaServer {
 

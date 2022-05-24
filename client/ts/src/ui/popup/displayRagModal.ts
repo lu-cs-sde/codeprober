@@ -17,7 +17,6 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
     rootStyle: `
         min-width: 12rem;
         min-height: 4rem;
-        max-height: 32rem;
       `,
     render: (root, cancelToken) => {
       while (root.firstChild) {

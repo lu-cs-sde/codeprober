@@ -71,7 +71,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
   const popup = showModal({
     pos: modalPos,
     rootStyle: `
-      min-width: 20rem;
+      min-width: 16rem;
       min-height: 4rem;
     `,
     render: (root) => {
