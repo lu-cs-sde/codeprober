@@ -1,7 +1,7 @@
 import createModalTitle from "../create/createModalTitle";
 import showWindow from "../create/showWindow";
 
-type HelpType = 'general' | 'recovery-strategy' | 'probe-window' | 'magic-stdout-messages';
+type HelpType = 'general' | 'recovery-strategy' | 'probe-window' | 'magic-stdout-messages' | 'ast-cache-strategy';
 
 const createSyntaxNode = (type: string, text: string, margins?: string) => {
   const retNode = document.createElement('span');
@@ -19,6 +19,7 @@ const getHelpTitle = (type: HelpType) => ({
   'recovery-strategy': 'Position recovery',
   'probe-window': 'Probe help',
   'magic-stdout-messages': 'Magic stdout messages',
+  'ast-cache-strategy': 'AST caching'
 })[type];
 
 const getHelpContents = (type: HelpType) => {
@@ -136,12 +137,12 @@ encode(value):
       settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
       settingsExplanation.style.gridColumnGap = '0.5rem';
       [
-        [`Fail', 'don\'t try to recover information`],
-        [`Parent', 'search recursively upwards through parent nodes, using the equivalent of 'node.getParent()'`],
-        [`Child', 'search recursively downwards through child nodes, using the equivalent of 'node.getChild(0)'`],
-        [`Parent->Child', 'Try 'Parent'. If no position is found, try 'Child'.`],
-        [`Child->Parent', 'Try 'Child'. If no position is found, try 'Parent'.`],
-        [`Zigzag', 'Similar to 'Parent->Child', but only search one step in one direction, then try the other direction, then another step in the first direction, etc. Initially searches one step upwards.`],
+        [`Fail`, `don\'t try to recover information`],
+        [`Parent`, `search recursively upwards through parent nodes, using the equivalent of 'node.getParent()'`],
+        [`Child`, `search recursively downwards through child nodes, using the equivalent of 'node.getChild(0)'`],
+        [`Parent->Child`, `Try 'Parent'. If no position is found, try 'Child'.`],
+        [`Child->Parent`, `Try 'Child'. If no position is found, try 'Parent'.`],
+        [`Zigzag`, `Similar to 'Parent->Child', but only search one step in one direction, then try the other direction, then another step in the first direction, etc. Initially searches one step upwards.`],
       ].forEach(([head, tail]) => {
         const headNode = document.createElement('span');
         headNode.style.textAlign = 'right';
@@ -290,6 +291,48 @@ aspect MagicOutputDemo {
           copyButton,
           `Once you have the code in an aspect and have recompiled, open a probe for the attribute 'drawBlueSquigglys' to see all instances of 'MyNodeType' have blue lines under them.`,
           'Note that the squiggly lines (and all other arrows/lines) only remain as long as their related probe window remains open.'
+        ];
+      }
+
+      case "ast-cache-strategy": {
+        const settingsExplanation = document.createElement('div');
+        settingsExplanation.style.display = 'grid';
+        settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
+        settingsExplanation.style.gridColumnGap = '0.5rem';
+        [
+          [`Full`, `Cache everything`],
+          [`Partial`, `Cache the AST, but call 'flushTreeCache' on the root before evaluating any probe. This ensures that cached attributes are invoked for every probe.`],
+          [`None`, `Don't cache the AST.`],
+          [`Purge`, `Don't cache the AST or even the underlying jar file, fully reload from the file system each time. This resets all global state, but kills the JVMs ability to optimize your code. This is terrible for performance.`],
+        ].forEach(([head, tail]) => {
+          const headNode = document.createElement('span');
+          headNode.style.textAlign = 'right';
+          headNode.classList.add('syntax-attr');
+          headNode.innerText = head;
+          settingsExplanation.appendChild(headNode);
+
+          settingsExplanation.appendChild(document.createTextNode('-'));
+
+          const tailNode = document.createElement('span');
+          tailNode.innerText = tail;
+          settingsExplanation.appendChild(tailNode);
+        })
+
+
+        return [
+          `When multiple probes are active, the same editor state will be evaluated multiple times (once for each probe).`,
+          `When this happens, we can re-use the AST multiple to avoid unnecessary re-parses. There are however reasons that you might not want to re-use the AST, or at least not fully.`,
+          '',
+          `While it is technically bad practice, you can use "printf-style" debugging in your attributes (System.out.println(..)).`,
+          `Cached attributes will only output such printf-messages once. With multiple active probes, this makes it uncertain which probe will capture the message.`,
+          `Even worse, if you have any form of mutable state in your AST (please don't!), then reusing an AST can cause unpredictable behavior when parsing.`,
+          `There are a few strategies you can use:`,
+          '',
+          settingsExplanation,
+          '',
+          `Performance is best with 'Full', and worst with 'Purge'.`,
+          `"Debuggability" is best with 'Purge', and worst with 'Full'.`,
+          `If you are unsure of what to use, 'Partial' is usually a pretty good option.`,
         ];
       }
   }

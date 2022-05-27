@@ -54,7 +54,7 @@ public class CreateLocator {
 				System.out.println("Failed to extract locator for " + astNode);
 				e.printStackTrace();
 				return null;
-				
+
 			}
 
 //		final JSONObject robustRoot = new JSONObject();
@@ -109,6 +109,8 @@ public class CreateLocator {
 		Collections.reverse(res);
 
 		if (useFastTrimAlgorithm) {
+			// TODO make this only happen when encoding the main locator of a probe
+			// When building locators for output bodies, TaL is not really necessary.
 			int trimPos = res.size() - 1;
 			while (trimPos >= 0) {
 				int numPotentialRemovals = 0;
@@ -242,32 +244,34 @@ public class CreateLocator {
 			}
 			++childIdxCounter;
 		}
-		for (Method m : parent.underlyingAstNode.getClass().getMethods()) {
-//			if (!m.getName().equals("unknownDecl")) {
-//				// Hack for development, REMOVEME
+		if (extractNtaEdge(info, astNode, out, target, parent)) {
+			return;
+		}
+//		for (Method m : parent.underlyingAstNode.getClass().getMethods()) {
+////			if (!m.getName().equals("unknownDecl")) {
+////				// Hack for development, REMOVEME
+////				continue;
+////			}
+//			if (!isNta(m)) {
 //				continue;
 //			}
-			if (!isNta(m)) {
-				continue;
-			}
-
-			// What if the NTA is a List? Like Program.predefinedFunctions()
-			// What if the NTA takes 1 parameter?
-			// What if >= 2 parameters?
-			if (m.getParameterCount() == 0) {
-				final Field field = m.getDeclaringClass().getDeclaredField(m.getName() + "_value");
-				field.setAccessible(true);
-				final Object cachedNtaValue = field.get(parent.underlyingAstNode);
-				// Intentional identity comparison
-				if (cachedNtaValue == astNode.underlyingAstNode) {
-					out.add(new NodeEdge.ParameterizedNtaEdge(parent, source, astNode, target, m.getName(),
-							Collections.emptyList()));
-					extractStepsTo(info, parent, out);
-
-					return;
-				}
-			}
-		}
+//
+//			// What if the NTA is a List? Like Program.predefinedFunctions()
+//			// What if the NTA takes 1 parameter?
+//			// What if >= 2 parameters?
+//			if (m.getParameterCount() == 0) {
+//				final Field field = m.getDeclaringClass().getDeclaredField(m.getName() + "_value");
+//				field.setAccessible(true);
+//				final Object cachedNtaValue = field.get(parent.underlyingAstNode);
+//				// Intentional identity comparison
+//				if (cachedNtaValue == astNode.underlyingAstNode) {
+//					out.add(new NodeEdge.ParameterizedNtaEdge(parent, source, astNode, target, m.getName(),
+//							Collections.emptyList()));
+//					extractStepsTo(info, parent, out);
+//					return;
+//				}
+//			}
+//		}
 
 		if (parent.getNumChildren() == 0) {
 			// Strange proxy node that appears in NTA+param cases
@@ -275,95 +279,13 @@ public class CreateLocator {
 			// In this case, 'parent' is the proxy. We want the grandparent instead
 			final AstNode realParent = parent.parent();
 			if (realParent != null) {
-				for (Method m : realParent.underlyingAstNode.getClass().getMethods()) {
-					if (!isNta(m)) {
-						continue;
-					}
-					if (m.getParameterCount() == 0) {
-						continue;
-					}
-					Field f;
-					String guessedCacheName = m.getName();
-					final Type[] genParams = m.getGenericParameterTypes();
-					for (Type t : genParams) {
-						guessedCacheName += "_" + convTypeNameToSignature(extractSimpleNames(t));
-					}
-					guessedCacheName += "_values";
-
-					try {
-						f = m.getDeclaringClass().getDeclaredField(guessedCacheName);
-					} catch (NoSuchFieldException e) {
-						System.out.println(
-								"Failed to guess values field name for " + m + ", thought it was " + guessedCacheName);
-
-						System.out.println("reguess: " + guessedCacheName);
-						System.out.println("gens: " + Arrays.toString(genParams));
-						e.printStackTrace();
-						continue;
-					}
-					f.setAccessible(true);
-					@SuppressWarnings("unchecked")
-					final Map<Object, Object> cache = (Map<Object, Object>) f.get(realParent.underlyingAstNode);
-					if (cache == null) {
-						continue;
-					}
-
-					final Parameter[] mParams = m.getParameters();
-					checkCacheEntries: for (Entry<Object, Object> ent : cache.entrySet()) {
-						if (ent.getValue() == astNode.underlyingAstNode) {
-							final Object param = ent.getKey();
-
-							final List<ParameterValue> serializableParams = new ArrayList<>();
-							if (mParams.length > 1) {
-								if (!(param instanceof List<?>)) {
-									System.out.println("Method " + m.getName() + " has " + mParams.length
-											+ " params, but cache key isn't a list? It is: " + param);
-									continue checkCacheEntries;
-								}
-								final List<?> argList = (List<?>) param;
-								int paramIdx = 0;
-								for (Object v : argList) {
-									final ParameterValue decoded = CreateValue.fromInstance(info,
-											mParams[paramIdx].getType(), genParams[paramIdx], v);
-									++paramIdx;
-									if (decoded == null) {
-										System.out.println("Unknown parameter at index " + (paramIdx - 1) + ":" + v);
-										continue checkCacheEntries;
-									}
-									serializableParams.add(decoded);
-								}
-							} else {
-								final ParameterValue decoded = CreateValue.fromInstance(info, mParams[0].getType(),
-										genParams[0], param);
-								if (decoded == null) {
-									System.out.println("Unknown parameter " + param + ", class name: "
-											+ param.getClass().getName());
-									continue checkCacheEntries;
-								}
-								serializableParams.add(decoded);
-							}
-//							final SerializableParameterType serializable = SerializableParameterType
-//									.decode(param.getClass(), baseAstClazz);
-							final TypeAtLoc realSource = TypeAtLoc.from(info, realParent);
-							out.add(new NodeEdge.ParameterizedNtaEdge(realParent, realSource, astNode, target,
-									m.getName(), serializableParams));
-							extractStepsTo(info, realParent, out);
-							return;
-
-//							if (serializable != null) {
-//								return;
-//							} else {
-//								System.out.println("Found parameterized NTA edge from " + m.getName()
-//										+ ", but it takes param '" + param + "' (type=" + param.getClass()
-//										+ "), not sure how to encode it");
-//							}
-
-						}
-					}
+				if (extractNtaEdge(info, astNode, out, target, realParent)) {
+					return;
 				}
 			}
 		}
 
+		out.add(null);
 		System.out.println("Unknown edge " + parent + " -->" + astNode);
 		System.out.println("other way: " + source + " --> " + target);
 		System.out.println("Parent pretty : " + Reflect.invoke0(parent.underlyingAstNode, "prettyPrint"));
@@ -377,11 +299,158 @@ public class CreateLocator {
 			search = search.parent();
 			System.out.println("Grandparent.. " + search);
 		}
-		out.add(null);
 //		addEdge.accept("UNKNOWN EDGE");
 //		if (parent != null) {
 //			extractStepsTo(parent, out);
 //		}
+	}
+
+	private static boolean extractNtaEdge(AstInfo info, AstNode astNode, List<NodeEdge> out, final TypeAtLoc target,
+			final AstNode parent)
+			throws IllegalAccessException, NoSuchFieldException, NoSuchMethodException, InvocationTargetException {
+		for (Method m : parent.underlyingAstNode.getClass().getMethods()) {
+			if (!isNta(m)) {
+				continue;
+			}
+			Field f;
+			String guessedCacheName = m.getName();
+			final Type[] genParams = m.getGenericParameterTypes();
+			for (Type t : genParams) {
+				guessedCacheName += "_" + convTypeNameToSignature(extractSimpleNames(t));
+			}
+			final String guessedProxyName = guessedCacheName + "_proxy";
+			final boolean expectSingleValueCache = m.getParameterCount() == 0;
+			if (expectSingleValueCache) {
+				guessedCacheName += "_value";
+			} else {
+				guessedCacheName += "_values";
+			}
+
+			boolean isTheProxyNode = false;
+			if (!expectSingleValueCache) {
+				try {
+					Field proxy = m.getDeclaringClass().getDeclaredField(guessedProxyName);
+					proxy.setAccessible(true);
+					if (proxy.get(parent.underlyingAstNode) == astNode.underlyingAstNode) {
+						/**
+						 * Oh dear. We are in the following situation:
+						 * 
+						 * <pre>
+						 * 		 Parent
+						 * 			|`- - - .
+						 * 			V       V 
+						 * 		  Proxy   (NTA)
+						 * 			|       /
+						 * 			| - - -´ 
+						 * 			V
+						 * 		   Child
+						 * </pre>
+						 * 
+						 * "astNode" is the Proxy.
+						 * 
+						 * Normally people go from Parent to Child through the NTA. The Proxy is just
+						 * some sort of implementation detail that isn't really supposed to be
+						 * interacted with. But if you do Child.getParent(), you'll get it.
+						 * 
+						 * We can construct a locator to it by finding a child in the NTA cache (any
+						 * child will do) and getting parent from it.
+						 */
+//						isTheProxyNode = true;
+						System.out.println("test");
+					}
+				} catch (NoSuchFieldException e) {
+					System.out.println(
+							"Failed to guess values proxy name for " + m + ", thought it was " + guessedProxyName);
+					e.printStackTrace();
+				}
+			}
+
+			try {
+				f = m.getDeclaringClass().getDeclaredField(guessedCacheName);
+			} catch (NoSuchFieldException e) {
+				System.out
+						.println("Failed to guess values field name for " + m + ", thought it was " + guessedCacheName);
+
+				System.out.println("reguess: " + guessedCacheName);
+				System.out.println("gens: " + Arrays.toString(genParams));
+				e.printStackTrace();
+				continue;
+			}
+			f.setAccessible(true);
+
+			if (expectSingleValueCache) {
+				final Object cachedNtaValue = f.get(parent.underlyingAstNode);
+				// Intentional identity comparison
+				if (cachedNtaValue != astNode.underlyingAstNode) {
+					continue;
+				}
+				out.add(new NodeEdge.ParameterizedNtaEdge(parent, TypeAtLoc.from(info, astNode), astNode, target,
+						m.getName(), Collections.emptyList()));
+				extractStepsTo(info, parent, out);
+				return true;
+			}
+//			if (m.getpar)
+			@SuppressWarnings("unchecked")
+			final Map<Object, Object> cache = (Map<Object, Object>) f.get(parent.underlyingAstNode);
+			if (cache == null) {
+				continue;
+			}
+
+			final Parameter[] mParams = m.getParameters();
+			checkCacheEntries: for (Entry<Object, Object> ent : cache.entrySet()) {
+				if (isTheProxyNode || ent.getValue() == astNode.underlyingAstNode) {
+					final Object param = ent.getKey();
+
+					final List<ParameterValue> serializableParams = new ArrayList<>();
+					if (mParams.length > 1) {
+						if (!(param instanceof List<?>)) {
+							System.out.println("Method " + m.getName() + " has " + mParams.length
+									+ " params, but cache key isn't a list? It is: " + param);
+							continue checkCacheEntries;
+						}
+						final List<?> argList = (List<?>) param;
+						int paramIdx = 0;
+						for (Object v : argList) {
+							final ParameterValue decoded = CreateValue.fromInstance(info, mParams[paramIdx].getType(),
+									genParams[paramIdx], v);
+							++paramIdx;
+							if (decoded == null) {
+								System.out.println("Unknown parameter at index " + (paramIdx - 1) + ":" + v);
+								continue checkCacheEntries;
+							}
+							serializableParams.add(decoded);
+						}
+					} else {
+						final ParameterValue decoded = CreateValue.fromInstance(info, mParams[0].getType(),
+								genParams[0], param);
+						if (decoded == null) {
+							System.out.println(
+									"Unknown parameter " + param + ", class name: " + param.getClass().getName());
+							continue checkCacheEntries;
+						}
+						serializableParams.add(decoded);
+					}
+					final TypeAtLoc realSource = TypeAtLoc.from(info, parent);
+					if (isTheProxyNode) {
+						// "bounce" off the child node for the proxy-reasons listed above.
+						final AstNode bounceChild = new AstNode(ent.getValue());
+						final TypeAtLoc bounceChildLoc = TypeAtLoc.from(info, bounceChild);
+
+						out.add(new NodeEdge.ParameterizedNtaEdge(bounceChild, bounceChildLoc, astNode, target,
+								"getParent", new ArrayList<>()));
+						out.add(new NodeEdge.ParameterizedNtaEdge(parent, realSource, bounceChild, bounceChildLoc,
+								m.getName(), serializableParams));
+					} else {
+						out.add(new NodeEdge.ParameterizedNtaEdge(parent, realSource, astNode, target, m.getName(),
+								serializableParams));
+					}
+					extractStepsTo(info, parent, out);
+					return true;
+
+				}
+			}
+		}
+		return false;
 	}
 
 	private static String extractSimpleNames(Type type) {

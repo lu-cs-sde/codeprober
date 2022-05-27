@@ -38,18 +38,31 @@ public class ASTProvider {
 		}
 	}
 
+	public static void purgeCache() {
+		if (lastJar != null) {
+			try {
+				lastJar.jar.close();
+			} catch (IOException e) {
+				System.out.println("Error when closing jar file");
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		lastJar = null;
+	}
+	
 	private static LoadedJar lastJar = null;
 
 	private static LoadedJar loadJar(String jarPath)
 			throws ClassNotFoundException, IOException, NoSuchMethodException, SecurityException, NoSuchFieldException {
-		File jarFile = new File(jarPath);
-		final long jarLastMod = jarFile.lastModified();
-		if (lastJar != null && lastJar.jarPath.equals(jarPath) && lastJar.jarLastModified == jarLastMod) {
+		if (hasUnchangedJar(jarPath)) {
 			return lastJar;
 		}
 		if (lastJar != null) {
 			lastJar.jar.close();
 		}
+		final File jarFile = new File(jarPath);
+		final long jarLastMod = jarFile.lastModified();
 		CompilerClassLoader urlClassLoader = new CompilerClassLoader(jarFile.toURI().toURL());
 
 		// Find and instantiate the main class from the Jar file.
@@ -62,6 +75,12 @@ public class ASTProvider {
 
 		lastJar = new LoadedJar(jarPath, jarLastMod, urlClassLoader, klass, jar, mainMethod, rootField);
 		return lastJar;
+	}
+	
+	public static boolean hasUnchangedJar(String jarPath) {
+		File jarFile = new File(jarPath);
+		final long jarLastMod = jarFile.lastModified();
+		return lastJar != null && lastJar.jarPath.equals(jarPath) && lastJar.jarLastModified == jarLastMod;
 	}
 
 	/**

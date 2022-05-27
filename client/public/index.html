@@ -126,6 +126,16 @@
         <label for='control-position-recovery-strategy'>Position recovery strategy</label>
         <button onClick="displayRecoveryStrategyHelp()" id="control-position-recovery-strategy-help" style="border-radius: 50%; ">?</button>
       </div>
+      <div>
+        <select id="ast-cache-strategy">
+          <option value="FULL">Full</option>
+          <option value="PARTIAL">Partial</option>
+          <option value="NONE">None</option>
+          <option value="PURGE">Purge ⚠️</option>
+        </select>
+        <label for='ast-cache-strategy'>AST cache strategy</label>
+        <button onClick="displayAstCacheStrategyHelp()" id="control-ast-cache-strategy-help" style="border-radius: 50%; ">?</button>
+      </div>
       <button id="display-help" onclick="displayGeneralHelp()">Help</button>
       <button id="clear-settings" onclick="clearPastaSettings()">Clear state and reload</button>
       <br>

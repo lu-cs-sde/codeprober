@@ -156,6 +156,7 @@ interface Window {
   displayGeneralHelp: () => void;
   displayProbeStatistics: () => void;
   displayRecoveryStrategyHelp: () => void;
+  displayAstCacheStrategyHelp: () => void;
   maybeAutoInit: () => void;
   init: (editorType: string) => void;
   MiniEditorMain: () => void;

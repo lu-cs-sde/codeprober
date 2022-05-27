@@ -65,8 +65,15 @@ public class EncodeResponseValue {
 						}
 						return;
 					}
-					return;
+				} else {
+					out.put("Couldn't create locator for " + node.underlyingAstNode);
+					out.put("This could indicate a caching issue, where a detached AST node is stored ");
+					out.put("somewhere even after a re-parse or flushTreeCache() is called.");
+					out.put("Try setting the 'AST caching strategy' to 'None' or 'Purge'.");
+					out.put("If that helps, then you have a caching problem somewhere in the AST.");
+					out.put("If that doesn't help, then you may have found a bug. Please report it!");
 				}
+				return;
 			} catch (InvokeProblem e) {
 				System.err.println("Failed creating locator to " + node);
 				e.printStackTrace();

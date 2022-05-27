@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import org.json.JSONArray;
@@ -21,6 +22,7 @@ import pasta.metaprogramming.InvokeProblem;
 import pasta.metaprogramming.PositionRepresentation;
 import pasta.metaprogramming.Reflect;
 import pasta.metaprogramming.StdIoInterceptor;
+import pasta.protocol.AstCacheStrategy;
 import pasta.protocol.ParameterValue;
 import pasta.protocol.PositionRecoveryStrategy;
 import pasta.protocol.create.EncodeResponseValue;
@@ -34,6 +36,9 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 	private final String underlyingCompilerJar;
 	private final String[] forwardArgs;
+
+	private AstInfo lastInfo = null;
+	private String lastParsedInput = null;
 
 	public DefaultRequestHandler(String underlyingJarFile, String[] forwardArgs) {
 		this.underlyingCompilerJar = underlyingJarFile;
@@ -78,11 +83,11 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					"2) [getStartLine, getEndLine, getStartColumn, getEndColumn] should return line / column respectively.");
 			throw new RuntimeException("Exiting due to unknown position representation");
 		}
-		System.out.println("Going to use posRepr: " + positionRepresentation);
 
 		final AstInfo info = new AstInfo(astNode,
 				PositionRecoveryStrategy.fallbackParse(queryObj.getString("posRecovery")), positionRepresentation,
 				loadAstClass);
+		lastInfo = info;
 
 		final JSONObject queryBody = queryObj.getJSONObject("query");
 		final JSONObject locator = queryBody.getJSONObject("locator");
@@ -124,7 +129,12 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				// Respond with new args, just like we respond with a new locator
 				JSONArray updatedArgs = new JSONArray();
 				if (args == null) {
-					value = Reflect.invoke0(match.node.underlyingAstNode, queryAttrName);
+					BenchmarkTimer.EVALUATE_ATTR.enter();
+					try {
+						value = Reflect.invoke0(match.node.underlyingAstNode, queryAttrName);
+					} finally {
+						BenchmarkTimer.EVALUATE_ATTR.exit();
+					}
 				} else {
 					final int numArgs = args.length();
 					final Class<?>[] argTypes = new Class<?>[numArgs];
@@ -142,7 +152,12 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 						argValues[i] = param.getUnpackedValue();
 						updatedArgs.put(param.toJson());
 					}
-					value = Reflect.invokeN(match.node.underlyingAstNode, queryAttrName, argTypes, argValues);
+					BenchmarkTimer.EVALUATE_ATTR.enter();
+					try {
+						value = Reflect.invokeN(match.node.underlyingAstNode, queryAttrName, argTypes, argValues);
+					} finally {
+						BenchmarkTimer.EVALUATE_ATTR.exit();
+					}
 				}
 				EncodeResponseValue.encode(info, bodyBuilder, value, new HashSet<>());
 				retBuilder.put("args", updatedArgs);
@@ -165,20 +180,15 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			}
 		};
 
-		BenchmarkTimer.EVALUATE_ATTR.enter();
-		try {
-			if (captureStdio) {
-				bodyBuilder.putAll(StdIoInterceptor.performCaptured((stdout, line) -> {
-					JSONObject fmt = new JSONObject();
-					fmt.put("type", stdout ? "stdout" : "stderr");
-					fmt.put("value", line);
-					return fmt;
-				}, evaluateAttr));
-			} else {
-				evaluateAttr.run();
-			}
-		} finally {
-			BenchmarkTimer.EVALUATE_ATTR.exit();
+		if (captureStdio) {
+			bodyBuilder.putAll(StdIoInterceptor.performCaptured((stdout, line) -> {
+				JSONObject fmt = new JSONObject();
+				fmt.put("type", stdout ? "stdout" : "stderr");
+				fmt.put("value", line);
+				return fmt;
+			}, evaluateAttr));
+		} else {
+			evaluateAttr.run();
 		}
 	}
 
@@ -188,6 +198,12 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 //		System.out.println("Incoming query: " + queryObj.toString(2));
 		final long requestStart = System.nanoTime();
 
+		final AstCacheStrategy cacheStrategy = AstCacheStrategy.fallbackParse(queryObj.getString("cache"));
+		if (cacheStrategy == AstCacheStrategy.PURGE) {
+			ASTProvider.purgeCache();
+			lastInfo = null;
+		}
+
 		// Root response object
 		final JSONObject retBuilder = new JSONObject();
 
@@ -195,32 +211,61 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		// the user wants to see.
 		// Meta-information goes in the 'root' response object.
 		final JSONArray bodyBuilder = new JSONArray();
-
-		final File tmp;
-		try {
-			tmp = File.createTempFile("pasta-server", ".java");
-		} catch (IOException e) {
-			e.printStackTrace();
-			throw new RuntimeException(e);
-		}
-		try {
-			Files.write(tmp.toPath(), queryObj.getString("text").getBytes(StandardCharsets.UTF_8),
-					StandardOpenOption.CREATE);
-		} catch (IOException e) {
-			System.out.println("Failed while copying source text to disk");
-			e.printStackTrace();
-			throw new RuntimeException(e);
-		}
 		BenchmarkTimer.APPLY_LOCATOR.reset();
 		BenchmarkTimer.CREATE_LOCATOR.reset();
 		BenchmarkTimer.EVALUATE_ATTR.reset();
 		final JSONArray errors;
+
+		final AtomicReference<File> tmp = new AtomicReference<>(null);
 		try {
 			errors = StdIoInterceptor.performCaptured(MagicStdoutMessageParser::parse, () -> {
+				final String inputText = queryObj.getString("text");
+
+				if (cacheStrategy.canCacheAST() //
+						&& lastParsedInput != null //
+						&& lastInfo != null //
+						&& lastParsedInput.equals(inputText) //
+						&& ASTProvider.hasUnchangedJar(underlyingCompilerJar)) {
+					final long flushStart = System.nanoTime();
+					try {
+						if (cacheStrategy == AstCacheStrategy.PARTIAL) {
+							Reflect.invoke0(lastInfo.ast.underlyingAstNode, "flushTreeCache");
+						}
+
+						retBuilder.put("parseTime", (System.nanoTime() - flushStart) / 1_000_000.0);
+//						final boolean parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs, (ast, loadCls) -> {
+						handleParsedAst(lastInfo.ast.underlyingAstNode, lastInfo.loadAstClass, queryObj, retBuilder,
+								bodyBuilder);
+						return;
+					} catch (InvokeProblem ip) {
+						System.out.println("Problem when flushing previous tree");
+						ip.printStackTrace();
+						lastInfo = null;
+					}
+				}
+				lastParsedInput = inputText;
+
+				final File tmpFile;
+				try {
+					tmpFile = File.createTempFile("pasta-server", ".java");
+				} catch (IOException e) {
+					e.printStackTrace();
+					throw new RuntimeException(e);
+				}
+				tmp.set(tmpFile);
+				try {
+					Files.write(tmpFile.toPath(), inputText.getBytes(StandardCharsets.UTF_8),
+							StandardOpenOption.CREATE);
+				} catch (IOException e) {
+					System.out.println("Failed while copying source text to disk");
+					e.printStackTrace();
+					throw new RuntimeException(e);
+				}
+
 				final String[] astArgs = new String[1 + forwardArgs.length];
 //				astArgs[0] = tmp.getAbsolutePath();
 				System.arraycopy(forwardArgs, 0, astArgs, 0, forwardArgs.length);
-				astArgs[forwardArgs.length] = tmp.getAbsolutePath();
+				astArgs[forwardArgs.length] = tmpFile.getAbsolutePath();
 				System.out.println("fwd args: " + Arrays.toString(astArgs));
 
 				final long parseStart = System.nanoTime();
@@ -236,7 +281,10 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				}
 			});
 		} finally {
-			tmp.delete();
+			final File tmpFile = tmp.get();
+			if (tmpFile != null) {
+				tmpFile.delete();
+			}
 		}
 
 		// Somehow extract syntax errors from stdout?

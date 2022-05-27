@@ -6,6 +6,7 @@ interface Settings {
   captureStdio?: boolean;
   duplicateProbeOnAttrClick?: boolean;
   positionRecoveryStrategy?: string;
+  astCacheStrategy?: string;
   probeWindowStates?: ProbeWindowState[];
 }
 
@@ -41,6 +42,9 @@ const settings = {
 
   getPositionRecoveryStrategy: () => settings.get().positionRecoveryStrategy ?? 'ALTERNATE_PARENT_CHILD',
   setPositionRecoveryStrategy: (positionRecoveryStrategy: string) => settings.set({ ...settings.get(), positionRecoveryStrategy }),
+
+  getAstCacheStrategy: () => settings.get().astCacheStrategy ?? 'PARTIAL',
+  setAstCacheStrategy: (astCacheStrategy: string) => settings.set({ ...settings.get(), astCacheStrategy }),
 
   getProbeWindowStates: () => settings.get().probeWindowStates ?? [],
   setProbeWindowStates: (probeWindowStates: ProbeWindowState[]) => settings.set({ ...settings.get(), probeWindowStates }),

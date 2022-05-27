@@ -1,5 +1,6 @@
 package pasta.server;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -33,26 +34,22 @@ public class WebSocketServer {
 	}
 
 	private static void writeWsMessage(OutputStream dst, String msg) throws IOException {
-		System.out.println("Taking lock..");
 		synchronized (dst) {
-			System.out.println("Got lock..");;
 			final byte[] fullStrData = msg.getBytes(StandardCharsets.UTF_8);
-			System.out.println("num out bytes: " + fullStrData.length);
+//			System.out.println("num out bytes: " + fullStrData.length);
 			if (fullStrData.length == 0) {
 				System.err.println("Writing empty message to client??");
-				dst.write(new byte[] {
-						(byte)129,
-						(byte)0
-				});
+				dst.write(new byte[] { (byte) 129, (byte) 0 });
 				dst.flush();
 				return;
 			}
-			
+
 			final int chunkSize = 32000;
 			final int neededChunks = (fullStrData.length / chunkSize) + (fullStrData.length % chunkSize == 0 ? 0 : 1);
 			for (int chunk = 0; chunk < neededChunks; chunk++) {
-				final byte[] strData = Arrays.copyOfRange(fullStrData, chunk * chunkSize, Math.min(fullStrData.length, (chunk + 1) * chunkSize));
-				
+				final byte[] strData = Arrays.copyOfRange(fullStrData, chunk * chunkSize,
+						Math.min(fullStrData.length, (chunk + 1) * chunkSize));
+
 				final int lenPart;
 				if (strData.length <= 125) {
 					lenPart = 1;
@@ -62,12 +59,12 @@ public class WebSocketServer {
 					lenPart = 9;
 //				throw new Error("TODO write really long msgs, len: " + strData.length);
 				}
-				
+
 				final byte[] padded = new byte[1 + lenPart + strData.length];
-				
+
 				// Header bits:
-				//   0: Continuation frame
-				//   1: Text frame
+				// 0: Continuation frame
+				// 1: Text frame
 				// 128: Last frame
 				if (chunk == neededChunks - 1) {
 					// Last frame
@@ -96,16 +93,16 @@ public class WebSocketServer {
 						padded[i] = 0;
 					}
 					// Low bits -> string len
-					padded[6] = (byte)((strData.length >>> 24) & 0xFF);
-					padded[7] = (byte)((strData.length >>> 16) & 0xFF);
-					padded[8] = (byte)((strData.length >>> 8) & 0xFF);
-					padded[9] = (byte)(strData.length & 0xFF);
+					padded[6] = (byte) ((strData.length >>> 24) & 0xFF);
+					padded[7] = (byte) ((strData.length >>> 16) & 0xFF);
+					padded[8] = (byte) ((strData.length >>> 8) & 0xFF);
+					padded[9] = (byte) (strData.length & 0xFF);
 				}
 				System.arraycopy(strData, 0, padded, 1 + lenPart, strData.length);
-				
+
 //				System.out.println("Chunk " + chunk +", msglen " + strData.length + " , lenPart " + lenPart);
 //				System.out.println("Writing " + Arrays.toString(Arrays.copyOfRange(padded, 0, Math.min(padded.length, 16))) +"..");
-				
+
 				dst.write(padded);
 				dst.flush();
 //				try {
@@ -117,7 +114,6 @@ public class WebSocketServer {
 			}
 		}
 	}
-
 
 	private static void handleRequest(Socket socket, List<Runnable> onJarChangeListeners,
 			Function<JSONObject, String> onQuery) throws IOException, NoSuchAlgorithmException {
@@ -165,53 +161,79 @@ public class WebSocketServer {
 				writeWsMessage(out, "{\"type\":\"init-pasta\"}");
 //				writeWsMessage(out, "{\"hello\": \"world\"}");
 //				writeWsMessage(out, "{\"hello\": \"world\"}");
-				while (true) {
 //					System.out.println("Waiting for more data..");
-					final int first = in.read();
-					if ((first &  8) == 8) {
+				while (true) {
+
+					int first = in.read();
+					if ((first & 8) == 8) {
 						// Close frame, don't worry about the contents, just close
 						cleanup.run();
 						return;
 					}
-					switch (first) {
-					case 129: {
-//						System.out.println("Got expected first byte");
+					ByteArrayOutputStream frameBuffer = null;
+					readFrame: while (true) {
+						boolean isFin = (first & 128) == 128;
+						switch (first & 0x7F) {
+						case 0: // Continuation
+							if (frameBuffer == null) {
+								System.err.println("Got continuation frame without an initial text frame");
+								System.exit(1);
+							}
+							// Else, fall down to 'text frame'
+						case 1: { // Text
+							System.out.println("got text frame, fin: " + isFin +" ; ");
 
-						// -128, strip away the 'mask' big
-						final int lenIndicator = in.read() - 128;
-						final byte[] reqData;
+							// -128, strip away the 'mask' bit
+							final int lenIndicator = in.read() - 128;
+							final byte[] reqData;
 
-						if (lenIndicator >= 0 && lenIndicator <= 125) {
-							reqData = new byte[lenIndicator];
-						} else if (lenIndicator == 126) {
-							reqData = new byte[(in.read() << 8) | in.read()];
-						} else {
-							reqData = new byte[(in.read() << 56) | (in.read() << 48) | (in.read() << 40) | (in.read() << 32) | (in.read() << 24) | (in.read() << 16) | (in.read() << 8) | in.read()];
-//							throw new Error("TODO handle big requests " + lenIndicator);
-						}
-						System.out.println("Got req w/ len " + reqData.length + ", lenid: " + lenIndicator);
-						
-						final byte[] key = new byte[4];
-						readFully(in, key);
+							if (lenIndicator >= 0 && lenIndicator <= 125) {
+								reqData = new byte[lenIndicator];
+							} else if (lenIndicator == 126) {
+								reqData = new byte[(in.read() << 8) | in.read()];
+							} else {
+								reqData = new byte[(in.read() << 56) | (in.read() << 48) | (in.read() << 40)
+										| (in.read() << 32) | (in.read() << 24) | (in.read() << 16) | (in.read() << 8)
+										| in.read()];
+							}
+							System.out.println("Got req w/ len " + reqData.length + ", lenid: " + lenIndicator);
+
+							final byte[] key = new byte[4];
+							readFully(in, key);
 //						System.out.println("Reading data..");
-						readFully(in, reqData);
+							readFully(in, reqData);
 
 //						System.out.println(Arrays.toString(key));
 //						System.out.println(Arrays.toString(reqData));
 
-						// Decode request data
-						for (int i = 0; i < reqData.length; i++) {
-							reqData[i] = (byte) (reqData[i] ^ key[i & 0x3]);
-						}
+							// Decode request data
+							for (int i = 0; i < reqData.length; i++) {
+								reqData[i] = (byte) (reqData[i] ^ key[i & 0x3]);
+							}
+
+							if (isFin && frameBuffer == null) {
+								// Only a single frame
+								final JSONObject jobj = new JSONObject(new String(reqData, StandardCharsets.UTF_8));
+								writeWsMessage(out, onQuery.apply(jobj));
+								break readFrame;
+							} else {
+								if (frameBuffer == null) {
+									frameBuffer = new ByteArrayOutputStream();
+								}
+								frameBuffer.write(reqData);
+								if (isFin) {
+									final JSONObject jobj = new JSONObject(new String(frameBuffer.toByteArray(), StandardCharsets.UTF_8));
+									writeWsMessage(out, onQuery.apply(jobj));
+									break readFrame;
+								} else {
+									first = in.read();
+								}
+							}
 //						System.out.println(Arrays.toString(reqData));
-						final JSONObject jobj = new JSONObject(new String(reqData, StandardCharsets.UTF_8));
-						System.out.println("json: " + jobj.toString(2));
+//						System.out.println("json: " + jobj.toString(2));
 
-						writeWsMessage(out, onQuery.apply(jobj));
-						System.out.println("onQuery response finished writing");
-
-						break;
-					}
+							break;
+						}
 //					case 136: {
 //						// Connection close
 //						System.out.println("Client disconnected");
@@ -219,19 +241,20 @@ public class WebSocketServer {
 //						cleanup.run();
 //						return;
 //					}
-					default: {
-						System.out.println("Got unexpected first byte: " + first);
-						for (int i = 0; i < 111; i++) {
-							System.out.println("next " + i + " :: " + in.read());
+						default: {
+							System.out.println("Got unexpected first byte: " + first);
+							for (int i = 0; i < 111; i++) {
+								System.out.println("next " + i + " :: " + in.read());
+							}
+							System.exit(1);
 						}
-						System.exit(1);
-					}
-					}
+						}
 //					System.out.println(in.read());
+					}
 				}
 			}
 		}
-		System.out.println("Not a get request.. ? From " + socket.getRemoteSocketAddress() +" :: " + data);
+		System.out.println("Not a get request.. ? From " + socket.getRemoteSocketAddress() + " :: " + data);
 	}
 
 	public static void start(List<Runnable> onJarChangeListeners, Function<JSONObject, String> onQuery) {

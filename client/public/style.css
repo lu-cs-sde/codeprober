@@ -436,6 +436,10 @@ body[data-theme-light="true"] .search-list-separator {
   left: 50%;
   transform: translate(-50%, -50%);
 }
+@keyframes lds-spinner-fade-in {
+  0%, 20% {visibility: hidden; }
+  21% {visibility: visible; }
+}
 /* Taken from https://loading.io/css/ */
 .lds-spinner {
   color: official;
@@ -443,6 +447,7 @@ body[data-theme-light="true"] .search-list-separator {
   position: relative;
   width: 40px;
   height: 40px;
+  animation: lds-spinner-fade-in 1s linear;
 }
 .lds-spinner div {
   transform-origin: 20px 20px;

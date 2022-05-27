@@ -1034,6 +1034,7 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
         'recovery-strategy': 'Position recovery',
         'probe-window': 'Probe help',
         'magic-stdout-messages': 'Magic stdout messages',
+        'ast-cache-strategy': 'AST caching'
     })[type];
     const getHelpContents = (type) => {
         const createHeader = (text) => {
@@ -1146,12 +1147,12 @@ encode(value):
                 settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
                 settingsExplanation.style.gridColumnGap = '0.5rem';
                 [
-                    [`Fail', 'don\'t try to recover information`],
-                    [`Parent', 'search recursively upwards through parent nodes, using the equivalent of 'node.getParent()'`],
-                    [`Child', 'search recursively downwards through child nodes, using the equivalent of 'node.getChild(0)'`],
-                    [`Parent->Child', 'Try 'Parent'. If no position is found, try 'Child'.`],
-                    [`Child->Parent', 'Try 'Child'. If no position is found, try 'Parent'.`],
-                    [`Zigzag', 'Similar to 'Parent->Child', but only search one step in one direction, then try the other direction, then another step in the first direction, etc. Initially searches one step upwards.`],
+                    [`Fail`, `don\'t try to recover information`],
+                    [`Parent`, `search recursively upwards through parent nodes, using the equivalent of 'node.getParent()'`],
+                    [`Child`, `search recursively downwards through child nodes, using the equivalent of 'node.getChild(0)'`],
+                    [`Parent->Child`, `Try 'Parent'. If no position is found, try 'Child'.`],
+                    [`Child->Parent`, `Try 'Child'. If no position is found, try 'Parent'.`],
+                    [`Zigzag`, `Similar to 'Parent->Child', but only search one step in one direction, then try the other direction, then another step in the first direction, etc. Initially searches one step upwards.`],
                 ].forEach(([head, tail]) => {
                     const headNode = document.createElement('span');
                     headNode.style.textAlign = 'right';
@@ -1291,6 +1292,43 @@ aspect MagicOutputDemo {
                     copyButton,
                     `Once you have the code in an aspect and have recompiled, open a probe for the attribute 'drawBlueSquigglys' to see all instances of 'MyNodeType' have blue lines under them.`,
                     'Note that the squiggly lines (and all other arrows/lines) only remain as long as their related probe window remains open.'
+                ];
+            }
+            case "ast-cache-strategy": {
+                const settingsExplanation = document.createElement('div');
+                settingsExplanation.style.display = 'grid';
+                settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
+                settingsExplanation.style.gridColumnGap = '0.5rem';
+                [
+                    [`Full`, `Cache everything`],
+                    [`Partial`, `Cache the AST, but call 'flushTreeCache' on the root before evaluating any probe. This ensures that cached attributes are invoked for every probe.`],
+                    [`None`, `Don't cache the AST.`],
+                    [`Purge`, `Don't cache the AST or even the underlying jar file, fully reload from the file system each time. This resets all global state, but kills the JVMs ability to optimize your code. This is terrible for performance.`],
+                ].forEach(([head, tail]) => {
+                    const headNode = document.createElement('span');
+                    headNode.style.textAlign = 'right';
+                    headNode.classList.add('syntax-attr');
+                    headNode.innerText = head;
+                    settingsExplanation.appendChild(headNode);
+                    settingsExplanation.appendChild(document.createTextNode('-'));
+                    const tailNode = document.createElement('span');
+                    tailNode.innerText = tail;
+                    settingsExplanation.appendChild(tailNode);
+                });
+                return [
+                    `When multiple probes are active, the same editor state will be evaluated multiple times (once for each probe).`,
+                    `When this happens, we can re-use the AST multiple to avoid unnecessary re-parses. There are however reasons that you might not want to re-use the AST, or at least not fully.`,
+                    '',
+                    `While it is technically bad practice, you can use "printf-style" debugging in your attributes (System.out.println(..)).`,
+                    `Cached attributes will only output such printf-messages once. With multiple active probes, this makes it uncertain which probe will capture the message.`,
+                    `Even worse, if you have any form of mutable state in your AST (please don't!), then reusing an AST can cause unpredictable behavior when parsing.`,
+                    `There are a few strategies you can use:`,
+                    '',
+                    settingsExplanation,
+                    '',
+                    `Performance is best with 'Full', and worst with 'Purge'.`,
+                    `"Debuggability" is best with 'Purge', and worst with 'Full'.`,
+                    `If you are unsure of what to use, 'Partial' is usually a pretty good option.`,
                 ];
             }
         }
@@ -1941,6 +1979,8 @@ define("settings", ["require", "exports"], function (require, exports) {
         setShouldCaptureStdio: (captureStdio) => settings.set({ ...settings.get(), captureStdio }),
         getPositionRecoveryStrategy: () => { var _a; return (_a = settings.get().positionRecoveryStrategy) !== null && _a !== void 0 ? _a : 'ALTERNATE_PARENT_CHILD'; },
         setPositionRecoveryStrategy: (positionRecoveryStrategy) => settings.set({ ...settings.get(), positionRecoveryStrategy }),
+        getAstCacheStrategy: () => { var _a; return (_a = settings.get().astCacheStrategy) !== null && _a !== void 0 ? _a : 'PARTIAL'; },
+        setAstCacheStrategy: (astCacheStrategy) => settings.set({ ...settings.get(), astCacheStrategy }),
         getProbeWindowStates: () => { var _a; return (_a = settings.get().probeWindowStates) !== null && _a !== void 0 ? _a : []; },
         setProbeWindowStates: (probeWindowStates) => settings.set({ ...settings.get(), probeWindowStates }),
     };
@@ -2062,7 +2102,7 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
             },
             {
                 title: 'Java - Enormous',
-                contents: generateMethodGenerator(200),
+                contents: generateMethodGenerator(500),
             },
         ];
         let activeTest = tests[0].title;
@@ -2216,7 +2256,7 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
                                 else {
                                     triggerChange();
                                 }
-                            }, 100);
+                            }, 30);
                         });
                     }
                     root.appendChild(document.createElement('hr'));
@@ -2300,10 +2340,12 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         const performRpcQuery = (props) => new Promise(async (res, rej) => {
             // console.log('send RPC query:', props);
             const posRecoverySelect = document.getElementById('control-position-recovery-strategy');
+            const astCacheStrategySelector = document.getElementById('ast-cache-strategy');
             const id = rpcIdGenerator++; //  Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
             rpcQuerySocket.send(JSON.stringify({
                 id,
                 posRecovery: posRecoverySelect.value,
+                cache: astCacheStrategySelector.value,
                 type: 'query',
                 text: getLocalState(),
                 stdout: settings_1.default.shouldCaptureStdio(),
@@ -2455,6 +2497,12 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     settings_1.default.setShouldCaptureStdio(captureStdoutCheckbox.checked);
                     notifyLocalChangeListeners();
                 };
+                const astCacheStrategySelector = document.getElementById('ast-cache-strategy');
+                astCacheStrategySelector.value = settings_1.default.getAstCacheStrategy();
+                astCacheStrategySelector.oninput = () => {
+                    settings_1.default.setAstCacheStrategy(astCacheStrategySelector.value);
+                    notifyLocalChangeListeners();
+                };
                 const recoveryStrategySelector = document.getElementById('control-position-recovery-strategy');
                 recoveryStrategySelector.value = settings_1.default.getPositionRecoveryStrategy();
                 recoveryStrategySelector.oninput = () => {
@@ -2518,9 +2566,11 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 // };
                 window.displayGeneralHelp = () => (0, displayHelp_2.default)('general', disabled => document.getElementById('display-help').disabled = disabled);
                 window.displayRecoveryStrategyHelp = () => (0, displayHelp_2.default)('recovery-strategy', disabled => document.getElementById('control-position-recovery-strategy-help').disabled = disabled);
-                setTimeout(() => {
-                    // displayProbeModal(modalEnv, { x: 320, y: 240 }, { lineStart: 5, colStart: 1, lineEnd: 7, colEnd: 2 }, 'Program', 'prettyPrint');
-                }, 500);
+                window.displayAstCacheStrategyHelp = () => (0, displayHelp_2.default)('ast-cache-strategy', disabled => document.getElementById('control-ast-cache-strategy-help').disabled = disabled);
+                // setTimeout(() => {
+                //   // window.displayAstCacheStrategyHelp();
+                //   // displayProbeModal(modalEnv, { x: 320, y: 240 }, { lineStart: 5, colStart: 1, lineEnd: 7, colEnd: 2 }, 'Program', 'prettyPrint');
+                // }, 500);
                 setTimeout(() => {
                     // displayProbeModal(modalEnv, { x: 320, y: 140 }, { lineStart: 4, colStart: 1, lineEnd: 4, colEnd: 5 }, 'Call', 'prettyPrint');
                     // displayAttributeModal(modalEnv, { x: 320, y: 140 }, { lineStart: 4, colStart: 1, lineEnd: 4, colEnd: 5 }, 'Call');

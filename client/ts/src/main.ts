@@ -28,10 +28,12 @@ const main = () => {
   const performRpcQuery = (props: { [key: string]: any }) => new Promise(async (res, rej) => {
     // console.log('send RPC query:', props);
     const posRecoverySelect = document.getElementById('control-position-recovery-strategy') as HTMLSelectElement;
+    const astCacheStrategySelector = document.getElementById('ast-cache-strategy') as HTMLSelectElement;
         const id = rpcIdGenerator++; //  Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
         rpcQuerySocket.send(JSON.stringify({
           id,
           posRecovery: posRecoverySelect.value,
+          cache: astCacheStrategySelector.value,
           type: 'query',
           text: getLocalState(),
           stdout: settings.shouldCaptureStdio(),
@@ -202,6 +204,12 @@ const main = () => {
         settings.setShouldCaptureStdio(captureStdoutCheckbox.checked);
         notifyLocalChangeListeners();
       }
+      const astCacheStrategySelector = document.getElementById('ast-cache-strategy') as HTMLSelectElement;
+      astCacheStrategySelector.value = settings.getAstCacheStrategy();
+      astCacheStrategySelector.oninput = () => {
+        settings.setAstCacheStrategy(astCacheStrategySelector.value);
+        notifyLocalChangeListeners();
+      }
       const recoveryStrategySelector = document.getElementById('control-position-recovery-strategy') as HTMLSelectElement;
       recoveryStrategySelector.value = settings.getPositionRecoveryStrategy();
       recoveryStrategySelector.oninput = () => {
@@ -277,13 +285,17 @@ const main = () => {
       window.displayGeneralHelp = () => displayHelp('general',
         disabled => (document.getElementById('display-help') as HTMLButtonElement).disabled = disabled
         );
-        window.displayRecoveryStrategyHelp = () => displayHelp('recovery-strategy',
+      window.displayRecoveryStrategyHelp = () => displayHelp('recovery-strategy',
           disabled => (document.getElementById('control-position-recovery-strategy-help') as HTMLButtonElement).disabled = disabled
       );
+      window.displayAstCacheStrategyHelp = () => displayHelp('ast-cache-strategy',
+          disabled => (document.getElementById('control-ast-cache-strategy-help') as HTMLButtonElement).disabled = disabled
+      );
 
-      setTimeout(() => {
-        // displayProbeModal(modalEnv, { x: 320, y: 240 }, { lineStart: 5, colStart: 1, lineEnd: 7, colEnd: 2 }, 'Program', 'prettyPrint');
-      }, 500);
+      // setTimeout(() => {
+      //   // window.displayAstCacheStrategyHelp();
+      //   // displayProbeModal(modalEnv, { x: 320, y: 240 }, { lineStart: 5, colStart: 1, lineEnd: 7, colEnd: 2 }, 'Program', 'prettyPrint');
+      // }, 500);
       setTimeout(() => {
         // displayProbeModal(modalEnv, { x: 320, y: 140 }, { lineStart: 4, colStart: 1, lineEnd: 4, colEnd: 5 }, 'Call', 'prettyPrint');
         // displayAttributeModal(modalEnv, { x: 320, y: 140 }, { lineStart: 4, colStart: 1, lineEnd: 4, colEnd: 5 }, 'Call');

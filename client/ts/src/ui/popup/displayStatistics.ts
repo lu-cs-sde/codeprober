@@ -89,7 +89,7 @@ const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButt
     },
     {
       title: 'Java - Enormous',
-      contents: generateMethodGenerator(200),
+      contents: generateMethodGenerator(500),
     },
   ];
   let activeTest = tests[0].title;
@@ -272,7 +272,7 @@ const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButt
               } else {
                 triggerChange();
               }
-            }, 100);
+            }, 30);
           });
         }
 
