@@ -18,11 +18,11 @@ import pasta.util.FileMonitor;
 
 public class PastaServer {
 
-	private static void printUsage() {
+	public static void printUsage() {
 		System.out.println(
 				"Usage: java -jar pasta-server.jar path/to/your/compiler.jar [args-to-forward-to-compiler-on-each-request]");
 	}
-	
+
 	public static void main(String[] mainArgs) {
 		System.out.println("Starting debug build..");
 		if (mainArgs.length == 0) {
@@ -35,7 +35,7 @@ public class PastaServer {
 
 		new Thread(WebServer::start).start();
 
-		final List<Runnable> onJarChangeListeners = Collections.synchronizedList(new ArrayList<>());
+		final List<Runnable> onJarChangeListeners = Collections.<Runnable>synchronizedList(new ArrayList<>());
 		new Thread(() -> WebSocketServer.start(onJarChangeListeners, handler.createRpcRequestHandler())).start();
 
 		System.out.println("Starting file monitor...");

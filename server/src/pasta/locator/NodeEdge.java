@@ -1,12 +1,8 @@
 package pasta.locator;
 
-import java.util.List;
-
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import pasta.ast.AstNode;
-import pasta.protocol.ParameterValue;
 
 /**
  * Represents a step from a parent to a child node.
@@ -56,47 +52,5 @@ abstract class NodeEdge {
 	@Override
 	public String toString() {
 		return type + "<" + targetNode +">";
-	}
-
-	public static class ChildIndexEdge extends NodeEdge {
-		public ChildIndexEdge(AstNode sourceNode, TypeAtLoc sourceLoc, AstNode targetNode, TypeAtLoc targetLoc,
-				int childIndex) {
-			super(sourceNode, sourceLoc, targetNode, targetLoc, NodeEdgeType.ChildIndex, childIndex);
-		}
-	}
-
-	public static class ParameterizedNtaEdge extends NodeEdge {
-		public ParameterizedNtaEdge(AstNode sourceNode, TypeAtLoc sourceLoc, AstNode targetNode, TypeAtLoc targetLoc,
-				String ntaName, List<ParameterValue> arguments) {
-			super(sourceNode, sourceLoc, targetNode, targetLoc, NodeEdgeType.NTA, buildMthObj(ntaName, arguments));
-		}
-
-		private static JSONObject buildMthObj(String ntaName, List<ParameterValue> arguments) {
-			final JSONObject ret = new JSONObject();
-			ret.put("name", ntaName);
-
-			final JSONArray arr = new JSONArray();
-			for (ParameterValue arg : arguments) {
-				arr.put(arg.toJson());
-			}
-			ret.put("args", arr);
-
-			return ret;
-		}
-	}
-
-	public static class TypeAtLocEdge extends NodeEdge {
-		public TypeAtLocEdge(AstNode sourceNode, TypeAtLoc sourceLoc, AstNode targetNode, TypeAtLoc targetLoc) {
-			super(sourceNode, sourceLoc, targetNode, targetLoc, NodeEdgeType.TypeAtLoc, buildLocatorObj(targetLoc));
-		}
-
-		private static JSONObject buildLocatorObj(TypeAtLoc target) {
-			final JSONObject locatorObj = new JSONObject();
-			locatorObj.put("start", target.loc.start);
-			locatorObj.put("end", target.loc.end);
-			locatorObj.put("type", target.type);
-			return locatorObj;
-		}
-
 	}
 }

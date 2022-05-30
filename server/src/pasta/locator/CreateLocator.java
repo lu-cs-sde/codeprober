@@ -98,7 +98,7 @@ public class CreateLocator {
 
 		if (res.isEmpty()) {
 			// Root node!
-			return new Locator(Collections.emptyList());
+			return new Locator(Collections.<NodeEdge>emptyList());
 		}
 		for (NodeEdge edge : res) {
 			if (edge == null) {
@@ -138,7 +138,7 @@ public class CreateLocator {
 				final NodeEdge edge = res.get(trimPos);
 
 				res.set(trimPos,
-						new NodeEdge.TypeAtLocEdge(top.sourceNode, top.sourceLoc, edge.targetNode, edge.targetLoc));
+						new TypeAtLocEdge(top.sourceNode, top.sourceLoc, edge.targetNode, edge.targetLoc));
 				for (int i = 1; i < numPotentialRemovals; i++) {
 					res.remove(trimPos - i);
 				}
@@ -166,112 +166,26 @@ public class CreateLocator {
 	private static void extractStepsTo(AstInfo info, AstNode astNode, List<NodeEdge> out)
 			throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException,
 			NoSuchMethodException, InvocationTargetException {
-//		final Object parent;
-//		try {
-//			parent = Reflect.getParent(astNode);
-//		} catch (NoSuchMethodException | InvocationTargetException e) {
-//			e.printStackTrace();
-//			throw new RuntimeException(e);
-//		}
-
 		final AstNode parent = astNode.parent();
 		if (parent == null) {
-			// No edge
+			// No edge needed
 			return;
 		}
 
 		final TypeAtLoc source = TypeAtLoc.from(info, parent);
 		final TypeAtLoc target = TypeAtLoc.from(info, astNode);
 		int childIdxCounter = 0;
-//		int foundTargetIndex = -1;
-//		boolean ambiguousTarget = false;
 		for (AstNode child : parent.getChildren()) {
 			if (child.sharesUnderlyingNode(astNode)) {
-				out.add(new NodeEdge.ChildIndexEdge(parent, source, astNode, target, childIdxCounter));
-				final int parentPos = out.size();
+				out.add(new ChildIndexEdge(parent, source, astNode, target, childIdxCounter));
 				extractStepsTo(info, parent, out);
-
-				// TODO rewrite to handle "special case" that parent is the root of the AST,
-				// because in that case the "while (parentPos < out.size)" never hits.
-
-				if (useFastTrimAlgorithm) {
-					return;
-				}
-				AstNode safeIgnoreNode = astNode;
-				if (target.loc.isMeaningful()) {
-					// We might be able to replace the ChildIndex edge with a TypeAtLoc.
-					// It depends on the nodes that come before us.
-					while (parentPos < out.size()) {
-						final NodeEdge parentEdge = out.get(parentPos);
-						if (parentEdge.type == NodeEdgeType.NTA) {
-							final NodeEdge candidateTal = new NodeEdge.TypeAtLocEdge(parentEdge.targetNode,
-									parentEdge.targetLoc, astNode, target);
-							if (ApplyLocator.isAmbiguousTal(info, parentEdge.targetNode, target, safeIgnoreNode)) {
-								break;
-							}
-							// Non-ambiguous! Previous step is still necessary, but we can replace our own
-							// with a TAL
-							out.set(parentPos - 1, candidateTal);
-							return;
-						} else {
-
-							final NodeEdge candidateTal = new NodeEdge.TypeAtLocEdge(parentEdge.sourceNode,
-									parentEdge.sourceLoc, astNode, target);
-							if (ApplyLocator.isAmbiguousTal(info, parentEdge.sourceNode, target, safeIgnoreNode)) {
-								break;
-							}
-							// Non-ambiguous! Previous step is not necessary, and our step can be replaced
-							// with a TAL
-							out.set(parentPos - 1, candidateTal);
-							out.remove(parentPos);
-							safeIgnoreNode = parentEdge.sourceNode;
-						}
-					}
-
-					// Special case: handle us being immediately below the root of the ast.
-					if (parentPos == out.size()) {
-						final NodeEdge candidateTal = new NodeEdge.TypeAtLocEdge(info.ast,
-								TypeAtLoc.from(info, info.ast), astNode, target);
-						if (!ApplyLocator.isAmbiguousTal(info, info.ast, target, safeIgnoreNode)) {
-							out.set(parentPos - 1, candidateTal);
-						}
-					}
-				}
 				return;
-//				foundTargetIndex = childIdxCounter;
-//			} else {
-//				ambiguousTarget |= target.equals(TypeAtLoc.from(child, info.recoveryStrategy));
 			}
 			++childIdxCounter;
 		}
 		if (extractNtaEdge(info, astNode, out, target, parent)) {
 			return;
 		}
-//		for (Method m : parent.underlyingAstNode.getClass().getMethods()) {
-////			if (!m.getName().equals("unknownDecl")) {
-////				// Hack for development, REMOVEME
-////				continue;
-////			}
-//			if (!isNta(m)) {
-//				continue;
-//			}
-//
-//			// What if the NTA is a List? Like Program.predefinedFunctions()
-//			// What if the NTA takes 1 parameter?
-//			// What if >= 2 parameters?
-//			if (m.getParameterCount() == 0) {
-//				final Field field = m.getDeclaringClass().getDeclaredField(m.getName() + "_value");
-//				field.setAccessible(true);
-//				final Object cachedNtaValue = field.get(parent.underlyingAstNode);
-//				// Intentional identity comparison
-//				if (cachedNtaValue == astNode.underlyingAstNode) {
-//					out.add(new NodeEdge.ParameterizedNtaEdge(parent, source, astNode, target, m.getName(),
-//							Collections.emptyList()));
-//					extractStepsTo(info, parent, out);
-//					return;
-//				}
-//			}
-//		}
 
 		if (parent.getNumChildren() == 0) {
 			// Strange proxy node that appears in NTA+param cases
@@ -290,9 +204,9 @@ public class CreateLocator {
 		System.out.println("other way: " + source + " --> " + target);
 		System.out.println("Parent pretty : " + Reflect.invoke0(parent.underlyingAstNode, "prettyPrint"));
 		System.out.println("child type " + astNode.getClass());
-		final Field childIndex = astNode.underlyingAstNode.getClass().getDeclaredField("childIndex");
-		childIndex.setAccessible(true);
-		System.out.println("value childIndex : " + childIndex.getInt(astNode));
+//		final Field childIndex = astNode.underlyingAstNode.getClass().getDeclaredField("childIndex");
+//		childIndex.setAccessible(true);
+//		System.out.println("value childIndex : " + childIndex.getInt(astNode));
 
 		AstNode search = parent;
 		while (search != null) {
@@ -334,29 +248,28 @@ public class CreateLocator {
 					if (proxy.get(parent.underlyingAstNode) == astNode.underlyingAstNode) {
 						/**
 						 * Oh dear. We are in the following situation:
-						 * 
+						 *
 						 * <pre>
 						 * 		 Parent
 						 * 			|`- - - .
-						 * 			V       V 
+						 * 			V       V
 						 * 		  Proxy   (NTA)
 						 * 			|       /
-						 * 			| - - -´ 
+						 * 			| - - -´
 						 * 			V
 						 * 		   Child
 						 * </pre>
-						 * 
+						 *
 						 * "astNode" is the Proxy.
-						 * 
+						 *
 						 * Normally people go from Parent to Child through the NTA. The Proxy is just
 						 * some sort of implementation detail that isn't really supposed to be
 						 * interacted with. But if you do Child.getParent(), you'll get it.
-						 * 
+						 *
 						 * We can construct a locator to it by finding a child in the NTA cache (any
 						 * child will do) and getting parent from it.
 						 */
-//						isTheProxyNode = true;
-						System.out.println("test");
+						isTheProxyNode = true;
 					}
 				} catch (NoSuchFieldException e) {
 					System.out.println(
@@ -384,8 +297,8 @@ public class CreateLocator {
 				if (cachedNtaValue != astNode.underlyingAstNode) {
 					continue;
 				}
-				out.add(new NodeEdge.ParameterizedNtaEdge(parent, TypeAtLoc.from(info, astNode), astNode, target,
-						m.getName(), Collections.emptyList()));
+				out.add(new ParameterizedNtaEdge(parent, TypeAtLoc.from(info, astNode), astNode, target,
+						m.getName(), Collections.<ParameterValue>emptyList()));
 				extractStepsTo(info, parent, out);
 				return true;
 			}
@@ -436,12 +349,12 @@ public class CreateLocator {
 						final AstNode bounceChild = new AstNode(ent.getValue());
 						final TypeAtLoc bounceChildLoc = TypeAtLoc.from(info, bounceChild);
 
-						out.add(new NodeEdge.ParameterizedNtaEdge(bounceChild, bounceChildLoc, astNode, target,
+						out.add(new ParameterizedNtaEdge(bounceChild, bounceChildLoc, astNode, target,
 								"getParent", new ArrayList<>()));
-						out.add(new NodeEdge.ParameterizedNtaEdge(parent, realSource, bounceChild, bounceChildLoc,
+						out.add(new ParameterizedNtaEdge(parent, realSource, bounceChild, bounceChildLoc,
 								m.getName(), serializableParams));
 					} else {
-						out.add(new NodeEdge.ParameterizedNtaEdge(parent, realSource, astNode, target, m.getName(),
+						out.add(new ParameterizedNtaEdge(parent, realSource, astNode, target, m.getName(),
 								serializableParams));
 					}
 					extractStepsTo(info, parent, out);

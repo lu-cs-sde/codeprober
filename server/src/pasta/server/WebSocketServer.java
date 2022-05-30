@@ -181,7 +181,7 @@ public class WebSocketServer {
 							}
 							// Else, fall down to 'text frame'
 						case 1: { // Text
-							System.out.println("got text frame, fin: " + isFin +" ; ");
+//							System.out.println("got text frame, fin: " + isFin +" ; ");
 
 							// -128, strip away the 'mask' bit
 							final int lenIndicator = in.read() - 128;
@@ -196,7 +196,7 @@ public class WebSocketServer {
 										| (in.read() << 32) | (in.read() << 24) | (in.read() << 16) | (in.read() << 8)
 										| in.read()];
 							}
-							System.out.println("Got req w/ len " + reqData.length + ", lenid: " + lenIndicator);
+//							System.out.println("Got req w/ len " + reqData.length + ", lenid: " + lenIndicator);
 
 							final byte[] key = new byte[4];
 							readFully(in, key);
@@ -263,6 +263,7 @@ public class WebSocketServer {
 			System.out.println("Started WebSocket server on port " + port);
 			while (true) {
 				Socket s = server.accept();
+				System.out.println("New WS connection from " + s.getRemoteSocketAddress());
 				new Thread(() -> {
 					try {
 						handleRequest(s, onJarChangeListeners, onQuery);

@@ -6,14 +6,14 @@ import org.json.JSONObject;
 
 @FunctionalInterface
 public interface JsonRequestHandler {
-	
+
 	static  final Object lock = new Object();
 
 	JSONObject handleRequest(JSONObject queryObj);
 
 	default Function<JSONObject, String> createRpcRequestHandler() {
 		return obj -> {
-			
+
 			JSONObject rpcResponse = new JSONObject();
 			rpcResponse.put("type", "rpc");
 			rpcResponse.put("id", obj.getLong("id"));

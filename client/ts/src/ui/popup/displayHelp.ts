@@ -100,10 +100,10 @@ encode(value):
 
       return [
         `PASTA : Probe-AST-Attributes 🍝 🤌`,
-        `Right click on some text in the editor and click 'RAG Query' to get started`,
+        `Right click on some text in the editor and click 'Create Probe' to get started`,
         `There are three magic attributes you may want to add:`,
         ``,
-        joinElements(`1) '`, createHeader('pastaVisible'), `'. This controls whether or not a node will appear in the 'RAG Query' menu.`),
+        joinElements(`1) '`, createHeader('pastaVisible'), `'. This controls whether or not a node will appear in the 'Create Probe' menu.`),
         `Default: `,
         `--    false: for 'List' and 'Opt'. Note: this is only default, you can override it.`,
         `--     true: for all other types`,
@@ -119,6 +119,15 @@ encode(value):
         viewDefault,
         exampleView,
         ``,
+        `The way this tool is built, it cannot help you find & fix infinite loops.`,
+        joinElements(`For infinite loops we instead recommend you use other tools like `, (() => {
+          const a = document.createElement('a');
+          a.href = 'https://docs.oracle.com/javase/1.5.0/docs/tooldocs/share/jstack.html';
+          a.innerText = 'jstack';
+          a.target = '_blank';
+          return a;
+        })(), ' and/or traditional breakpoint/step-debuggers.'),
+        ``,
         joinElements(`Contributions welcome at `, (() => {
           const a = document.createElement('a');
           a.href = 'https://git.cs.lth.se/an6308ri/pasta-server';
@@ -126,7 +135,6 @@ encode(value):
           a.target = '_blank';
           return a;
         })()),
-        // `Contributions welcome at [https://git.cs.lth.se/an6308ri/pasta-server]`,
         `Version: abc-123`,
       ];
     }

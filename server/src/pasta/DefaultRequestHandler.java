@@ -266,7 +266,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 //				astArgs[0] = tmp.getAbsolutePath();
 				System.arraycopy(forwardArgs, 0, astArgs, 0, forwardArgs.length);
 				astArgs[forwardArgs.length] = tmpFile.getAbsolutePath();
-				System.out.println("fwd args: " + Arrays.toString(astArgs));
+//				System.out.println("fwd args: " + Arrays.toString(astArgs));
 
 				final long parseStart = System.nanoTime();
 				final boolean parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs, (ast, loadCls) -> {
