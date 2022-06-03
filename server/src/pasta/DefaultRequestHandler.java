@@ -232,7 +232,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 							Reflect.invoke0(lastInfo.ast.underlyingAstNode, "flushTreeCache");
 						}
 
-						retBuilder.put("parseTime", (System.nanoTime() - flushStart) / 1_000_000.0);
+						retBuilder.put("parseTime", (System.nanoTime() - flushStart));
 //						final boolean parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs, (ast, loadCls) -> {
 						handleParsedAst(lastInfo.ast.underlyingAstNode, lastInfo.loadAstClass, queryObj, retBuilder,
 								bodyBuilder);
@@ -270,7 +270,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 				final long parseStart = System.nanoTime();
 				final boolean parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs, (ast, loadCls) -> {
-					retBuilder.put("parseTime", (System.nanoTime() - parseStart) / 1_000_000.0);
+					retBuilder.put("parseTime", (System.nanoTime() - parseStart));
 					handleParsedAst(ast, loadCls, queryObj, retBuilder, bodyBuilder);
 				});
 				if (!parsed) {
@@ -290,10 +290,10 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		// Somehow extract syntax errors from stdout?
 		retBuilder.put("body", bodyBuilder);
 		retBuilder.put("errors", errors != null ? errors : new JSONArray());
-		retBuilder.put("totalTime", (System.nanoTime() - requestStart) / 1_000_000.0);
-		retBuilder.put("createLocatorTime", BenchmarkTimer.CREATE_LOCATOR.getAccumulatedNano() / 1_000_000.0);
-		retBuilder.put("applyLocatorTime", BenchmarkTimer.APPLY_LOCATOR.getAccumulatedNano() / 1_000_000.0);
-		retBuilder.put("attrEvalTime", BenchmarkTimer.EVALUATE_ATTR.getAccumulatedNano() / 1_000_000.0);
+		retBuilder.put("totalTime", (System.nanoTime() - requestStart));
+		retBuilder.put("createLocatorTime", BenchmarkTimer.CREATE_LOCATOR.getAccumulatedNano());
+		retBuilder.put("applyLocatorTime", BenchmarkTimer.APPLY_LOCATOR.getAccumulatedNano());
+		retBuilder.put("attrEvalTime", BenchmarkTimer.EVALUATE_ATTR.getAccumulatedNano());
 
 		System.out.println("Request done");
 		return retBuilder;

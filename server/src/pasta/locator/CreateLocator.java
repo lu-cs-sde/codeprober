@@ -155,13 +155,13 @@ public class CreateLocator {
 			return false;
 		}
 
-		for (Annotation a : m.getAnnotations()) {
+		for (Annotation a : m.getAnnotations()) { 
 			if (a.annotationType().getName().endsWith(".ASTNodeAnnotation$Attribute")) {
 				return (Boolean) Reflect.invoke0(a, "isNTA");
 			}
 		}
 		return false;
-	}
+	} 
 
 	private static void extractStepsTo(AstInfo info, AstNode astNode, List<NodeEdge> out)
 			throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException,

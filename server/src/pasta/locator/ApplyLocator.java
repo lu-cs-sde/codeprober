@@ -153,9 +153,20 @@ public class ApplyLocator {
 					}
 					case "tal": {
 						final JSONObject tal = step.getJSONObject("value");
-						matchedNode = bestMatchingNode(info, matchedNode,
-								info.loadAstClass.apply(info.getQualifiedAstType(tal.getString("type"))),
-								tal.getInt("start"), tal.getInt("end"), info.recoveryStrategy, false);
+						final int start = tal.getInt("start");
+						final int end = tal.getInt("end");
+						final Class<?> clazz = info.loadAstClass.apply(info.getQualifiedAstType(tal.getString("type")));
+						final AstNode parent = matchedNode;
+						matchedNode = bestMatchingNode(info, parent, clazz, start, end, info.recoveryStrategy,
+								false);
+
+						if (matchedNode == null) {
+							// Sometimes the locator can shift 1 or 2 characters off,
+							// especially if the document enters an invalid state while typing.
+							// We can permit a tiny bit of error and try again
+							matchedNode = bestMatchingNode(info, parent, clazz, start - 2, end + 2,
+									info.recoveryStrategy, false);
+						}
 						break;
 					}
 					case "child": {

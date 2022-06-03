@@ -11,7 +11,6 @@ import adjustLocator from "../../model/adjustLocator";
 import displayHelp from "./displayHelp";
 
 const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLocator, attr: AstAttrWithValue) => {
-  console.log('dPM, env:', env);
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   const localErrors: ProbeMarker[] = [];
   env.probeMarkers[queryId] = localErrors;
@@ -236,12 +235,12 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
             && typeof parsed.applyLocatorTime === 'number'
             && typeof parsed.attrEvalTime === 'number' ) {
             env.statisticsCollector.addProbeEvaluationTime({
-              attrEvalMs: parsed.attrEvalTime,
+              attrEvalMs: parsed.attrEvalTime / 1_000_000.0,
               fullRpcMs: Math.max(performance.now() - rpcQueryStart),
-              serverApplyLocatorMs: parsed.applyLocatorTime,
-              serverCreateLocatorMs: parsed.createLocatorTime,
-              serverParseOnlyMs: parsed.parseTime,
-              serverSideMs: parsed.totalTime,
+              serverApplyLocatorMs: parsed.applyLocatorTime / 1_000_000.0,
+              serverCreateLocatorMs: parsed.createLocatorTime / 1_000_000.0,
+              serverParseOnlyMs: parsed.parseTime / 1_000_000.0,
+              serverSideMs: parsed.totalTime / 1_000_000.0,
             });
           }
           if (cancelToken.cancelled) { return; }

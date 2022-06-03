@@ -178,7 +178,6 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
     attachDragToMove_1 = __importDefault(attachDragToMove_1);
     attachDragToX_2 = __importStar(attachDragToX_2);
     const showWindow = (args) => {
-        console.log('new and shiny showModal..', args);
         const { render, pos: initialPos, rootStyle, resizable } = args;
         const root = document.createElement('div');
         root.tabIndex = 0;
@@ -1141,8 +1140,8 @@ encode(value):
                     ``,
                     joinElements(`Contributions welcome at `, (() => {
                         const a = document.createElement('a');
-                        a.href = 'https://git.cs.lth.se/an6308ri/pasta-server';
-                        a.innerText = 'https://git.cs.lth.se/an6308ri/pasta-server';
+                        a.href = 'https://git.cs.lth.se/an6308ri/pasta-debugger';
+                        a.innerText = 'https://git.cs.lth.se/an6308ri/pasta-debugger';
                         a.target = '_blank';
                         return a;
                     })()),
@@ -1415,7 +1414,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     adjustLocator_1 = __importDefault(adjustLocator_1);
     displayHelp_1 = __importDefault(displayHelp_1);
     const displayProbeModal = (env, modalPos, locator, attr) => {
-        console.log('dPM, env:', env);
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
         env.probeMarkers[queryId] = localErrors;
@@ -1637,12 +1635,12 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         && typeof parsed.applyLocatorTime === 'number'
                         && typeof parsed.attrEvalTime === 'number') {
                         env.statisticsCollector.addProbeEvaluationTime({
-                            attrEvalMs: parsed.attrEvalTime,
+                            attrEvalMs: parsed.attrEvalTime / 1000000,
                             fullRpcMs: Math.max(performance.now() - rpcQueryStart),
-                            serverApplyLocatorMs: parsed.applyLocatorTime,
-                            serverCreateLocatorMs: parsed.createLocatorTime,
-                            serverParseOnlyMs: parsed.parseTime,
-                            serverSideMs: parsed.totalTime,
+                            serverApplyLocatorMs: parsed.applyLocatorTime / 1000000,
+                            serverCreateLocatorMs: parsed.createLocatorTime / 1000000,
+                            serverParseOnlyMs: parsed.parseTime / 1000000,
+                            serverSideMs: parsed.totalTime / 1000000,
                         });
                     }
                     if (cancelToken.cancelled) {

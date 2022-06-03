@@ -14,7 +14,6 @@ interface ShowWindowArgs {
 }
 
 const showWindow = (args: ShowWindowArgs) => {
-  console.log('new and shiny showModal..', args);
   const { render, pos: initialPos, rootStyle, resizable } = args;
   const root = document.createElement('div');
   root.tabIndex = 0;

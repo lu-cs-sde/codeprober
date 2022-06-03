@@ -130,8 +130,8 @@ encode(value):
         ``,
         joinElements(`Contributions welcome at `, (() => {
           const a = document.createElement('a');
-          a.href = 'https://git.cs.lth.se/an6308ri/pasta-server';
-          a.innerText = 'https://git.cs.lth.se/an6308ri/pasta-server';
+          a.href = 'https://git.cs.lth.se/an6308ri/pasta-debugger';
+          a.innerText = 'https://git.cs.lth.se/an6308ri/pasta-debugger';
           a.target = '_blank';
           return a;
         })()),

@@ -23,6 +23,7 @@ public interface JsonRequestHandler {
 					rpcResponse.put("result", encoded == null ? JSONObject.NULL : encoded);
 				}
 			} catch (RuntimeException e) {
+				System.out.println("Request threw an error");
 				e.printStackTrace();
 				rpcResponse.put("error", "Error while processing request. See server for more info");
 			}
