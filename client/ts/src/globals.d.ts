@@ -106,13 +106,17 @@ interface AstAttrWithValue {
 type NodeLocatorStep =
     { type: 'nta', value: { name: string; args: AstAttrWithValue[] } }
   | { type: 'child', value: number }
-  | { type: 'tal', value: TypeAtLoc }
+  | { type: 'tal', value: TypeAtLocStep }
   ;
 
 interface TypeAtLoc {
   type: string;
   start: number;
   end: number;
+}
+
+interface TypeAtLocStep extends TypeAtLoc {
+  depth: number;
 }
 
 interface NodeLocator {
@@ -129,7 +133,7 @@ interface RpcResponse {
   errors: { start: number; end: number; msg: string; }[];
 
   // Expected for request pasta_spansAndNodeTypes
-  spansAndNodeTypes?: { start: number; end: number; type: string; }[];
+  spansAndNodeTypes?: NodeLocator[];
 
   // Expected for request pasta_pastaAttrs
   pastaAttrs?: AstAttr[];

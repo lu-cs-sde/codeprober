@@ -63,6 +63,9 @@ public class TestData {
 		}
 
 		private Map<Object, Object> parameterizedNTA_int_Node_values = new HashMap<>();
+		
+		@SuppressWarnings("unused")
+		private final Object parameterizedNTA_int_Node_proxy = new Object();
 
 		public Node setParameterizedNTA(int arg1, Node arg2, Node value) {
 			final List<Object> argList = new ArrayList<>();

@@ -28,7 +28,13 @@ import pasta.util.BenchmarkTimer;
 
 public class CreateLocator {
 
-	private static final boolean useFastTrimAlgorithm = true;
+//	private static final boolean useFastTrimAlgorithm = true;
+
+	private static boolean buildFastButFragileLocator = false;
+
+	public static void setBuildFastButFragileLocator(boolean fastAndFragile) {
+		buildFastButFragileLocator = fastAndFragile;
+	}
 
 	private static class Locator {
 		public final List<NodeEdge> steps;
@@ -108,37 +114,47 @@ public class CreateLocator {
 
 		Collections.reverse(res);
 
-		if (useFastTrimAlgorithm) {
+		if (!buildFastButFragileLocator) {
 			// TODO make this only happen when encoding the main locator of a probe
 			// When building locators for output bodies, TaL is not really necessary.
 			int trimPos = res.size() - 1;
-			while (trimPos >= 0) {
+			boolean foundTopSubstitutableNode = false;
+			while (trimPos >= 0 && !foundTopSubstitutableNode) {
 				int numPotentialRemovals = 0;
 				NodeEdge disambiguationTarget = res.get(trimPos);
+				int disambiguationDepth = 0;
 				for (int i = trimPos; i >= 0; --i) {
+					++disambiguationDepth;
 					final NodeEdge parentEdge = res.get(i);
+//					System.out.println("Locator parentEdge target class: " + parentEdge.targetNode.underlyingAstNode.getClass().getSimpleName());
+					
+					if (parentEdge.targetNode.isLocatorTALRoot(info)) {
+						foundTopSubstitutableNode = true;
+						break;
+					}
 					if (parentEdge.type == NodeEdgeType.ChildIndex
 							&& (parentEdge.targetNode.isNonOverlappingSibling(info) || //
 									!ApplyLocator.isAmbiguousTal(info, parentEdge.sourceNode,
-											disambiguationTarget.targetLoc, disambiguationTarget.targetNode))) {
+											disambiguationTarget.targetLoc, disambiguationDepth,
+											disambiguationTarget.targetNode))) {
 						++numPotentialRemovals;
 						if (parentEdge.targetNode.getRawSpan(info).isMeaningful()) {
 							disambiguationTarget = parentEdge;
+							disambiguationDepth = 0;
 						}
 					} else {
 						break;
 					}
 				}
 				if (numPotentialRemovals == 0) {
-
 					--trimPos;
 					continue;
 				}
 				final NodeEdge top = res.get(trimPos + 1 - numPotentialRemovals);
 				final NodeEdge edge = res.get(trimPos);
 
-				res.set(trimPos,
-						new TypeAtLocEdge(top.sourceNode, top.sourceLoc, edge.targetNode, edge.targetLoc));
+				res.set(trimPos, new TypeAtLocEdge(top.sourceNode, top.sourceLoc, edge.targetNode, edge.targetLoc,
+						numPotentialRemovals));
 				for (int i = 1; i < numPotentialRemovals; i++) {
 					res.remove(trimPos - i);
 				}
@@ -146,7 +162,7 @@ public class CreateLocator {
 
 			}
 		}
-
+		
 		return new Locator(res);
 	}
 
@@ -155,13 +171,13 @@ public class CreateLocator {
 			return false;
 		}
 
-		for (Annotation a : m.getAnnotations()) { 
+		for (Annotation a : m.getAnnotations()) {
 			if (a.annotationType().getName().endsWith(".ASTNodeAnnotation$Attribute")) {
 				return (Boolean) Reflect.invoke0(a, "isNTA");
 			}
 		}
 		return false;
-	} 
+	}
 
 	private static void extractStepsTo(AstInfo info, AstNode astNode, List<NodeEdge> out)
 			throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException,
@@ -297,8 +313,8 @@ public class CreateLocator {
 				if (cachedNtaValue != astNode.underlyingAstNode) {
 					continue;
 				}
-				out.add(new ParameterizedNtaEdge(parent, TypeAtLoc.from(info, astNode), astNode, target,
-						m.getName(), Collections.<ParameterValue>emptyList()));
+				out.add(new ParameterizedNtaEdge(parent, TypeAtLoc.from(info, astNode), astNode, target, m.getName(),
+						Collections.<ParameterValue>emptyList()));
 				extractStepsTo(info, parent, out);
 				return true;
 			}
@@ -349,10 +365,10 @@ public class CreateLocator {
 						final AstNode bounceChild = new AstNode(ent.getValue());
 						final TypeAtLoc bounceChildLoc = TypeAtLoc.from(info, bounceChild);
 
-						out.add(new ParameterizedNtaEdge(bounceChild, bounceChildLoc, astNode, target,
-								"getParent", new ArrayList<>()));
-						out.add(new ParameterizedNtaEdge(parent, realSource, bounceChild, bounceChildLoc,
-								m.getName(), serializableParams));
+						out.add(new ParameterizedNtaEdge(bounceChild, bounceChildLoc, astNode, target, "getParent",
+								new ArrayList<>()));
+						out.add(new ParameterizedNtaEdge(parent, realSource, bounceChild, bounceChildLoc, m.getName(),
+								serializableParams));
 					} else {
 						out.add(new ParameterizedNtaEdge(parent, realSource, astNode, target, m.getName(),
 								serializableParams));

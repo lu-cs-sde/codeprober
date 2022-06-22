@@ -34,17 +34,35 @@ public class ApplyLocator {
 		}
 	}
 
+	private static class MatchedNode {
+		public final AstNode matchedNode;
+		public final int matchError;
+		public final int depthDiff;
+
+		public MatchedNode(AstNode matchedNode, int matchError, int depthDiff) {
+			this.matchedNode = matchedNode;
+			this.matchError = matchError;
+			this.depthDiff = depthDiff;
+		}
+	}
+
 	@SuppressWarnings("serial")
 	private static class AmbiguousTal extends RuntimeException {
 	}
 
-	private static AstNode bestMatchingNode(AstInfo info, AstNode astNode, Class<?> nodeType, int startPos, int endPos,
-			PositionRecoveryStrategy recoveryStrategy, boolean failOnAmbiguity) {
-		return bestMatchingNode(info, astNode, nodeType, startPos, endPos, recoveryStrategy, failOnAmbiguity, null);
+	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, Class<?> nodeType, int startPos,
+			int endPos, int depth, PositionRecoveryStrategy recoveryStrategy, boolean failOnAmbiguity) {
+		return bestMatchingNode(info, astNode, nodeType, startPos, endPos, depth, recoveryStrategy, failOnAmbiguity,
+				null, Integer.MIN_VALUE);
 	}
 
-	private static AstNode bestMatchingNode(AstInfo info, AstNode astNode, Class<?> nodeType, int startPos, int endPos,
-			PositionRecoveryStrategy recoveryStrategy, boolean failOnAmbiguity, AstNode ignoreTraversalOn) {
+	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, Class<?> nodeType, int startPos,
+			int endPos, int depth, PositionRecoveryStrategy recoveryStrategy, boolean failOnAmbiguity,
+			AstNode ignoreTraversalOn, int failOnDepthBelowLevel) {
+		if (depth < failOnDepthBelowLevel) {
+			return null;
+		}
+		
 		final Span nodePos;
 		try {
 			nodePos = astNode.getRecoveredSpan(info);
@@ -62,34 +80,50 @@ public class ApplyLocator {
 		}
 
 		AstNode bestNode = nodeType.isInstance(astNode.underlyingAstNode) ? astNode : null;
-		int bestError = bestNode != null ? (Math.abs(start - startPos) + Math.abs(end - endPos)) : Integer.MAX_VALUE;
+		int bestError;
+		int bestDepthDiff;
+		if (bestNode == null) {
+			bestError = Integer.MAX_VALUE;
+			bestDepthDiff = bestError;
+
+		} else {
+			bestError = Math.abs(start - startPos) + Math.abs(end - endPos);
+			bestDepthDiff = Math.abs(depth);
+
+			if (bestDepthDiff <= 0 && !failOnAmbiguity) {
+				// Child nodes cannot be better than this, and we don't care about ambiguity
+				// Return early
+				return new MatchedNode(bestNode, bestError, bestDepthDiff);
+			}
+			failOnDepthBelowLevel = Math.max(failOnDepthBelowLevel, -bestDepthDiff); 
+		}
 		for (AstNode child : astNode.getChildren()) {
 			if (ignoreTraversalOn != null && ignoreTraversalOn.underlyingAstNode == child.underlyingAstNode) {
 				continue;
 			}
-			AstNode recurse = bestMatchingNode(info, child, nodeType, startPos, endPos, recoveryStrategy,
-					failOnAmbiguity, ignoreTraversalOn);
+			MatchedNode recurse = bestMatchingNode(info, child, nodeType, startPos, endPos, depth - 1, recoveryStrategy,
+					failOnAmbiguity, ignoreTraversalOn, failOnDepthBelowLevel);
 			if (recurse != null) {
-				final Span recursePos;
-				try {
-					recursePos = recurse.getRecoveredSpan(info);
-					final int recurseError = Math.abs(recursePos.start - startPos) + Math.abs(recursePos.end - endPos);
-					if (recurseError < bestError) {
-						bestNode = recurse;
-						bestError = recurseError;
-					} else if (recurseError == bestError && failOnAmbiguity) {
+				if (recurse.depthDiff <= bestDepthDiff) {
+					if (recurse.matchError < bestError) {
+						bestNode = recurse.matchedNode;
+						bestError = recurse.matchError;
+						bestDepthDiff = recurse.depthDiff;
+						failOnDepthBelowLevel = Math.max(failOnDepthBelowLevel, -bestDepthDiff);
+					} else if (recurse.matchError == bestError && failOnAmbiguity) {
 						throw new AmbiguousTal();
 					}
-				} catch (InvokeProblem e) {
-					System.out.println("Error while extracting child node position");
-					e.printStackTrace();
 				}
 			}
 		}
-		return bestNode;
+		if (bestNode == null) {
+			return null;
+		}
+		return new MatchedNode(bestNode, bestError, bestDepthDiff);
 	}
 
-	public static boolean isAmbiguousTal(AstInfo info, AstNode sourceNode, TypeAtLoc tal, AstNode ignoreTraversalOn) {
+	public static boolean isAmbiguousTal(AstInfo info, AstNode sourceNode, TypeAtLoc tal, int depth,
+			AstNode ignoreTraversalOn) {
 //		switch (step.getString("type")) {
 //		case "nta":
 //		case "child": {
@@ -98,9 +132,9 @@ public class ApplyLocator {
 //		case "tal": {
 //			final JSONObject tal = step.getJSONObject("value");
 		try {
-			final AstNode match = bestMatchingNode(info, sourceNode,
-					info.loadAstClass.apply(info.getQualifiedAstType(tal.type)), tal.loc.start, tal.loc.end,
-					info.recoveryStrategy, true, ignoreTraversalOn);
+			final MatchedNode match = bestMatchingNode(info, sourceNode,
+					info.loadAstClass.apply(info.getQualifiedAstType(tal.type)), tal.loc.start, tal.loc.end, depth,
+					info.recoveryStrategy, true, ignoreTraversalOn, Integer.MIN_VALUE);
 			if (ignoreTraversalOn != null) {
 				// Matching anything means that there are >=two matches -> ambiguous
 				return match != null;
@@ -155,18 +189,20 @@ public class ApplyLocator {
 						final JSONObject tal = step.getJSONObject("value");
 						final int start = tal.getInt("start");
 						final int end = tal.getInt("end");
+						final int depth = tal.getInt("depth");
 						final Class<?> clazz = info.loadAstClass.apply(info.getQualifiedAstType(tal.getString("type")));
 						final AstNode parent = matchedNode;
-						matchedNode = bestMatchingNode(info, parent, clazz, start, end, info.recoveryStrategy,
-								false);
+						MatchedNode result = bestMatchingNode(info, parent, clazz, start, end, depth,
+								info.recoveryStrategy, false);
 
-						if (matchedNode == null) {
+						if (result == null) {
 							// Sometimes the locator can shift 1 or 2 characters off,
 							// especially if the document enters an invalid state while typing.
 							// We can permit a tiny bit of error and try again
-							matchedNode = bestMatchingNode(info, parent, clazz, start - 2, end + 2,
+							result = bestMatchingNode(info, parent, clazz, start - 2, end + 2, depth,
 									info.recoveryStrategy, false);
 						}
+						matchedNode = result != null ? result.matchedNode : null;
 						break;
 					}
 					case "child": {

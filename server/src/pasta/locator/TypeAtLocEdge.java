@@ -3,17 +3,17 @@ package pasta.locator;
 import org.json.JSONObject;
 
 import pasta.ast.AstNode;
-import pasta.locator.NodeEdge.NodeEdgeType;
 
 public class TypeAtLocEdge extends NodeEdge {
-	public TypeAtLocEdge(AstNode sourceNode, TypeAtLoc sourceLoc, AstNode targetNode, TypeAtLoc targetLoc) {
-		super(sourceNode, sourceLoc, targetNode, targetLoc, NodeEdgeType.TypeAtLoc, buildLocatorObj(targetLoc));
+	public TypeAtLocEdge(AstNode sourceNode, TypeAtLoc sourceLoc, AstNode targetNode, TypeAtLoc targetLoc, int depth) {
+		super(sourceNode, sourceLoc, targetNode, targetLoc, NodeEdgeType.TypeAtLoc, buildLocatorObj(targetLoc, depth));
 	}
 
-	private static JSONObject buildLocatorObj(TypeAtLoc target) {
+	private static JSONObject buildLocatorObj(TypeAtLoc target, int depth) {
 		final JSONObject locatorObj = new JSONObject();
 		locatorObj.put("start", target.loc.start);
 		locatorObj.put("end", target.loc.end);
+		locatorObj.put("depth", depth);
 		locatorObj.put("type", target.type);
 		return locatorObj;
 	}

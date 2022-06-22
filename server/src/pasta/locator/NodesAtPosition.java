@@ -14,12 +14,12 @@ public class NodesAtPosition {
 
 	public static List<JSONObject> get(AstInfo info, AstNode astNode, int pos) {
 		List<JSONObject> ret = new ArrayList<>();
-		getTo(ret, info, astNode, pos);
+		getTo(ret, info, astNode, pos, 0);
 		Collections.reverse(ret); // Narrowest/smallest node first inthe list
 		return ret;
 	}
 
-	private static void getTo(List<JSONObject> out, AstInfo info, AstNode astNode, int pos) {
+	private static void getTo(List<JSONObject> out, AstInfo info, AstNode astNode, int pos, int depth) {
 		final Span nodePos;
 		try {
 			nodePos = astNode.getRecoveredSpan(info);
@@ -34,15 +34,11 @@ public class NodesAtPosition {
 
 			final Boolean override = astNode.pastaVisible();
 			if (override != null ? override : show) {
-				JSONObject obj = new JSONObject();
-				obj.put("start", nodePos.start);
-				obj.put("end", nodePos.end);
-				obj.put("type", astNode.underlyingAstNode.getClass().getSimpleName());
-				out.add(obj);
+				out.add(CreateLocator.fromNode(info, astNode));
 			}
 		}
 		for (AstNode child : astNode.getChildren()) {
-			getTo(out, info, child, pos);
+			getTo(out, info, child, pos, depth + 1);
 		}
 	}
 }

@@ -40,6 +40,10 @@ public class AstNode {
 		this.underlyingAstNode = underlyingAstNode;
 	}
 
+	public boolean isLocatorTALRoot(AstInfo info) {
+		return underlyingAstNode.getClass() == info.getLocatorTALRoot();
+	}
+	
 	public Boolean pastaVisible() {
 		try {
 			return (Boolean) Reflect.invoke0(underlyingAstNode, "pastaVisible");

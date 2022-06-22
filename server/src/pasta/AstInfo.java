@@ -3,7 +3,9 @@ package pasta;
 import java.util.function.Function;
 
 import pasta.ast.AstNode;
+import pasta.metaprogramming.InvokeProblem;
 import pasta.metaprogramming.PositionRepresentation;
+import pasta.metaprogramming.Reflect;
 import pasta.protocol.PositionRecoveryStrategy;
 
 public class AstInfo {
@@ -13,6 +15,9 @@ public class AstInfo {
 	public final PositionRepresentation positionRepresentation;
 	public final Function<String, Class<?>> loadAstClass;
 	public final Class<?> basAstClazz;
+	
+	private Class<?> locatorTALRoot;
+	private boolean loadedLocatorTALRoot;
 
 	public AstInfo(AstNode ast, PositionRecoveryStrategy recoveryStrategy,
 			PositionRepresentation positionRepresentation, Function<String, Class<?>> loadAstClass) {
@@ -37,5 +42,21 @@ public class AstInfo {
 			return basAstClazz.getEnclosingClass().getName() + "$" + simpleName;
 		}
 		return basAstClazz.getPackage().getName() + "." + simpleName;
+	}
+	
+	public Class<?> getLocatorTALRoot() {
+		if (!loadedLocatorTALRoot) {
+			loadedLocatorTALRoot = true;
+			try {
+				String underlyingType = (String)Reflect.invoke0(ast.underlyingAstNode, "pastaLocatorTALRoot");
+				locatorTALRoot = loadAstClass.apply(getQualifiedAstType(underlyingType));
+			} catch (InvokeProblem e) {
+				// OK, this is an optional attribute after all
+			} catch (ClassCastException e) {
+				System.out.println("pastaLocatorTALRoot returned non-String value");
+				e.printStackTrace();
+			}
+		}
+		return locatorTALRoot;
 	}
 }

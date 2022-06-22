@@ -1,0 +1,121 @@
+package benchmark;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+public class ExtendJQueries {
+
+	private static void generateBusyLocatorStep(JSONArray out) {
+		out.put(new JSONObject() //
+				.put("type", "nta") //
+				.put("value", new JSONObject() //
+						.put("name", "getChild") //
+						.put("args", new JSONArray() //
+								.put(new JSONObject() //
+										.put("type", "int") //
+										.put("isNodeType", false) //
+										.put("value", 0) //
+								))));
+		out.put(new JSONObject() //
+				.put("type", "nta") //
+				.put("value", new JSONObject() //
+						.put("name", "getParent") //
+						.put("args", new JSONArray())));
+	}
+	
+	// + Prob för Program.errors() (eller CompilationUnit.errors())
+
+	private static JSONObject createLookupType(String pkg, String name) {
+		return new JSONObject() //
+				.put("type", "nta") //
+				.put("value", new JSONObject() //
+						.put("name", "lookupType") //
+						.put("args", new JSONArray() //
+								.put(new JSONObject() //
+										.put("type", "java.lang.String") //
+										.put("isNodeType", false) //
+										.put("value", pkg) //
+								) //
+								.put(new JSONObject() //
+										.put("type", "java.lang.String") //
+										.put("isNodeType", false) //
+										.put("value", name) //
+								) //
+						) //
+				);
+
+	}
+
+	private static JSONObject createTAL(String type, int start, int end) {
+		return new JSONObject() //
+				.put("type", "tal") //
+				.put("value", new JSONObject() //
+						.put("type", type) //
+						.put("start", start) //
+						.put("end", end) //
+						.put("depth", 123) //
+				);
+
+	}
+
+	private static JSONObject createBaseMessageObject(int rpcId, String sourceFile) {
+		final JSONObject msgObj = new JSONObject();
+		msgObj.put("id", rpcId);
+		msgObj.put("posRecovery", "FAIL");
+		msgObj.put("cache", "FULL");
+		msgObj.put("type", "query");
+		msgObj.put("text", sourceFile);
+		msgObj.put("stdout", false);
+		return msgObj;
+	}
+
+	public static JSONObject createStdJavaLibQuery(int rpcId, String sourceFile) {
+
+		JSONArray locatorSteps = new JSONArray();
+		for (int i = 0; i < 10; i++) {
+			generateBusyLocatorStep(locatorSteps);
+		}
+		locatorSteps.put(createLookupType("java.lang", "Object"));
+
+		final JSONObject msgObj = createBaseMessageObject(rpcId, sourceFile);
+		msgObj.put("query", new JSONObject() //
+				.put("attr", new JSONObject() //
+						.put("name", "unqualifiedLookupMethod") //
+						.put("args", new JSONArray() //
+								.put(new JSONObject() //
+										.put("type", "java.lang.String") //
+										.put("isNodeType", false) //
+										.put("value", "hashCode") //
+								) //
+						) //
+				) //
+				.put("locator", new JSONObject() //
+						.put("steps", locatorSteps)));
+
+		return msgObj;
+	}
+
+	public static JSONObject createLookupExternalTypeQuery(int rpcId, String sourceFile, String lookupPkg,
+			String lookupName) {
+		return createBaseMessageObject(rpcId, sourceFile) //
+				.put("query", new JSONObject() //
+						.put("attr", new JSONObject() //
+								.put("name", "isEnumDecl") //
+						) //
+						.put("locator", new JSONObject() //
+								.put("steps", new JSONArray() //
+										.put(createLookupType(lookupPkg, lookupName)))));
+	}
+
+	public static JSONObject createTAL(int rpcId, String sourceFile, String talType, int talStart, int talEnd) {
+		return createBaseMessageObject(rpcId, sourceFile) //
+				.put("query", new JSONObject() //
+						.put("attr", new JSONObject() //
+								.put("name", "getNumChild") //
+						) //
+						.put("locator", new JSONObject() //
+								.put("steps", new JSONArray() //
+										.put(createTAL(talType, talStart, talEnd)))));
+
+	}
+}

@@ -1860,7 +1860,8 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                 const rootProgramLocator = {
                     type: '?',
                     start: (line << 12) + col,
-                    end: (line << 12) + col
+                    end: (line << 12) + col,
+                    depth: 0,
                 };
                 env.performRpcQuery({
                     attr: {
@@ -1897,8 +1898,8 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                     const rowsContainer = document.createElement('div');
                     rowsContainer.style.padding = '2px';
                     root.appendChild(rowsContainer);
-                    // const parsed = JSON.parse(interestingLine.slice(needle.length)) as string[];
-                    parsed.spansAndNodeTypes.forEach(({ start, end, type }, entIdx) => {
+                    parsed.spansAndNodeTypes.forEach((locator, entIdx) => {
+                        const { start, end, type } = locator.result;
                         const span = { lineStart: (start >>> 12), colStart: (start & 0xFFF), lineEnd: (end >>> 12), colEnd: (end & 0xFFF) };
                         const node = document.createElement('div');
                         node.classList.add('clickHighlightOnHover');
@@ -1909,12 +1910,6 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         node.innerText = `${type}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
                         (0, registerOnHover_4.default)(node, on => env.updateSpanHighlight(on ? span : null));
                         node.onmousedown = (e) => { e.stopPropagation(); };
-                        const nodeTal = {
-                            start: (span.lineStart << 12) + span.colStart,
-                            end: (span.lineEnd << 12) + span.colEnd,
-                            type,
-                        };
-                        const locator = { result: nodeTal, steps: [{ type: 'tal', value: nodeTal }] };
                         (0, registerNodeSelector_3.default)(node, () => locator);
                         node.onclick = () => {
                             cleanup();
@@ -2597,7 +2592,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 }, 300); // JUUUUUUUST in case the stored window state causes issues, this 300ms timeout allows people to click the 'clear state' button
                 window.RagQuery = (line, col, autoSelectRoot) => {
                     if (autoSelectRoot) {
-                        const node = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1 };
+                        const node = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1, depth: 0 };
                         (0, displayAttributeModal_4.default)(modalEnv, null, { result: node, steps: [] });
                     }
                     else {

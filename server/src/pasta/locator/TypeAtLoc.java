@@ -10,10 +10,12 @@ public class TypeAtLoc {
 
 	public final String type;
 	public final Span loc;
+//	public final int depth;
 
 	public TypeAtLoc(String type, Span position) {
 		this.type = type;
 		this.loc = position;
+//		this.depth = depth;
 	}
 
 	@Override
@@ -39,6 +41,6 @@ public class TypeAtLoc {
 		if (getClass() != obj.getClass())
 			return false;
 		final TypeAtLoc other = (TypeAtLoc) obj;
-		return Objects.equals(loc, other.loc) && Objects.equals(type, other.type);
+		return Objects.equals(loc, other.loc) && Objects.equals(type, other.type); // && Objects.equals(depth, other.depth);
 	}
 }

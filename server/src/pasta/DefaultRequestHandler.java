@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -17,6 +16,7 @@ import pasta.ast.AstNode;
 import pasta.locator.ApplyLocator;
 import pasta.locator.ApplyLocator.ResolvedNode;
 import pasta.locator.AttrsInNode;
+import pasta.locator.CreateLocator;
 import pasta.locator.NodesAtPosition;
 import pasta.metaprogramming.InvokeProblem;
 import pasta.metaprogramming.PositionRepresentation;
@@ -159,7 +159,13 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 						BenchmarkTimer.EVALUATE_ATTR.exit();
 					}
 				}
-				EncodeResponseValue.encode(info, bodyBuilder, value, new HashSet<>());
+				
+				CreateLocator.setBuildFastButFragileLocator(true);
+				try {
+					EncodeResponseValue.encode(info, bodyBuilder, value, new HashSet<>());
+				} finally {
+					CreateLocator.setBuildFastButFragileLocator(false);
+				}
 				retBuilder.put("args", updatedArgs);
 			} catch (InvokeProblem e) {
 				final Throwable cause = e.getCause();
@@ -229,6 +235,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					final long flushStart = System.nanoTime();
 					try {
 						if (cacheStrategy == AstCacheStrategy.PARTIAL) {
+//							System.out.println("Flushing treeCache!");
 							Reflect.invoke0(lastInfo.ast.underlyingAstNode, "flushTreeCache");
 						}
 

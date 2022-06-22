@@ -30,10 +30,11 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
       spinner.classList.add('absoluteCenter');
       root.appendChild(spinner);
 
-      const rootProgramLocator: TypeAtLoc = {
+      const rootProgramLocator: TypeAtLocStep = {
         type: '?',
         start: (line << 12) + col,
-        end: (line << 12) + col
+        end: (line << 12) + col,
+        depth: 0,
       };
       env.performRpcQuery({
         attr: {
@@ -70,8 +71,8 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
           const rowsContainer = document.createElement('div');
           rowsContainer.style.padding = '2px';
           root.appendChild(rowsContainer);
-          // const parsed = JSON.parse(interestingLine.slice(needle.length)) as string[];
-          parsed.spansAndNodeTypes.forEach(({ start, end, type }, entIdx) => {
+          parsed.spansAndNodeTypes.forEach((locator, entIdx) => {
+            const { start, end, type } = locator.result;
             const span = { lineStart: (start >>> 12), colStart: (start & 0xFFF), lineEnd: (end >>> 12), colEnd: (end & 0xFFF) };
             const node = document.createElement('div');
             node.classList.add('clickHighlightOnHover');
@@ -83,12 +84,6 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
             registerOnHover(node, on => env.updateSpanHighlight(on ? span : null));
             node.onmousedown = (e) => { e.stopPropagation(); }
 
-            const nodeTal: TypeAtLoc = { 
-              start: (span.lineStart << 12) + span.colStart,
-              end: (span.lineEnd << 12) + span.colEnd,
-              type,
-            }
-            const locator: NodeLocator = { result: nodeTal, steps: [{ type: 'tal', value: nodeTal }]};
             registerNodeSelector(node, () => locator );
             node.onclick = () => {
               cleanup();
