@@ -4,9 +4,12 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 import java.util.function.Consumer;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class ExtendJBenchmark extends BaseBenchmark {
@@ -84,13 +87,13 @@ public class ExtendJBenchmark extends BaseBenchmark {
 		// TODO Auto-generated constructor stub
 	}
 
+//	private Set<String> uniqResponses = new HashSet<>();
 	@Override
 	public void handleIncomingMessage(JSONObject msg) {
 		synchronized (this) {
 			final int actualid = msg.getInt("id");
 //			System.out.println("Got msg with id " + actualid +", was waiting for " + expectedId);
-//			System.out.println("resp: " + msg);
-			if (actualid != expectedId) {
+						if (actualid != expectedId) {
 				System.out.println("Unknown RPC response: " + msg.toString());
 				System.out.println("Expected id: " + expectedId);
 				return;
@@ -100,6 +103,12 @@ public class ExtendJBenchmark extends BaseBenchmark {
 				System.out.println("Got response without locator - query or test config is probably wrong");
 				return;
 			}
+//			final String msgStr = "" + msg.getJSONObject("result").get("body");
+//			if (!uniqResponses.contains(msgStr)) {
+//				uniqResponses.add(msgStr);
+//				System.out.println("UNIQ resp: " + msgStr +"  | from " + lastSentMessage);
+//			}
+
 			measurements.numSamples++;
 			measurements.endToEndTime += System.nanoTime() - requestStartNanos;
 
@@ -144,7 +153,7 @@ public class ExtendJBenchmark extends BaseBenchmark {
 	private void sendMessageAndWaitForResponse(int numProbes) throws InterruptedException {
 		final String sourceFile = generateSourceFile();
 
-		final int probeOffset = (int)(Math.random() * 5);
+		final int probeOffset = (int) (Math.random() * 5);
 		for (int probe = 0; probe < numProbes; ++probe) {
 
 			synchronized (this) {
@@ -158,87 +167,35 @@ public class ExtendJBenchmark extends BaseBenchmark {
 				msgObj = ExtendJQueries.createStdJavaLibQuery(expectedId, sourceFile);
 				break;
 			case 1:
-				switch (PROBE_TYPE) {
-				case FOP: {
-					msgObj = ExtendJQueries.createLookupExternalTypeQuery(expectedId, sourceFile,
-							"org.apache.fop.cli", "CommandLineOptions");
-					break;
-				}
-				case PMD: {
-					msgObj = ExtendJQueries.createLookupExternalTypeQuery(expectedId, sourceFile,
-							"net.sourceforge.pmd", "RuleChain");
-					break;
-				}
-				case NETBEANS: {
-					msgObj = ExtendJQueries.createLookupExternalTypeQuery(expectedId, sourceFile,
-							"org.netbeans.modules.bugtracking", "BugtrackingManager");
-					break;
-
-				}
-				case COMMONSCODEC: {
-					msgObj = ExtendJQueries.createLookupExternalTypeQuery(expectedId, sourceFile, "org.apache.commons.codec",
-							"BinaryEncoder");
-					break;
-				}
-				case PASTA: {
-					msgObj = ExtendJQueries.createLookupExternalTypeQuery(expectedId, sourceFile, "pasta.protocol",
-							"AstCacheStrategy");
-					break;
-				}
-				case MINI:
-				default: {
-					msgObj = ExtendJQueries.createLookupExternalTypeQuery(expectedId, sourceFile, "java.util",
-							"ArrayList");
-					break;
-				}
-				}
+				msgObj = ExtendJQueries.createIsEnumDecl(expectedId, sourceFile, new JSONArray() //
+						.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(25)) //
+				);
 				break;
 			case 2:
-				msgObj = ExtendJQueries.createTAL(expectedId, sourceFile, "StringLiteral", (5 << 12), (6 << 12));
+				msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
+						.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(100)) // = Our file, it is always last
+																						// (=100)
+						.put(ExtendJQueries.createTALStep("StringLiteral", (5 << 12), (6 << 12))) //
+				);
 				break;
 			case 3:
-
-				switch (PROBE_TYPE) {
-				case FOP: {
-					msgObj = ExtendJQueries.createLookupExternalTypeQuery(expectedId, sourceFile,
-							"org.apache.fop.traits", "BlockProps");
-					break;
-				}
-				case PMD: {
-					msgObj = ExtendJQueries.createLookupExternalTypeQuery(expectedId, sourceFile,
-							"net.sourceforge.pmd.renderers", "HTMLRenderer");
-					break;
-				}
-				case NETBEANS: {
-					msgObj = ExtendJQueries.createLookupExternalTypeQuery(expectedId, sourceFile,
-							"org.netbeans.modules.bugtracking.api", "Query");
-					break;
-				}
-				case COMMONSCODEC: {
-					msgObj = ExtendJQueries.createLookupExternalTypeQuery(expectedId, sourceFile,
-							"org.apache.commons.codec.cli", "Digest");
-					break;
-				}
-				case PASTA: {
-					msgObj = ExtendJQueries.createLookupExternalTypeQuery(expectedId, sourceFile, "pasta.locator",
-							"Span");
-					break;
-				}
-				case MINI:
-				default: {
-					msgObj = ExtendJQueries.createLookupExternalTypeQuery(expectedId, sourceFile, "java.lang",
-							"String");
-					break;
-				}
-				}
+				msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
+						.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(50)) //
+						.put(ExtendJQueries.createTALStep("MethodDecl", (1 << 12), (128 << 12))) //
+				);
 				break;
 			case 4:
 			default:
-				msgObj = ExtendJQueries.createTAL(expectedId, sourceFile, "MethodDecl", (4 << 12), (5 << 12));
+//				msgObj = ExtendJQueries.createTAL(expectedId, sourceFile, "MethodDecl", (4 << 12), (5 << 12));
+
+				msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
+						.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(75)) //
+				);
 				break;
 			}
 
 			final String outgoingStr = msgObj.toString();
+//			lastSentMessage = outgoingStr;
 //			System.out.println("Sending " + outgoingStr);
 
 			requestStartNanos = System.nanoTime();
@@ -251,6 +208,8 @@ public class ExtendJBenchmark extends BaseBenchmark {
 			}
 		}
 	}
+	
+//	private String lastSentMessage;
 
 	@Override
 	public void run() throws InterruptedException {

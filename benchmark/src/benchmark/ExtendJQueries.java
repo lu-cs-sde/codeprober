@@ -22,10 +22,10 @@ public class ExtendJQueries {
 						.put("name", "getParent") //
 						.put("args", new JSONArray())));
 	}
-	
+
 	// + Prob för Program.errors() (eller CompilationUnit.errors())
 
-	private static JSONObject createLookupType(String pkg, String name) {
+	private static JSONObject createLookupTypeStep(String pkg, String name) {
 		return new JSONObject() //
 				.put("type", "nta") //
 				.put("value", new JSONObject() //
@@ -46,7 +46,23 @@ public class ExtendJQueries {
 
 	}
 
-	private static JSONObject createTAL(String type, int start, int end) {
+	public static JSONObject createLookupTypeDeclForBenchmarkStep(int posSelector) {
+		return new JSONObject() //
+				.put("type", "nta") //
+				.put("value", new JSONObject() //
+						.put("name", "getTypeDeclForBenchmark") //
+						.put("args", new JSONArray() //
+								.put(new JSONObject() //
+										.put("type", "int") //
+										.put("isNodeType", false) //
+										.put("value", posSelector) //
+								) //
+						) //
+				);
+
+	}
+
+	public static JSONObject createTALStep(String type, int start, int end) {
 		return new JSONObject() //
 				.put("type", "tal") //
 				.put("value", new JSONObject() //
@@ -72,10 +88,10 @@ public class ExtendJQueries {
 	public static JSONObject createStdJavaLibQuery(int rpcId, String sourceFile) {
 
 		JSONArray locatorSteps = new JSONArray();
-		for (int i = 0; i < 10; i++) {
-			generateBusyLocatorStep(locatorSteps);
-		}
-		locatorSteps.put(createLookupType("java.lang", "Object"));
+//		for (int i = 0; i < 10; i++) {
+//			generateBusyLocatorStep(locatorSteps);
+//		}
+		locatorSteps.put(createLookupTypeStep("java.lang", "Object"));
 
 		final JSONObject msgObj = createBaseMessageObject(rpcId, sourceFile);
 		msgObj.put("query", new JSONObject() //
@@ -104,7 +120,38 @@ public class ExtendJQueries {
 						) //
 						.put("locator", new JSONObject() //
 								.put("steps", new JSONArray() //
-										.put(createLookupType(lookupPkg, lookupName)))));
+										.put(createLookupTypeStep(lookupPkg, lookupName)))));
+	}
+
+	public static JSONObject createGetNumChild(int rpcId, String sourceFile, JSONArray steps) {
+		return createBaseMessageObject(rpcId, sourceFile) //
+				.put("query", new JSONObject() //
+						.put("attr", new JSONObject() //
+								.put("name", "getNumChild") //
+						) //
+						.put("locator", new JSONObject() //
+								.put("steps", steps)));
+	}
+
+	public static JSONObject createIsEnumDecl(int rpcId, String sourceFile, JSONArray steps) {
+		return createBaseMessageObject(rpcId, sourceFile) //
+				.put("query", new JSONObject() //
+						.put("attr", new JSONObject() //
+								.put("name", "isEnumDecl") //
+						) //
+						.put("locator", new JSONObject() //
+								.put("steps", steps)));
+	}
+
+	public static JSONObject createLookupTypeDeclForBenchmark(int rpcId, String sourceFile, int posSelector) {
+		return createBaseMessageObject(rpcId, sourceFile) //
+				.put("query", new JSONObject() //
+						.put("attr", new JSONObject() //
+								.put("name", "isEnumDecl") //
+						) //
+						.put("locator", new JSONObject() //
+								.put("steps", new JSONArray() //
+										.put(createLookupTypeDeclForBenchmarkStep(posSelector)))));
 	}
 
 	public static JSONObject createTAL(int rpcId, String sourceFile, String talType, int talStart, int talEnd) {
@@ -115,7 +162,7 @@ public class ExtendJQueries {
 						) //
 						.put("locator", new JSONObject() //
 								.put("steps", new JSONArray() //
-										.put(createTAL(talType, talStart, talEnd)))));
+										.put(createTALStep(talType, talStart, talEnd)))));
 
 	}
 }

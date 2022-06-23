@@ -10,6 +10,7 @@ find src -name "*.java" > sources.txt
 echo "Building.."
 javac @sources.txt -cp libs/json.jar -d build_tmp
 
+unzip libs/json.jar '*.class' -x */* -d build_tmp
 cd build_tmp
 
 echo "Generating jar.."
