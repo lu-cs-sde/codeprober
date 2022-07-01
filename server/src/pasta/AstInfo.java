@@ -1,5 +1,9 @@
 package pasta;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 import pasta.ast.AstNode;
@@ -19,6 +23,9 @@ public class AstInfo {
 	private Class<?> locatorTALRoot;
 	private boolean loadedLocatorTALRoot;
 
+	
+	private final Map<Class<?>, Map<String, Boolean>> hasOverrides = new HashMap<>();
+	
 	public AstInfo(AstNode ast, PositionRecoveryStrategy recoveryStrategy,
 			PositionRepresentation positionRepresentation, Function<String, Class<?>> loadAstClass) {
 		this.ast = ast;
@@ -58,5 +65,26 @@ public class AstInfo {
 			}
 		}
 		return locatorTALRoot;
+	}
+	
+	public boolean hasOverride0(Class<?> cls, String mthName) {
+		Map<String, Boolean> inner = hasOverrides.get(cls);
+		if (inner == null) {
+			inner = new HashMap<>();
+			hasOverrides.put(cls, inner);
+		}
+		
+		Boolean ex = inner.get(mthName);
+		if (ex != null) { return ex; }
+		
+		boolean fresh;
+		try {
+			cls.getMethod(mthName);
+			fresh = true;
+		} catch (NoSuchMethodException e) {
+			fresh = false;
+		}
+		inner.put(mthName, fresh);
+		return fresh;
 	}
 }

@@ -123,6 +123,32 @@ public class ExtendJQueries {
 										.put(createLookupTypeStep(lookupPkg, lookupName)))));
 	}
 
+	public static JSONObject createNodesAtPosition(int rpcId, String sourceFile) {
+		return createBaseMessageObject(rpcId, sourceFile) //
+				.put("query", new JSONObject() //
+						.put("attr", new JSONObject() //
+								.put("name", "pasta_spansAndNodeTypes") //
+						) //
+						.put("locator", new JSONObject() //
+								.put("steps", new JSONArray()) //
+								.put("result", new JSONObject() //
+										// Line 16, column 12
+										.put("start", (4 << 12) + 60) //
+										.put("end", (4 << 12) + 60) //
+								) //
+						));
+	}
+
+	public static JSONObject createPastaAttrs(int rpcId, String sourceFile, JSONObject locator) {
+		return createBaseMessageObject(rpcId, sourceFile) //
+				.put("query", new JSONObject() //
+						.put("attr", new JSONObject() //
+								.put("name", "pasta_pastaAttrs") //
+						) //
+						.put("locator", locator) //
+						);
+	}
+
 	public static JSONObject createGetNumChild(int rpcId, String sourceFile, JSONArray steps) {
 		return createBaseMessageObject(rpcId, sourceFile) //
 				.put("query", new JSONObject() //

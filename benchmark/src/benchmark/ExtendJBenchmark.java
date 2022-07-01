@@ -4,9 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Locale;
-import java.util.Set;
 import java.util.function.Consumer;
 
 import org.json.JSONArray;
@@ -14,13 +12,13 @@ import org.json.JSONObject;
 
 public class ExtendJBenchmark extends BaseBenchmark {
 
-	private static enum ProbeType {
-		MINI, PASTA, COMMONSCODEC, NETBEANS, PMD, FOP,
+	private static enum ActionType {
+		CREATE_PROBE, EVALUATE_PROBE
 	};
 
 	private static final int NUM_ITERATIONS;
 	private static final int NUM_PROBES;
-	private static final ProbeType PROBE_TYPE;
+	private static final ActionType PROBE_TYPE;
 
 	private static final double COV_WARMUP_THRESHOLD;
 	private static final int COV_WARMUP_IMPLIED_STEADY_STATE_TIMEOUT;
@@ -28,7 +26,8 @@ public class ExtendJBenchmark extends BaseBenchmark {
 	static {
 		NUM_ITERATIONS = Integer.parseInt(System.getProperty("benchmark.iterations", "1000"));
 		NUM_PROBES = Integer.parseInt(System.getProperty("benchmark.probes", "1"));
-		PROBE_TYPE = ProbeType.valueOf(System.getProperty("benchmark.probeType", "mini").toUpperCase(Locale.ENGLISH));
+		PROBE_TYPE = ActionType
+				.valueOf(System.getProperty("benchmark.actionType", "evaluate_probe").toUpperCase(Locale.ENGLISH));
 		COV_WARMUP_THRESHOLD = Double.parseDouble(System.getProperty("benchmark.warmupCovThreshold", "0.01"));
 		COV_WARMUP_IMPLIED_STEADY_STATE_TIMEOUT = Integer
 				.parseInt(System.getProperty("benchmark.warmupImpliedSteadyStateTimeout", "10"));
@@ -42,6 +41,8 @@ public class ExtendJBenchmark extends BaseBenchmark {
 		public long createLocatorTime;
 		public long applyLocatorTime;
 		public long attrEvalTime;
+		public long nodesAtPositionTime;
+		public long pastaAttrsTime;
 
 		public void reset() {
 			numSamples = 0;
@@ -51,6 +52,8 @@ public class ExtendJBenchmark extends BaseBenchmark {
 			createLocatorTime = 0;
 			applyLocatorTime = 0;
 			attrEvalTime = 0;
+			nodesAtPositionTime = 0;
+			pastaAttrsTime = 0;
 		}
 
 		public double getAverageEndToEnd() {
@@ -76,11 +79,20 @@ public class ExtendJBenchmark extends BaseBenchmark {
 		public double getAverageAttrEvalTime() {
 			return attrEvalTime / (double) numSamples;
 		}
+
+		public double getAverageNodesAtPositionTime() {
+			return nodesAtPositionTime / (double) numSamples;
+		}
+
+		public double getAveragePastaAttrsTime() {
+			return pastaAttrsTime / (double) numSamples;
+		}
 	}
 
 	private int expectedId = -1;
 	private long requestStartNanos;
 	private Measurement measurements = new Measurement();
+	private JSONObject lastResult = new JSONObject();
 
 	public ExtendJBenchmark(Consumer<String> postMessage) {
 		super(postMessage);
@@ -90,19 +102,30 @@ public class ExtendJBenchmark extends BaseBenchmark {
 //	private Set<String> uniqResponses = new HashSet<>();
 	@Override
 	public void handleIncomingMessage(JSONObject msg) {
+		if (!msg.has("id")) {
+			System.err.println("Got unknown message: " + msg);
+			return;
+		}
 		synchronized (this) {
 			final int actualid = msg.getInt("id");
 //			System.out.println("Got msg with id " + actualid +", was waiting for " + expectedId);
-						if (actualid != expectedId) {
+			if (actualid != expectedId) {
 				System.out.println("Unknown RPC response: " + msg.toString());
 				System.out.println("Expected id: " + expectedId);
 				return;
 			}
-			final JSONObject res = msg.getJSONObject("result");
-			if (!res.has("locator")) {
-				System.out.println("Got response without locator - query or test config is probably wrong");
+			if (!msg.has("result")) {
+				System.err.println("Got response without result: " + msg);
 				return;
 			}
+			final JSONObject res = msg.getJSONObject("result");
+			if (!res.has("locator")) {
+				System.out.println("Got response without locator - query or test config is probably wrong: " + msg);
+				System.out.println("Last query: " + lastSentMessage);
+				return;
+			}
+//			System.out.println(msg);
+			lastResult = msg;
 //			final String msgStr = "" + msg.getJSONObject("result").get("body");
 //			if (!uniqResponses.contains(msgStr)) {
 //				uniqResponses.add(msgStr);
@@ -117,6 +140,8 @@ public class ExtendJBenchmark extends BaseBenchmark {
 			measurements.createLocatorTime += res.getLong("createLocatorTime");
 			measurements.applyLocatorTime += res.getLong("applyLocatorTime");
 			measurements.attrEvalTime += res.getLong("attrEvalTime");
+			measurements.nodesAtPositionTime += res.getLong("nodesAtPositionTime");
+			measurements.pastaAttrsTime += res.getLong("pastaAttrsTime");
 
 			expectedId = -1;
 //				try {
@@ -141,19 +166,23 @@ public class ExtendJBenchmark extends BaseBenchmark {
 		System.out.printf("   Create locator: %.2f\n", measurements.getAverageCreateLocatorTime() / 1_000_000.0);
 		System.out.printf("    Apply locator: %.2f\n", measurements.getAverageApplyLocatorTime() / 1_000_000.0);
 		System.out.printf("        Attr eval: %.2f\n", measurements.getAverageAttrEvalTime() / 1_000_000.0);
+		System.out.printf("       NodesAtPos: %.2f\n", measurements.getAverageNodesAtPositionTime() / 1_000_000.0);
+		System.out.printf("       PastaAttrs: %.2f\n", measurements.getAveragePastaAttrsTime() / 1_000_000.0);
+
 	}
 
 	private String generateSourceFile() {
-		return "import java.util.HashSet;\n\nclass Foo {\n  void bar() {\n" + //
-//				"pasta.PastaServer.printUsage(); \n" + //
-				"HashSet<String> obj = new HashSet<String>(); obj.add(\"foo\" + Math.random()); \n" + //
+		return "import java.util.HashSet;\n" + //
+				"class Foo {\n" + //
+				"  void bar() {\n" + //
+				"    HashSet<String> obj = new HashSet<String>(); obj.add(\"foo\" + Math.random()); \n" + //
 				"} // " + Math.random() + "\n}\n";
 	}
 
 	private void sendMessageAndWaitForResponse(int numProbes) throws InterruptedException {
 		final String sourceFile = generateSourceFile();
 
-		final int probeOffset = (int) (Math.random() * 5);
+		final int probeOffset = (int) (Math.random() * 10);
 		for (int probe = 0; probe < numProbes; ++probe) {
 
 			synchronized (this) {
@@ -162,54 +191,71 @@ public class ExtendJBenchmark extends BaseBenchmark {
 
 			final JSONObject msgObj;
 
-			switch ((probe + probeOffset) % 5) {
-			case 0:
-				msgObj = ExtendJQueries.createStdJavaLibQuery(expectedId, sourceFile);
-				break;
-			case 1:
-				msgObj = ExtendJQueries.createIsEnumDecl(expectedId, sourceFile, new JSONArray() //
-						.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(25)) //
-				);
-				break;
-			case 2:
-				msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
-						.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(100)) // = Our file, it is always last
-																						// (=100)
-						.put(ExtendJQueries.createTALStep("StringLiteral", (5 << 12), (6 << 12))) //
-				);
-				break;
-			case 3:
-				msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
-						.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(50)) //
-						.put(ExtendJQueries.createTALStep("MethodDecl", (1 << 12), (128 << 12))) //
-				);
-				break;
-			case 4:
-			default:
-//				msgObj = ExtendJQueries.createTAL(expectedId, sourceFile, "MethodDecl", (4 << 12), (5 << 12));
+			if (PROBE_TYPE == ActionType.CREATE_PROBE) {
 
-				msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
-						.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(75)) //
-				);
-				break;
+				sendMessageAndWaitForResponse(ExtendJQueries.createNodesAtPosition(expectedId, sourceFile));
+				final JSONArray searchResults = lastResult.getJSONObject("result").getJSONArray("spansAndNodeTypes");
+
+//				System.out.println(lastResult);
+				synchronized (this) {
+					expectedId = (int) (Math.random() * Integer.MAX_VALUE);
+				}
+				msgObj = ExtendJQueries.createPastaAttrs(expectedId, sourceFile,
+						searchResults.getJSONObject((probe + probeOffset) % searchResults.length()));
+
+//				msgObj = ExtendJQueries.createPastaAttrs(expectedId, sourceFile, new JSONArray() //
+//						.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(50)));
+
+//				throw new Error();
+			} else {
+
+				// Perform random lightweight query
+				switch ((probe + probeOffset) % 4) {
+				case 0:
+					msgObj = ExtendJQueries.createStdJavaLibQuery(expectedId, sourceFile);
+					break;
+				case 1:
+					msgObj = ExtendJQueries.createIsEnumDecl(expectedId, sourceFile, new JSONArray() //
+							.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(25)) //
+					);
+					break;
+				case 2:
+					msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
+							.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(100)) // = Our file, it is always
+																							// last
+																							// (=100)
+							.put(ExtendJQueries.createTALStep("StringLiteral", (4 << 12), (5 << 12))) //
+					);
+					break;
+				case 3:
+				default:
+					msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
+							.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(75)) //
+							.put(ExtendJQueries.createTALStep("Modifiers", (1 << 12), (1024 << 12))) //
+					);
+				}
 			}
 
-			final String outgoingStr = msgObj.toString();
-//			lastSentMessage = outgoingStr;
-//			System.out.println("Sending " + outgoingStr);
+			sendMessageAndWaitForResponse(msgObj);
+		}
+	}
 
-			requestStartNanos = System.nanoTime();
-			postMessage.accept(outgoingStr);
+	private void sendMessageAndWaitForResponse(JSONObject msgObj) throws InterruptedException {
+		final String outgoingStr = msgObj.toString();
+		lastSentMessage = outgoingStr;
+//		System.out.println("Sending " + outgoingStr);
 
-			synchronized (this) {
-				while (expectedId != -1) {
-					wait();
-				}
+		requestStartNanos = System.nanoTime();
+		postMessage.accept(outgoingStr);
+
+		synchronized (this) {
+			while (expectedId != -1) {
+				wait();
 			}
 		}
 	}
-	
-//	private String lastSentMessage;
+
+	private String lastSentMessage;
 
 	@Override
 	public void run() throws InterruptedException {
@@ -285,6 +331,9 @@ public class ExtendJBenchmark extends BaseBenchmark {
 		job.put("server_side_create_locator", measurements.getAverageCreateLocatorTime() / 1_000_000.0);
 		job.put("server_side_apply_locator", measurements.getAverageApplyLocatorTime() / 1_000_000.0);
 		job.put("server_side_attr_eval", measurements.getAverageAttrEvalTime() / 1_000_000.0);
+		job.put("server_side_nodes_at_position", measurements.getAverageNodesAtPositionTime() / 1_000_000.0);
+		job.put("server_side_pasta_attrs", measurements.getAveragePastaAttrsTime() / 1_000_000.0);
+
 		System.out.println(job.toString());
 		final String savePath = System.getProperty("benchmark.output");
 		if (savePath != null) {

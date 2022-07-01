@@ -44,13 +44,29 @@ public class AstNode {
 		return underlyingAstNode.getClass() == info.getLocatorTALRoot();
 	}
 	
-	public Boolean pastaVisible() {
+	public Boolean pastaVisible(AstInfo info) {
+		if (!info.hasOverride0(underlyingAstNode.getClass(), "pastaVisible")) {
+			return null;
+		}
 		try {
 			return (Boolean) Reflect.invoke0(underlyingAstNode, "pastaVisible");
 		} catch (InvokeProblem e) {
 			// Perfectly fine to not override this, ignore the error
 			return null;
 		}
+	}
+	
+	public Boolean cutoffPastaVisibleTree(AstInfo info) {
+		if (!info.hasOverride0(underlyingAstNode.getClass(), "cutoffPastaVisibleTree")) {
+			return null;
+		}
+//		try {
+			return (Boolean) Reflect.invoke0(underlyingAstNode, "cutoffPastaVisibleTree");
+//		} catch (InvokeProblem e) {
+//			// Perfectly fine to not override this, ignore the error
+//			return null;
+//		}
+
 	}
 
 	public boolean isNonOverlappingSibling(AstInfo info) {

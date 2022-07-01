@@ -108,14 +108,24 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		case "pasta_spansAndNodeTypes": {
 			final int rootStart = locator.getJSONObject("result").getInt("start");
 			final int rootEnd = locator.getJSONObject("result").getInt("end");
-			retBuilder.put("spansAndNodeTypes", new JSONArray(NodesAtPosition.get( //
-					info, match.node, rootStart + (rootEnd - rootStart) / 2 //
-			)));
+			BenchmarkTimer.NODES_AT_POSITION.enter();
+			try {
+				retBuilder.put("spansAndNodeTypes", new JSONArray(NodesAtPosition.get( //
+						info, match.node, rootStart + (rootEnd - rootStart) / 2 //
+				)));
+			} finally {
+				BenchmarkTimer.NODES_AT_POSITION.exit();
+			}
 			return;
 		}
 		case "pasta_pastaAttrs": {
-			retBuilder.put("pastaAttrs",
-					AttrsInNode.get(info, match.node, AttrsInNode.extractFilter(info, match.node)));
+			BenchmarkTimer.PASTA_ATTRS.enter();
+			try {
+				retBuilder.put("pastaAttrs",
+						AttrsInNode.get(info, match.node, AttrsInNode.extractFilter(info, match.node)));
+			} finally {
+				BenchmarkTimer.PASTA_ATTRS.exit();
+			}
 			return;
 		}
 		}
@@ -159,7 +169,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 						BenchmarkTimer.EVALUATE_ATTR.exit();
 					}
 				}
-				
+
 				CreateLocator.setBuildFastButFragileLocator(true);
 				try {
 					EncodeResponseValue.encode(info, bodyBuilder, value, new HashSet<>());
@@ -217,9 +227,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		// the user wants to see.
 		// Meta-information goes in the 'root' response object.
 		final JSONArray bodyBuilder = new JSONArray();
-		BenchmarkTimer.APPLY_LOCATOR.reset();
-		BenchmarkTimer.CREATE_LOCATOR.reset();
-		BenchmarkTimer.EVALUATE_ATTR.reset();
+		BenchmarkTimer.resetAll();
 		final JSONArray errors;
 
 		final AtomicReference<File> tmp = new AtomicReference<>(null);
@@ -301,7 +309,9 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		retBuilder.put("createLocatorTime", BenchmarkTimer.CREATE_LOCATOR.getAccumulatedNano());
 		retBuilder.put("applyLocatorTime", BenchmarkTimer.APPLY_LOCATOR.getAccumulatedNano());
 		retBuilder.put("attrEvalTime", BenchmarkTimer.EVALUATE_ATTR.getAccumulatedNano());
-
+		retBuilder.put("nodesAtPositionTime", BenchmarkTimer.NODES_AT_POSITION.getAccumulatedNano());
+		retBuilder.put("pastaAttrsTime", BenchmarkTimer.PASTA_ATTRS.getAccumulatedNano());
+		
 		System.out.println("Request done");
 		return retBuilder;
 	}

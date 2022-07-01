@@ -9,17 +9,18 @@ import org.json.JSONObject;
 import pasta.AstInfo;
 import pasta.ast.AstNode;
 import pasta.metaprogramming.InvokeProblem;
+import pasta.metaprogramming.Reflect;
 
 public class NodesAtPosition {
 
 	public static List<JSONObject> get(AstInfo info, AstNode astNode, int pos) {
 		List<JSONObject> ret = new ArrayList<>();
-		getTo(ret, info, astNode, pos, 0);
+		getTo(ret, info, astNode, pos);
 		Collections.reverse(ret); // Narrowest/smallest node first inthe list
 		return ret;
 	}
 
-	private static void getTo(List<JSONObject> out, AstInfo info, AstNode astNode, int pos, int depth) {
+	private static void getTo(List<JSONObject> out, AstInfo info, AstNode astNode, int pos) {
 		final Span nodePos;
 		try {
 			nodePos = astNode.getRecoveredSpan(info);
@@ -27,18 +28,32 @@ public class NodesAtPosition {
 			e1.printStackTrace();
 			return;
 		}
-		if ((nodePos.start <= pos && nodePos.end >= pos)) {
-			
+		final Boolean cutoff = astNode.cutoffPastaVisibleTree(info);
+		if (cutoff != null && cutoff) {
+//			System.out.println("Cutoff at ");
+			return;
+		}
+		if (out.isEmpty() || (nodePos.start <= pos && nodePos.end >= pos)) {
+
 			// Default false for List/Opt, they are very rarely useful
 			boolean show = !astNode.isList() && !astNode.isOpt();
 
-			final Boolean override = astNode.pastaVisible();
+			final Boolean override = astNode.pastaVisible(info);
 			if (override != null ? override : show) {
 				out.add(CreateLocator.fromNode(info, astNode));
 			}
 		}
+		if (astNode == info.ast) {
+			
+			// Root node, maybe skip ahead
+			Object next = Reflect.invoke0(astNode.underlyingAstNode, "pastaVisibleNextAfterRoot");
+			if (next != null) {
+				getTo(out, info, new AstNode(next), pos);
+				return;
+			}
+		}
 		for (AstNode child : astNode.getChildren()) {
-			getTo(out, info, child, pos, depth + 1);
+			getTo(out, info, child, pos);
 		}
 	}
 }

@@ -215,7 +215,7 @@ body[data-theme-light="true"] .attr-list-submit:active {
   border: 1px solid #999;
   border-radius: 0.25rem;
   font-size: 1rem;
-  box-shadow: 0px 2px 2rem #333;
+  box-shadow: 0px 2px 0.5rem #333;
   cursor: move;
   user-select: none;
   max-height: 80vh;
@@ -235,7 +235,7 @@ body[data-theme-light="true"] .attr-list-submit:active {
 body[data-theme-light="true"] .modalWindow {
   background: #f4f4f4;
   color: #222;
-  box-shadow: 0px 2px 2rem #aaa;
+  box-shadow: 0px 2px 0.5rem #aaa;
 }
 
 
