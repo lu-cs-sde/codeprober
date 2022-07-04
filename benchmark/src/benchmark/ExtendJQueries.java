@@ -69,7 +69,7 @@ public class ExtendJQueries {
 						.put("type", type) //
 						.put("start", start) //
 						.put("end", end) //
-						.put("depth", 123) //
+						.put("depth", 1) //
 				);
 
 	}
@@ -132,7 +132,7 @@ public class ExtendJQueries {
 						.put("locator", new JSONObject() //
 								.put("steps", new JSONArray()) //
 								.put("result", new JSONObject() //
-										// Line 16, column 12
+										// Line 4, column 60
 										.put("start", (4 << 12) + 60) //
 										.put("end", (4 << 12) + 60) //
 								) //

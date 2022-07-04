@@ -19,10 +19,10 @@ import pasta.protocol.create.CreateType;
 
 public class AttrsInNode {
 
-	public static JSONArray get(AstInfo info, AstNode node, List<String> blacklistFilter) {
+	public static JSONArray get(AstInfo info, AstNode node, List<String> whitelistFilter) {
 		List<JSONObject> attrs = new ArrayList<>();
 		for (Method m : node.underlyingAstNode.getClass().getMethods()) {
-			if (blacklistFilter != null && !blacklistFilter.contains(m.getName())) {
+			if (whitelistFilter != null && !whitelistFilter.contains(m.getName())) {
 				continue;
 			}
 			if (!java.lang.reflect.Modifier.isPublic(m.getModifiers())) {
@@ -34,7 +34,7 @@ public class AttrsInNode {
 			final Parameter[] parameters = m.getParameters();
 			final ParameterType[] types = CreateType.fromParameters(info, parameters);
 			if (types == null) {
-				System.out.println("Skipping " + m + " due to unknown param types");
+//				System.out.println("Skipping " + m + " due to unknown param types");
 				continue;
 			}
 			JSONObject attr = new JSONObject();

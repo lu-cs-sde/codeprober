@@ -22,7 +22,7 @@ public abstract class CreateType {
 		if (paramType == Collection.class) {
 			return new ParameterType(paramType, false);
 		}
-		System.out.println("Unknown parameter type '" + paramType.getName() + "'");
+//		System.out.println("Unknown parameter type '" + paramType.getName() + "'");
 		return null;
 	}
 

@@ -13,7 +13,7 @@ import org.json.JSONObject;
 public class ExtendJBenchmark extends BaseBenchmark {
 
 	private static enum ActionType {
-		CREATE_PROBE, EVALUATE_PROBE
+		CREATE_PROBE, EVALUATE_PROBE, FULL_PARSE
 	};
 
 	private static final int NUM_ITERATIONS;
@@ -182,7 +182,7 @@ public class ExtendJBenchmark extends BaseBenchmark {
 	private void sendMessageAndWaitForResponse(int numProbes) throws InterruptedException {
 		final String sourceFile = generateSourceFile();
 
-		final int probeOffset = (int) (Math.random() * 10);
+		final int probeOffset = (int) (Math.random() * numProbes);
 		for (int probe = 0; probe < numProbes; ++probe) {
 
 			synchronized (this) {
@@ -191,8 +191,8 @@ public class ExtendJBenchmark extends BaseBenchmark {
 
 			final JSONObject msgObj;
 
-			if (PROBE_TYPE == ActionType.CREATE_PROBE) {
-
+			switch (PROBE_TYPE) {
+			case CREATE_PROBE:
 				sendMessageAndWaitForResponse(ExtendJQueries.createNodesAtPosition(expectedId, sourceFile));
 				final JSONArray searchResults = lastResult.getJSONObject("result").getJSONArray("spansAndNodeTypes");
 
@@ -202,38 +202,48 @@ public class ExtendJBenchmark extends BaseBenchmark {
 				}
 				msgObj = ExtendJQueries.createPastaAttrs(expectedId, sourceFile,
 						searchResults.getJSONObject((probe + probeOffset) % searchResults.length()));
+				break;
 
-//				msgObj = ExtendJQueries.createPastaAttrs(expectedId, sourceFile, new JSONArray() //
-//						.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(50)));
+			case FULL_PARSE: {
+				msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray());
+				msgObj.put("cache", "NONE");
+				break;
+			}
 
-//				throw new Error();
-			} else {
+			case EVALUATE_PROBE:
+			default: {
 
 				// Perform random lightweight query
 				switch ((probe + probeOffset) % 4) {
 				case 0:
+					// Lookup Object.hashCode
 					msgObj = ExtendJQueries.createStdJavaLibQuery(expectedId, sourceFile);
 					break;
 				case 1:
+					// compilationUnitList.get(..25%..).isEnumDecl()
 					msgObj = ExtendJQueries.createIsEnumDecl(expectedId, sourceFile, new JSONArray() //
 							.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(25)) //
 					);
 					break;
 				case 2:
+					// "theMonacoFile".tal(StringLiteral).getNumChild()
 					msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
 							.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(100)) // = Our file, it is always
-																							// last
-																							// (=100)
+							// last
+							// (=100)
 							.put(ExtendJQueries.createTALStep("StringLiteral", (4 << 12), (5 << 12))) //
 					);
 					break;
 				case 3:
 				default:
+					// compilationUnitList.get(..75%..).tal(Modifiers).getNumChild()
 					msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
 							.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(75)) //
 							.put(ExtendJQueries.createTALStep("Modifiers", (1 << 12), (1024 << 12))) //
 					);
 				}
+				break;
+			}
 			}
 
 			sendMessageAndWaitForResponse(msgObj);

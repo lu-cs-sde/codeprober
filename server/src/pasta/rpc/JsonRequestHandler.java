@@ -13,6 +13,7 @@ public interface JsonRequestHandler {
 
 	default Function<JSONObject, String> createRpcRequestHandler() {
 		return obj -> {
+			final long start = System.nanoTime();
 
 			JSONObject rpcResponse = new JSONObject();
 			rpcResponse.put("type", "rpc");
@@ -27,6 +28,7 @@ public interface JsonRequestHandler {
 				e.printStackTrace();
 				rpcResponse.put("error", "Error while processing request. See server for more info");
 			}
+			System.out.printf("Handled request in %.2fms\n", (System.nanoTime() - start) / 1_000_000.0);
 			return rpcResponse.toString();
 		};
 	}

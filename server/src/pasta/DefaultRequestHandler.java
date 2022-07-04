@@ -2,6 +2,8 @@ package pasta;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
@@ -231,19 +233,74 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		final JSONArray errors;
 
 		final AtomicReference<File> tmp = new AtomicReference<>(null);
+		Function<String, File> createTmpFile = inputText -> {
+			final File existing = tmp.get();
+			if (existing != null) {
+				return existing;
+			}
+			try {
+				final File tmpFile = File.createTempFile("pasta-server", ".java");
+				try {
+					Files.write(tmpFile.toPath(), inputText.getBytes(StandardCharsets.UTF_8),
+							StandardOpenOption.CREATE);
+				} catch (IOException e) {
+					System.out.println("Failed while copying source text to disk");
+					e.printStackTrace();
+					throw new RuntimeException(e);
+				}
+				tmp.set(tmpFile);
+				return tmpFile;
+			} catch (IOException e) {
+				e.printStackTrace();
+				throw new RuntimeException(e);
+			}
+		};
 		try {
 			errors = StdIoInterceptor.performCaptured(MagicStdoutMessageParser::parse, () -> {
 				final String inputText = queryObj.getString("text");
 
-				if (cacheStrategy.canCacheAST() //
+				boolean maybeCacheAST = cacheStrategy.canCacheAST() //
 						&& lastParsedInput != null //
 						&& lastInfo != null //
-						&& lastParsedInput.equals(inputText) //
-						&& ASTProvider.hasUnchangedJar(underlyingCompilerJar)) {
+						&& ASTProvider.hasUnchangedJar(underlyingCompilerJar);
+
+				if (maybeCacheAST && !lastParsedInput.equals(inputText)) {
+					System.out.println("Can cache AST, but input is different..");
+					maybeCacheAST = false;
+					// Something changed, must replace the AST,
+					// UNLESS flushTreeCacheAndReplaceLastFile is present.
+					Method optimizedFlusher = null;
+					try {
+						optimizedFlusher = lastInfo.ast.underlyingAstNode.getClass()
+								.getMethod("flushTreeCacheAndReplaceLastFile", String.class);
+					} catch (NoSuchMethodException | SecurityException e) {
+						// OK, it is an optional method after all
+						System.out.println("No flusher available");
+					}
+					if (optimizedFlusher != null) {
+						try {
+							final File tmpFile = createTmpFile.apply(inputText);
+							final long flushStart = System.nanoTime();
+							final Boolean replacedOk = (Boolean)optimizedFlusher.invoke(lastInfo.ast.underlyingAstNode, tmpFile.getAbsolutePath());
+							System.out.println("Tried optimized flush, result: " + replacedOk);
+							if (replacedOk) {
+								retBuilder.put("parseTime", (System.nanoTime() - flushStart));
+								handleParsedAst(lastInfo.ast.underlyingAstNode, lastInfo.loadAstClass, queryObj, retBuilder,
+										bodyBuilder);
+								lastParsedInput = inputText;
+								return;
+							}
+						} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+							System.out.println("Error when calling 'flushTreeCacheAndReplaceLastFile'");
+							e.printStackTrace();
+						}
+					}
+				}
+
+				if (maybeCacheAST) {
 					final long flushStart = System.nanoTime();
 					try {
 						if (cacheStrategy == AstCacheStrategy.PARTIAL) {
-//							System.out.println("Flushing treeCache!");
 							Reflect.invoke0(lastInfo.ast.underlyingAstNode, "flushTreeCache");
 						}
 
@@ -260,28 +317,10 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				}
 				lastParsedInput = inputText;
 
-				final File tmpFile;
-				try {
-					tmpFile = File.createTempFile("pasta-server", ".java");
-				} catch (IOException e) {
-					e.printStackTrace();
-					throw new RuntimeException(e);
-				}
-				tmp.set(tmpFile);
-				try {
-					Files.write(tmpFile.toPath(), inputText.getBytes(StandardCharsets.UTF_8),
-							StandardOpenOption.CREATE);
-				} catch (IOException e) {
-					System.out.println("Failed while copying source text to disk");
-					e.printStackTrace();
-					throw new RuntimeException(e);
-				}
-
+				final File tmpFile = createTmpFile.apply(inputText);
 				final String[] astArgs = new String[1 + forwardArgs.length];
-//				astArgs[0] = tmp.getAbsolutePath();
 				System.arraycopy(forwardArgs, 0, astArgs, 0, forwardArgs.length);
 				astArgs[forwardArgs.length] = tmpFile.getAbsolutePath();
-//				System.out.println("fwd args: " + Arrays.toString(astArgs));
 
 				final long parseStart = System.nanoTime();
 				final boolean parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs, (ast, loadCls) -> {
@@ -311,8 +350,9 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		retBuilder.put("attrEvalTime", BenchmarkTimer.EVALUATE_ATTR.getAccumulatedNano());
 		retBuilder.put("nodesAtPositionTime", BenchmarkTimer.NODES_AT_POSITION.getAccumulatedNano());
 		retBuilder.put("pastaAttrsTime", BenchmarkTimer.PASTA_ATTRS.getAccumulatedNano());
-		
+
 		System.out.println("Request done");
 		return retBuilder;
 	}
+
 }
