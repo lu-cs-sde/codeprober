@@ -155,11 +155,31 @@ public class TestData {
 	 * 5 }
 	 * </pre>
 	 */
-	public static Object getAmbiguous() {
+	public static Object getFlatAmbiguous() {
 		return new Program(lc(0, 0), lc(4, 0)) //
 				.add(new Foo(lc(1, 2), lc(3, 2)) //
 						.add(new Bar(lc(2, 8), lc(2, 8))) //
 						.add(new Bar(lc(2, 8), lc(2, 8))) //
+				);
+	}
+
+	/**
+	 * Get an AST looking like this:
+	 * 
+	 * <pre>
+	 * 0 Program {
+	 * 1   Bar {}
+	 * 1   Foo {
+	 * 1     Bar {   }
+	 * 2   }
+	 * 3 }
+	 * </pre>
+	 */
+	public static Object getHillyAmbiguous() {
+		return new Program(lc(0, 0), lc(3, 0)) //
+				.add(new Bar(lc(1, 2), lc(1, 4))) //
+				.add(new Foo(lc(1, 2), lc(1, 8)) //
+						.add(new Bar(lc(1, 2), lc(1, 8))) //
 				);
 	}
 

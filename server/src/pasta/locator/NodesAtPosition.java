@@ -46,7 +46,12 @@ public class NodesAtPosition {
 		if (astNode == info.ast) {
 			
 			// Root node, maybe skip ahead
-			Object next = Reflect.invoke0(astNode.underlyingAstNode, "pastaVisibleNextAfterRoot");
+			Object next = null;
+			try {
+				next = Reflect.invoke0(astNode.underlyingAstNode, "pastaVisibleNextAfterRoot");
+			} catch (InvokeProblem e) {
+				// OK, this is an optional attribute
+			}
 			if (next != null) {
 				getTo(out, info, new AstNode(next), pos);
 				return;

@@ -2,16 +2,13 @@ package pasta.locator;
 
 import java.util.function.Function;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import junit.framework.TestCase;
 import pasta.AstInfo;
 import pasta.ast.AstNode;
 import pasta.ast.TestData;
-import pasta.ast.TestData.Bar;
-import pasta.ast.TestData.Baz;
-import pasta.ast.TestData.Foo;
-import pasta.ast.TestData.Program;
 import pasta.locator.ApplyLocator.ResolvedNode;
 
 public class TestApplyLocator extends TestCase {
@@ -44,23 +41,49 @@ public class TestApplyLocator extends TestCase {
 	}
 
 	public void testMirrorAmbiguousProgram() {
-		assertMirror(TestData.getAmbiguous(), ast -> ast);
+		assertMirror(TestData.getFlatAmbiguous(), ast -> ast);
 	}
 
 	public void testMirrorAmbiguousFoo() {
-		assertMirror(TestData.getAmbiguous(), ast -> ast.getNthChild(0));
+		assertMirror(TestData.getFlatAmbiguous(), ast -> ast.getNthChild(0));
 	}
 
-	public void testMirrorAmbiguousBar() {
-		assertMirror(TestData.getAmbiguous(), ast -> ast.getNthChild(0).getNthChild(0));
-		assertMirror(TestData.getAmbiguous(), ast -> ast.getNthChild(0).getNthChild(1));
+	public void testMirrorHillyAmbiguousBar() {
+		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
+		final AstNode shallowBar = info.ast.getNthChild(0);
+		final AstNode deepBar = info.ast.getNthChild(1).getNthChild(0);
+		final JSONObject locator = new JSONObject().put("steps", new JSONArray().put(//
+				new TypeAtLocEdge(info.ast, TypeAtLoc.from(info, info.ast), shallowBar, TypeAtLoc.from(info, shallowBar), 1).toJson()));
+
+		final JSONObject talStep = locator.getJSONArray("steps").getJSONObject(0);
+		assertEquals("tal", talStep.getString("type"));
+
+		final JSONObject talPos = talStep.getJSONObject("value");
+		assertEquals(1, talPos.getInt("depth"));
+		assertSame(shallowBar, ApplyLocator.toNode(info, locator).node);
+		// Increase depth
+		// Start/end perfectly matches the shallowBar, but depth is now a bad match.
+		// Start/end and depth both mismatch the deepBar, but depth matches "better"
+		// than the shallow, so it should win.
+		talPos.put("depth", 4);
+
+		final ResolvedNode result = ApplyLocator.toNode(info, locator);
+
+		assertNotNull(result);
+		assertSame(deepBar, result.node);
 	}
-	
+
+//	.add(new Bar(lc(1, 2), lc(1, 4))) //
+	public void testMirrorAmbiguousBar() {
+		assertMirror(TestData.getFlatAmbiguous(), ast -> ast.getNthChild(0).getNthChild(0));
+		assertMirror(TestData.getFlatAmbiguous(), ast -> ast.getNthChild(0).getNthChild(1));
+	}
+
 	public void testSlightlyIncorrectLocator() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getSimple()));
 		final AstNode foo = info.ast.getNthChild(0);
 		final JSONObject locator = CreateLocator.fromNode(info, foo);
-		
+
 		final JSONObject talStep = locator.getJSONArray("steps").getJSONObject(0);
 		assertEquals("tal", talStep.getString("type"));
 
@@ -69,7 +92,7 @@ public class TestApplyLocator extends TestCase {
 		// ApplyLocator should permit minor errors.
 		talPos.put("end", talPos.getInt("start") - 2);
 		talPos.put("start", talPos.getInt("start") - 3);
-		
+
 		final ResolvedNode result = ApplyLocator.toNode(info, locator);
 
 		assertNotNull(result);

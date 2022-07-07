@@ -62,7 +62,7 @@ public class ApplyLocator {
 		if (depth < failOnDepthBelowLevel) {
 			return null;
 		}
-		
+
 		final Span nodePos;
 		try {
 			nodePos = astNode.getRecoveredSpan(info);
@@ -74,7 +74,7 @@ public class ApplyLocator {
 		final int start = nodePos.start;
 		final int end = nodePos.end;
 
-		if (start != 0 && end != 0 && (start > endPos || end < startPos)) {
+		if (start != 0 && end != 0 && startPos != 0 && endPos != 0 && (start > endPos || end < startPos)) {
 //			// Assume that a parent only contains children within its own bounds
 			return null;
 		}
@@ -95,7 +95,7 @@ public class ApplyLocator {
 				// Return early
 				return new MatchedNode(bestNode, bestError, bestDepthDiff);
 			}
-			failOnDepthBelowLevel = Math.max(failOnDepthBelowLevel, -bestDepthDiff); 
+			failOnDepthBelowLevel = Math.max(failOnDepthBelowLevel, -bestDepthDiff);
 		}
 		for (AstNode child : astNode.getChildren()) {
 			if (ignoreTraversalOn != null && ignoreTraversalOn.underlyingAstNode == child.underlyingAstNode) {
@@ -104,15 +104,18 @@ public class ApplyLocator {
 			MatchedNode recurse = bestMatchingNode(info, child, nodeType, startPos, endPos, depth - 1, recoveryStrategy,
 					failOnAmbiguity, ignoreTraversalOn, failOnDepthBelowLevel);
 			if (recurse != null) {
-				if (recurse.depthDiff <= bestDepthDiff) {
-					if (recurse.matchError < bestError) {
-						bestNode = recurse.matchedNode;
-						bestError = recurse.matchError;
-						bestDepthDiff = recurse.depthDiff;
-						failOnDepthBelowLevel = Math.max(failOnDepthBelowLevel, -bestDepthDiff);
-					} else if (recurse.matchError == bestError && failOnAmbiguity) {
-						throw new AmbiguousTal();
-					}
+				final boolean isBetterMatch = //
+						// Better depth has highest priority
+						recurse.depthDiff < bestDepthDiff
+								// Otherwise, same depth and closer offset -> better
+								|| (recurse.depthDiff == bestDepthDiff && recurse.matchError < bestError);
+				if (isBetterMatch) {
+					bestNode = recurse.matchedNode;
+					bestError = recurse.matchError;
+					bestDepthDiff = recurse.depthDiff;
+					failOnDepthBelowLevel = Math.max(failOnDepthBelowLevel, -bestDepthDiff);
+				} else if (recurse.depthDiff == bestDepthDiff && recurse.matchError == bestError && failOnAmbiguity) {
+					throw new AmbiguousTal();
 				}
 			}
 		}

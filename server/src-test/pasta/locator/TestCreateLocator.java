@@ -78,7 +78,7 @@ public class TestCreateLocator extends TestCase {
 	}
 
 	public void testAmbiguousBar() {
-		final AstNode root = new AstNode(TestData.getAmbiguous());
+		final AstNode root = new AstNode(TestData.getFlatAmbiguous());
 		final AstInfo info = TestData.getInfo(root);
 		final AstNode foo = root.getNthChild(0);
 		final AstNode bar = foo.getNthChild(1);

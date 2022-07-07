@@ -13,12 +13,16 @@ import org.json.JSONObject;
 public class ExtendJBenchmark extends BaseBenchmark {
 
 	private static enum ActionType {
-		CREATE_PROBE, EVALUATE_PROBE, FULL_PARSE
+		CREATE_PROBE, EVALUATE_PROBE, FULL_PARSE_HOT, FULL_PARSE_COLD;
+		
+		public boolean requiresWarmup() {
+			return this != FULL_PARSE_COLD;
+		}
 	};
 
 	private static final int NUM_ITERATIONS;
 	private static final int NUM_PROBES;
-	private static final ActionType PROBE_TYPE;
+	private static final ActionType ACTION_TYPE;
 
 	private static final double COV_WARMUP_THRESHOLD;
 	private static final int COV_WARMUP_IMPLIED_STEADY_STATE_TIMEOUT;
@@ -26,7 +30,7 @@ public class ExtendJBenchmark extends BaseBenchmark {
 	static {
 		NUM_ITERATIONS = Integer.parseInt(System.getProperty("benchmark.iterations", "1000"));
 		NUM_PROBES = Integer.parseInt(System.getProperty("benchmark.probes", "1"));
-		PROBE_TYPE = ActionType
+		ACTION_TYPE = ActionType
 				.valueOf(System.getProperty("benchmark.actionType", "evaluate_probe").toUpperCase(Locale.ENGLISH));
 		COV_WARMUP_THRESHOLD = Double.parseDouble(System.getProperty("benchmark.warmupCovThreshold", "0.01"));
 		COV_WARMUP_IMPLIED_STEADY_STATE_TIMEOUT = Integer
@@ -191,7 +195,7 @@ public class ExtendJBenchmark extends BaseBenchmark {
 
 			final JSONObject msgObj;
 
-			switch (PROBE_TYPE) {
+			switch (ACTION_TYPE) {
 			case CREATE_PROBE:
 				sendMessageAndWaitForResponse(ExtendJQueries.createNodesAtPosition(expectedId, sourceFile));
 				final JSONArray searchResults = lastResult.getJSONObject("result").getJSONArray("spansAndNodeTypes");
@@ -204,9 +208,15 @@ public class ExtendJBenchmark extends BaseBenchmark {
 						searchResults.getJSONObject((probe + probeOffset) % searchResults.length()));
 				break;
 
-			case FULL_PARSE: {
+			case FULL_PARSE_HOT: {
 				msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray());
 				msgObj.put("cache", "NONE");
+				break;
+			}
+
+			case FULL_PARSE_COLD: {
+				msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray());
+				msgObj.put("cache", "PURGE");
 				break;
 			}
 
@@ -269,6 +279,55 @@ public class ExtendJBenchmark extends BaseBenchmark {
 
 	@Override
 	public void run() throws InterruptedException {
+		if (ACTION_TYPE.requiresWarmup()) {
+			warmup();
+		} else {
+			System.out.println("Skipping warmup beccause action type is " + ACTION_TYPE);
+		}
+
+		measurements.reset();
+		System.out.println("Benchmarking, performing " + NUM_ITERATIONS + " iterations and measuring time usage");
+		for (int i = 0; i < NUM_ITERATIONS; i++) {
+			if (i != 0 && i % 100 == 0) {
+				System.out.println("Iteration " + i);
+				if (i % 500 == 0) {
+					System.out.println("\n -- Measurements after " + measurements.numSamples + " requests:");
+					printReport();
+					System.out.println();
+				}
+			}
+			sendMessageAndWaitForResponse(NUM_PROBES);
+		}
+
+		System.out.println("\n -- Final measurements after " + measurements.numSamples + " requests:");
+		printReport();
+
+		JSONObject job = new JSONObject();
+		job.put("end_to_end", measurements.getAverageEndToEnd() / 1_000_000.0);
+		job.put("server_side_total", measurements.getAverageTotalTime() / 1_000_000.0);
+		job.put("server_side_parse", measurements.getAverageParseTime() / 1_000_000.0);
+		job.put("server_side_create_locator", measurements.getAverageCreateLocatorTime() / 1_000_000.0);
+		job.put("server_side_apply_locator", measurements.getAverageApplyLocatorTime() / 1_000_000.0);
+		job.put("server_side_attr_eval", measurements.getAverageAttrEvalTime() / 1_000_000.0);
+		job.put("server_side_nodes_at_position", measurements.getAverageNodesAtPositionTime() / 1_000_000.0);
+		job.put("server_side_pasta_attrs", measurements.getAveragePastaAttrsTime() / 1_000_000.0);
+
+		System.out.println(job.toString());
+		final String savePath = System.getProperty("benchmark.output");
+		if (savePath != null) {
+			try {
+				System.out.println("Writing result to " + savePath);
+				Files.writeString(new File(savePath).toPath(), job.toString());
+			} catch (IOException e) {
+				System.out.println("Error when writing benchmark result");
+				e.printStackTrace();
+			}
+		}
+		System.out.println("Done!");
+
+	}
+
+	private void warmup() throws InterruptedException {
 		// Warm up for multiples of 100 iterations until the standard deviation goes
 		// below a threshold
 		double prevBestCov = Double.MAX_VALUE;
@@ -316,46 +375,5 @@ public class ExtendJBenchmark extends BaseBenchmark {
 				}
 			}
 		}
-
-		measurements.reset();
-		System.out.println("Benchmarking, performing " + NUM_ITERATIONS + " iterations and measuring time usage");
-		for (int i = 0; i < NUM_ITERATIONS; i++) {
-			if (i != 0 && i % 100 == 0) {
-				System.out.println("Iteration " + i);
-				if (i % 500 == 0) {
-					System.out.println("\n -- Measurements after " + measurements.numSamples + " requests:");
-					printReport();
-					System.out.println();
-				}
-			}
-			sendMessageAndWaitForResponse(NUM_PROBES);
-		}
-
-		System.out.println("\n -- Final measurements after " + measurements.numSamples + " requests:");
-		printReport();
-
-		JSONObject job = new JSONObject();
-		job.put("end_to_end", measurements.getAverageEndToEnd() / 1_000_000.0);
-		job.put("server_side_total", measurements.getAverageTotalTime() / 1_000_000.0);
-		job.put("server_side_parse", measurements.getAverageParseTime() / 1_000_000.0);
-		job.put("server_side_create_locator", measurements.getAverageCreateLocatorTime() / 1_000_000.0);
-		job.put("server_side_apply_locator", measurements.getAverageApplyLocatorTime() / 1_000_000.0);
-		job.put("server_side_attr_eval", measurements.getAverageAttrEvalTime() / 1_000_000.0);
-		job.put("server_side_nodes_at_position", measurements.getAverageNodesAtPositionTime() / 1_000_000.0);
-		job.put("server_side_pasta_attrs", measurements.getAveragePastaAttrsTime() / 1_000_000.0);
-
-		System.out.println(job.toString());
-		final String savePath = System.getProperty("benchmark.output");
-		if (savePath != null) {
-			try {
-				System.out.println("Writing result to " + savePath);
-				Files.writeString(new File(savePath).toPath(), job.toString());
-			} catch (IOException e) {
-				System.out.println("Error when writing benchmark result");
-				e.printStackTrace();
-			}
-		}
-		System.out.println("Done!");
-
 	}
 }
