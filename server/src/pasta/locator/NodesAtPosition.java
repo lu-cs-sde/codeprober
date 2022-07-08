@@ -33,7 +33,9 @@ public class NodesAtPosition {
 //			System.out.println("Cutoff at ");
 			return;
 		}
-		if (out.isEmpty() || (nodePos.start <= pos && nodePos.end >= pos)) {
+		boolean includeNode = out.isEmpty()
+				|| (nodePos.start == 0 || nodePos.end == 0 || (nodePos.start <= pos && nodePos.end >= pos));
+		if (includeNode) {
 
 			// Default false for List/Opt, they are very rarely useful
 			boolean show = !astNode.isList() && !astNode.isOpt();
@@ -44,7 +46,7 @@ public class NodesAtPosition {
 			}
 		}
 		if (astNode == info.ast) {
-			
+
 			// Root node, maybe skip ahead
 			Object next = null;
 			try {
@@ -57,8 +59,10 @@ public class NodesAtPosition {
 				return;
 			}
 		}
-		for (AstNode child : astNode.getChildren()) {
-			getTo(out, info, child, pos);
+		if (includeNode) {
+			for (AstNode child : astNode.getChildren()) {
+				getTo(out, info, child, pos);
+			}
 		}
 	}
 }

@@ -111,11 +111,13 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			final int rootStart = locator.getJSONObject("result").getInt("start");
 			final int rootEnd = locator.getJSONObject("result").getInt("end");
 			BenchmarkTimer.NODES_AT_POSITION.enter();
+			CreateLocator.setBuildFastButFragileLocator(true);
 			try {
 				retBuilder.put("spansAndNodeTypes", new JSONArray(NodesAtPosition.get( //
 						info, match.node, rootStart + (rootEnd - rootStart) / 2 //
 				)));
 			} finally {
+				CreateLocator.setBuildFastButFragileLocator(false);
 				BenchmarkTimer.NODES_AT_POSITION.exit();
 			}
 			return;

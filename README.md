@@ -20,12 +20,15 @@ All HTML, JavaScript and CSS files should now be available in the `client/public
 ## Build - Server
 
 The server is written in Java and has primarily been developed in Eclipse, and there are `.project` & `.classpath` files in the repository that should let you import the project into your own Eclipse instance.
-That said, you can also build with the command line. To do so, do the following:
+That said, you can in theory also build with the command line. To do so, do the following:
 
 ```sh
 cd server
 ./build.sh
 ```
+
+There are some problems with bundling of the client data using the script version.
+Please build from inside eclipse instead, or use the "PASTA_WEB_OVERRIDE" system property (see WebServer.java).
 
 ## Running
 
