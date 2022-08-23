@@ -8,9 +8,13 @@ echo "Gathering sources.."
 find src -name "*.java" > sources.txt
 
 echo "Building.."
+# "Our own" class files
 javac @sources.txt -cp libs/json.jar -d build_tmp
-
+# Third party class files
 unzip libs/json.jar '*.class' -x */* -d build_tmp
+# Resources
+cp -r src/pasta/resources build_tmp/pasta/
+
 cd build_tmp
 
 echo "Generating jar.."

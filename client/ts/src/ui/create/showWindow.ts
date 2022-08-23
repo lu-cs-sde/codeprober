@@ -36,7 +36,7 @@ const showWindow = (args: ShowWindowArgs) => {
   let lastCancelToken: CancelToken = {};
 
   const contentRoot = document.createElement('div');
-  contentRoot.classList.add('HELLO-FIND-ME');
+  // contentRoot.classList.add('HELLO-FIND-ME');
   contentRoot.style.overflow = 'auto';
   contentRoot.style.position = 'relative';
   contentRoot.style.top = '0px';

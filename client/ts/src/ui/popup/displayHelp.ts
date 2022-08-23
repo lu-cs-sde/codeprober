@@ -1,7 +1,7 @@
 import createModalTitle from "../create/createModalTitle";
 import showWindow from "../create/showWindow";
 
-type HelpType = 'general' | 'recovery-strategy' | 'probe-window' | 'magic-stdout-messages' | 'ast-cache-strategy';
+type HelpType = 'general' | 'recovery-strategy' | 'probe-window' | 'magic-stdout-messages' | 'ast-cache-strategy' | 'syntax-highlighting' | 'main-args-override';
 
 const createSyntaxNode = (type: string, text: string, margins?: string) => {
   const retNode = document.createElement('span');
@@ -19,7 +19,9 @@ const getHelpTitle = (type: HelpType) => ({
   'recovery-strategy': 'Position recovery',
   'probe-window': 'Probe help',
   'magic-stdout-messages': 'Magic stdout messages',
-  'ast-cache-strategy': 'AST caching'
+  'ast-cache-strategy': 'AST caching',
+  'syntax-highlighting': 'Syntax Highlighting',
+  'main-args-override': 'Main args override'
 })[type];
 
 const getHelpContents = (type: HelpType) => {
@@ -343,6 +345,24 @@ aspect MagicOutputDemo {
           `If you are unsure of what to use, 'Partial' is usually a pretty good option.`,
         ];
       }
+
+      case 'syntax-highlighting': return [
+        `This setting controls which style of highlighting is used in the editor.`,
+        `This is only affects the client - the parsing of your tool is unaffected.`,
+      ];
+
+      case 'main-args-override': return [
+        `When your underlying tool is invoked, the path to a temporary file is sent as an arg to the main method.`,
+        `Optionally, some extra args are also included.`,
+        `By default, the extra args are defined when you start the server`,
+        `By checking 'Override main args' and clicking "Edit", you can override those extra args`,
+        ``,
+        `Args are separated by spaces.`,
+        `To include a space in an arg, wrap it in quotes (e.g "foo bar").`,
+        `To include a quote in an arg, escape it with \\ (e.g "foo\\"bar")`,
+        `To include a backslash in an arg, escape it with an extra backslash (e.g "foo\\\\bar")`,
+        '',
+      ]
   }
 }
 

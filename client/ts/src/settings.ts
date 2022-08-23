@@ -8,6 +8,8 @@ interface Settings {
   positionRecoveryStrategy?: string;
   astCacheStrategy?: string;
   probeWindowStates?: ProbeWindowState[];
+  syntaxHighlighting?: SyntaxHighlightingLanguageId;
+  mainArgsOverride?: string[] | null;
 }
 
 let settingsObj: Settings | null = null;
@@ -48,6 +50,12 @@ const settings = {
 
   getProbeWindowStates: () => settings.get().probeWindowStates ?? [],
   setProbeWindowStates: (probeWindowStates: ProbeWindowState[]) => settings.set({ ...settings.get(), probeWindowStates }),
+
+  getSyntaxHighlighting: () => settings.get().syntaxHighlighting ?? 'java',
+  setSyntaxHighlighting: (syntaxHighlighting: SyntaxHighlightingLanguageId) => settings.set({ ...settings.get(), syntaxHighlighting }),
+
+  getMainArgsOverride: () => settings.get().mainArgsOverride ?? null,
+  setMainArgsOverride: (mainArgsOverride: string[] | null) => settings.set({ ...settings.get(), mainArgsOverride }),
 };
 
 export default settings;

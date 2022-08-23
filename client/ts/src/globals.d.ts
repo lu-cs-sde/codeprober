@@ -19,13 +19,16 @@ type TextMarkFn = (mark: Span & { severity: MarkerSeverity; message: string }) =
 
 type LocationAdjuster = (line: number, col: number) => [number, number];
 
-type EditorInitializer = (initialValue: string, onChange: (newValue: string, adjusters?: LocationAdjuster[] ) => void) => {
+type SyntaxHighlightingLanguageId = 'java' | 'c' | 'python'
+
+type EditorInitializer = (initialValue: string, onChange: (newValue: string, adjusters?: LocationAdjuster[] ) => void, initialSyntaxHIghlight: SyntaxHighlightingLanguageId) => {
   setLocalState?: (newValue: string) => void;
   getLocalState?: () => string;
   updateSpanHighlight?: (span: Span | null) => void;
   registerStickyMarker?: (initialSpan: Span) => StickyMarker;
   markText?: TextMarkFn;
   themeToggler: (isLightTheme: boolean) => void;
+  syntaxHighlightingToggler: (langId: SyntaxHighlightingLanguageId) => void;
 };
 
 type MarkerSeverity = 'error' | 'warning' | 'info' | 'line-pa';
@@ -157,10 +160,11 @@ interface Window {
     };
   };
   loadPreload: (preloader: EditorPreloader, onDone: () => void) => void;
-  displayGeneralHelp: () => void;
-  displayProbeStatistics: () => void;
-  displayRecoveryStrategyHelp: () => void;
-  displayAstCacheStrategyHelp: () => void;
+  // displayGeneralHelp: () => void;
+  // displayProbeStatistics: () => void;
+  // displayRecoveryStrategyHelp: () => void;
+  // displayAstCacheStrategyHelp: () => void;
+  displayHelp: (type: 'general' | 'probe-statistics' | 'recovery-strategy' | 'ast-cache-strategy' | 'syntax-highlighting' | 'main-args-override') => void;
   maybeAutoInit: () => void;
   init: (editorType: string) => void;
   MiniEditorMain: () => void;

@@ -114,6 +114,15 @@
         <input type='checkbox' id='control-duplicate-probe-on-attr' checked></input>
         <label for='control-duplicate-probe-on-attr'>Duplicate probe on attr click</label>
       </div>
+      <div style="display: none">
+        <input type='checkbox' id='control-should-override-main-args'></input>
+        <label for='control-should-override-main-args'>Override main args</label>
+
+        <button id="configure-main-args">
+          Edit (0)
+        </button>
+        <button onClick="displayHelp('main-args-override')" id="main-args-override-help" style="border-radius: 50%; ">?</button>
+      </div>
       <div>
         <select id="control-position-recovery-strategy">
           <option value="FAIL">Fail</option>
@@ -124,7 +133,7 @@
           <option value="ALTERNATE_PARENT_CHILD" >Zigzag</option>
         </select>
         <label for='control-position-recovery-strategy'>Position recovery strategy</label>
-        <button onClick="displayRecoveryStrategyHelp()" id="control-position-recovery-strategy-help" style="border-radius: 50%; ">?</button>
+        <button onClick="displayHelp('recovery-strategy')" id="control-position-recovery-strategy-help" style="border-radius: 50%; ">?</button>
       </div>
       <div>
         <select id="ast-cache-strategy">
@@ -134,13 +143,22 @@
           <option value="PURGE">Purge ⚠️</option>
         </select>
         <label for='ast-cache-strategy'>AST cache strategy</label>
-        <button onClick="displayAstCacheStrategyHelp()" id="control-ast-cache-strategy-help" style="border-radius: 50%; ">?</button>
+        <button onClick="displayHelp('ast-cache-strategy')" id="control-ast-cache-strategy-help" style="border-radius: 50%; ">?</button>
       </div>
-      <button id="display-help" onclick="displayGeneralHelp()">Help</button>
+      <div>
+        <select id="syntax-highlighting">
+          <option value="java">Java</option>
+          <option value="c">C</option>
+          <option value="python">Python</option>
+        </select>
+        <label for='syntax-highlighting'>Syntax highlighting</label>
+        <button onClick="displayHelp('syntax-highlighting')" id="control-syntax-highlighting-help" style="border-radius: 50%; ">?</button>
+      </div>
+      <button id="display-help" onclick="displayHelp('general')">Help</button>
       <button id="clear-settings" onclick="clearPastaSettings()">Clear state and reload</button>
       <br>
       <div id="secret-debug-panel" style="display: none; border-top: 2px dashed gray; margin-top: 2rem; padding: 0.25rem 0;">
-        <button id="display-statistics" onclick="displayProbeStatistics()">Statistics</button>
+        <button id="display-statistics" onclick="displayHelp('probe-statistics')">Statistics</button>
       </div>
     </div>
   </div>

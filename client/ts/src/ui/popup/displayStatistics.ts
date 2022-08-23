@@ -284,7 +284,6 @@ const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButt
         const testSuiteSelector = document.createElement('select');
         testSuiteSelector.style.marginRight = '0.5rem';
         testSuiteSelector.id = 'test-type-selector';
-        console.log('QQ ', activeTest, ' => ', tests.findIndex(({ title }) => title === activeTest));
 
         tests.forEach(({ title }) => {
           const option = document.createElement('option');

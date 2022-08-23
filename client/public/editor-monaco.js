@@ -9,14 +9,14 @@ window.defineEditor(
     style: [],
     predicate: () => 'monaco' in window,
   }),
-  (value, onChange) => {
+  (value, onChange, initialSyntaxHighlight) => {
     const inw = document.getElementById('input-wrapper');
     inw.classList.add('input-Monaco');
     inw.innerHTML = '';
 
     const editor = monaco.editor.create(inw, {
       value,
-      language: 'java',
+      language: initialSyntaxHighlight,
       theme: 'dark',
       scrollBeyondLastLine: false,
       automaticLayout: true,
@@ -539,6 +539,10 @@ window.defineEditor(
         }
       },
       themeToggler: light => monaco.editor.setTheme(light ? 'vs-light' : 'vs-dark'),
+      syntaxHighlightingToggler: langId => {
+        editor.updateOptions({ language: langId });
+        monaco.editor.setModelLanguage(editor.getModel(), langId)
+      },
     };
   },
 );

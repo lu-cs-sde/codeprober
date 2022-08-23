@@ -197,7 +197,7 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
         };
         let lastCancelToken = {};
         const contentRoot = document.createElement('div');
-        contentRoot.classList.add('HELLO-FIND-ME');
+        // contentRoot.classList.add('HELLO-FIND-ME');
         contentRoot.style.overflow = 'auto';
         contentRoot.style.position = 'relative';
         contentRoot.style.top = '0px';
@@ -1033,7 +1033,9 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
         'recovery-strategy': 'Position recovery',
         'probe-window': 'Probe help',
         'magic-stdout-messages': 'Magic stdout messages',
-        'ast-cache-strategy': 'AST caching'
+        'ast-cache-strategy': 'AST caching',
+        'syntax-highlighting': 'Syntax Highlighting',
+        'main-args-override': 'Main args override'
     })[type];
     const getHelpContents = (type) => {
         const createHeader = (text) => {
@@ -1338,6 +1340,22 @@ aspect MagicOutputDemo {
                     `If you are unsure of what to use, 'Partial' is usually a pretty good option.`,
                 ];
             }
+            case 'syntax-highlighting': return [
+                `This setting controls which style of highlighting is used in the editor.`,
+                `This is only affects the client - the parsing of your tool is unaffected.`,
+            ];
+            case 'main-args-override': return [
+                `When your underlying tool is invoked, the path to a temporary file is sent as an arg to the main method.`,
+                `Optionally, some extra args are also included.`,
+                `By default, the extra args are defined when you start the server`,
+                `By checking 'Override main args' and clicking "Edit", you can override those extra args`,
+                ``,
+                `Args are separated by spaces.`,
+                `To include a space in an arg, wrap it in quotes (e.g "foo bar").`,
+                `To include a quote in an arg, escape it with \\ (e.g "foo\\"bar")`,
+                `To include a backslash in an arg, escape it with an extra backslash (e.g "foo\\\\bar")`,
+                '',
+            ];
         }
     };
     const displayHelp = (type, setHelpButtonDisabled) => {
@@ -1984,6 +2002,10 @@ define("settings", ["require", "exports"], function (require, exports) {
         setAstCacheStrategy: (astCacheStrategy) => settings.set({ ...settings.get(), astCacheStrategy }),
         getProbeWindowStates: () => { var _a; return (_a = settings.get().probeWindowStates) !== null && _a !== void 0 ? _a : []; },
         setProbeWindowStates: (probeWindowStates) => settings.set({ ...settings.get(), probeWindowStates }),
+        getSyntaxHighlighting: () => { var _a; return (_a = settings.get().syntaxHighlighting) !== null && _a !== void 0 ? _a : 'java'; },
+        setSyntaxHighlighting: (syntaxHighlighting) => settings.set({ ...settings.get(), syntaxHighlighting }),
+        getMainArgsOverride: () => { var _a; return (_a = settings.get().mainArgsOverride) !== null && _a !== void 0 ? _a : null; },
+        setMainArgsOverride: (mainArgsOverride) => settings.set({ ...settings.get(), mainArgsOverride }),
     };
     exports.default = settings;
 });
@@ -2266,7 +2288,6 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
                     const testSuiteSelector = document.createElement('select');
                     testSuiteSelector.style.marginRight = '0.5rem';
                     testSuiteSelector.id = 'test-type-selector';
-                    console.log('QQ ', activeTest, ' => ', tests.findIndex(({ title }) => title === activeTest));
                     tests.forEach(({ title }) => {
                         const option = document.createElement('option');
                         option.value = title;
@@ -2313,7 +2334,268 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
     };
     exports.default = displayStatistics;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_4, settings_1, StatisticsCollectorImpl_1, displayStatistics_1) {
+define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_1, createModalTitle_7, showWindow_8) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    settings_1 = __importDefault(settings_1);
+    createModalTitle_7 = __importDefault(createModalTitle_7);
+    showWindow_8 = __importDefault(showWindow_8);
+    const getArgs = () => {
+        const re = settings_1.default.getMainArgsOverride();
+        if (!re) {
+            return re;
+        }
+        return re.map(item => {
+            let str = '';
+            let surround = false;
+            for (let i = 0; i < item.length; ++i) {
+                const ch = item[i];
+                switch (ch) {
+                    case '"': {
+                        surround = true;
+                        str = `${str}\\"`;
+                        break;
+                    }
+                    case '\\': {
+                        str = `${str}\\\\`;
+                        break;
+                    }
+                    case ' ': {
+                        surround = true;
+                        // Fall through
+                    }
+                    default: {
+                        str = `${str}${ch}`;
+                        break;
+                    }
+                }
+            }
+            if (surround) {
+                return `"${str}"`;
+            }
+            return str;
+        }).join(' ');
+    };
+    const setArgs = (raw, onError) => {
+        let args = [];
+        let buf = null;
+        let parsePos = 0;
+        const commit = () => {
+            if (buf !== null) {
+                args.push(buf);
+            }
+            buf = null;
+        };
+        const getLineColFromStartToPos = (pos) => {
+            let line = 1;
+            let col = 0;
+            for (let i = 0; i < pos; ++i) {
+                if (raw[i] == '\n') {
+                    ++line;
+                    col = 0;
+                }
+                else {
+                    // This is slightly incorrect for multibyte characters, TODO support properly (if worth the effort)
+                    ++col;
+                }
+            }
+            return { line, col };
+        };
+        const parseEscaped = () => {
+            const next = raw[parsePos++];
+            if (next == '\\') {
+                buf = `${buf !== null && buf !== void 0 ? buf : ''}\\`;
+            }
+            else if (next == '"') {
+                buf = `${buf !== null && buf !== void 0 ? buf : ''}"`;
+            }
+            else {
+                const loc = getLineColFromStartToPos(parsePos - 1);
+                onError(loc.line, loc.col, `Unexpected escape character, expected '"' or '\\' after this backslash`);
+                throw new Error(`Unexpected escape character`);
+            }
+        };
+        const parseQuoted = () => {
+            const start = parsePos;
+            buf = '';
+            while (parsePos < raw.length) {
+                const ch = raw[parsePos++];
+                switch (ch) {
+                    case '"': {
+                        commit();
+                        return;
+                    }
+                    case '\\': {
+                        parseEscaped();
+                        break;
+                    }
+                    default: {
+                        buf = `${buf}${ch}`;
+                        break;
+                    }
+                }
+            }
+            const loc = getLineColFromStartToPos(start);
+            onError(loc.line, loc.col, `Unterminated string`);
+            throw new Error('Unterminated string');
+        };
+        const parseOuter = () => {
+            while (parsePos < raw.length) {
+                const ch = raw[parsePos++];
+                switch (ch) {
+                    case '"': {
+                        commit();
+                        parseQuoted();
+                        break;
+                    }
+                    case '\\': {
+                        parseEscaped();
+                        break;
+                    }
+                    case ' ': {
+                        commit();
+                        break;
+                    }
+                    default: {
+                        buf = `${buf !== null && buf !== void 0 ? buf : ''}${ch}`;
+                        break;
+                    }
+                }
+            }
+        };
+        parseOuter();
+        commit();
+        // console.log('done parsing @', parsePos)
+        settings_1.default.setMainArgsOverride(args);
+    };
+    const displayMainArgsOverrideModal = (setDisableEditButton, onChange) => {
+        setDisableEditButton(true);
+        const windowInstance = (0, showWindow_8.default)({
+            render: (root) => {
+                while (root.firstChild) {
+                    root.firstChild.remove();
+                }
+                root.appendChild((0, createModalTitle_7.default)({
+                    renderLeft: (container) => {
+                        const headType = document.createElement('span');
+                        headType.classList.add('syntax-stype');
+                        headType.innerText = `Main arg override editor`;
+                        container.appendChild(headType);
+                    },
+                    onClose: () => close(),
+                }).element);
+                const elem = document.createElement('div');
+                // elem.style.minHeight = '16rem';
+                elem.style = `
+      width: 100%;
+      height: 100%;
+      `;
+                const liveView = document.createElement('div');
+                liveView.style.display = 'flex';
+                liveView.style.padding = '0.25rem';
+                liveView.style.flexDirection = 'row';
+                liveView.style.maxWidth = '100%';
+                liveView.style.flexWrap = 'wrap';
+                // liveView.style.maxHeight = '7.8rem';
+                liveView.style.overflow = 'scroll';
+                liveView.style.rowGap = '4px';
+                const refreshLiveView = () => {
+                    var _a;
+                    liveView.innerHTML = '';
+                    const addTn = (str) => {
+                        const tn = document.createElement('span');
+                        tn.innerText = str;
+                        // tn.style.margin = '1px';
+                        liveView.appendChild(tn);
+                    };
+                    // liveView.appendChild(document.createTextNode('tool.main(\n'));
+                    addTn('yourtool.main(new String[]{');
+                    [...((_a = settings_1.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : []), '/path/to/file.tmp'].forEach((part, partIdx) => {
+                        if (partIdx > 0) {
+                            liveView.appendChild(document.createTextNode(', '));
+                        }
+                        const span = document.createElement('span');
+                        span.innerText = part;
+                        span.style.whiteSpace = 'pre';
+                        span.style.border = '1px solid #888';
+                        span.style.marginLeft = '0.125rem';
+                        span.style.marginRight = '0.125rem';
+                        liveView.appendChild(span);
+                    });
+                    addTn('})');
+                    // liveView.innerText = `tool.main(\n  ${[...(settings.getMainArgsOverride() ?? []), '/path/to/tmp-file'].filter(Boolean).join(',\n  ')})`
+                };
+                liveView.classList.add('override-main-args-live-view');
+                refreshLiveView();
+                // elem.classList.add('input-Monaco');
+                const editor = window.monaco.editor.create(elem, {
+                    value: getArgs(),
+                    language: 'plaintext',
+                    // theme: 'dark',
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    minimap: {
+                        enabled: false,
+                    },
+                    wordWrap: true,
+                });
+                editor.onDidChangeModelContent(() => {
+                    console.log('settings args..', editor.getValue());
+                    const errs = [];
+                    try {
+                        setArgs(editor.getValue(), (line, col, msg) => errs.push({ line, col, msg }));
+                        refreshLiveView();
+                        onChange();
+                    }
+                    catch (e) {
+                        console.warn('Error when parsing user input', e);
+                    }
+                    window.monaco.editor.setModelMarkers(editor.getModel(), 'override-problems', errs.map(({ line, col, msg }) => ({
+                        startLineNumber: line,
+                        startColumn: col,
+                        endLineNumber: line,
+                        endColumn: col + 1,
+                        message: msg,
+                        severity: 8, // default to 'error' (8)
+                    })));
+                    console.log('did set args, getArgs():', getArgs(), '||', settings_1.default.getMainArgsOverride());
+                });
+                const wrapper = document.createElement('div');
+                wrapper.style = `
+      display: flex;
+      width: 100%;
+      height: 8rem;
+      `;
+                wrapper.appendChild(elem);
+                root.appendChild(wrapper);
+                const explanation = document.createElement('p');
+                explanation.style.marginTop = '0';
+                explanation.innerText = [
+                    'Example invocation with current override value:'
+                ].join('\n');
+                root.appendChild(explanation);
+                root.appendChild(liveView);
+            },
+            rootStyle: `
+    min-width: 12rem;
+    min-height: 4rem;
+    max-width: 80vw;
+    max-height: 80vh;
+    overflow: auto;
+    `,
+            resizable: true,
+        });
+        const close = () => {
+            setDisableEditButton(false);
+            windowInstance.remove();
+        };
+        return {
+            forceClose: () => close(),
+        };
+    };
+    exports.default = displayMainArgsOverrideModal;
+});
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_4, settings_2, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -2321,11 +2603,12 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_2 = __importDefault(displayHelp_2);
     displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
-    settings_1 = __importDefault(settings_1);
+    settings_2 = __importDefault(settings_2);
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
     displayStatistics_1 = __importDefault(displayStatistics_1);
+    displayMainArgsOverrideModal_1 = __importDefault(displayMainArgsOverrideModal_1);
     window.clearPastaSettings = () => {
-        settings_1.default.set({});
+        settings_2.default.set({});
         location.reload();
     };
     const main = () => {
@@ -2349,7 +2632,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 cache: astCacheStrategySelector.value,
                 type: 'query',
                 text: getLocalState(),
-                stdout: settings_1.default.shouldCaptureStdio(),
+                stdout: settings_2.default.shouldCaptureStdio(),
                 query: props
             }));
             const cleanup = () => delete rpcHandlers[id];
@@ -2376,7 +2659,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             const states = [];
             Object.values(probeWindowStateSavers).forEach(v => v(states));
             // console.log('triggerWindowsSave -->', states);
-            settings_1.default.setProbeWindowStates(states);
+            settings_2.default.setProbeWindowStates(states);
         };
         const notifyLocalChangeListeners = (adjusters) => {
             // Short timeout to easier see changes happening. Remove in prod
@@ -2390,7 +2673,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 location.search = "editor=" + editorType;
                 return;
             }
-            document.body.setAttribute('data-theme-light', `${settings_1.default.isLightTheme()}`);
+            document.body.setAttribute('data-theme-light', `${settings_2.default.isLightTheme()}`);
             document.getElementById('connections').style.display = 'none';
             const socket = new WebSocket(`ws://${location.hostname}:8080`);
             rpcQuerySocket = socket;
@@ -2410,7 +2693,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             const init = ({ value, parser, version }) => {
                 rootElem.style.display = "grid";
                 const onChange = (newValue, adjusters) => {
-                    settings_1.default.setEditorContents(newValue);
+                    settings_2.default.setEditorContents(newValue);
                     if (!pastaMode) {
                         // ++changeCtr;
                         // socket.send(JSON.stringify({
@@ -2433,15 +2716,15 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     remove: () => { },
                 });
                 const darkModeCheckbox = document.getElementById('control-dark-mode');
-                darkModeCheckbox.checked = !settings_1.default.isLightTheme();
+                darkModeCheckbox.checked = !settings_2.default.isLightTheme();
                 const defineThemeToggler = (cb) => {
                     darkModeCheckbox.oninput = (e) => {
                         let lightTheme = !darkModeCheckbox.checked;
-                        settings_1.default.setLightTheme(lightTheme);
+                        settings_2.default.setLightTheme(lightTheme);
                         document.body.setAttribute('data-theme-light', `${lightTheme}`);
                         cb(lightTheme);
                     };
-                    cb(settings_1.default.isLightTheme());
+                    cb(settings_2.default.isLightTheme());
                     // let lightTheme = MiniEditorUtils.getThemeIsLight();
                     // window.toggleTheme = () => {
                     //   lightTheme = !lightTheme;
@@ -2452,11 +2735,11 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     // lightTheme = !lightTheme;
                     // window.toggleTheme();
                 };
-                console.log('definedEditors:', Object.keys(window.definedEditors), '; tag:', editorType);
+                let syntaxHighlightingToggler;
                 if (window.definedEditors[editorType]) {
                     const { preload, init, } = window.definedEditors[editorType];
                     window.loadPreload(preload, () => {
-                        const res = init(value, onChange);
+                        const res = init(value, onChange, settings_2.default.getSyntaxHighlighting());
                         setLocalState = res.setLocalState || setLocalState;
                         getLocalState = res.getLocalState || getLocalState;
                         updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
@@ -2465,6 +2748,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         if (res.themeToggler) {
                             defineThemeToggler(res.themeToggler);
                         }
+                        syntaxHighlightingToggler = res.syntaxHighlightingToggler;
                     });
                 }
                 else {
@@ -2493,35 +2777,68 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     Object.values(probeMarkers).forEach(arr => arr.forEach(({ severity, errStart, errEnd, msg }) => filteredAddMarker(severity, errStart, errEnd, msg)));
                 };
                 const captureStdoutCheckbox = document.getElementById('control-capture-stdout');
-                captureStdoutCheckbox.checked = settings_1.default.shouldCaptureStdio();
+                captureStdoutCheckbox.checked = settings_2.default.shouldCaptureStdio();
                 captureStdoutCheckbox.oninput = () => {
-                    settings_1.default.setShouldCaptureStdio(captureStdoutCheckbox.checked);
+                    settings_2.default.setShouldCaptureStdio(captureStdoutCheckbox.checked);
                     notifyLocalChangeListeners();
                 };
                 const astCacheStrategySelector = document.getElementById('ast-cache-strategy');
-                astCacheStrategySelector.value = settings_1.default.getAstCacheStrategy();
+                astCacheStrategySelector.value = settings_2.default.getAstCacheStrategy();
                 astCacheStrategySelector.oninput = () => {
-                    settings_1.default.setAstCacheStrategy(astCacheStrategySelector.value);
+                    settings_2.default.setAstCacheStrategy(astCacheStrategySelector.value);
                     notifyLocalChangeListeners();
                 };
                 const recoveryStrategySelector = document.getElementById('control-position-recovery-strategy');
-                recoveryStrategySelector.value = settings_1.default.getPositionRecoveryStrategy();
+                recoveryStrategySelector.value = settings_2.default.getPositionRecoveryStrategy();
                 recoveryStrategySelector.oninput = () => {
-                    settings_1.default.setPositionRecoveryStrategy(recoveryStrategySelector.value);
+                    settings_2.default.setPositionRecoveryStrategy(recoveryStrategySelector.value);
                     notifyLocalChangeListeners();
                 };
                 const duplicateProbeCheckbox = document.getElementById('control-duplicate-probe-on-attr');
                 duplicateProbeCheckbox.oninput = () => {
-                    settings_1.default.setShouldDuplicateProbeOnAttrClick(duplicateProbeCheckbox.checked);
+                    settings_2.default.setShouldDuplicateProbeOnAttrClick(duplicateProbeCheckbox.checked);
                 };
-                duplicateProbeCheckbox.checked = settings_1.default.shouldDuplicateProbeOnAttrClick();
+                duplicateProbeCheckbox.checked = settings_2.default.shouldDuplicateProbeOnAttrClick();
+                const syntaxHighlightingSelector = document.getElementById('syntax-highlighting');
+                syntaxHighlightingSelector.value = settings_2.default.getSyntaxHighlighting();
+                syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_2.default.getSyntaxHighlighting());
+                syntaxHighlightingSelector.oninput = () => {
+                    settings_2.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
+                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_2.default.getSyntaxHighlighting());
+                };
+                const shouldOverrideMainArgsCheckbox = document.getElementById('control-should-override-main-args');
+                const configureMainArgsOverrideButton = document.getElementById('configure-main-args');
+                let overrideEditorCloser = null;
+                const updateOverrideArgsButton = () => {
+                    const overrides = settings_2.default.getMainArgsOverride();
+                    if (overrides === null) {
+                        configureMainArgsOverrideButton.style.display = 'none';
+                    }
+                    else {
+                        configureMainArgsOverrideButton.style.display = 'inline-block';
+                        configureMainArgsOverrideButton.innerText = `Edit (${overrides.length})`;
+                    }
+                };
+                shouldOverrideMainArgsCheckbox.checked = settings_2.default.getMainArgsOverride() !== null;
+                updateOverrideArgsButton();
+                configureMainArgsOverrideButton.onclick = () => {
+                    const { forceClose } = (0, displayMainArgsOverrideModal_1.default)((disabled) => {
+                        configureMainArgsOverrideButton.disabled = disabled;
+                        if (!disabled) {
+                            overrideEditorCloser = null;
+                        }
+                    }, () => {
+                        updateOverrideArgsButton();
+                        notifyLocalChangeListeners();
+                    });
+                    overrideEditorCloser = () => forceClose();
+                };
+                shouldOverrideMainArgsCheckbox.oninput = (e) => {
+                    overrideEditorCloser === null || overrideEditorCloser === void 0 ? void 0 : overrideEditorCloser();
+                    settings_2.default.setMainArgsOverride(shouldOverrideMainArgsCheckbox.checked ? [] : null);
+                    updateOverrideArgsButton();
+                };
                 const statCollectorImpl = new StatisticsCollectorImpl_1.default();
-                window.displayProbeStatistics = () => {
-                    (0, displayStatistics_1.default)(statCollectorImpl, disabled => document.getElementById('display-statistics').disabled = disabled, newContents => {
-                        setLocalState(newContents);
-                        // notifyLocalChangeListeners();
-                    }, () => modalEnv.currentlyLoadingModals.size > 0);
-                };
                 if (location.search.includes('debug=true')) {
                     document.getElementById('secret-debug-panel').style.display = 'block';
                 }
@@ -2565,9 +2882,28 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 //     console.log('PASSIVE:', res);
                 //   });
                 // };
-                window.displayGeneralHelp = () => (0, displayHelp_2.default)('general', disabled => document.getElementById('display-help').disabled = disabled);
-                window.displayRecoveryStrategyHelp = () => (0, displayHelp_2.default)('recovery-strategy', disabled => document.getElementById('control-position-recovery-strategy-help').disabled = disabled);
-                window.displayAstCacheStrategyHelp = () => (0, displayHelp_2.default)('ast-cache-strategy', disabled => document.getElementById('control-ast-cache-strategy-help').disabled = disabled);
+                window.displayHelp = (type) => {
+                    switch (type) {
+                        case "general": return (0, displayHelp_2.default)('general', disabled => document.getElementById('display-help').disabled = disabled);
+                        case 'recovery-strategy': return (0, displayHelp_2.default)('recovery-strategy', disabled => document.getElementById('control-position-recovery-strategy-help').disabled = disabled);
+                        case "ast-cache-strategy": return (0, displayHelp_2.default)('ast-cache-strategy', disabled => document.getElementById('control-ast-cache-strategy-help').disabled = disabled);
+                        case "probe-statistics": return (0, displayStatistics_1.default)(statCollectorImpl, disabled => document.getElementById('display-statistics').disabled = disabled, newContents => {
+                            setLocalState(newContents);
+                        }, () => modalEnv.currentlyLoadingModals.size > 0);
+                        case 'syntax-highlighting': return (0, displayHelp_2.default)('syntax-highlighting', disabled => document.getElementById('control-syntax-highlighting-help').disabled = disabled);
+                        case 'main-args-override': return (0, displayHelp_2.default)('main-args-override', disabled => document.getElementById('main-args-override-help').disabled = disabled);
+                        default: return console.error('Unknown help type', type);
+                    }
+                };
+                // window.displayGeneralHelp = () => displayHelp('general',
+                //   disabled => (document.getElementById('display-help') as HTMLButtonElement).disabled = disabled
+                //   );
+                // window.displayRecoveryStrategyHelp = () => displayHelp('recovery-strategy',
+                //     disabled => (document.getElementById('control-position-recovery-strategy-help') as HTMLButtonElement).disabled = disabled
+                // );
+                // window.displayAstCacheStrategyHelp = () => displayHelp('ast-cache-strategy',
+                //     disabled => (document.getElementById('control-ast-cache-strategy-help') as HTMLButtonElement).disabled = disabled
+                // );
                 // setTimeout(() => {
                 //   // window.displayAstCacheStrategyHelp();
                 //   // displayProbeModal(modalEnv, { x: 320, y: 240 }, { lineStart: 5, colStart: 1, lineEnd: 7, colEnd: 2 }, 'Program', 'prettyPrint');
@@ -2582,7 +2918,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     //   { name: 'lookup', args: [{ type: 'java.lang.String', name: 'name', value: 'Foo' }]}
                     // );
                     try {
-                        settings_1.default.getProbeWindowStates().forEach((state) => {
+                        settings_2.default.getProbeWindowStates().forEach((state) => {
                             (0, displayProbeModal_3.default)(modalEnv, state.modalPos, state.locator, state.attr);
                         });
                     }
@@ -2607,7 +2943,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 delete window.DoAutoComplete;
                 // rootElem.style.gridTemplateColumns = '3fr 1fr';
                 // handlers.init({ value: '// Hello World!\n\nint main() {\n  print(123);\n  print(456);\n}\n', parser: 'beaver', version: 1 });
-                handlers.init({ value: (_a = settings_1.default.getEditorContents()) !== null && _a !== void 0 ? _a : '// Hello World!\n\class Foo {\n  static void main(String[] args) {\n    System.out.println("Hello World!");\n  }\n}\n', parser: 'beaver', version: 1 });
+                handlers.init({ value: (_a = settings_2.default.getEditorContents()) !== null && _a !== void 0 ? _a : '// Hello World!\n\class Foo {\n  static void main(String[] args) {\n    System.out.println("Hello World!");\n  }\n}\n', parser: 'beaver', version: 1 });
             };
             handlers.refresh = () => {
                 notifyLocalChangeListeners();

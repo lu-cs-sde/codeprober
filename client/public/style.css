@@ -188,9 +188,6 @@ body[data-theme-light="true"] .attr-input-twopill-selected {
   border-color: gray;
 }
 
-.locator-symbol::after {
-
-}
 body[data-theme-light="true"] .attr-list-submit {
   border-color: #333;
   color: black;
@@ -346,6 +343,13 @@ select {
   background: gray; */
 }
 
+.override-main-args-live-view {
+  background: #111;
+  /* overflow-y: scroll; */
+}
+body[data-theme-light="true"] .override-main-args-live-view {
+  background: #EEE;
+}
 /* body[data-theme-light="true"] #display-help {
   background: #ddd;
   border-color: #aaa;

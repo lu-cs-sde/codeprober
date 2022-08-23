@@ -6,6 +6,7 @@ import displayAttributeModal from "./ui/popup/displayAttributeModal";
 import settings from './settings';
 import StatisticsCollectorImpl from "./model/StatisticsCollectorImpl";
 import displayStatistics from "./ui/popup/displayStatistics";
+import displayMainArgsOverrideModal from "./ui/popup/displayMainArgsOverrideModal";
 
 type HandlerFn = (data: { [key: string]: any }) => void;
 
@@ -154,11 +155,12 @@ const main = () => {
         // window.toggleTheme();
       };
 
-      console.log('definedEditors:', Object.keys(window.definedEditors), '; tag:', editorType);
+      let syntaxHighlightingToggler: ((langId: SyntaxHighlightingLanguageId) => void) | undefined;
+
       if (window.definedEditors[editorType]) {
         const { preload, init, } = window.definedEditors[editorType];
         window.loadPreload(preload, () => {
-          const res = init(value, onChange);
+          const res = init(value, onChange, settings.getSyntaxHighlighting());
           setLocalState = res.setLocalState || setLocalState;
           getLocalState = res.getLocalState || getLocalState;
           updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
@@ -167,6 +169,7 @@ const main = () => {
           if (res.themeToggler) {
             defineThemeToggler(res.themeToggler);
           }
+          syntaxHighlightingToggler = res.syntaxHighlightingToggler;
         })
 
       } else {
@@ -222,19 +225,51 @@ const main = () => {
       }
       duplicateProbeCheckbox.checked = settings.shouldDuplicateProbeOnAttrClick();
 
+      const syntaxHighlightingSelector = document.getElementById('syntax-highlighting') as HTMLSelectElement;
+      syntaxHighlightingSelector.value = settings.getSyntaxHighlighting();
+      syntaxHighlightingToggler?.(settings.getSyntaxHighlighting());
+      syntaxHighlightingSelector.oninput = () => {
+        settings.setSyntaxHighlighting(syntaxHighlightingSelector.value as SyntaxHighlightingLanguageId);
+        syntaxHighlightingToggler?.(settings.getSyntaxHighlighting());
+      }
+
+      const shouldOverrideMainArgsCheckbox  = document.getElementById('control-should-override-main-args') as HTMLInputElement;
+      const configureMainArgsOverrideButton = document.getElementById('configure-main-args') as HTMLButtonElement;
+      let overrideEditorCloser: (() => void) | null = null;
+      const updateOverrideArgsButton = () => {
+        const overrides = settings.getMainArgsOverride();
+        if (overrides === null) {
+          configureMainArgsOverrideButton.style.display = 'none';
+        } else {
+          configureMainArgsOverrideButton.style.display = 'inline-block';
+          configureMainArgsOverrideButton.innerText = `Edit (${overrides.length})`;
+        }
+      };
+      shouldOverrideMainArgsCheckbox.checked = settings.getMainArgsOverride() !== null;
+      updateOverrideArgsButton();
+
+      configureMainArgsOverrideButton.onclick = () => {
+        const { forceClose } = displayMainArgsOverrideModal((disabled) => {
+          configureMainArgsOverrideButton.disabled = disabled;
+          if (!disabled) {
+            overrideEditorCloser = null;
+          }
+        },
+          () => {
+            updateOverrideArgsButton();
+            notifyLocalChangeListeners()
+          },
+        );
+        overrideEditorCloser = () => forceClose();
+      };
+
+      shouldOverrideMainArgsCheckbox.oninput = (e) => {
+        overrideEditorCloser?.();
+        settings.setMainArgsOverride(shouldOverrideMainArgsCheckbox.checked ? [] : null);
+        updateOverrideArgsButton();
+      }
 
       const statCollectorImpl = new StatisticsCollectorImpl();
-      window.displayProbeStatistics = () => {
-        displayStatistics(
-          statCollectorImpl,
-          disabled => (document.getElementById('display-statistics') as HTMLButtonElement).disabled = disabled,
-          newContents => {
-            setLocalState(newContents);
-            // notifyLocalChangeListeners();
-          },
-          () => modalEnv.currentlyLoadingModals.size > 0,
-        );
-      };
       if (location.search.includes('debug=true')) {
         document.getElementById('secret-debug-panel')!.style.display = 'block';
       }
@@ -282,15 +317,43 @@ const main = () => {
       // };
 
 
-      window.displayGeneralHelp = () => displayHelp('general',
-        disabled => (document.getElementById('display-help') as HTMLButtonElement).disabled = disabled
-        );
-      window.displayRecoveryStrategyHelp = () => displayHelp('recovery-strategy',
-          disabled => (document.getElementById('control-position-recovery-strategy-help') as HTMLButtonElement).disabled = disabled
-      );
-      window.displayAstCacheStrategyHelp = () => displayHelp('ast-cache-strategy',
-          disabled => (document.getElementById('control-ast-cache-strategy-help') as HTMLButtonElement).disabled = disabled
-      );
+      window.displayHelp = (type) => {
+        switch (type) {
+          case "general": return displayHelp('general',
+            disabled => (document.getElementById('display-help') as HTMLButtonElement).disabled = disabled
+          );
+          case 'recovery-strategy': return displayHelp('recovery-strategy',
+            disabled => (document.getElementById('control-position-recovery-strategy-help') as HTMLButtonElement).disabled = disabled
+          );
+          case "ast-cache-strategy": return displayHelp('ast-cache-strategy',
+            disabled => (document.getElementById('control-ast-cache-strategy-help') as HTMLButtonElement).disabled = disabled
+          );
+          case "probe-statistics": return displayStatistics(
+            statCollectorImpl,
+            disabled => (document.getElementById('display-statistics') as HTMLButtonElement).disabled = disabled,
+            newContents => {
+              setLocalState(newContents);
+            },
+            () => modalEnv.currentlyLoadingModals.size > 0,
+          );
+          case 'syntax-highlighting': return displayHelp('syntax-highlighting',
+            disabled => (document.getElementById('control-syntax-highlighting-help') as HTMLButtonElement).disabled = disabled
+          );
+          case 'main-args-override': return displayHelp('main-args-override',
+            disabled => (document.getElementById('main-args-override-help') as HTMLButtonElement).disabled = disabled
+          );
+          default: return console.error('Unknown help type', type);
+        }
+      }
+      // window.displayGeneralHelp = () => displayHelp('general',
+      //   disabled => (document.getElementById('display-help') as HTMLButtonElement).disabled = disabled
+      //   );
+      // window.displayRecoveryStrategyHelp = () => displayHelp('recovery-strategy',
+      //     disabled => (document.getElementById('control-position-recovery-strategy-help') as HTMLButtonElement).disabled = disabled
+      // );
+      // window.displayAstCacheStrategyHelp = () => displayHelp('ast-cache-strategy',
+      //     disabled => (document.getElementById('control-ast-cache-strategy-help') as HTMLButtonElement).disabled = disabled
+      // );
 
       // setTimeout(() => {
       //   // window.displayAstCacheStrategyHelp();
