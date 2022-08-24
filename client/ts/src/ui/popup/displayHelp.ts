@@ -1,7 +1,7 @@
 import createModalTitle from "../create/createModalTitle";
 import showWindow from "../create/showWindow";
 
-type HelpType = 'general' | 'recovery-strategy' | 'probe-window' | 'magic-stdout-messages' | 'ast-cache-strategy' | 'syntax-highlighting' | 'main-args-override';
+type HelpType = 'general' | 'recovery-strategy' | 'probe-window' | 'magic-stdout-messages' | 'ast-cache-strategy' | 'syntax-highlighting' | 'main-args-override' | 'customize-file-suffix';
 
 const createSyntaxNode = (type: string, text: string, margins?: string) => {
   const retNode = document.createElement('span');
@@ -21,7 +21,8 @@ const getHelpTitle = (type: HelpType) => ({
   'magic-stdout-messages': 'Magic stdout messages',
   'ast-cache-strategy': 'AST caching',
   'syntax-highlighting': 'Syntax Highlighting',
-  'main-args-override': 'Main args override'
+  'main-args-override': 'Main args override',
+  'customize-file-suffix': 'Temp file suffix',
 })[type];
 
 const getHelpContents = (type: HelpType) => {
@@ -168,7 +169,7 @@ encode(value):
       })
       return [
         'Some nodes in your AST might be missing location information',
-        'This editor is built around the idea that all AST nodes have positions, and it is very hard to use for nodes where this isn\'t true',
+        'This editor is built around the idea that all AST nodes have positions, and the experience is worsened for nodes where this isn\'t true.',
         '',
         'There are two solutions',
         '',
@@ -348,21 +349,28 @@ aspect MagicOutputDemo {
 
       case 'syntax-highlighting': return [
         `This setting controls which style of highlighting is used in the editor.`,
-        `This is only affects the client - the parsing of your tool is unaffected.`,
+        `This also affects the suffix used for temporary files, unless 'Custom file suffix' is checked.`,
       ];
 
       case 'main-args-override': return [
         `When your underlying tool is invoked, the path to a temporary file is sent as an arg to the main method.`,
         `Optionally, some extra args are also included.`,
-        `By default, the extra args are defined when you start the server`,
-        `By checking 'Override main args' and clicking "Edit", you can override those extra args`,
+        `By default, the extra args are defined when you start the server.`,
+        `By checking 'Override main args' and clicking "Edit", you can override those extra args.`,
         ``,
-        `Args are separated by spaces.`,
-        `To include a space in an arg, wrap it in quotes (e.g "foo bar").`,
-        `To include a quote in an arg, escape it with \\ (e.g "foo\\"bar")`,
-        `To include a backslash in an arg, escape it with an extra backslash (e.g "foo\\\\bar")`,
-        '',
-      ]
+        `Args are separated by spaces and/or newlines.`,
+        `To include a space in an arg, wrap the arg in quotes (e.g "foo bar").`,
+        `To include a newline, quote or backslash in an arg, prefix the char with \\ (e.g \\n, \\" and \\\\).`,
+      ];
+
+      case 'customize-file-suffix': return [
+        `By default, the editor state is written to a temporary file with a file suffix that matches the chosen syntax highlighting.`,
+        `For example, if the highlighting is set to 'Python', then the temp file will end with '.py'.`,
+        ``,
+        `If you work on a language not represented in the syntax highlighting list, then this might result in your compiler/analyzer rejecting the temporary file due to it having an unknown suffix.`,
+        `By checking 'Custom file suffix' you can change the default suffix to something else.`,
+        `Note that custom suffixes are used as-is. If you want temp files to end with '.txt', then you must set the custom suffix to exactly '.tmp' (including the dot).`,
+      ];
   }
 }
 
@@ -373,7 +381,7 @@ const displayHelp = (type: HelpType, setHelpButtonDisabled: (disabled: boolean) 
   const helpWindow = showWindow({
     rootStyle: `
       width: 32rem;
-      min-height: 12rem;
+      min-height: 8rem;
     `,
     resizable: true,
     render: (root) => {

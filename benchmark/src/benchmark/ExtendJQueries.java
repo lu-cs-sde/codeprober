@@ -82,6 +82,7 @@ public class ExtendJQueries {
 		msgObj.put("type", "query");
 		msgObj.put("text", sourceFile);
 		msgObj.put("stdout", false);
+		msgObj.put("tmpSuffix", ".java");
 		return msgObj;
 	}
 

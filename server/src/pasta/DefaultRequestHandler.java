@@ -7,6 +7,7 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -37,14 +38,16 @@ import pasta.util.MagicStdoutMessageParser;
 public class DefaultRequestHandler implements JsonRequestHandler {
 
 	private final String underlyingCompilerJar;
-	private final String[] forwardArgs;
+	private final String[] defaultForwardArgs;
 
 	private AstInfo lastInfo = null;
 	private String lastParsedInput = null;
+	private String[] lastForwardArgs;
 
 	public DefaultRequestHandler(String underlyingJarFile, String[] forwardArgs) {
 		this.underlyingCompilerJar = underlyingJarFile;
-		this.forwardArgs = forwardArgs;
+		this.defaultForwardArgs = forwardArgs;
+		this.lastForwardArgs = this.defaultForwardArgs;
 	}
 
 	void handleParsedAst(Object ast, Function<String, Class<?>> loadAstClass, JSONObject queryObj,
@@ -241,7 +244,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				return existing;
 			}
 			try {
-				final File tmpFile = File.createTempFile("pasta-server", ".java");
+				final File tmpFile = File.createTempFile("pasta-server", queryObj.getString("tmpSuffix"));
 				try {
 					Files.write(tmpFile.toPath(), inputText.getBytes(StandardCharsets.UTF_8),
 							StandardOpenOption.CREATE);
@@ -260,10 +263,23 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		try {
 			errors = StdIoInterceptor.performCaptured(MagicStdoutMessageParser::parse, () -> {
 				final String inputText = queryObj.getString("text");
+				
+				final String[] fwdArgs;
+				final JSONArray argsOverride = queryObj.optJSONArray("mainArgs");
+				if (argsOverride != null) {
+					fwdArgs = new String[argsOverride.length()];
+					for (int i = 0; i < fwdArgs.length; ++i) {
+						fwdArgs[i] = argsOverride.getString(i);
+					}
+				} else {
+					fwdArgs = defaultForwardArgs;
+				}
 
+				final boolean newFwdArgs = !Arrays.equals(lastForwardArgs, fwdArgs); 
 				boolean maybeCacheAST = cacheStrategy.canCacheAST() //
 						&& lastParsedInput != null //
 						&& lastInfo != null //
+						&& !newFwdArgs
 						&& ASTProvider.hasUnchangedJar(underlyingCompilerJar);
 
 				if (maybeCacheAST && !lastParsedInput.equals(inputText)) {
@@ -320,9 +336,10 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				lastParsedInput = inputText;
 
 				final File tmpFile = createTmpFile.apply(inputText);
-				final String[] astArgs = new String[1 + forwardArgs.length];
-				System.arraycopy(forwardArgs, 0, astArgs, 0, forwardArgs.length);
-				astArgs[forwardArgs.length] = tmpFile.getAbsolutePath();
+				final String[] astArgs = new String[1 + fwdArgs.length];
+				System.arraycopy(fwdArgs, 0, astArgs, 0, fwdArgs.length);
+				astArgs[fwdArgs.length] = tmpFile.getAbsolutePath();
+				lastForwardArgs = fwdArgs;
 
 				final long parseStart = System.nanoTime();
 				final boolean parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs, (ast, loadCls) -> {

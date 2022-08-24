@@ -19,7 +19,7 @@ type TextMarkFn = (mark: Span & { severity: MarkerSeverity; message: string }) =
 
 type LocationAdjuster = (line: number, col: number) => [number, number];
 
-type SyntaxHighlightingLanguageId = 'java' | 'c' | 'python'
+type SyntaxHighlightingLanguageId = 'plaintext' | 'abap' | 'apex' | 'azcli' | 'bat' | 'bicep' | 'cameligo' | 'clojure' | 'coffeescript' | 'c' | 'cpp' | 'csharp' | 'csp' | 'css' | 'dart' | 'dockerfile' | 'ecl' | 'elixir' | 'flow9' | 'fsharp' | 'go' | 'graphql' | 'handlebars' | 'hcl' | 'html' | 'ini' | 'java' | 'javascript' | 'julia' | 'kotlin' | 'less' | 'lexon' | 'lua' | 'liquid' | 'm3' | 'markdown' | 'mips' | 'msdax' | 'mysql' | 'objective-c' | 'pascal' | 'pascaligo' | 'perl' | 'pgsql' | 'php' | 'postiats' | 'powerquery' | 'powershell' | 'proto' | 'pug' | 'python' | 'qsharp' | 'r' | 'razor' | 'redis' | 'redshift' | 'restructuredtext' | 'ruby' | 'rust' | 'sb' | 'scala' | 'scheme' | 'scss' | 'shell' | 'sol' | 'aes' | 'sparql' | 'sql' | 'st' | 'swift' | 'systemverilog' | 'verilog' | 'tcl' | 'twig' | 'typescript' | 'vb' | 'xml' | 'yaml' | 'json';
 
 type EditorInitializer = (initialValue: string, onChange: (newValue: string, adjusters?: LocationAdjuster[] ) => void, initialSyntaxHIghlight: SyntaxHighlightingLanguageId) => {
   setLocalState?: (newValue: string) => void;
@@ -164,7 +164,7 @@ interface Window {
   // displayProbeStatistics: () => void;
   // displayRecoveryStrategyHelp: () => void;
   // displayAstCacheStrategyHelp: () => void;
-  displayHelp: (type: 'general' | 'probe-statistics' | 'recovery-strategy' | 'ast-cache-strategy' | 'syntax-highlighting' | 'main-args-override') => void;
+  displayHelp: (type: 'general' | 'probe-statistics' | 'recovery-strategy' | 'ast-cache-strategy' | 'syntax-highlighting' | 'main-args-override' | 'customize-file-suffix') => void;
   maybeAutoInit: () => void;
   init: (editorType: string) => void;
   MiniEditorMain: () => void;

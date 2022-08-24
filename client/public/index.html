@@ -114,7 +114,7 @@
         <input type='checkbox' id='control-duplicate-probe-on-attr' checked></input>
         <label for='control-duplicate-probe-on-attr'>Duplicate probe on attr click</label>
       </div>
-      <div style="display: none">
+      <div>
         <input type='checkbox' id='control-should-override-main-args'></input>
         <label for='control-should-override-main-args'>Override main args</label>
 
@@ -122,6 +122,14 @@
           Edit (0)
         </button>
         <button onClick="displayHelp('main-args-override')" id="main-args-override-help" style="border-radius: 50%; ">?</button>
+      </div>
+      <div>
+        <input type='checkbox' id='control-customize-file-suffix'></input>
+        <label for='control-customize-file-suffix'>Custom file suffix</label>
+        <button id="customize-file-suffix">
+          Edit (.tmp)
+        </button>
+        <button onClick="displayHelp('customize-file-suffix')" id="customize-file-suffix-help" style="border-radius: 50%; ">?</button>
       </div>
       <div>
         <select id="control-position-recovery-strategy">
@@ -147,9 +155,7 @@
       </div>
       <div>
         <select id="syntax-highlighting">
-          <option value="java">Java</option>
-          <option value="c">C</option>
-          <option value="python">Python</option>
+          <option value="tmp">Tmp</option>
         </select>
         <label for='syntax-highlighting'>Syntax highlighting</label>
         <button onClick="displayHelp('syntax-highlighting')" id="control-syntax-highlighting-help" style="border-radius: 50%; ">?</button>

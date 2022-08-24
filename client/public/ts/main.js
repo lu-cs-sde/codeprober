@@ -1035,7 +1035,8 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
         'magic-stdout-messages': 'Magic stdout messages',
         'ast-cache-strategy': 'AST caching',
         'syntax-highlighting': 'Syntax Highlighting',
-        'main-args-override': 'Main args override'
+        'main-args-override': 'Main args override',
+        'customize-file-suffix': 'Temp file suffix',
     })[type];
     const getHelpContents = (type) => {
         const createHeader = (text) => {
@@ -1175,7 +1176,7 @@ encode(value):
                 });
                 return [
                     'Some nodes in your AST might be missing location information',
-                    'This editor is built around the idea that all AST nodes have positions, and it is very hard to use for nodes where this isn\'t true',
+                    'This editor is built around the idea that all AST nodes have positions, and the experience is worsened for nodes where this isn\'t true.',
                     '',
                     'There are two solutions',
                     '',
@@ -1342,19 +1343,25 @@ aspect MagicOutputDemo {
             }
             case 'syntax-highlighting': return [
                 `This setting controls which style of highlighting is used in the editor.`,
-                `This is only affects the client - the parsing of your tool is unaffected.`,
+                `This also affects the suffix used for temporary files, unless 'Custom file suffix' is checked.`,
             ];
             case 'main-args-override': return [
                 `When your underlying tool is invoked, the path to a temporary file is sent as an arg to the main method.`,
                 `Optionally, some extra args are also included.`,
-                `By default, the extra args are defined when you start the server`,
-                `By checking 'Override main args' and clicking "Edit", you can override those extra args`,
+                `By default, the extra args are defined when you start the server.`,
+                `By checking 'Override main args' and clicking "Edit", you can override those extra args.`,
                 ``,
-                `Args are separated by spaces.`,
-                `To include a space in an arg, wrap it in quotes (e.g "foo bar").`,
-                `To include a quote in an arg, escape it with \\ (e.g "foo\\"bar")`,
-                `To include a backslash in an arg, escape it with an extra backslash (e.g "foo\\\\bar")`,
-                '',
+                `Args are separated by spaces and/or newlines.`,
+                `To include a space in an arg, wrap the arg in quotes (e.g "foo bar").`,
+                `To include a newline, quote or backslash in an arg, prefix the char with \\ (e.g \\n, \\" and \\\\).`,
+            ];
+            case 'customize-file-suffix': return [
+                `By default, the editor state is written to a temporary file with a file suffix that matches the chosen syntax highlighting.`,
+                `For example, if the highlighting is set to 'Python', then the temp file will end with '.py'.`,
+                ``,
+                `If you work on a language not represented in the syntax highlighting list, then this might result in your compiler/analyzer rejecting the temporary file due to it having an unknown suffix.`,
+                `By checking 'Custom file suffix' you can change the default suffix to something else.`,
+                `Note that custom suffixes are used as-is. If you want temp files to end with '.txt', then you must set the custom suffix to exactly '.tmp' (including the dot).`,
             ];
         }
     };
@@ -1365,7 +1372,7 @@ aspect MagicOutputDemo {
         const helpWindow = (0, showWindow_4.default)({
             rootStyle: `
       width: 32rem;
-      min-height: 12rem;
+      min-height: 8rem;
     `,
             resizable: true,
             render: (root) => {
@@ -1967,7 +1974,100 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
     };
     exports.default = displayRagModal;
 });
-define("settings", ["require", "exports"], function (require, exports) {
+define("model/syntaxHighlighting", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getAvailableLanguages = exports.getAppropriateFileSuffix = void 0;
+    const langstoSuffixes = {
+        plaintext: ['txt', 'Plain Text'],
+        abap: ['abap', 'abap'],
+        apex: ['cls', 'Apex'],
+        azcli: ['azcli', 'Azure CLI'],
+        bat: ['bat', 'Batch'],
+        bicep: ['bicep', 'Bicep'],
+        cameligo: ['mligo', 'Cameligo'],
+        clojure: ['clj', 'clojure'],
+        coffeescript: ['coffee', 'CoffeeScript'],
+        c: ['c', 'C'],
+        cpp: ['cpp', 'C++'],
+        csharp: ['cs', 'C#'],
+        csp: ['csp', 'CSP'],
+        css: ['css', 'CSS'],
+        dart: ['dart', 'Dart'],
+        dockerfile: ['dockerfile', 'Dockerfile'],
+        ecl: ['ecl', 'ECL'],
+        elixir: ['ex', 'Elixir'],
+        flow9: ['flow', 'Flow9'],
+        fsharp: ['fs', 'F#'],
+        go: ['go', 'Go'],
+        graphql: ['graphql', 'GraphQL'],
+        handlebars: ['handlebars', 'Handlebars'],
+        hcl: ['tf', 'Terraform'],
+        html: ['html', 'HTML'],
+        ini: ['ini', 'Ini'],
+        java: ['java', 'Java'],
+        javascript: ['js', 'JavaScript'],
+        julia: ['jl', 'Julia'],
+        kotlin: ['kt', 'Kotlin'],
+        less: ['less', 'Less'],
+        lexon: ['lex', 'Lexon'],
+        lua: ['lua', 'Lua'],
+        liquid: ['liquid', 'Liquid'],
+        m3: ['m3', 'Modula-3'],
+        markdown: ['md', 'Markdown'],
+        mips: ['s', 'MIPS'],
+        msdax: ['dax', 'DAX'],
+        mysql: ['mysql', 'MySQL'],
+        'objective-c': ['m', 'Objective-C'],
+        pascal: ['pas', 'Pascal'],
+        pascaligo: ['ligo', 'Pascaligo'],
+        perl: ['pl', 'Perl'],
+        pgsql: ['pgsql', 'PostgreSQL'],
+        php: ['php', 'PHP'],
+        postiats: ['dats', 'ATS'],
+        powerquery: ['pq', 'PQ'],
+        powershell: ['ps1', 'PowerShell'],
+        proto: ['proto', 'protobuf'],
+        pug: ['jade', 'Pug'],
+        python: ['py', 'Python'],
+        qsharp: ['qs', 'Q#'],
+        r: ['r', 'R'],
+        razor: ['cshtml', 'Razor'],
+        redis: ['redis', 'redis'],
+        redshift: ['redshift', 'Redshift'],
+        restructuredtext: ['rst', 'reStructuredText'],
+        ruby: ['rb', 'Ruby'],
+        rust: ['rs', 'Rust'],
+        sb: ['sb', 'Small Basic'],
+        scala: ['scala', 'Scala'],
+        scheme: ['scm', 'scheme'],
+        scss: ['scss', 'Sass'],
+        shell: ['sh', 'Shell'],
+        sol: ['sol', 'sol'],
+        aes: ['aes', 'aes'],
+        sparql: ['rq', 'sparql'],
+        sql: ['sql', 'SQL'],
+        st: ['st', 'StructuredText'],
+        swift: ['swift', 'Swift'],
+        systemverilog: ['sv', 'SV'],
+        verilog: ['v', 'V'],
+        tcl: ['tcl', 'tcl'],
+        twig: ['twig', 'Twig'],
+        typescript: ['ts', 'TypeScript'],
+        vb: ['vb', 'Visual Basic'],
+        xml: ['xml', 'XML'],
+        yaml: ['yaml', 'YAML'],
+        json: ['json', 'JSON']
+    };
+    const getAppropriateFileSuffix = (lang) => {
+        var _a, _b;
+        return (_b = (_a = langstoSuffixes[lang]) === null || _a === void 0 ? void 0 : _a[0]) !== null && _b !== void 0 ? _b : `.${lang.toLowerCase()}`;
+    };
+    exports.getAppropriateFileSuffix = getAppropriateFileSuffix;
+    const getAvailableLanguages = () => Object.assign(Object.entries(langstoSuffixes).map(([k, v]) => ({ id: k, alias: v[1] })));
+    exports.getAvailableLanguages = getAvailableLanguages;
+});
+define("settings", ["require", "exports", "model/syntaxHighlighting"], function (require, exports, syntaxHighlighting_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     let settingsObj = null;
@@ -2006,6 +2106,9 @@ define("settings", ["require", "exports"], function (require, exports) {
         setSyntaxHighlighting: (syntaxHighlighting) => settings.set({ ...settings.get(), syntaxHighlighting }),
         getMainArgsOverride: () => { var _a; return (_a = settings.get().mainArgsOverride) !== null && _a !== void 0 ? _a : null; },
         setMainArgsOverride: (mainArgsOverride) => settings.set({ ...settings.get(), mainArgsOverride }),
+        getCustomFileSuffix: () => { var _a; return (_a = settings.get().customFileSuffix) !== null && _a !== void 0 ? _a : null; },
+        setCustomFileSuffix: (customFileSuffix) => settings.set({ ...settings.get(), customFileSuffix }),
+        getCurrentFileSuffix: () => { var _a; return (_a = settings.getCustomFileSuffix()) !== null && _a !== void 0 ? _a : `.${(0, syntaxHighlighting_1.getAppropriateFileSuffix)(settings.getSyntaxHighlighting())}`; },
     };
     exports.default = settings;
 });
@@ -2360,6 +2463,10 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
                         str = `${str}\\\\`;
                         break;
                     }
+                    case '\n': {
+                        str = `${str}\\n`;
+                        break;
+                    }
                     case ' ': {
                         surround = true;
                         // Fall through
@@ -2403,16 +2510,24 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
         };
         const parseEscaped = () => {
             const next = raw[parsePos++];
-            if (next == '\\') {
-                buf = `${buf !== null && buf !== void 0 ? buf : ''}\\`;
-            }
-            else if (next == '"') {
-                buf = `${buf !== null && buf !== void 0 ? buf : ''}"`;
-            }
-            else {
-                const loc = getLineColFromStartToPos(parsePos - 1);
-                onError(loc.line, loc.col, `Unexpected escape character, expected '"' or '\\' after this backslash`);
-                throw new Error(`Unexpected escape character`);
+            switch (next) {
+                case '\\': {
+                    buf = `${buf !== null && buf !== void 0 ? buf : ''}\\`;
+                    break;
+                }
+                case '"': {
+                    buf = `${buf !== null && buf !== void 0 ? buf : ''}"`;
+                    break;
+                }
+                case 'n': {
+                    buf = `${buf !== null && buf !== void 0 ? buf : ''}\n`;
+                    break;
+                }
+                default: {
+                    const loc = getLineColFromStartToPos(parsePos - 1);
+                    onError(loc.line, loc.col, `Unexpected escape character, expected '"', '\\' or 'n' after this backslash`);
+                    throw new Error(`Unexpected escape character`);
+                }
             }
         };
         const parseQuoted = () => {
@@ -2428,6 +2543,11 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
                     case '\\': {
                         parseEscaped();
                         break;
+                    }
+                    case '\n': {
+                        const loc = getLineColFromStartToPos(start);
+                        onError(loc.line, loc.col, `Unterminated string, if you want newlines in the string then write '\\n'`);
+                        throw new Error('Unterminated string');
                     }
                     default: {
                         buf = `${buf}${ch}`;
@@ -2452,7 +2572,8 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
                         parseEscaped();
                         break;
                     }
-                    case ' ': {
+                    case ' ': // Fall through
+                    case '\n': {
                         commit();
                         break;
                     }
@@ -2468,8 +2589,7 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
         // console.log('done parsing @', parsePos)
         settings_1.default.setMainArgsOverride(args);
     };
-    const displayMainArgsOverrideModal = (setDisableEditButton, onChange) => {
-        setDisableEditButton(true);
+    const displayMainArgsOverrideModal = (onClose, onChange) => {
         const windowInstance = (0, showWindow_8.default)({
             render: (root) => {
                 while (root.firstChild) {
@@ -2558,7 +2678,6 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
                         message: msg,
                         severity: 8, // default to 'error' (8)
                     })));
-                    console.log('did set args, getArgs():', getArgs(), '||', settings_1.default.getMainArgsOverride());
                 });
                 const wrapper = document.createElement('div');
                 wrapper.style = `
@@ -2569,7 +2688,8 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
                 wrapper.appendChild(elem);
                 root.appendChild(wrapper);
                 const explanation = document.createElement('p');
-                explanation.style.marginTop = '0';
+                explanation.style.margin = '0';
+                explanation.style.padding = '0.25rem';
                 explanation.innerText = [
                     'Example invocation with current override value:'
                 ].join('\n');
@@ -2586,7 +2706,7 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
             resizable: true,
         });
         const close = () => {
-            setDisableEditButton(false);
+            onClose();
             windowInstance.remove();
         };
         return {
@@ -2595,7 +2715,7 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
     };
     exports.default = displayMainArgsOverrideModal;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_4, settings_2, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_4, settings_2, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -2633,7 +2753,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 type: 'query',
                 text: getLocalState(),
                 stdout: settings_2.default.shouldCaptureStdio(),
-                query: props
+                query: props,
+                mainArgs: settings_2.default.getMainArgsOverride(),
+                tmpSuffix: settings_2.default.getCurrentFileSuffix(),
             }));
             const cleanup = () => delete rpcHandlers[id];
             rpcHandlers[id] = ({ error, result }) => {
@@ -2800,44 +2922,81 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 duplicateProbeCheckbox.checked = settings_2.default.shouldDuplicateProbeOnAttrClick();
                 const syntaxHighlightingSelector = document.getElementById('syntax-highlighting');
+                syntaxHighlightingSelector.innerHTML = '';
+                (0, syntaxHighlighting_2.getAvailableLanguages)().forEach(({ id, alias }) => {
+                    const option = document.createElement('option');
+                    option.value = id;
+                    option.innerText = alias;
+                    syntaxHighlightingSelector.appendChild(option);
+                });
                 syntaxHighlightingSelector.value = settings_2.default.getSyntaxHighlighting();
                 syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_2.default.getSyntaxHighlighting());
                 syntaxHighlightingSelector.oninput = () => {
                     settings_2.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
                     syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_2.default.getSyntaxHighlighting());
+                    notifyLocalChangeListeners();
+                };
+                const configureCheckboxWithHiddenButton = (checkbox, button, onCheckboxChange, displayEditor, getButtonDecoration) => {
+                    let overrideEditorCloser = null;
+                    const refreshButton = () => {
+                        const decoration = getButtonDecoration();
+                        if (decoration === null) {
+                            button.style.display = 'none';
+                        }
+                        else {
+                            button.style.display = 'inline-block';
+                            button.innerText = decoration;
+                        }
+                    };
+                    refreshButton();
+                    button.onclick = () => {
+                        button.disabled = true;
+                        const { forceClose } = displayEditor(() => {
+                            button.disabled = false;
+                            overrideEditorCloser = null;
+                        });
+                        overrideEditorCloser = () => forceClose();
+                    };
+                    checkbox.oninput = (e) => {
+                        overrideEditorCloser === null || overrideEditorCloser === void 0 ? void 0 : overrideEditorCloser();
+                        onCheckboxChange(checkbox.checked);
+                    };
+                    return { refreshButton };
                 };
                 const shouldOverrideMainArgsCheckbox = document.getElementById('control-should-override-main-args');
                 const configureMainArgsOverrideButton = document.getElementById('configure-main-args');
-                let overrideEditorCloser = null;
-                const updateOverrideArgsButton = () => {
-                    const overrides = settings_2.default.getMainArgsOverride();
-                    if (overrides === null) {
-                        configureMainArgsOverrideButton.style.display = 'none';
-                    }
-                    else {
-                        configureMainArgsOverrideButton.style.display = 'inline-block';
-                        configureMainArgsOverrideButton.innerText = `Edit (${overrides.length})`;
-                    }
-                };
                 shouldOverrideMainArgsCheckbox.checked = settings_2.default.getMainArgsOverride() !== null;
-                updateOverrideArgsButton();
-                configureMainArgsOverrideButton.onclick = () => {
-                    const { forceClose } = (0, displayMainArgsOverrideModal_1.default)((disabled) => {
-                        configureMainArgsOverrideButton.disabled = disabled;
-                        if (!disabled) {
-                            overrideEditorCloser = null;
-                        }
-                    }, () => {
-                        updateOverrideArgsButton();
-                        notifyLocalChangeListeners();
-                    });
-                    overrideEditorCloser = () => forceClose();
-                };
-                shouldOverrideMainArgsCheckbox.oninput = (e) => {
-                    overrideEditorCloser === null || overrideEditorCloser === void 0 ? void 0 : overrideEditorCloser();
+                const overrideCfg = configureCheckboxWithHiddenButton(shouldOverrideMainArgsCheckbox, configureMainArgsOverrideButton, () => {
                     settings_2.default.setMainArgsOverride(shouldOverrideMainArgsCheckbox.checked ? [] : null);
-                    updateOverrideArgsButton();
-                };
+                    overrideCfg.refreshButton();
+                    notifyLocalChangeListeners();
+                }, onClose => (0, displayMainArgsOverrideModal_1.default)(onClose, () => {
+                    overrideCfg.refreshButton();
+                    notifyLocalChangeListeners();
+                }), () => {
+                    const overrides = settings_2.default.getMainArgsOverride();
+                    return overrides === null ? null : `Edit (${overrides.length})`;
+                });
+                const shouldCustomizeFileSuffixCheckbox = document.getElementById('control-customize-file-suffix');
+                const configureCustomFileSuffixButton = document.getElementById('customize-file-suffix');
+                shouldCustomizeFileSuffixCheckbox.checked = settings_2.default.getCustomFileSuffix() !== null;
+                const suffixCfg = configureCheckboxWithHiddenButton(shouldCustomizeFileSuffixCheckbox, configureCustomFileSuffixButton, () => {
+                    settings_2.default.setCustomFileSuffix(shouldCustomizeFileSuffixCheckbox.checked ? settings_2.default.getCurrentFileSuffix() : null);
+                    suffixCfg.refreshButton();
+                    notifyLocalChangeListeners();
+                }, onClose => {
+                    const newVal = prompt('Enter new suffix', settings_2.default.getCurrentFileSuffix());
+                    if (newVal !== null) {
+                        settings_2.default.setCustomFileSuffix(newVal);
+                        suffixCfg.refreshButton();
+                        notifyLocalChangeListeners();
+                    }
+                    onClose();
+                    return { forceClose: () => { }, };
+                }, () => {
+                    const overrides = settings_2.default.getCustomFileSuffix();
+                    return overrides === null ? null : `Edit (${settings_2.default.getCurrentFileSuffix()})`;
+                });
                 const statCollectorImpl = new StatisticsCollectorImpl_1.default();
                 if (location.search.includes('debug=true')) {
                     document.getElementById('secret-debug-panel').style.display = 'block';
@@ -2892,6 +3051,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         }, () => modalEnv.currentlyLoadingModals.size > 0);
                         case 'syntax-highlighting': return (0, displayHelp_2.default)('syntax-highlighting', disabled => document.getElementById('control-syntax-highlighting-help').disabled = disabled);
                         case 'main-args-override': return (0, displayHelp_2.default)('main-args-override', disabled => document.getElementById('main-args-override-help').disabled = disabled);
+                        case 'customize-file-suffix': return (0, displayHelp_2.default)('customize-file-suffix', disabled => document.getElementById('customize-file-suffix-help').disabled = disabled);
                         default: return console.error('Unknown help type', type);
                     }
                 };
@@ -2943,7 +3103,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 delete window.DoAutoComplete;
                 // rootElem.style.gridTemplateColumns = '3fr 1fr';
                 // handlers.init({ value: '// Hello World!\n\nint main() {\n  print(123);\n  print(456);\n}\n', parser: 'beaver', version: 1 });
-                handlers.init({ value: (_a = settings_2.default.getEditorContents()) !== null && _a !== void 0 ? _a : '// Hello World!\n\class Foo {\n  static void main(String[] args) {\n    System.out.println("Hello World!");\n  }\n}\n', parser: 'beaver', version: 1 });
+                handlers.init({ value: (_a = settings_2.default.getEditorContents()) !== null && _a !== void 0 ? _a : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started`, parser: 'beaver', version: 1 });
             };
             handlers.refresh = () => {
                 notifyLocalChangeListeners();

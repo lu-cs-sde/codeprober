@@ -1,3 +1,4 @@
+import { getAppropriateFileSuffix } from "./model/syntaxHighlighting";
 
 
 interface Settings {
@@ -10,6 +11,7 @@ interface Settings {
   probeWindowStates?: ProbeWindowState[];
   syntaxHighlighting?: SyntaxHighlightingLanguageId;
   mainArgsOverride?: string[] | null;
+  customFileSuffix?: string | null;
 }
 
 let settingsObj: Settings | null = null;
@@ -56,6 +58,10 @@ const settings = {
 
   getMainArgsOverride: () => settings.get().mainArgsOverride ?? null,
   setMainArgsOverride: (mainArgsOverride: string[] | null) => settings.set({ ...settings.get(), mainArgsOverride }),
+
+  getCustomFileSuffix: () => settings.get().customFileSuffix ?? null,
+  setCustomFileSuffix: (customFileSuffix: string | null) => settings.set({ ...settings.get(), customFileSuffix }),
+  getCurrentFileSuffix: (): string => settings.getCustomFileSuffix() ?? `.${getAppropriateFileSuffix(settings.getSyntaxHighlighting())}`,
 };
 
 export default settings;

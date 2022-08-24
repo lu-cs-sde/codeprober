@@ -21,6 +21,10 @@ const getArgs = () => {
           str = `${str}\\\\`;
           break;
         }
+        case '\n': {
+          str = `${str}\\n`;
+          break;
+        }
         case ' ': {
           surround = true;
           // Fall through
@@ -65,14 +69,24 @@ const setArgs = (raw: string, onError: (line: number, col: number, msg: string) 
   }
   const parseEscaped = () => {
     const next = raw[parsePos++];
-    if (next == '\\') {
-      buf = `${buf ?? ''}\\`;
-    } else if (next == '"') {
-      buf = `${buf ?? ''}"`;
-    } else {
-      const loc = getLineColFromStartToPos(parsePos - 1);
-      onError(loc.line, loc.col, `Unexpected escape character, expected '"' or '\\' after this backslash`);
-      throw new Error(`Unexpected escape character`);
+    switch (next) {
+      case '\\': {
+        buf = `${buf ?? ''}\\`;
+        break;
+      }
+      case '"': {
+        buf = `${buf ?? ''}"`;
+        break;
+      }
+      case 'n': {
+        buf = `${buf ?? ''}\n`;
+        break;
+      }
+      default: {
+        const loc = getLineColFromStartToPos(parsePos - 1);
+        onError(loc.line, loc.col, `Unexpected escape character, expected '"', '\\' or 'n' after this backslash`);
+        throw new Error(`Unexpected escape character`);
+      }
     }
   }
   const parseQuoted = () => {
@@ -88,6 +102,11 @@ const setArgs = (raw: string, onError: (line: number, col: number, msg: string) 
         case '\\': {
           parseEscaped();
           break;
+        }
+        case '\n': {
+          const loc = getLineColFromStartToPos(start);
+          onError(loc.line, loc.col, `Unterminated string, if you want newlines in the string then write '\\n'`);
+          throw new Error('Unterminated string');
         }
         default: {
           buf = `${buf}${ch}`;
@@ -112,7 +131,8 @@ const setArgs = (raw: string, onError: (line: number, col: number, msg: string) 
           parseEscaped();
           break;
         }
-        case ' ': {
+        case ' ': // Fall through
+        case '\n': {
           commit();
           break;
         }
@@ -131,10 +151,9 @@ const setArgs = (raw: string, onError: (line: number, col: number, msg: string) 
 }
 
 const displayMainArgsOverrideModal = (
-  setDisableEditButton: (disabled: boolean) => void,
+  onClose: () => void,
   onChange: () => void,
 ) => {
-  setDisableEditButton(true);
   const windowInstance = showWindow({
     render: (root) => {
       while (root.firstChild) {
@@ -229,8 +248,6 @@ const displayMainArgsOverrideModal = (
             severity: 8, // default to 'error' (8)
           }))
         );
-
-        console.log('did set args, getArgs():', getArgs(), '||', settings.getMainArgsOverride());
       });
 
       const wrapper = document.createElement('div');
@@ -243,7 +260,8 @@ const displayMainArgsOverrideModal = (
       root.appendChild(wrapper);
 
       const explanation = document.createElement('p');
-      explanation.style.marginTop = '0';
+      explanation.style.margin = '0';
+      explanation.style.padding = '0.25rem';
       explanation.innerText = [
         'Example invocation with current override value:'
       ].join('\n');
@@ -260,7 +278,7 @@ const displayMainArgsOverrideModal = (
     resizable: true,
   });
   const close = () => {
-    setDisableEditButton(false);
+    onClose();
     windowInstance.remove();
   };
 

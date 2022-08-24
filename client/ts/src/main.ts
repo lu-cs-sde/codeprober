@@ -7,6 +7,7 @@ import settings from './settings';
 import StatisticsCollectorImpl from "./model/StatisticsCollectorImpl";
 import displayStatistics from "./ui/popup/displayStatistics";
 import displayMainArgsOverrideModal from "./ui/popup/displayMainArgsOverrideModal";
+import { getAvailableLanguages } from "./model/syntaxHighlighting";
 
 type HandlerFn = (data: { [key: string]: any }) => void;
 
@@ -38,7 +39,9 @@ const main = () => {
           type: 'query',
           text: getLocalState(),
           stdout: settings.shouldCaptureStdio(),
-          query: props
+          query: props,
+          mainArgs: settings.getMainArgsOverride(),
+          tmpSuffix: settings.getCurrentFileSuffix(),
         }));
 
         const cleanup = () => delete rpcHandlers[id];
@@ -226,48 +229,99 @@ const main = () => {
       duplicateProbeCheckbox.checked = settings.shouldDuplicateProbeOnAttrClick();
 
       const syntaxHighlightingSelector = document.getElementById('syntax-highlighting') as HTMLSelectElement;
+      syntaxHighlightingSelector.innerHTML = '';
+      getAvailableLanguages().forEach(({ id, alias }) => {
+        const option = document.createElement('option');
+        option.value = id;
+        option.innerText = alias;
+        syntaxHighlightingSelector.appendChild(option);
+      })
       syntaxHighlightingSelector.value = settings.getSyntaxHighlighting();
       syntaxHighlightingToggler?.(settings.getSyntaxHighlighting());
       syntaxHighlightingSelector.oninput = () => {
         settings.setSyntaxHighlighting(syntaxHighlightingSelector.value as SyntaxHighlightingLanguageId);
         syntaxHighlightingToggler?.(settings.getSyntaxHighlighting());
+        notifyLocalChangeListeners();
+      }
+
+      const configureCheckboxWithHiddenButton = (
+        checkbox: HTMLInputElement,
+        button: HTMLButtonElement,
+        onCheckboxChange: (checked: boolean) => void,
+        displayEditor: (onClose: () => void) => ({ forceClose: () => void }),
+        getButtonDecoration: () => string | null,
+      ) => {
+        let overrideEditorCloser: (() => void) | null = null;
+        const refreshButton = () => {
+          const decoration = getButtonDecoration();
+          if (decoration === null) {
+            button.style.display = 'none';
+          } else {
+            button.style.display = 'inline-block';
+            button.innerText = decoration;
+          }
+        };
+        refreshButton();
+
+        button.onclick = () => {
+          button.disabled = true;
+          const { forceClose } = displayEditor(() => {
+            button.disabled = false;
+            overrideEditorCloser = null;
+          });
+          overrideEditorCloser = () => forceClose();
+        };
+
+        checkbox.oninput = (e) => {
+          overrideEditorCloser?.();
+          onCheckboxChange(checkbox.checked);
+        }
+        return { refreshButton };
       }
 
       const shouldOverrideMainArgsCheckbox  = document.getElementById('control-should-override-main-args') as HTMLInputElement;
       const configureMainArgsOverrideButton = document.getElementById('configure-main-args') as HTMLButtonElement;
-      let overrideEditorCloser: (() => void) | null = null;
-      const updateOverrideArgsButton = () => {
-        const overrides = settings.getMainArgsOverride();
-        if (overrides === null) {
-          configureMainArgsOverrideButton.style.display = 'none';
-        } else {
-          configureMainArgsOverrideButton.style.display = 'inline-block';
-          configureMainArgsOverrideButton.innerText = `Edit (${overrides.length})`;
-        }
-      };
       shouldOverrideMainArgsCheckbox.checked = settings.getMainArgsOverride() !== null;
-      updateOverrideArgsButton();
-
-      configureMainArgsOverrideButton.onclick = () => {
-        const { forceClose } = displayMainArgsOverrideModal((disabled) => {
-          configureMainArgsOverrideButton.disabled = disabled;
-          if (!disabled) {
-            overrideEditorCloser = null;
-          }
+      const overrideCfg = configureCheckboxWithHiddenButton(shouldOverrideMainArgsCheckbox, configureMainArgsOverrideButton,
+        () => { // On checkbox update
+          settings.setMainArgsOverride(shouldOverrideMainArgsCheckbox.checked ? [] : null);
+          overrideCfg.refreshButton();
+          notifyLocalChangeListeners();
         },
-          () => {
-            updateOverrideArgsButton();
-            notifyLocalChangeListeners()
-          },
-        );
-        overrideEditorCloser = () => forceClose();
-      };
+        onClose => displayMainArgsOverrideModal(onClose, () => {
+          overrideCfg.refreshButton();
+          notifyLocalChangeListeners()
+        }),
+        () => { // Get styling
+          const overrides = settings.getMainArgsOverride();
+          return overrides === null ? null : `Edit (${overrides.length})`
+        },
+      );
 
-      shouldOverrideMainArgsCheckbox.oninput = (e) => {
-        overrideEditorCloser?.();
-        settings.setMainArgsOverride(shouldOverrideMainArgsCheckbox.checked ? [] : null);
-        updateOverrideArgsButton();
-      }
+      const shouldCustomizeFileSuffixCheckbox  = document.getElementById('control-customize-file-suffix') as HTMLInputElement;
+      const configureCustomFileSuffixButton = document.getElementById('customize-file-suffix') as HTMLButtonElement;
+      shouldCustomizeFileSuffixCheckbox.checked = settings.getCustomFileSuffix() !== null;
+      const suffixCfg = configureCheckboxWithHiddenButton(shouldCustomizeFileSuffixCheckbox, configureCustomFileSuffixButton,
+        () => { // On checkbox update
+          settings.setCustomFileSuffix(shouldCustomizeFileSuffixCheckbox.checked ? settings.getCurrentFileSuffix() : null);
+          suffixCfg.refreshButton();
+          notifyLocalChangeListeners();
+        },
+        onClose => {
+          const newVal = prompt('Enter new suffix', settings.getCurrentFileSuffix());
+          if (newVal !== null) {
+            settings.setCustomFileSuffix(newVal);
+              suffixCfg.refreshButton();
+              notifyLocalChangeListeners()
+          }
+          onClose();
+          return { forceClose: () => { }, };
+        },
+        () => { // Get styling
+          const overrides = settings.getCustomFileSuffix();
+          return overrides === null ? null : `Edit (${settings.getCurrentFileSuffix()})`;
+        },
+      );
 
       const statCollectorImpl = new StatisticsCollectorImpl();
       if (location.search.includes('debug=true')) {
@@ -342,6 +396,9 @@ const main = () => {
           case 'main-args-override': return displayHelp('main-args-override',
             disabled => (document.getElementById('main-args-override-help') as HTMLButtonElement).disabled = disabled
           );
+          case 'customize-file-suffix':  return displayHelp('customize-file-suffix',
+          disabled => (document.getElementById('customize-file-suffix-help') as HTMLButtonElement).disabled = disabled
+        );
           default: return console.error('Unknown help type', type);
         }
       }
@@ -394,7 +451,7 @@ const main = () => {
       delete window.DoAutoComplete;
       // rootElem.style.gridTemplateColumns = '3fr 1fr';
       // handlers.init({ value: '// Hello World!\n\nint main() {\n  print(123);\n  print(456);\n}\n', parser: 'beaver', version: 1 });
-      handlers.init({ value: settings.getEditorContents() ?? '// Hello World!\n\class Foo {\n  static void main(String[] args) {\n    System.out.println("Hello World!");\n  }\n}\n', parser: 'beaver', version: 1 });
+      handlers.init({ value: settings.getEditorContents() ?? `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started`, parser: 'beaver', version: 1 });
     };
     handlers.refresh = () => {
       notifyLocalChangeListeners();

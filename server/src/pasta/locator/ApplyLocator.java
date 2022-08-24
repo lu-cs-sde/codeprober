@@ -210,6 +210,9 @@ public class ApplyLocator {
 					}
 					case "child": {
 						final int childIndex = step.getInt("value");
+						if (childIndex < 0 || childIndex >= matchedNode.getNumChildren()) {
+							return null;
+						}
 						matchedNode = matchedNode.getNthChild(childIndex);
 						break;
 					}
