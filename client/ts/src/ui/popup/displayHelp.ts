@@ -435,4 +435,5 @@ const displayHelp = (type: HelpType, setHelpButtonDisabled: (disabled: boolean) 
   });
 }
 
+export { HelpType };
 export default displayHelp;

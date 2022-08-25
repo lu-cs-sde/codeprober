@@ -66,7 +66,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
           // const needle = 'SpansAndNodeTypes :: ';
 
           if (!parsed.spansAndNodeTypes) {
-            throw new Error("Couldn't find expected line in output");
+            throw new Error(`Couldn't find expected line in output '${JSON.stringify(parsed)}'`);
           }
           const rowsContainer = document.createElement('div');
           rowsContainer.style.padding = '2px';

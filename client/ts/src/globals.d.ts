@@ -1,4 +1,7 @@
 
+type HelpType = 'general' | 'recovery-strategy' | 'probe-window' | 'magic-stdout-messages' | 'ast-cache-strategy' | 'syntax-highlighting' | 'main-args-override' | 'customize-file-suffix';
+
+
 interface Span {
   lineStart: number;
   colStart: number;
@@ -152,7 +155,6 @@ interface ModalPosition { x: number, y: number };
 
 interface Window {
   RagQuery: (line: number, col: number, autoSelectRoot?: boolean) => void;
-  DoAutoComplete?: (line: number, col: number) => Promise<any>;
   definedEditors: {
     [editorId: string]: {
       preload: EditorPreloader;
@@ -164,11 +166,11 @@ interface Window {
   // displayProbeStatistics: () => void;
   // displayRecoveryStrategyHelp: () => void;
   // displayAstCacheStrategyHelp: () => void;
-  displayHelp: (type: 'general' | 'probe-statistics' | 'recovery-strategy' | 'ast-cache-strategy' | 'syntax-highlighting' | 'main-args-override' | 'customize-file-suffix') => void;
+  displayHelp: (type: HelpType | 'probe-statistics') => void;
   maybeAutoInit: () => void;
-  init: (editorType: string) => void;
+  initEditor: (editorType: string) => void;
   MiniEditorMain: () => void;
-  clearPastaSettings: () => void;
+  clearUserSettings: () => void;
   ActiveLocatorRequest?: ActiveNodeLocatorRequest;
 }
 

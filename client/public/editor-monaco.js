@@ -382,7 +382,7 @@ window.defineEditor(
       onChange(editor.getValue(), adjusters);
     });
     editor.addAction({
-      id: 'pasta-reg-query',
+      id: 'cpr-reg-query',
       label: 'Create Probe',
       precondition: null,
 
@@ -395,7 +395,7 @@ window.defineEditor(
       },
     });
     editor.addAction({
-      id: 'pasta-shortcut-query',
+      id: 'cpr-shortcut-query',
       label: '',
       precondition: null,
       run: (ed) => {
@@ -409,41 +409,6 @@ window.defineEditor(
           monaco.KeyCode.KeyP
         ),
       ],
-    });
-
-    monaco.languages.registerCompletionItemProvider('cpp', {
-      triggerCharacters: ['.', '('],
-      provideCompletionItems: async (model, position, token) => {
-        if (!window.DoAutoComplete) { return null; }
-        let result;
-        try {
-          result = await DoAutoComplete(position.lineNumber, position.column, editor.getValue());
-        } catch (e) {
-          console.log('AutoComplete failed:', e);
-          return null;
-        }
-        const mapKind = (kind) => ({
-          var: monaco.languages.CompletionItemKind.Variable,
-          func: monaco.languages.CompletionItemKind.Function,
-          member: monaco.languages.CompletionItemKind.Field,
-        })[kind] || monaco.languages.CompletionItemKind.Text;
-        // console.log('provcompl', position);
-        return {
-          suggestions: result.map(({ kind, insert, info }) => ({
-            label: insert,
-            kind: mapKind(kind),
-            detail: info,
-            insertText: insert,
-          }))
-        };
-
-        // [{
-        //   label: 'label here',
-        //   kind: monaco.languages.CompletionItemKind.Class,
-        //   detail: 'details here',
-        //   insertText: 'insert text'
-        // }],
-      }
     });
 
     let lastDecorations = [];

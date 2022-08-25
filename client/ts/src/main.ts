@@ -1,75 +1,68 @@
 import addConnectionCloseNotice from "./ui/addConnectionCloseNotice";
 import displayProbeModal from "./ui/popup/displayProbeModal";
 import displayRagModal from "./ui/popup/displayRagModal";
-import displayHelp from "./ui/popup/displayHelp";
+import displayHelp, { HelpType } from "./ui/popup/displayHelp";
 import displayAttributeModal from "./ui/popup/displayAttributeModal";
 import settings from './settings';
 import StatisticsCollectorImpl from "./model/StatisticsCollectorImpl";
 import displayStatistics from "./ui/popup/displayStatistics";
 import displayMainArgsOverrideModal from "./ui/popup/displayMainArgsOverrideModal";
 import { getAvailableLanguages } from "./model/syntaxHighlighting";
+import createWebsocketHandler, { WebsocketHandler } from "./createWebsocketHandler";
+import configureCheckboxWithHiddenButton from "./ui/configureCheckboxWithHiddenButton";
 
-type HandlerFn = (data: { [key: string]: any }) => void;
-
-window.clearPastaSettings = () => {
+window.clearUserSettings = () => {
   settings.set({});
   location.reload();
 }
 
-const main = () => {
-  function toggleTheme() {
-    console.log('Theme not defined for current editor');
-  }
+const uiElements = new (class UIElements {
+  // Use lazy getters since the dom elements haven't been loaded
+  // by the time this script initially runs.
+  get positionRecoverySelector() { return document.getElementById('control-position-recovery-strategy') as HTMLSelectElement; }
+  get positionRecoveryHelpButton() { return document.getElementById('control-position-recovery-strategy-help') as HTMLButtonElement; }
 
+  get astCacheStrategySelector() { return document.getElementById('ast-cache-strategy') as HTMLSelectElement; }
+  get astCacheStrategyHelpButton() { return document.getElementById('control-ast-cache-strategy-help') as HTMLButtonElement; }
+
+  get syntaxHighlightingSelector() { return document.getElementById('syntax-highlighting') as HTMLSelectElement; }
+  get syntaxHighlightingHelpButton() { return document.getElementById('control-syntax-highlighting-help') as HTMLButtonElement; }
+
+  get shouldOverrideMainArgsCheckbox() { return document.getElementById('control-should-override-main-args') as HTMLInputElement; }
+  get configureMainArgsOverrideButton() { return document.getElementById('configure-main-args') as HTMLButtonElement; }
+  get mainArgsOverrideHelpButton() { return document.getElementById('main-args-override-help') as HTMLButtonElement; }
+
+  get shouldCustomizeFileSuffixCheckbox() { return document.getElementById('control-customize-file-suffix') as HTMLInputElement; }
+  get configureCustomFileSuffixButton() { return document.getElementById('customize-file-suffix') as HTMLButtonElement; }
+  get customFileSuffixHelpButton() { return document.getElementById('customize-file-suffix-help') as HTMLButtonElement; }
+
+  get generalHelpButton() { return document.getElementById('display-help') as HTMLButtonElement; }
+  get captureStdoutCheckbox() { return document.getElementById('control-capture-stdout') as HTMLInputElement; }
+  get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr') as HTMLInputElement; }
+  get darkModeCheckbox() { return document.getElementById('control-dark-mode') as HTMLInputElement; }
+  get displayStatisticsButton() { return document.getElementById('display-statistics') as HTMLButtonElement; }
+})();
+
+const main = () => {
   let getLocalState = () => '';
   let updateSpanHighlight = (span: Span | null) => {};
-  let rpcQuerySocket: any = null;
-  let pastaMode = false;
-  const rpcHandlers: { [id: string]: HandlerFn } = {};
-  let rpcIdGenerator = 1;
-  const performRpcQuery = (props: { [key: string]: any }) => new Promise(async (res, rej) => {
-    // console.log('send RPC query:', props);
-    const posRecoverySelect = document.getElementById('control-position-recovery-strategy') as HTMLSelectElement;
-    const astCacheStrategySelector = document.getElementById('ast-cache-strategy') as HTMLSelectElement;
-        const id = rpcIdGenerator++; //  Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
-        rpcQuerySocket.send(JSON.stringify({
-          id,
-          posRecovery: posRecoverySelect.value,
-          cache: astCacheStrategySelector.value,
-          type: 'query',
-          text: getLocalState(),
-          stdout: settings.shouldCaptureStdio(),
-          query: props,
-          mainArgs: settings.getMainArgsOverride(),
-          tmpSuffix: settings.getCurrentFileSuffix(),
-        }));
-
-        const cleanup = () => delete rpcHandlers[id];
-        rpcHandlers[id] = ({ error, result }) => {
-          // console.log('rpc response:', { error, result });
-          cleanup();
-          if (error) {
-            console.warn('RPC request failed', error);
-            rej(error);
-          } else {
-            res(result);
-          }
-        };
-
-        setTimeout(() => {
-          cleanup();
-          rej('Timeout');
-        }, 30000);
-      });
+  const performRpcQuery = (handler: WebsocketHandler, props: { [key: string]: any }) => handler.sendRpc({
+    posRecovery: uiElements.positionRecoverySelector.value,
+    cache: uiElements.astCacheStrategySelector.value,
+    type: 'query',
+    text: getLocalState(),
+    stdout: settings.shouldCaptureStdio(),
+    query: props,
+    mainArgs: settings.getMainArgsOverride(),
+    tmpSuffix: settings.getCurrentFileSuffix(),
+  });
 
     const onChangeListeners: ModalEnv['onChangeListeners'] = {};
 
     const probeWindowStateSavers: { [key: string]: (target: ProbeWindowState[]) => void } = {};
     const triggerWindowSave = () => {
-      // console.log('triggerWindowsSave...');
       const states: ProbeWindowState[] = [];
       Object.values(probeWindowStateSavers).forEach(v => v(states));
-      // console.log('triggerWindowsSave -->', states);
       settings.setProbeWindowStates(states);
     };
 
@@ -81,7 +74,7 @@ const main = () => {
       // }, 500);
     }
 
-    function init(editorType: string) {
+    function initEditor(editorType: string) {
       if (!location.search) {
         location.search = "editor=" + editorType;
         return;
@@ -90,43 +83,19 @@ const main = () => {
 
       document.getElementById('connections')!.style.display = 'none';
 
-    const socket = new WebSocket(`ws://${location.hostname}:8080`);
-    rpcQuerySocket = socket;
-
-    let handlers: { [opName: string]: HandlerFn } = {
-      rpc: ({ id, ...res }) => {
-        const handler = rpcHandlers[id];
-        if (handler) {
-          delete rpcHandlers[id];
-          handler(res);
-        } else {
-          console.warn('Received RPC response for', id, ', expected one of', Object.keys(rpcHandlers));
-        }
-      },
-    };
+    const wsHandler = createWebsocketHandler(
+      new WebSocket(`ws://${location.hostname}:8080`),
+      addConnectionCloseNotice
+    );
 
     const rootElem = document.getElementById('root') as HTMLElement;
-    const init: HandlerFn = ({ value, parser, version }) => {
+    wsHandler.on('init', () => {
       rootElem.style.display = "grid";
 
       const onChange = (newValue: string, adjusters?: LocationAdjuster[]) => {
         settings.setEditorContents(newValue);
-        if (!pastaMode) {
-          // ++changeCtr;
-          // socket.send(JSON.stringify({
-          //   type: 'change',
-          //   version: changeCtr,
-          //   parser: parserToggler.value,
-          //   str: newValue,
-          //   mode: 'pretty', // [outputToggler.value, modeTail].filter(Boolean).join(':'),
-          // }));
-        }
         notifyLocalChangeListeners(adjusters);
       };
-      // window.foo
-
-      // parserToggler.disabled = false;
-      // parserToggler.value = parser;
 
       let setLocalState = (value: string) => { };
       let markText: TextMarkFn = () => ({});
@@ -135,7 +104,7 @@ const main = () => {
         remove: () => {},
       });
 
-      const darkModeCheckbox  = document.getElementById('control-dark-mode') as HTMLInputElement;
+      const darkModeCheckbox  = uiElements.darkModeCheckbox;
       darkModeCheckbox.checked = !settings.isLightTheme();
 
       const defineThemeToggler = (cb: (lightTheme: boolean) => void) => {
@@ -146,16 +115,6 @@ const main = () => {
           cb(lightTheme);
         }
         cb(settings.isLightTheme());
-
-        // let lightTheme = MiniEditorUtils.getThemeIsLight();
-        // window.toggleTheme = () => {
-        //   lightTheme = !lightTheme;
-        //   MiniEditorUtils.setThemeIsLight(lightTheme);
-        //   setThemeButton(lightTheme ? '☀️' : '🌛');
-        //   cb(lightTheme);
-        // }
-        // lightTheme = !lightTheme;
-        // window.toggleTheme();
       };
 
       let syntaxHighlightingToggler: ((langId: SyntaxHighlightingLanguageId) => void) | undefined;
@@ -163,7 +122,7 @@ const main = () => {
       if (window.definedEditors[editorType]) {
         const { preload, init, } = window.definedEditors[editorType];
         window.loadPreload(preload, () => {
-          const res = init(value, onChange, settings.getSyntaxHighlighting());
+          const res = init(settings.getEditorContents() ?? `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings.getSyntaxHighlighting());
           setLocalState = res.setLocalState || setLocalState;
           getLocalState = res.getLocalState || getLocalState;
           updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
@@ -204,31 +163,21 @@ const main = () => {
       };
 
 
-      const captureStdoutCheckbox = document.getElementById('control-capture-stdout') as HTMLInputElement;
-      captureStdoutCheckbox.checked = settings.shouldCaptureStdio();
-      captureStdoutCheckbox.oninput = () => {
-        settings.setShouldCaptureStdio(captureStdoutCheckbox.checked);
-        notifyLocalChangeListeners();
-      }
-      const astCacheStrategySelector = document.getElementById('ast-cache-strategy') as HTMLSelectElement;
-      astCacheStrategySelector.value = settings.getAstCacheStrategy();
-      astCacheStrategySelector.oninput = () => {
-        settings.setAstCacheStrategy(astCacheStrategySelector.value);
-        notifyLocalChangeListeners();
-      }
-      const recoveryStrategySelector = document.getElementById('control-position-recovery-strategy') as HTMLSelectElement;
-      recoveryStrategySelector.value = settings.getPositionRecoveryStrategy();
-      recoveryStrategySelector.oninput = () => {
-        settings.setPositionRecoveryStrategy(recoveryStrategySelector.value);
-        notifyLocalChangeListeners();
-      }
-      const duplicateProbeCheckbox = document.getElementById('control-duplicate-probe-on-attr') as HTMLInputElement;
-      duplicateProbeCheckbox.oninput = () => {
-        settings.setShouldDuplicateProbeOnAttrClick(duplicateProbeCheckbox.checked);
-      }
-      duplicateProbeCheckbox.checked = settings.shouldDuplicateProbeOnAttrClick();
+      const setupSimpleCheckbox = (input: HTMLInputElement, initial: boolean, update: (checked: boolean) => void) => {
+        input.checked = initial;
+        input.oninput = () => { update(input.checked); notifyLocalChangeListeners(); }
+      };
+      setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings.shouldCaptureStdio(), cb => settings.setShouldCaptureStdio(cb));
+      setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings.shouldDuplicateProbeOnAttrClick(), cb => settings.setShouldDuplicateProbeOnAttrClick(cb));
 
-      const syntaxHighlightingSelector = document.getElementById('syntax-highlighting') as HTMLSelectElement;
+      const setupSimpleSelector = (input: HTMLSelectElement, initial: string, update: (val: string) => void) => {
+        input.value = initial;
+        input.oninput = () => { update(input.value); notifyLocalChangeListeners(); };
+      };
+      setupSimpleSelector(uiElements.astCacheStrategySelector, settings.getAstCacheStrategy(), cb => settings.setAstCacheStrategy(cb));
+      setupSimpleSelector(uiElements.positionRecoverySelector, settings.getPositionRecoveryStrategy(), cb => settings.setPositionRecoveryStrategy(cb));
+
+      const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
       syntaxHighlightingSelector.innerHTML = '';
       getAvailableLanguages().forEach(({ id, alias }) => {
         const option = document.createElement('option');
@@ -236,55 +185,14 @@ const main = () => {
         option.innerText = alias;
         syntaxHighlightingSelector.appendChild(option);
       })
-      syntaxHighlightingSelector.value = settings.getSyntaxHighlighting();
-      syntaxHighlightingToggler?.(settings.getSyntaxHighlighting());
-      syntaxHighlightingSelector.oninput = () => {
+      setupSimpleSelector(syntaxHighlightingSelector, settings.getSyntaxHighlighting(), cb => {
         settings.setSyntaxHighlighting(syntaxHighlightingSelector.value as SyntaxHighlightingLanguageId);
         syntaxHighlightingToggler?.(settings.getSyntaxHighlighting());
-        notifyLocalChangeListeners();
-      }
+      });
 
-      const configureCheckboxWithHiddenButton = (
-        checkbox: HTMLInputElement,
-        button: HTMLButtonElement,
-        onCheckboxChange: (checked: boolean) => void,
-        displayEditor: (onClose: () => void) => ({ forceClose: () => void }),
-        getButtonDecoration: () => string | null,
-      ) => {
-        let overrideEditorCloser: (() => void) | null = null;
-        const refreshButton = () => {
-          const decoration = getButtonDecoration();
-          if (decoration === null) {
-            button.style.display = 'none';
-          } else {
-            button.style.display = 'inline-block';
-            button.innerText = decoration;
-          }
-        };
-        refreshButton();
-
-        button.onclick = () => {
-          button.disabled = true;
-          const { forceClose } = displayEditor(() => {
-            button.disabled = false;
-            overrideEditorCloser = null;
-          });
-          overrideEditorCloser = () => forceClose();
-        };
-
-        checkbox.oninput = (e) => {
-          overrideEditorCloser?.();
-          onCheckboxChange(checkbox.checked);
-        }
-        return { refreshButton };
-      }
-
-      const shouldOverrideMainArgsCheckbox  = document.getElementById('control-should-override-main-args') as HTMLInputElement;
-      const configureMainArgsOverrideButton = document.getElementById('configure-main-args') as HTMLButtonElement;
-      shouldOverrideMainArgsCheckbox.checked = settings.getMainArgsOverride() !== null;
-      const overrideCfg = configureCheckboxWithHiddenButton(shouldOverrideMainArgsCheckbox, configureMainArgsOverrideButton,
-        () => { // On checkbox update
-          settings.setMainArgsOverride(shouldOverrideMainArgsCheckbox.checked ? [] : null);
+      const overrideCfg = configureCheckboxWithHiddenButton(uiElements.shouldOverrideMainArgsCheckbox, uiElements.configureMainArgsOverrideButton,
+        (checked) => { // On checkbox update
+          settings.setMainArgsOverride(checked ? [] : null);
           overrideCfg.refreshButton();
           notifyLocalChangeListeners();
         },
@@ -298,12 +206,9 @@ const main = () => {
         },
       );
 
-      const shouldCustomizeFileSuffixCheckbox  = document.getElementById('control-customize-file-suffix') as HTMLInputElement;
-      const configureCustomFileSuffixButton = document.getElementById('customize-file-suffix') as HTMLButtonElement;
-      shouldCustomizeFileSuffixCheckbox.checked = settings.getCustomFileSuffix() !== null;
-      const suffixCfg = configureCheckboxWithHiddenButton(shouldCustomizeFileSuffixCheckbox, configureCustomFileSuffixButton,
-        () => { // On checkbox update
-          settings.setCustomFileSuffix(shouldCustomizeFileSuffixCheckbox.checked ? settings.getCurrentFileSuffix() : null);
+      const suffixCfg = configureCheckboxWithHiddenButton(uiElements.shouldCustomizeFileSuffixCheckbox, uiElements.configureCustomFileSuffixButton,
+        (checked) => { // On checkbox update
+          settings.setCustomFileSuffix(checked ? settings.getCurrentFileSuffix() : null);
           suffixCfg.refreshButton();
           notifyLocalChangeListeners();
         },
@@ -329,10 +234,11 @@ const main = () => {
       }
 
       const modalEnv: ModalEnv = {
-        performRpcQuery, probeMarkers, onChangeListeners, updateMarkers,
+        performRpcQuery: (args) => performRpcQuery(wsHandler, args),
+        probeMarkers, onChangeListeners, updateMarkers,
         getLocalState: () => getLocalState(),
-        captureStdout: () => captureStdoutCheckbox.checked,
-        duplicateOnAttr: () => duplicateProbeCheckbox.checked,
+        captureStdout: () => uiElements.captureStdoutCheckbox.checked,
+        duplicateOnAttr: () => uiElements.duplicateProbeCheckbox.checked,
         registerStickyMarker: (...args) => registerStickyMarker(...args),
         updateSpanHighlight: (hl) => updateSpanHighlight(hl),
         probeWindowStateSavers,
@@ -341,92 +247,25 @@ const main = () => {
         currentlyLoadingModals: new Set<string>(),
        };
 
-      // const inputHeader = document.getElementById('input-header');
-      // onChangeListeners['passive-bg-listener'] = () => {
-      //   // If you have more than 100k lines in this editor and the program node starts after that,
-      //   // then I don't know what to tell you.
-      //   const rootLocator: TypeAtLoc = {
-      //     start: 0,
-      //     end: (100000 << 12) + 100,
-      //     type: 'Program',
-      //   };
-      //   performRpcQuery({
-      //     type: 'query',
-      //     // ...span,
-      //     text: modalEnv.getLocalState(),
-      //     query: {
-      //       nodeType: 'Program',
-      //       attr: {
-      //         name: 'pasta_containingSpansAndNodeTypes',
-      //       },
-      //       locator: {
-      //         root: rootLocator,
-      //         result: rootLocator,
-      //         steps: []
-      //       },
-      //     },
-      //   }).then((res) => {
-      //     console.log('PASSIVE:', res);
-      //   });
-      // };
-
-
       window.displayHelp = (type) => {
+        const common = (type: HelpType, button: HTMLButtonElement) => displayHelp(type, disabled => button.disabled = disabled);
         switch (type) {
-          case "general": return displayHelp('general',
-            disabled => (document.getElementById('display-help') as HTMLButtonElement).disabled = disabled
-          );
-          case 'recovery-strategy': return displayHelp('recovery-strategy',
-            disabled => (document.getElementById('control-position-recovery-strategy-help') as HTMLButtonElement).disabled = disabled
-          );
-          case "ast-cache-strategy": return displayHelp('ast-cache-strategy',
-            disabled => (document.getElementById('control-ast-cache-strategy-help') as HTMLButtonElement).disabled = disabled
-          );
+          case "general": return common('general', uiElements.generalHelpButton);
+          case 'recovery-strategy': return common('recovery-strategy', uiElements.positionRecoveryHelpButton);
+          case "ast-cache-strategy": return common('ast-cache-strategy', uiElements.astCacheStrategyHelpButton);
           case "probe-statistics": return displayStatistics(
             statCollectorImpl,
-            disabled => (document.getElementById('display-statistics') as HTMLButtonElement).disabled = disabled,
-            newContents => {
-              setLocalState(newContents);
-            },
+            disabled => uiElements.displayStatisticsButton.disabled = disabled,
+            newContents => setLocalState(newContents),
             () => modalEnv.currentlyLoadingModals.size > 0,
           );
-          case 'syntax-highlighting': return displayHelp('syntax-highlighting',
-            disabled => (document.getElementById('control-syntax-highlighting-help') as HTMLButtonElement).disabled = disabled
-          );
-          case 'main-args-override': return displayHelp('main-args-override',
-            disabled => (document.getElementById('main-args-override-help') as HTMLButtonElement).disabled = disabled
-          );
-          case 'customize-file-suffix':  return displayHelp('customize-file-suffix',
-          disabled => (document.getElementById('customize-file-suffix-help') as HTMLButtonElement).disabled = disabled
-        );
+          case 'syntax-highlighting': return common('syntax-highlighting', uiElements.syntaxHighlightingHelpButton);
+          case 'main-args-override': return common('main-args-override', uiElements.mainArgsOverrideHelpButton);
+          case 'customize-file-suffix':  return common('customize-file-suffix', uiElements.customFileSuffixHelpButton);
           default: return console.error('Unknown help type', type);
         }
       }
-      // window.displayGeneralHelp = () => displayHelp('general',
-      //   disabled => (document.getElementById('display-help') as HTMLButtonElement).disabled = disabled
-      //   );
-      // window.displayRecoveryStrategyHelp = () => displayHelp('recovery-strategy',
-      //     disabled => (document.getElementById('control-position-recovery-strategy-help') as HTMLButtonElement).disabled = disabled
-      // );
-      // window.displayAstCacheStrategyHelp = () => displayHelp('ast-cache-strategy',
-      //     disabled => (document.getElementById('control-ast-cache-strategy-help') as HTMLButtonElement).disabled = disabled
-      // );
-
-      // setTimeout(() => {
-      //   // window.displayAstCacheStrategyHelp();
-      //   // displayProbeModal(modalEnv, { x: 320, y: 240 }, { lineStart: 5, colStart: 1, lineEnd: 7, colEnd: 2 }, 'Program', 'prettyPrint');
-      // }, 500);
       setTimeout(() => {
-        // displayProbeModal(modalEnv, { x: 320, y: 140 }, { lineStart: 4, colStart: 1, lineEnd: 4, colEnd: 5 }, 'Call', 'prettyPrint');
-        // displayAttributeModal(modalEnv, { x: 320, y: 140 }, { lineStart: 4, colStart: 1, lineEnd: 4, colEnd: 5 }, 'Call');
-
-        // displayArgModal(modalEnv, { x: 320, y: 140 }, { lineStart: 4, colStart: 1, lineEnd: 4, colEnd: 5 },
-        //   'Call',  { name: 'lookup', args: [{ type: 'java.lang.String', name: 'name', value: '' }]}
-
-        // const call = { type: 'Call', start: (4 << 12) + 1, end: (4 << 12) + 5};
-        // displayProbeModal(modalEnv, { x: 320, y: 140 }, { root: call, result: call, steps: [] },
-        //   { name: 'lookup', args: [{ type: 'java.lang.String', name: 'name', value: 'Foo' }]}
-        // );
         try {
           settings.getProbeWindowStates().forEach((state) => {
             displayProbeModal(modalEnv, state.modalPos, state.locator, state.attr);
@@ -444,57 +283,16 @@ const main = () => {
 
         }
       }
-    };
-    handlers.init = init;
-    handlers['init-pasta'] = () => {
-      pastaMode = true;
-      delete window.DoAutoComplete;
-      // rootElem.style.gridTemplateColumns = '3fr 1fr';
-      // handlers.init({ value: '// Hello World!\n\nint main() {\n  print(123);\n  print(456);\n}\n', parser: 'beaver', version: 1 });
-      handlers.init({ value: settings.getEditorContents() ?? `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started`, parser: 'beaver', version: 1 });
-    };
-    handlers.refresh = () => {
-      notifyLocalChangeListeners();
-    }
-
-    let didReceiveAtLeastOneMessage = false;
-    // Listen for messages
-    socket.addEventListener('message', function (event) {
-      didReceiveAtLeastOneMessage = true;
-      // console.log('Message from server ', event.data);
-      const parsed = JSON.parse(event.data);
-      if (handlers[parsed.type]) {
-        handlers[parsed.type](parsed);
-      } else {
-        console.log('No handler for message', parsed, ', got handlers for', Object.keys(handlers));
-      }
     });
-
-    window.DoAutoComplete = (line, col) => {
-      return performRpcQuery({
-        type: 'complete',
-        line,
-        col,
-        text: getLocalState(),
-        // parser: parserToggler.value,
-      });
-    };
-
-    socket.addEventListener('close', () => {
-      // Small timeout to reduce risk of it appearing when navigating away
-      setTimeout(() => addConnectionCloseNotice(didReceiveAtLeastOneMessage), 100);
+    wsHandler.on('refresh', () => {
+      notifyLocalChangeListeners();
     });
   }
 
   window.maybeAutoInit = () => {
-    // const idx = location.search.indexOf('editor=');
-    // const editorId = location.search.slice(idx + 'editor='.length).split('&')[0];
-    // if (editorId) {
-    //   init(editorId);
-    // }
-    init('Monaco');
+    initEditor('Monaco');
   }
-  window.init = init;
+  window.initEditor = initEditor;
 }
 
 window.MiniEditorMain = main;

@@ -158,7 +158,7 @@ public class WebSocketServer {
 				Runnable cleanup = () -> onJarChangeListeners.remove(onJarChange);
 
 //				136
-				writeWsMessage(out, "{\"type\":\"init-pasta\"}");
+				writeWsMessage(out, "{\"type\":\"init\"}");
 //				writeWsMessage(out, "{\"hello\": \"world\"}");
 //				writeWsMessage(out, "{\"hello\": \"world\"}");
 //					System.out.println("Waiting for more data..");

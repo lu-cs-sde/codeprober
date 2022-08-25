@@ -226,7 +226,6 @@ const displayMainArgsOverrideModal = (
         wordWrap: true,
       });
       editor.onDidChangeModelContent(() => {
-        console.log('settings args..', editor.getValue());
         const errs: { line: number, col: number, msg: string }[] = [];
         try {
           setArgs(editor.getValue(), (line, col, msg) => errs.push({line, col, msg }));

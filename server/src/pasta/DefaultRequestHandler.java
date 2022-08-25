@@ -53,6 +53,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 	void handleParsedAst(Object ast, Function<String, Class<?>> loadAstClass, JSONObject queryObj,
 			JSONObject retBuilder, JSONArray bodyBuilder) {
 		if (ast == null) {
+			lastInfo = null;
 			bodyBuilder.put("Compiler exited, but no 'DrAST_root_node' found.");
 			bodyBuilder
 					.put("If parsing failed, you can draw 'red squigglies' in the code to indicate where it failed.");

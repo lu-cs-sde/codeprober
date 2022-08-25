@@ -212,7 +212,7 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
       // if (cancelToken.cancelled) { return; }
       const parsed = result.pastaAttrs;
       if (!parsed) {
-        throw new Error('Unexpected response body "' + result + '"');
+        throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
       }
 
       filter = '';
