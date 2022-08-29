@@ -1,3 +1,4 @@
+import repositoryUrl from "../../model/repositoryUrl";
 import createModalTitle from "../create/createModalTitle";
 import showWindow from "../create/showWindow";
 
@@ -49,10 +50,10 @@ const getHelpContents = (type: HelpType) => {
       const exampleVisible = document.createElement('div');
       {
         const add = (...args: string[]) => exampleVisible.appendChild(createSyntaxNode(args[0], args[1], args[2]));
-        exampleVisible.appendChild(document.createTextNode('Example: '));
+        exampleVisible.appendChild(document.createTextNode('Example (JastAdd syntax): '));
         add('syntax-modifier', 'syn', 'right');
         add('syntax-type', 'boolean List');
-        add('syntax-attr', '.pastaVisible', '');
+        add('syntax-attr', '.cpr_nodeListVisible', '');
         add('', '() =', 'right');
         add('syntax-modifier', 'false', 'false');
         add('', ';', '');
@@ -60,7 +61,7 @@ const getHelpContents = (type: HelpType) => {
       const exampleAttrs = document.createElement('div');
       {
         const add = (...args: string[]) => exampleAttrs.appendChild(createSyntaxNode(args[0], args[1], args[2]));
-        exampleAttrs.appendChild(document.createTextNode('Example: '));
+        exampleAttrs.appendChild(document.createTextNode('Example (JastAdd syntax): '));
         add('syntax-modifier', 'syn', 'right');
         add('syntax-type', 'java.util.List<String> Function');
         add('syntax-attr', '.pastaAttrs', '');
@@ -74,10 +75,10 @@ const getHelpContents = (type: HelpType) => {
       const exampleView = document.createElement('div');
       {
         const add = (...args: string[]) => exampleView.appendChild(createSyntaxNode(args[0], args[1], args[2]));
-        exampleView.appendChild(document.createTextNode('Example: '));
+        exampleView.appendChild(document.createTextNode('Example (JastAdd syntax): '));
         add('syntax-modifier', 'syn', 'right');
         add('syntax-type', 'Object IntType');
-        add('syntax-attr', '.pastaView', '');
+        add('syntax-attr', '.cpr_getOutput', '');
         add('', '() =', 'right');
         add('syntax-string', '"int"');
         add('', ';', '');
@@ -90,7 +91,7 @@ const getHelpContents = (type: HelpType) => {
       viewDefault.innerText = `
 encode(value):
   if (value is ASTNode):
-    if (value has 'pastaView'): encode(value.pastaView())
+    if (value has 'cpr_getOutput'): encode(value.cpr_getOutput())
     else: output(value.location, value.type)
 
   if (value is Iterator or Iterable):
@@ -100,21 +101,22 @@ encode(value):
 `.trim();
 
       return [
-        `Right click on some text in the editor and click 'Create Probe' to get started`,
-        `There are three magic attributes you may want to add:`,
+        `Right click on some text in the editor and click 'Create Probe' to get started.`,
+        `There are a number of 'magic' attributes you can add to your AST nodes to modify their behavior in this tool.`,
+        `All magic attributes are prefixed with 'cpr_' (CodePRober_) to avoid colliding with your own functionality.`,
+        `There three main magic attributes you may want to add are:`,
         ``,
-        joinElements(`1) '`, createHeader('pastaVisible'), `'. This controls whether or not a node will appear in the 'Create Probe' menu.`),
+        joinElements(`1) '`, createHeader('cpr_nodeListVisible'), `'. This controls whether or not a node will appear in the 'Create Probe' node list.`),
         `Default: `,
         `--    false: for 'List' and 'Opt'. Note: this is only default, you can override it.`,
         `--     true: for all other types`,
-        // `Example: syn boolean List.pastaVisible() = false;`,
         exampleVisible,
         ``,
         joinElements(`2) '`, createHeader('pastaAttrs'), `'. A filter that can be used to specify which attributes should be visible.`),
         `Default: all public functions with serializable argument types (String, int, boolean, AST Nodes) visible.`,
         exampleAttrs,
         ``,
-        joinElements(`3) '`, createHeader('pastaView'), `'. This controls how a value is printed`),
+        joinElements(`3) '`, createHeader('cpr_getOutput'), `'. This controls how a value is shown in the output (lower part) of a probe.`),
         `Default: encodes one or more options in order. In pseudocode:`,
         viewDefault,
         exampleView,
@@ -130,12 +132,11 @@ encode(value):
         ``,
         joinElements(`Contributions welcome at `, (() => {
           const a = document.createElement('a');
-          a.href = 'https://git.cs.lth.se/an6308ri/pasta-debugger';
-          a.innerText = 'https://git.cs.lth.se/an6308ri/pasta-debugger';
+          a.href = repositoryUrl;
+          a.innerText = repositoryUrl;
           a.target = '_blank';
           return a;
         })()),
-        `Version: abc-123`,
       ];
     }
 

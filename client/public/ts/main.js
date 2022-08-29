@@ -1081,9 +1081,16 @@ define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], f
     };
     exports.default = adjustLocator;
 });
-define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, createModalTitle_3, showWindow_4) {
+define("model/repositoryUrl", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    const repositoryUrl = `https://git.cs.lth.se/an6308ri/pasta-debugger`;
+    exports.default = repositoryUrl;
+});
+define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, repositoryUrl_1, createModalTitle_3, showWindow_4) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    repositoryUrl_1 = __importDefault(repositoryUrl_1);
     createModalTitle_3 = __importDefault(createModalTitle_3);
     showWindow_4 = __importDefault(showWindow_4);
     const createSyntaxNode = (type, text, margins) => {
@@ -1133,10 +1140,10 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
                 const exampleVisible = document.createElement('div');
                 {
                     const add = (...args) => exampleVisible.appendChild(createSyntaxNode(args[0], args[1], args[2]));
-                    exampleVisible.appendChild(document.createTextNode('Example: '));
+                    exampleVisible.appendChild(document.createTextNode('Example (JastAdd syntax): '));
                     add('syntax-modifier', 'syn', 'right');
                     add('syntax-type', 'boolean List');
-                    add('syntax-attr', '.pastaVisible', '');
+                    add('syntax-attr', '.cpr_nodeListVisible', '');
                     add('', '() =', 'right');
                     add('syntax-modifier', 'false', 'false');
                     add('', ';', '');
@@ -1144,7 +1151,7 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
                 const exampleAttrs = document.createElement('div');
                 {
                     const add = (...args) => exampleAttrs.appendChild(createSyntaxNode(args[0], args[1], args[2]));
-                    exampleAttrs.appendChild(document.createTextNode('Example: '));
+                    exampleAttrs.appendChild(document.createTextNode('Example (JastAdd syntax): '));
                     add('syntax-modifier', 'syn', 'right');
                     add('syntax-type', 'java.util.List<String> Function');
                     add('syntax-attr', '.pastaAttrs', '');
@@ -1158,10 +1165,10 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
                 const exampleView = document.createElement('div');
                 {
                     const add = (...args) => exampleView.appendChild(createSyntaxNode(args[0], args[1], args[2]));
-                    exampleView.appendChild(document.createTextNode('Example: '));
+                    exampleView.appendChild(document.createTextNode('Example (JastAdd syntax): '));
                     add('syntax-modifier', 'syn', 'right');
                     add('syntax-type', 'Object IntType');
-                    add('syntax-attr', '.pastaView', '');
+                    add('syntax-attr', '.cpr_getOutput', '');
                     add('', '() =', 'right');
                     add('syntax-string', '"int"');
                     add('', ';', '');
@@ -1173,7 +1180,7 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
                 viewDefault.innerText = `
 encode(value):
   if (value is ASTNode):
-    if (value has 'pastaView'): encode(value.pastaView())
+    if (value has 'cpr_getOutput'): encode(value.cpr_getOutput())
     else: output(value.location, value.type)
 
   if (value is Iterator or Iterable):
@@ -1182,21 +1189,22 @@ encode(value):
   if no case above matched: output(value.toString())
 `.trim();
                 return [
-                    `Right click on some text in the editor and click 'Create Probe' to get started`,
-                    `There are three magic attributes you may want to add:`,
+                    `Right click on some text in the editor and click 'Create Probe' to get started.`,
+                    `There are a number of 'magic' attributes you can add to your AST nodes to modify their behavior in this tool.`,
+                    `All magic attributes are prefixed with 'cpr_' (CodePRober_) to avoid colliding with your own functionality.`,
+                    `There three main magic attributes you may want to add are:`,
                     ``,
-                    joinElements(`1) '`, createHeader('pastaVisible'), `'. This controls whether or not a node will appear in the 'Create Probe' menu.`),
+                    joinElements(`1) '`, createHeader('cpr_nodeListVisible'), `'. This controls whether or not a node will appear in the 'Create Probe' node list.`),
                     `Default: `,
                     `--    false: for 'List' and 'Opt'. Note: this is only default, you can override it.`,
                     `--     true: for all other types`,
-                    // `Example: syn boolean List.pastaVisible() = false;`,
                     exampleVisible,
                     ``,
                     joinElements(`2) '`, createHeader('pastaAttrs'), `'. A filter that can be used to specify which attributes should be visible.`),
                     `Default: all public functions with serializable argument types (String, int, boolean, AST Nodes) visible.`,
                     exampleAttrs,
                     ``,
-                    joinElements(`3) '`, createHeader('pastaView'), `'. This controls how a value is printed`),
+                    joinElements(`3) '`, createHeader('cpr_getOutput'), `'. This controls how a value is shown in the output (lower part) of a probe.`),
                     `Default: encodes one or more options in order. In pseudocode:`,
                     viewDefault,
                     exampleView,
@@ -1212,12 +1220,11 @@ encode(value):
                     ``,
                     joinElements(`Contributions welcome at `, (() => {
                         const a = document.createElement('a');
-                        a.href = 'https://git.cs.lth.se/an6308ri/pasta-debugger';
-                        a.innerText = 'https://git.cs.lth.se/an6308ri/pasta-debugger';
+                        a.href = repositoryUrl_1.default;
+                        a.innerText = repositoryUrl_1.default;
                         a.target = '_blank';
                         return a;
                     })()),
-                    `Version: abc-123`,
                 ];
             }
             case 'recovery-strategy': {
@@ -2844,10 +2851,10 @@ define("ui/UIElements", ["require", "exports"], function (require, exports) {
     }
     exports.default = UIElements;
 });
-define("ui/showVersionInfo", ["require", "exports"], function (require, exports) {
+define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], function (require, exports, repositoryUrl_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    const baseUrl = `https://git.cs.lth.se/an6308ri/pasta-debugger`;
+    repositoryUrl_2 = __importDefault(repositoryUrl_2);
     const showVersionInfo = (elem, ourHash, ourClean) => {
         elem.innerHTML = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
         if (!ourClean) {
@@ -2855,7 +2862,7 @@ define("ui/showVersionInfo", ["require", "exports"], function (require, exports)
             return;
         }
         const pollNewVersion = async () => {
-            const header = await fetch(`${baseUrl}/-/raw/master/VERSION`);
+            const header = await fetch(`${repositoryUrl_2.default}/-/raw/master/VERSION`);
             if (header.status !== 200) {
                 console.warn('Unexpected response code when fetching version info: ', header.status);
                 return 'done';
@@ -2867,7 +2874,7 @@ define("ui/showVersionInfo", ["require", "exports"], function (require, exports)
                 return 'again';
             }
             const a = document.createElement('a');
-            a.href = `${baseUrl}/-/blob/master/pasta-server.jar`;
+            a.href = `${repositoryUrl_2.default}/-/blob/master/pasta-server.jar`;
             a.target = '_blank';
             a.text = 'New version available';
             elem.appendChild(document.createElement('br'));

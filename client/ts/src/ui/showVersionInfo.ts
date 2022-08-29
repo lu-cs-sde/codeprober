@@ -1,6 +1,5 @@
+import repositoryUrl from "../model/repositoryUrl";
 
-
-const baseUrl = `https://git.cs.lth.se/an6308ri/pasta-debugger`;
 
 const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolean) => {
 
@@ -11,7 +10,7 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
   }
 
   const pollNewVersion = async (): Promise<'done' | 'again'> => {
-    const header = await fetch(`${baseUrl}/-/raw/master/VERSION`);
+    const header = await fetch(`${repositoryUrl}/-/raw/master/VERSION`);
     if (header.status !== 200) {
       console.warn('Unexpected response code when fetching version info: ', header.status);
       return 'done';
@@ -25,7 +24,7 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
     }
 
     const a = document.createElement('a');
-    a.href = `${baseUrl}/-/blob/master/pasta-server.jar`;
+    a.href = `${repositoryUrl}/-/blob/master/pasta-server.jar`;
     a.target = '_blank';
     a.text = 'New version available';
     elem.appendChild(document.createElement('br'));
