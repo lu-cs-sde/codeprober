@@ -784,7 +784,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
 define("model/repositoryUrl", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    const repositoryUrl = `https://git.cs.lth.se/an6308ri/pasta-debugger`;
+    const repositoryUrl = `https://git.cs.lth.se/an6308ri/code-prober`;
     exports.default = repositoryUrl;
 });
 define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, repositoryUrl_1, createModalTitle_2, showWindow_3) {
