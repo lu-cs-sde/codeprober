@@ -99,7 +99,21 @@ body[data-theme-light="true"] {
 #control-panel label {
   user-select: none;
 }
+#version a {
+  border: 1px solid yellow;
+  padding: 0.5rem;
+  display: block;
+  text-align: center;
+  animation: flash-new-version 0.5s;
+}
+body[data-theme-light="true"] #version a {
+  border-color: hotpink;
+}
 
+@keyframes flash-new-version {
+  from { background: lightblue }
+  to { background: transparent }
+}
 a {
   color: cyan;
 }

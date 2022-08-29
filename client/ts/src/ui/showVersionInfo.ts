@@ -23,10 +23,9 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
       // Check again (much) later
       return 'again';
     }
-    elem.innerHTML = ``;
 
     const a = document.createElement('a');
-    a.href = baseUrl;
+    a.href = `${baseUrl}/-/blob/master/pasta-server.jar`;
     a.target = '_blank';
     a.text = 'New version available';
     elem.appendChild(document.createElement('br'));
