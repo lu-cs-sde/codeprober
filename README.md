@@ -27,11 +27,15 @@ cd server
 ./build.sh
 ```
 
-This will generate two files in the repository root: `pasta-server.jar` and `VERSION`.
+If your git status is non-clean (any untracked/staged/modified files present), then this will generate a single file: `code-prober-dev.jar`.
 
-`pasta-server.jar` is the tool itself.
+If your git status is clean, then this will instead generate two files: `code-prober.jar` and `VERSION`.
+
+`code-prober.jar` is the tool itself.
 
 `VERSION` is a file containing the current git hash. This is used by the client to detect when new versions are available.
+
+If you want to "deploy" a new version, i.e make the tiny "New version available" prompt appear in the corner for everybody using the tool, then you must first commit your changes, make sure `git status` says `working tree clean`, and then build.
 
 ## Running
 
