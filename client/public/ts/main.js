@@ -1136,7 +1136,8 @@ aspect MagicOutputDemo {
             case 'main-args-override': return [
                 `When your underlying tool is invoked, the path to a temporary file is sent as an arg to the main method.`,
                 `Optionally, some extra args are also included.`,
-                `By default, the extra args are defined when you start the server.`,
+                `By default, the extra args are defined when you start the CodeProber server.`,
+                `For example, running 'java -jar code-prober-jar path/to/your/tool.jar foo bar baz', will set the extra args array to [foo, bar, baz].`,
                 `By checking 'Override main args' and clicking "Edit", you can override those extra args.`,
                 ``,
                 `Args are separated by spaces and/or newlines.`,

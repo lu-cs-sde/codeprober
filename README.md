@@ -16,6 +16,9 @@ Your tool needs to assign to a `public static Object DrAST_root_node` in the mai
 This is the object that the `code-prober.jar` will use as entry point.
 For information about why it is called "DrAST", see https://bitbucket.org/jastadd/drast/src/master/.
 
+Once started, you should open http://localhost:8000 in your browser.
+When the page is loaded, you'll find a `Help` button on the right side which can help you further.
+
 ## Building - Client
 
 The client is built with TypeScript. Do the following to generate the JavaScript files:

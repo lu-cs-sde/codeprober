@@ -16,7 +16,7 @@ public class CodeProber {
 
 	public static void printUsage() {
 		System.out.println(
-				"Usage: java -jar code-prober.jar path/to/your/analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]");
+				"Usage: java -jar code-prober.jar path/to/your/analyzer-or-compiler.jar [args-to-forward-to-your-main]");
 	}
 
 	public static void main(String[] mainArgs) {
