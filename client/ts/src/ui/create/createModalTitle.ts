@@ -38,7 +38,6 @@ const createModalTitle = (args: CreateModalTitleArgs) => {
         `,
         render: (container) => {
           container.addEventListener('mousedown', (e) => {
-            console.log('container.onmousedown..');
             e.stopPropagation();
             e.stopImmediatePropagation();
           });
@@ -69,7 +68,6 @@ const createModalTitle = (args: CreateModalTitleArgs) => {
         },
       })
       window.addEventListener('mousedown', () => {
-        console.log('window.onmousedown')
         cleanup();
       });
     }

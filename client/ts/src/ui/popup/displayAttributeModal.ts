@@ -5,6 +5,7 @@ import showWindow from "../create/showWindow";
 import displayArgModal from "./displayArgModal";
 import formatAttr from "./formatAttr";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
+import displayHelp from "./displayHelp";
 
 const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator) => {
   let filter: string = '';
@@ -43,6 +44,14 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
         onClose: () => {
           popup.remove();
         },
+        extraActions: [
+          {
+            title: 'Help',
+            invoke: () => {
+              displayHelp('property-list-usage', () => {});
+            }
+          },
+        ],
       }).element);
 
       if (!attrs && !showErr) {
@@ -106,10 +115,10 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
           const reg = filter ? new RegExp(`.*${[...filter].map(part => part.trim()).filter(Boolean).map(part => escapeRegex(part)).join('.*')}.*`, 'i') : null;
           const match = (attr: AstAttr) => {
             if (!reg) {
-              return false;
+              return !!attr.astChildName;
             }
             // const formatted =
-            return reg.test(formatAttr(attr));
+            return reg.test(formatAttr(attr)) || (attr.astChildName && reg.test(attr.astChildName));
           }
           const matches = attrs.filter(match);
           const misses = attrs.filter(a => !match(a));
@@ -144,7 +153,8 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
             if (highlight) {
               node.classList.add('bg-syntax-attr-dim');
             }
-            node.innerText = formatAttr(attr);
+            node.appendChild(document.createTextNode(formatAttr(attr)));
+
             node.onclick = () => showProbe(attr);
             node.onkeydown = (e) => {
               if (e.key === 'Enter') {

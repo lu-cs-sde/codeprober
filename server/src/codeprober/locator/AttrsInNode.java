@@ -50,6 +50,11 @@ public class AttrsInNode {
 				args.put(arg);
 			}
 			attr.put("args", args);
+			
+			final String astChildName = MethodKindDetector.getAstChildName(m);
+			if (astChildName != null) {
+				attr.put("astChildName", astChildName);
+			}
 
 			attrs.add(attr);
 		}

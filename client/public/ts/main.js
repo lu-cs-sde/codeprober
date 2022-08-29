@@ -354,7 +354,6 @@ define("ui/create/createModalTitle", ["require", "exports", "ui/create/showWindo
         `,
                     render: (container) => {
                         container.addEventListener('mousedown', (e) => {
-                            console.log('container.onmousedown..');
                             e.stopPropagation();
                             e.stopImmediatePropagation();
                         });
@@ -382,7 +381,6 @@ define("ui/create/createModalTitle", ["require", "exports", "ui/create/showWindo
                     },
                 });
                 window.addEventListener('mousedown', () => {
-                    console.log('window.onmousedown');
                     cleanup();
                 });
             };
@@ -783,316 +781,18 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
     };
     exports.default = displayArgModal;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayProbeModal_2, showWindow_3, displayArgModal_1, formatAttr_2, createTextSpanIndicator_2) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
-    createModalTitle_2 = __importDefault(createModalTitle_2);
-    displayProbeModal_2 = __importDefault(displayProbeModal_2);
-    showWindow_3 = __importDefault(showWindow_3);
-    displayArgModal_1 = __importDefault(displayArgModal_1);
-    formatAttr_2 = __importDefault(formatAttr_2);
-    createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
-    const displayAttributeModal = (env, modalPos, locator) => {
-        let filter = '';
-        let attrs = null;
-        let showErr = false;
-        const popup = (0, showWindow_3.default)({
-            pos: modalPos,
-            rootStyle: `
-      min-width: 16rem;
-      min-height: 8rem;
-      80vh;
-    `,
-            render: (root, cancelToken) => {
-                while (root.firstChild)
-                    root.firstChild.remove();
-                // root.innerText = 'Loading..';
-                root.appendChild((0, createModalTitle_2.default)({
-                    renderLeft: (container) => {
-                        const headType = document.createElement('span');
-                        headType.classList.add('syntax-type');
-                        headType.innerText = `${locator.result.type}`;
-                        const headAttr = document.createElement('span');
-                        headAttr.classList.add('syntax-attr');
-                        headAttr.innerText = `.?`;
-                        // headAttr.style.fontStyle= 'italic';
-                        container.appendChild(headType);
-                        container.appendChild(headAttr);
-                        container.appendChild((0, createTextSpanIndicator_2.default)({
-                            span: startEndToSpan(locator.result.start, locator.result.end),
-                            marginLeft: true,
-                            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
-                        }));
-                    },
-                    onClose: () => {
-                        popup.remove();
-                    },
-                }).element);
-                if (!attrs && !showErr) {
-                    const spinner = (0, createLoadingSpinner_1.default)();
-                    spinner.classList.add('absoluteCenter');
-                    const spinnerWrapper = document.createElement('div');
-                    spinnerWrapper.style.height = '7rem';
-                    spinnerWrapper.style.display = 'block';
-                    spinnerWrapper.style.position = 'relative';
-                    spinnerWrapper.appendChild(spinner);
-                    root.appendChild(spinnerWrapper);
-                    return;
-                }
-                if (attrs) {
-                    let resortList = () => { };
-                    let submit = () => { };
-                    const nodesList = [];
-                    const filterInput = document.createElement('input');
-                    filterInput.placeholder = 'Filter';
-                    filterInput.classList.add('attr-modal-filter');
-                    if (!filter) {
-                        filterInput.classList.add('empty');
-                    }
-                    filterInput.type = 'text';
-                    filterInput.value = filter;
-                    filterInput.oninput = (e) => {
-                        filter = filterInput.value.trim();
-                        resortList();
-                    };
-                    filterInput.onkeydown = (e) => {
-                        var _a;
-                        // filterInput.scrollIntoView();
-                        if (e.key === 'Enter') {
-                            submit();
-                        }
-                        else if (e.key === 'ArrowDown') {
-                            if (nodesList.length > 0) {
-                                (_a = nodesList[0]) === null || _a === void 0 ? void 0 : _a.focus();
-                                e.preventDefault();
-                            }
-                        }
-                    };
-                    setTimeout(() => filterInput.focus(), 50);
-                    root.appendChild(filterInput);
-                    root.style.minHeight = '4rem';
-                    const sortedAttrs = document.createElement('div');
-                    resortList = () => {
-                        nodesList.length = 0;
-                        submit = () => { };
-                        while (sortedAttrs.firstChild)
-                            sortedAttrs.firstChild.remove();
-                        if (!attrs) {
-                            console.log('attrs disappeared after a successful load??');
-                            return;
-                        }
-                        function escapeRegex(string) {
-                            return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                        }
-                        const reg = filter ? new RegExp(`.*${[...filter].map(part => part.trim()).filter(Boolean).map(part => escapeRegex(part)).join('.*')}.*`, 'i') : null;
-                        const match = (attr) => {
-                            if (!reg) {
-                                return false;
-                            }
-                            // const formatted =
-                            return reg.test((0, formatAttr_2.default)(attr));
-                        };
-                        const matches = attrs.filter(match);
-                        const misses = attrs.filter(a => !match(a));
-                        const showProbe = (attr) => {
-                            popup.remove();
-                            if (!attr.args || attr.args.length === 0) {
-                                (0, displayProbeModal_2.default)(env, popup.getPos(), locator, { name: attr.name });
-                            }
-                            else {
-                                (0, displayArgModal_1.default)(env, popup.getPos(), locator, {
-                                    name: attr.name,
-                                    args: attr.args.map(arg => ({
-                                        ...arg,
-                                        value: ''
-                                    })),
-                                });
-                            }
-                        };
-                        const buildNode = (attr, borderTop, highlight) => {
-                            const node = document.createElement('div');
-                            const ourNodeIndex = nodesList.length;
-                            nodesList.push(node);
-                            node.tabIndex = 0;
-                            node.onmousedown = (e) => { e.stopPropagation(); };
-                            node.classList.add('syntax-attr-dim-focus');
-                            node.classList.add('clickHighlightOnHover');
-                            node.style.padding = '0 0.25rem';
-                            if (borderTop) {
-                                node.style.borderTop = `1px solid gray`;
-                            }
-                            if (highlight) {
-                                node.classList.add('bg-syntax-attr-dim');
-                            }
-                            node.innerText = (0, formatAttr_2.default)(attr);
-                            node.onclick = () => showProbe(attr);
-                            node.onkeydown = (e) => {
-                                var _a, _b;
-                                if (e.key === 'Enter') {
-                                    showProbe(attr);
-                                }
-                                else if (e.key === 'ArrowDown' && ourNodeIndex !== (nodesList.length - 1)) {
-                                    e.preventDefault();
-                                    (_a = nodesList[ourNodeIndex + 1]) === null || _a === void 0 ? void 0 : _a.focus();
-                                }
-                                else if (e.key === 'ArrowUp') {
-                                    e.preventDefault();
-                                    if (ourNodeIndex > 0) {
-                                        (_b = nodesList[ourNodeIndex - 1]) === null || _b === void 0 ? void 0 : _b.focus();
-                                    }
-                                    else {
-                                        filterInput.focus();
-                                    }
-                                }
-                            };
-                            sortedAttrs.appendChild(node);
-                        };
-                        matches.forEach((attr, idx) => buildNode(attr, idx > 0, matches.length === 1));
-                        if (matches.length && misses.length) {
-                            if (matches.length === 1) {
-                                const submitExpl = document.createElement('p');
-                                submitExpl.classList.add('syntax-attr');
-                                submitExpl.style.textAlign = 'center';
-                                submitExpl.innerText = 'Press enter to select';
-                                sortedAttrs.appendChild(submitExpl);
-                                submit = () => showProbe(matches[0]);
-                            }
-                            const sep = document.createElement('div');
-                            sep.classList.add('search-list-separator');
-                            sortedAttrs.appendChild(sep);
-                            // sortedAttrs.appendChild(document.createElement('hr'));
-                            // sortedAttrs.appendChild(document.createElement('hr'));
-                            // sortedAttrs.appendChild(document.createElement('hr'));
-                        }
-                        misses.forEach((attr, idx) => buildNode(attr, idx > 0, !matches.length && misses.length === 1));
-                    };
-                    resortList();
-                    root.appendChild(sortedAttrs);
-                }
-                else {
-                    // showErr
-                    // if (cancelToken.cancelled) { return; }
-                    while (root.firstChild)
-                        root.removeChild(root.firstChild);
-                    root.style.display = 'flex';
-                    root.style.justifyContent = 'center';
-                    root.style.padding = 'auto';
-                    root.style.textAlign = 'center';
-                    root.style.color = '#F88';
-                    root.innerText = 'Error while\nloading attributes..';
-                    setTimeout(() => popup.remove(), 1000);
-                }
-            },
-        });
-        /*
-        const foo = 'bar';
-      
-        const obj = { foo }
-        const obj = { foo: foo }
-        const obj = { "foo": foo }
-        const obj = { 'foo': foo }
-        const obj = { ['foo']: foo }
-        */
-        env.performRpcQuery({
-            attr: {
-                name: 'meta:listProperties'
-            },
-            locator,
-        })
-            .then((result) => {
-            const parsed = result.properties;
-            if (!parsed) {
-                throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
-            }
-            filter = '';
-            attrs = [];
-            const deudplicator = new Set();
-            parsed.forEach(attr => {
-                const uniqId = JSON.stringify(attr);
-                if (deudplicator.has(uniqId)) {
-                    return;
-                }
-                deudplicator.add(uniqId);
-                attrs === null || attrs === void 0 ? void 0 : attrs.push(attr);
-            });
-            // attrs = [...new Set(parsed)];
-            popup.refresh();
-        })
-            .catch(err => {
-            console.warn('UserPA err:', err);
-            showErr = true;
-            popup.refresh();
-        });
-    };
-    exports.default = displayAttributeModal;
-});
-define("model/adjustTypeAtLoc", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    const adjustTypeAtLoc = (adjuster, tal) => {
-        const span = startEndToSpan(tal.start, tal.end);
-        let [ls, cs] = adjuster(span.lineStart, span.colStart);
-        let [le, ce] = adjuster(span.lineEnd, span.colEnd);
-        if (ls == le && cs == ce) {
-            if (span.lineStart === span.lineEnd && span.colStart === span.colEnd) {
-                // Accept it, despite it being strange
-            }
-            else {
-                // Instead of accepting change to zero-width span, take same line/col diff as before
-                le = ls + (span.lineEnd - span.lineStart);
-                ce = cs + (span.colEnd - span.colStart);
-                // console.log('Ignoring adjustmpent from', span, 'to', { lineStart: ls, colStart: cs, lineEnd: le, colEnd: ce }, 'because it looks very improbable');
-                // return;
-            }
-        }
-        tal.start = (ls << 12) + Math.max(0, cs);
-        tal.end = (le << 12) + ce;
-    };
-    exports.default = adjustTypeAtLoc;
-});
-define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], function (require, exports, adjustTypeAtLoc_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    adjustTypeAtLoc_1 = __importDefault(adjustTypeAtLoc_1);
-    const adjustLocator = (adj, loc) => {
-        (0, adjustTypeAtLoc_1.default)(adj, loc.result);
-        const adjustStep = (step) => {
-            switch (step.type) {
-                case 'tal': {
-                    (0, adjustTypeAtLoc_1.default)(adj, step.value);
-                    break;
-                }
-                case 'nta': {
-                    step.value.args.forEach(({ args }) => {
-                        if (args) {
-                            args.forEach(({ value }) => {
-                                if (value && typeof value === 'object') {
-                                    adjustLocator(adj, value);
-                                }
-                            });
-                        }
-                    });
-                    break;
-                }
-            }
-        };
-        loc.steps.forEach(adjustStep);
-    };
-    exports.default = adjustLocator;
-});
 define("model/repositoryUrl", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     const repositoryUrl = `https://git.cs.lth.se/an6308ri/pasta-debugger`;
     exports.default = repositoryUrl;
 });
-define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, repositoryUrl_1, createModalTitle_3, showWindow_4) {
+define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, repositoryUrl_1, createModalTitle_2, showWindow_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     repositoryUrl_1 = __importDefault(repositoryUrl_1);
-    createModalTitle_3 = __importDefault(createModalTitle_3);
-    showWindow_4 = __importDefault(showWindow_4);
+    createModalTitle_2 = __importDefault(createModalTitle_2);
+    showWindow_3 = __importDefault(showWindow_3);
     const createSyntaxNode = (type, text, margins) => {
         const retNode = document.createElement('span');
         if (type) {
@@ -1114,6 +814,7 @@ define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui
         'syntax-highlighting': 'Syntax Highlighting',
         'main-args-override': 'Main args override',
         'customize-file-suffix': 'Temp file suffix',
+        'property-list-usage': 'Property list help'
     })[type];
     const getHelpContents = (type) => {
         const createHeader = (text) => {
@@ -1450,20 +1151,31 @@ aspect MagicOutputDemo {
                 `By checking 'Custom file suffix' you can change the default suffix to something else.`,
                 `Note that custom suffixes are used as-is. If you want temp files to end with '.txt', then you must set the custom suffix to exactly '.tmp' (including the dot).`,
             ];
+            case 'property-list-usage': return [
+                `This is the list of available properties on the node you selected.`,
+                `The list is filtered according to the 'cpr_propertyListShow' logic (see general help window for more on this).`,
+                `When no filter is added, the properties are sorted by two criteria in order:`,
+                `1) Properties representing AST child accessors. This corresponds to field declarations in ast files. If you write 'MyNode ::= MyChild:TheType;', then the property 'getMyChild()' will appear high up in this list.`,
+                `2) Alphabetical ordering.`,
+                ``,
+                `When a filter is added, this list is instead is sorted by:`,
+                `1) Properties that match the filter. The filter is case insensitive and allows arbitrary characters to appear in between the filter characters. For example, 'gl' matches 'getLorem' but not 'getIpsum'.`,
+                `2) Alphabetical ordering`,
+            ];
         }
     };
     const displayHelp = (type, setHelpButtonDisabled) => {
         setHelpButtonDisabled(true);
         // TODO prevent this if help window already open
         // Maybe disable the help button, re-enable on close?
-        const helpWindow = (0, showWindow_4.default)({
+        const helpWindow = (0, showWindow_3.default)({
             rootStyle: `
       width: 32rem;
       min-height: 8rem;
     `,
             resizable: true,
             render: (root) => {
-                root.appendChild((0, createModalTitle_3.default)({
+                root.appendChild((0, createModalTitle_2.default)({
                     renderLeft: (container) => {
                         const header = document.createElement('span');
                         header.innerText = getHelpTitle(type);
@@ -1511,7 +1223,314 @@ aspect MagicOutputDemo {
     };
     exports.default = displayHelp;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/create/registerOnHover", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, createTextSpanIndicator_3, displayAttributeModal_2, showWindow_5, registerOnHover_3, formatAttr_3, displayArgModal_2, registerNodeSelector_2, adjustLocator_1, displayHelp_1) {
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayProbeModal_2, showWindow_4, displayArgModal_1, formatAttr_2, createTextSpanIndicator_2, displayHelp_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
+    createModalTitle_3 = __importDefault(createModalTitle_3);
+    displayProbeModal_2 = __importDefault(displayProbeModal_2);
+    showWindow_4 = __importDefault(showWindow_4);
+    displayArgModal_1 = __importDefault(displayArgModal_1);
+    formatAttr_2 = __importDefault(formatAttr_2);
+    createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
+    displayHelp_1 = __importDefault(displayHelp_1);
+    const displayAttributeModal = (env, modalPos, locator) => {
+        let filter = '';
+        let attrs = null;
+        let showErr = false;
+        const popup = (0, showWindow_4.default)({
+            pos: modalPos,
+            rootStyle: `
+      min-width: 16rem;
+      min-height: 8rem;
+      80vh;
+    `,
+            render: (root, cancelToken) => {
+                while (root.firstChild)
+                    root.firstChild.remove();
+                // root.innerText = 'Loading..';
+                root.appendChild((0, createModalTitle_3.default)({
+                    renderLeft: (container) => {
+                        const headType = document.createElement('span');
+                        headType.classList.add('syntax-type');
+                        headType.innerText = `${locator.result.type}`;
+                        const headAttr = document.createElement('span');
+                        headAttr.classList.add('syntax-attr');
+                        headAttr.innerText = `.?`;
+                        // headAttr.style.fontStyle= 'italic';
+                        container.appendChild(headType);
+                        container.appendChild(headAttr);
+                        container.appendChild((0, createTextSpanIndicator_2.default)({
+                            span: startEndToSpan(locator.result.start, locator.result.end),
+                            marginLeft: true,
+                            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
+                        }));
+                    },
+                    onClose: () => {
+                        popup.remove();
+                    },
+                    extraActions: [
+                        {
+                            title: 'Help',
+                            invoke: () => {
+                                (0, displayHelp_1.default)('property-list-usage', () => { });
+                            }
+                        },
+                    ],
+                }).element);
+                if (!attrs && !showErr) {
+                    const spinner = (0, createLoadingSpinner_1.default)();
+                    spinner.classList.add('absoluteCenter');
+                    const spinnerWrapper = document.createElement('div');
+                    spinnerWrapper.style.height = '7rem';
+                    spinnerWrapper.style.display = 'block';
+                    spinnerWrapper.style.position = 'relative';
+                    spinnerWrapper.appendChild(spinner);
+                    root.appendChild(spinnerWrapper);
+                    return;
+                }
+                if (attrs) {
+                    let resortList = () => { };
+                    let submit = () => { };
+                    const nodesList = [];
+                    const filterInput = document.createElement('input');
+                    filterInput.placeholder = 'Filter';
+                    filterInput.classList.add('attr-modal-filter');
+                    if (!filter) {
+                        filterInput.classList.add('empty');
+                    }
+                    filterInput.type = 'text';
+                    filterInput.value = filter;
+                    filterInput.oninput = (e) => {
+                        filter = filterInput.value.trim();
+                        resortList();
+                    };
+                    filterInput.onkeydown = (e) => {
+                        var _a;
+                        // filterInput.scrollIntoView();
+                        if (e.key === 'Enter') {
+                            submit();
+                        }
+                        else if (e.key === 'ArrowDown') {
+                            if (nodesList.length > 0) {
+                                (_a = nodesList[0]) === null || _a === void 0 ? void 0 : _a.focus();
+                                e.preventDefault();
+                            }
+                        }
+                    };
+                    setTimeout(() => filterInput.focus(), 50);
+                    root.appendChild(filterInput);
+                    root.style.minHeight = '4rem';
+                    const sortedAttrs = document.createElement('div');
+                    resortList = () => {
+                        nodesList.length = 0;
+                        submit = () => { };
+                        while (sortedAttrs.firstChild)
+                            sortedAttrs.firstChild.remove();
+                        if (!attrs) {
+                            console.log('attrs disappeared after a successful load??');
+                            return;
+                        }
+                        function escapeRegex(string) {
+                            return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                        }
+                        const reg = filter ? new RegExp(`.*${[...filter].map(part => part.trim()).filter(Boolean).map(part => escapeRegex(part)).join('.*')}.*`, 'i') : null;
+                        const match = (attr) => {
+                            if (!reg) {
+                                return !!attr.astChildName;
+                            }
+                            // const formatted =
+                            return reg.test((0, formatAttr_2.default)(attr)) || (attr.astChildName && reg.test(attr.astChildName));
+                        };
+                        const matches = attrs.filter(match);
+                        const misses = attrs.filter(a => !match(a));
+                        const showProbe = (attr) => {
+                            popup.remove();
+                            if (!attr.args || attr.args.length === 0) {
+                                (0, displayProbeModal_2.default)(env, popup.getPos(), locator, { name: attr.name });
+                            }
+                            else {
+                                (0, displayArgModal_1.default)(env, popup.getPos(), locator, {
+                                    name: attr.name,
+                                    args: attr.args.map(arg => ({
+                                        ...arg,
+                                        value: ''
+                                    })),
+                                });
+                            }
+                        };
+                        const buildNode = (attr, borderTop, highlight) => {
+                            const node = document.createElement('div');
+                            const ourNodeIndex = nodesList.length;
+                            nodesList.push(node);
+                            node.tabIndex = 0;
+                            node.onmousedown = (e) => { e.stopPropagation(); };
+                            node.classList.add('syntax-attr-dim-focus');
+                            node.classList.add('clickHighlightOnHover');
+                            node.style.padding = '0 0.25rem';
+                            if (borderTop) {
+                                node.style.borderTop = `1px solid gray`;
+                            }
+                            if (highlight) {
+                                node.classList.add('bg-syntax-attr-dim');
+                            }
+                            node.appendChild(document.createTextNode((0, formatAttr_2.default)(attr)));
+                            node.onclick = () => showProbe(attr);
+                            node.onkeydown = (e) => {
+                                var _a, _b;
+                                if (e.key === 'Enter') {
+                                    showProbe(attr);
+                                }
+                                else if (e.key === 'ArrowDown' && ourNodeIndex !== (nodesList.length - 1)) {
+                                    e.preventDefault();
+                                    (_a = nodesList[ourNodeIndex + 1]) === null || _a === void 0 ? void 0 : _a.focus();
+                                }
+                                else if (e.key === 'ArrowUp') {
+                                    e.preventDefault();
+                                    if (ourNodeIndex > 0) {
+                                        (_b = nodesList[ourNodeIndex - 1]) === null || _b === void 0 ? void 0 : _b.focus();
+                                    }
+                                    else {
+                                        filterInput.focus();
+                                    }
+                                }
+                            };
+                            sortedAttrs.appendChild(node);
+                        };
+                        matches.forEach((attr, idx) => buildNode(attr, idx > 0, matches.length === 1));
+                        if (matches.length && misses.length) {
+                            if (matches.length === 1) {
+                                const submitExpl = document.createElement('p');
+                                submitExpl.classList.add('syntax-attr');
+                                submitExpl.style.textAlign = 'center';
+                                submitExpl.innerText = 'Press enter to select';
+                                sortedAttrs.appendChild(submitExpl);
+                                submit = () => showProbe(matches[0]);
+                            }
+                            const sep = document.createElement('div');
+                            sep.classList.add('search-list-separator');
+                            sortedAttrs.appendChild(sep);
+                            // sortedAttrs.appendChild(document.createElement('hr'));
+                            // sortedAttrs.appendChild(document.createElement('hr'));
+                            // sortedAttrs.appendChild(document.createElement('hr'));
+                        }
+                        misses.forEach((attr, idx) => buildNode(attr, idx > 0, !matches.length && misses.length === 1));
+                    };
+                    resortList();
+                    root.appendChild(sortedAttrs);
+                }
+                else {
+                    // showErr
+                    // if (cancelToken.cancelled) { return; }
+                    while (root.firstChild)
+                        root.removeChild(root.firstChild);
+                    root.style.display = 'flex';
+                    root.style.justifyContent = 'center';
+                    root.style.padding = 'auto';
+                    root.style.textAlign = 'center';
+                    root.style.color = '#F88';
+                    root.innerText = 'Error while\nloading attributes..';
+                    setTimeout(() => popup.remove(), 1000);
+                }
+            },
+        });
+        /*
+        const foo = 'bar';
+      
+        const obj = { foo }
+        const obj = { foo: foo }
+        const obj = { "foo": foo }
+        const obj = { 'foo': foo }
+        const obj = { ['foo']: foo }
+        */
+        env.performRpcQuery({
+            attr: {
+                name: 'meta:listProperties'
+            },
+            locator,
+        })
+            .then((result) => {
+            const parsed = result.properties;
+            if (!parsed) {
+                throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
+            }
+            filter = '';
+            attrs = [];
+            const deudplicator = new Set();
+            parsed.forEach(attr => {
+                const uniqId = JSON.stringify(attr);
+                if (deudplicator.has(uniqId)) {
+                    return;
+                }
+                deudplicator.add(uniqId);
+                attrs === null || attrs === void 0 ? void 0 : attrs.push(attr);
+            });
+            // attrs = [...new Set(parsed)];
+            popup.refresh();
+        })
+            .catch(err => {
+            console.warn('UserPA err:', err);
+            showErr = true;
+            popup.refresh();
+        });
+    };
+    exports.default = displayAttributeModal;
+});
+define("model/adjustTypeAtLoc", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const adjustTypeAtLoc = (adjuster, tal) => {
+        const span = startEndToSpan(tal.start, tal.end);
+        let [ls, cs] = adjuster(span.lineStart, span.colStart);
+        let [le, ce] = adjuster(span.lineEnd, span.colEnd);
+        if (ls == le && cs == ce) {
+            if (span.lineStart === span.lineEnd && span.colStart === span.colEnd) {
+                // Accept it, despite it being strange
+            }
+            else {
+                // Instead of accepting change to zero-width span, take same line/col diff as before
+                le = ls + (span.lineEnd - span.lineStart);
+                ce = cs + (span.colEnd - span.colStart);
+                // console.log('Ignoring adjustmpent from', span, 'to', { lineStart: ls, colStart: cs, lineEnd: le, colEnd: ce }, 'because it looks very improbable');
+                // return;
+            }
+        }
+        tal.start = (ls << 12) + Math.max(0, cs);
+        tal.end = (le << 12) + ce;
+    };
+    exports.default = adjustTypeAtLoc;
+});
+define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], function (require, exports, adjustTypeAtLoc_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    adjustTypeAtLoc_1 = __importDefault(adjustTypeAtLoc_1);
+    const adjustLocator = (adj, loc) => {
+        (0, adjustTypeAtLoc_1.default)(adj, loc.result);
+        const adjustStep = (step) => {
+            switch (step.type) {
+                case 'tal': {
+                    (0, adjustTypeAtLoc_1.default)(adj, step.value);
+                    break;
+                }
+                case 'nta': {
+                    step.value.args.forEach(({ args }) => {
+                        if (args) {
+                            args.forEach(({ value }) => {
+                                if (value && typeof value === 'object') {
+                                    adjustLocator(adj, value);
+                                }
+                            });
+                        }
+                    });
+                    break;
+                }
+            }
+        };
+        loc.steps.forEach(adjustStep);
+    };
+    exports.default = adjustLocator;
+});
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/create/registerOnHover", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, createTextSpanIndicator_3, displayAttributeModal_2, showWindow_5, registerOnHover_3, formatAttr_3, displayArgModal_2, registerNodeSelector_2, adjustLocator_1, displayHelp_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
@@ -1524,7 +1543,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     displayArgModal_2 = __importDefault(displayArgModal_2);
     registerNodeSelector_2 = __importDefault(registerNodeSelector_2);
     adjustLocator_1 = __importDefault(adjustLocator_1);
-    displayHelp_1 = __importDefault(displayHelp_1);
+    displayHelp_2 = __importDefault(displayHelp_2);
     const displayProbeModal = (env, modalPos, locator, attr) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
@@ -1567,13 +1586,13 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     {
                         title: 'General probe help',
                         invoke: () => {
-                            (0, displayHelp_1.default)('probe-window', () => { });
+                            (0, displayHelp_2.default)('probe-window', () => { });
                         }
                     },
                     {
                         title: 'Magic output messages help',
                         invoke: () => {
-                            (0, displayHelp_1.default)('magic-stdout-messages', () => { });
+                            (0, displayHelp_2.default)('magic-stdout-messages', () => { });
                         }
                     },
                 ],
@@ -2902,20 +2921,20 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
                 // In the unlikely (but flattering!) scenario that somebody keeps the tool
                 // active on their computer for several days in a row, we will re-check version
                 // info periodically so they don't miss new releases.
-                await (new Promise((res) => setTimeout(res, 12 * 60 * 60 * 1000)));
+                await (new Promise((res) => setTimeout(res, 30 * 1000)));
             }
         })()
             .catch(err => console.warn('Error when polling for new versions', err));
     };
     exports.default = showVersionInfo;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_4, settings_2, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_3, displayAttributeModal_4, settings_2, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
     displayProbeModal_3 = __importDefault(displayProbeModal_3);
     displayRagModal_1 = __importDefault(displayRagModal_1);
-    displayHelp_2 = __importDefault(displayHelp_2);
+    displayHelp_3 = __importDefault(displayHelp_3);
     displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
     settings_2 = __importDefault(settings_2);
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
@@ -3103,7 +3122,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     currentlyLoadingModals: new Set(),
                 };
                 window.displayHelp = (type) => {
-                    const common = (type, button) => (0, displayHelp_2.default)(type, disabled => button.disabled = disabled);
+                    const common = (type, button) => (0, displayHelp_3.default)(type, disabled => button.disabled = disabled);
                     switch (type) {
                         case "general": return common('general', uiElements.generalHelpButton);
                         case 'recovery-strategy': return common('recovery-strategy', uiElements.positionRecoveryHelpButton);

@@ -22,6 +22,7 @@ const getHelpTitle = (type: HelpType) => ({
   'syntax-highlighting': 'Syntax Highlighting',
   'main-args-override': 'Main args override',
   'customize-file-suffix': 'Temp file suffix',
+  'property-list-usage': 'Property list help'
 })[type];
 
 const getHelpContents = (type: HelpType) => {
@@ -379,6 +380,18 @@ aspect MagicOutputDemo {
         `If you work on a language not represented in the syntax highlighting list, then this might result in your compiler/analyzer rejecting the temporary file due to it having an unknown suffix.`,
         `By checking 'Custom file suffix' you can change the default suffix to something else.`,
         `Note that custom suffixes are used as-is. If you want temp files to end with '.txt', then you must set the custom suffix to exactly '.tmp' (including the dot).`,
+      ];
+
+      case 'property-list-usage': return [
+        `This is the list of available properties on the node you selected.`,
+        `The list is filtered according to the 'cpr_propertyListShow' logic (see general help window for more on this).`,
+        `When no filter is added, the properties are sorted by two criteria in order:`,
+        `1) Properties representing AST child accessors. This corresponds to field declarations in ast files. If you write 'MyNode ::= MyChild:TheType;', then the property 'getMyChild()' will appear high up in this list.`,
+        `2) Alphabetical ordering.`,
+        ``,
+        `When a filter is added, this list is instead is sorted by:`,
+        `1) Properties that match the filter. The filter is case insensitive and allows arbitrary characters to appear in between the filter characters. For example, 'gl' matches 'getLorem' but not 'getIpsum'.`,
+        `2) Alphabetical ordering`,
       ];
   }
 }

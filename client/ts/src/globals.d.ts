@@ -1,5 +1,5 @@
 
-type HelpType = 'general' | 'recovery-strategy' | 'probe-window' | 'magic-stdout-messages' | 'ast-cache-strategy' | 'syntax-highlighting' | 'main-args-override' | 'customize-file-suffix';
+type HelpType = 'general' | 'recovery-strategy' | 'probe-window' | 'magic-stdout-messages' | 'ast-cache-strategy' | 'syntax-highlighting' | 'main-args-override' | 'customize-file-suffix' | 'property-list-usage';
 
 
 interface Span {
@@ -100,6 +100,7 @@ interface AstAttrArg {
 interface AstAttr {
   name: string;
   args?: AstAttrArg[];
+  astChildName?: string;
 }
 
 type ArgValue = string | number | boolean | null | NodeLocator;
