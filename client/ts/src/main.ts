@@ -11,6 +11,7 @@ import { getAvailableLanguages } from "./model/syntaxHighlighting";
 import createWebsocketHandler, { WebsocketHandler } from "./createWebsocketHandler";
 import configureCheckboxWithHiddenButton from "./ui/configureCheckboxWithHiddenButton";
 import UIElements from "./ui/UIElements";
+import showVersionInfo from "./ui/showVersionInfo";
 
 window.clearUserSettings = () => {
   settings.set({});
@@ -22,7 +23,7 @@ const uiElements = new UIElements();
 const main = () => {
   let getLocalState = () => '';
   let updateSpanHighlight = (span: Span | null) => {};
-  const performRpcQuery = (handler: WebsocketHandler, props: { [key: string]: any }) => handler.sendRpc({
+  const performRpcQuery = (handler: WebsocketHandler, props: { [key: string]: any }) => handler.sendRpc({
     posRecovery: uiElements.positionRecoverySelector.value,
     cache: uiElements.astCacheStrategySelector.value,
     type: 'query',
@@ -35,7 +36,7 @@ const main = () => {
 
     const onChangeListeners: ModalEnv['onChangeListeners'] = {};
 
-    const probeWindowStateSavers: { [key: string]: (target: ProbeWindowState[]) => void } = {};
+    const probeWindowStateSavers: { [key: string]: (target: ProbeWindowState[]) => void } = {};
     const triggerWindowSave = () => {
       const states: ProbeWindowState[] = [];
       Object.values(probeWindowStateSavers).forEach(v => v(states));
@@ -65,7 +66,9 @@ const main = () => {
     );
 
     const rootElem = document.getElementById('root') as HTMLElement;
-    wsHandler.on('init', () => {
+    wsHandler.on('init', ({ version: { clean, hash } }) => {
+      console.log('got version:', clean, hash);
+      showVersionInfo(uiElements.versionInfo, hash, clean);
       rootElem.style.display = "grid";
 
       const onChange = (newValue: string, adjusters?: LocationAdjuster[]) => {
@@ -99,11 +102,11 @@ const main = () => {
         const { preload, init, } = window.definedEditors[editorType];
         window.loadPreload(preload, () => {
           const res = init(settings.getEditorContents() ?? `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings.getSyntaxHighlighting());
-          setLocalState = res.setLocalState || setLocalState;
-          getLocalState = res.getLocalState || getLocalState;
-          updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
-          registerStickyMarker = res.registerStickyMarker || registerStickyMarker;
-          markText = res.markText || markText;
+          setLocalState = res.setLocalState || setLocalState;
+          getLocalState = res.getLocalState || getLocalState;
+          updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
+          registerStickyMarker = res.registerStickyMarker || registerStickyMarker;
+          markText = res.markText || markText;
           if (res.themeToggler) {
             defineThemeToggler(res.themeToggler);
           }
@@ -135,7 +138,7 @@ const main = () => {
           const colEnd = end & 0xFFF;
           activeMarkers.push(markText({ severity, lineStart, colStart, lineEnd, colEnd, message: msg }));
         }
-        Object.values(probeMarkers).forEach(arr => arr.forEach(({ severity, errStart, errEnd, msg }) => filteredAddMarker(severity, errStart, errEnd, msg)));
+        Object.values(probeMarkers).forEach(arr => arr.forEach(({ severity, errStart, errEnd, msg }) => filteredAddMarker(severity, errStart, errEnd, msg)));
       };
 
 
@@ -148,14 +151,14 @@ const main = () => {
 
       const setupSimpleSelector = (input: HTMLSelectElement, initial: string, update: (val: string) => void) => {
         input.value = initial;
-        input.oninput = () => { update(input.value); notifyLocalChangeListeners(); };
+        input.oninput = () => { update(input.value); notifyLocalChangeListeners(); };
       };
       setupSimpleSelector(uiElements.astCacheStrategySelector, settings.getAstCacheStrategy(), cb => settings.setAstCacheStrategy(cb));
       setupSimpleSelector(uiElements.positionRecoverySelector, settings.getPositionRecoveryStrategy(), cb => settings.setPositionRecoveryStrategy(cb));
 
       const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
       syntaxHighlightingSelector.innerHTML = '';
-      getAvailableLanguages().forEach(({ id, alias }) => {
+      getAvailableLanguages().forEach(({ id, alias }) => {
         const option = document.createElement('option');
         option.value = id;
         option.innerText = alias;
@@ -196,7 +199,7 @@ const main = () => {
               notifyLocalChangeListeners()
           }
           onClose();
-          return { forceClose: () => { }, };
+          return { forceClose: () => { }, };
         },
         () => { // Get styling
           const overrides = settings.getCustomFileSuffix();

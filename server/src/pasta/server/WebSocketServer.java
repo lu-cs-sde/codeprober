@@ -20,6 +20,8 @@ import java.util.regex.Pattern;
 
 import org.json.JSONObject;
 
+import pasta.util.VersionInfo;
+
 public class WebSocketServer {
 
 	private static void readFully(InputStream src, byte[] dst) throws IOException {
@@ -57,7 +59,6 @@ public class WebSocketServer {
 					lenPart = 3;
 				} else {
 					lenPart = 9;
-//				throw new Error("TODO write really long msgs, len: " + strData.length);
 				}
 
 				final byte[] padded = new byte[1 + lenPart + strData.length];
@@ -100,17 +101,8 @@ public class WebSocketServer {
 				}
 				System.arraycopy(strData, 0, padded, 1 + lenPart, strData.length);
 
-//				System.out.println("Chunk " + chunk +", msglen " + strData.length + " , lenPart " + lenPart);
-//				System.out.println("Writing " + Arrays.toString(Arrays.copyOfRange(padded, 0, Math.min(padded.length, 16))) +"..");
-
 				dst.write(padded);
 				dst.flush();
-//				try {
-//					Thread.sleep(1000L);
-//				} catch (InterruptedException e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
 			}
 		}
 	}
@@ -158,10 +150,15 @@ public class WebSocketServer {
 				Runnable cleanup = () -> onJarChangeListeners.remove(onJarChange);
 
 //				136
-				writeWsMessage(out, "{\"type\":\"init\"}");
-//				writeWsMessage(out, "{\"hello\": \"world\"}");
-//				writeWsMessage(out, "{\"hello\": \"world\"}");
-//					System.out.println("Waiting for more data..");
+				final JSONObject initMsg = new JSONObject();
+				initMsg.put("type", "init");
+				
+				final JSONObject versionMsg = new JSONObject();
+				versionMsg.put("hash", VersionInfo.getInstance().revision);
+				versionMsg.put("clean", VersionInfo.getInstance().clean);
+				initMsg.put("version", versionMsg);
+
+				writeWsMessage(out, initMsg.toString());
 				while (true) {
 
 					int first = in.read();

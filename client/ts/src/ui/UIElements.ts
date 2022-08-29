@@ -24,6 +24,7 @@ class UIElements {
   get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr') as HTMLInputElement; }
   get darkModeCheckbox() { return document.getElementById('control-dark-mode') as HTMLInputElement; }
   get displayStatisticsButton() { return document.getElementById('display-statistics') as HTMLButtonElement; }
+  get versionInfo() { return document.getElementById('version') as HTMLDivElement; }
 }
 
 export default UIElements;

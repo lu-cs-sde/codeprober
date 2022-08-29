@@ -2840,10 +2840,59 @@ define("ui/UIElements", ["require", "exports"], function (require, exports) {
         get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr'); }
         get darkModeCheckbox() { return document.getElementById('control-dark-mode'); }
         get displayStatisticsButton() { return document.getElementById('display-statistics'); }
+        get versionInfo() { return document.getElementById('version'); }
     }
     exports.default = UIElements;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_4, settings_2, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1) {
+define("ui/showVersionInfo", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const baseUrl = `https://git.cs.lth.se/an6308ri/pasta-debugger`;
+    const showVersionInfo = (elem, ourHash, ourClean) => {
+        elem.innerHTML = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
+        if (!ourClean) {
+            // No need to poll for new versions, 'DEV' label already shown
+            return;
+        }
+        const pollNewVersion = async () => {
+            const header = await fetch(`${baseUrl}/-/raw/master/VERSION`);
+            if (header.status !== 200) {
+                console.warn('Unexpected response code when fetching version info: ', header.status);
+                return 'done';
+            }
+            const text = (await header.text()).trim().split('\n').slice(-1)[0];
+            if (ourHash === text) {
+                // Status is clean.. for now.
+                // Check again (much) later
+                return 'again';
+            }
+            elem.innerHTML = ``;
+            const a = document.createElement('a');
+            a.href = baseUrl;
+            a.target = '_blank';
+            a.text = 'New version available';
+            elem.appendChild(document.createElement('br'));
+            elem.appendChild(a);
+            return 'done';
+        };
+        (async () => {
+            while (true) {
+                const status = await pollNewVersion();
+                if (status === 'done') {
+                    return;
+                }
+                // Sleep for 12 hours..
+                // In the unlikely (but flattering!) scenario that somebody keeps the tool
+                // active on their computer for several days in a row, we will re-check version
+                // info periodically so they don't miss new releases.
+                await (new Promise((res) => setTimeout(res, 12 * 60 * 60 * 1000)));
+            }
+        })()
+            .catch(err => console.warn('Error when polling for new versions', err));
+    };
+    exports.default = showVersionInfo;
+});
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_4, settings_2, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -2858,6 +2907,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     createWebsocketHandler_1 = __importDefault(createWebsocketHandler_1);
     configureCheckboxWithHiddenButton_1 = __importDefault(configureCheckboxWithHiddenButton_1);
     UIElements_1 = __importDefault(UIElements_1);
+    showVersionInfo_1 = __importDefault(showVersionInfo_1);
     window.clearUserSettings = () => {
         settings_2.default.set({});
         location.reload();
@@ -2899,7 +2949,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             document.getElementById('connections').style.display = 'none';
             const wsHandler = (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:8080`), addConnectionCloseNotice_1.default);
             const rootElem = document.getElementById('root');
-            wsHandler.on('init', () => {
+            wsHandler.on('init', ({ version: { clean, hash } }) => {
+                console.log('got version:', clean, hash);
+                (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean);
                 rootElem.style.display = "grid";
                 const onChange = (newValue, adjusters) => {
                     settings_2.default.setEditorContents(newValue);

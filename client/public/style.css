@@ -90,6 +90,11 @@ body[data-theme-light="true"] {
   background: #444;
   color: white;
   border-left: 0.25rem ridge #888;
+  position: relative;
+  overflow: scroll;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 #control-panel label {
   user-select: none;

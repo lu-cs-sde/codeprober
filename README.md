@@ -1,6 +1,6 @@
 # PASTA - Probe AST Attributes
 
-A prototype implementation of property probes.
+An implementation of property probes.
 
 ⚠️ In active development ⚠️
 
@@ -20,15 +20,18 @@ All HTML, JavaScript and CSS files should now be available in the `client/public
 ## Build - Server
 
 The server is written in Java and has primarily been developed in Eclipse, and there are `.project` & `.classpath` files in the repository that should let you import the project into your own Eclipse instance.
-That said, you can in theory also build with the command line. To do so, do the following:
+That said, release builds should be performed on the command line. To build, do the following:
 
 ```sh
 cd server
 ./build.sh
 ```
 
-There are some problems with bundling of the client data using the script version.
-Please build from inside eclipse instead, or use the "PASTA_WEB_OVERRIDE" system property (see WebServer.java).
+This will generate two files in the repository root: `pasta-server.jar` and `VERSION`.
+
+`pasta-server.jar` is the tool itself.
+
+`VERSION` is a file containing the current git hash. This is used by the client to detect when new versions are available.
 
 ## Running
 
