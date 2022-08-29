@@ -380,7 +380,7 @@ aspect MagicOutputDemo {
         ``,
         `If you work on a language not represented in the syntax highlighting list, then this might result in your compiler/analyzer rejecting the temporary file due to it having an unknown suffix.`,
         `By checking 'Custom file suffix' you can change the default suffix to something else.`,
-        `Note that custom suffixes are used as-is. If you want temp files to end with '.txt', then you must set the custom suffix to exactly '.tmp' (including the dot).`,
+        `Note that custom suffixes are used as-is. If you want temp files to end with '.txt', then you must set the custom suffix to exactly '.txt' (including the dot).`,
       ];
 
       case 'property-list-usage': return [
