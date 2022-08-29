@@ -28,7 +28,7 @@ public class NodesAtPosition {
 			e1.printStackTrace();
 			return;
 		}
-		final Boolean cutoff = astNode.cutoffPastaVisibleTree(info);
+		final Boolean cutoff = astNode.cutoffNodeListTree(info);
 		if (cutoff != null && cutoff) {
 			return;
 		}

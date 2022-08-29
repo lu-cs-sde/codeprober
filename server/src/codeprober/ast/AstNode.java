@@ -56,7 +56,7 @@ public class AstNode {
 		}
 	}
 	
-	public Boolean cutoffPastaVisibleTree(AstInfo info) {
+	public Boolean cutoffNodeListTree(AstInfo info) {
 		if (!info.hasOverride0(underlyingAstNode.getClass(), "cpr_cutoffNodeListTree")) {
 			return null;
 		}

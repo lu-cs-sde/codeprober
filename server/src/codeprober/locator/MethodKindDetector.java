@@ -30,4 +30,18 @@ public class MethodKindDetector {
 		return null;
 
 	}
+
+	public static boolean looksLikeAUserAccessibleJastaddRelatedMethod(Method m) {
+		if (!Modifier.isPublic(m.getModifiers())) {
+			return false;
+		}
+
+		for (Annotation a : m.getAnnotations()) {
+			if (a.annotationType().getName().contains(".ASTNodeAnnotation$")) {
+				return true;
+			}
+		}
+		return false;
+	}
 }
+//

@@ -1,7 +1,6 @@
 package codeprober.locator;
 
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -22,28 +21,22 @@ public class AttrsInNode {
 
 	public static JSONArray get(AstInfo info, AstNode node, List<String> whitelistFilter) {
 		if (whitelistFilter == null) {
-			 whitelistFilter = new ArrayList<>();
+			whitelistFilter = new ArrayList<>();
 		} else {
 			whitelistFilter = new ArrayList<>(whitelistFilter);
 		}
-		whitelistFilter.addAll(Arrays.asList(new String[]{ "getChild", "getParent", "getNumChild" }));
+		whitelistFilter.addAll(Arrays.asList(new String[] { "getChild", "getParent", "getNumChild", "toString" }));
 //		final Pattern illegalNamePattern = Pattern.compile(".*(\\$|_).*");
-		
+
 		List<JSONObject> attrs = new ArrayList<>();
-		for (Method m : node.underlyingAstNode.getClass().getMethods()) {
-//			if (!Modifier.isPublic(m.getModifiers())) {
-//				continue;
-//			}
-			if (!MethodKindDetector.isSomeAttr(m) && !whitelistFilter.contains(m.getName())) {
+		for (Method m : node.underlyingAstNode.getClass().getMethods()) { // getMethods() rather than getDeclaredMethods() to only get public methods
+			if (!MethodKindDetector.looksLikeAUserAccessibleJastaddRelatedMethod(m)
+					&& !whitelistFilter.contains(m.getName())) {
 				continue;
 			}
-//			if (illegalNamePattern.matcher(m.getName()).matches()) {
-//				continue;
-//			}
 			final Parameter[] parameters = m.getParameters();
 			final ParameterType[] types = CreateType.fromParameters(info, parameters);
 			if (types == null) {
-//				System.out.println("Skipping " + m + " due to unknown param types");
 				continue;
 			}
 			JSONObject attr = new JSONObject();
@@ -76,8 +69,11 @@ public class AttrsInNode {
 				@SuppressWarnings("unchecked")
 				final Collection<String> cast = (Collection<String>) override;
 				return new ArrayList<String>(cast);
+			} else if (override instanceof Object[]) {
+				final String[] cast = (String[]) override;
+				return Arrays.asList(cast);
 			} else {
-				System.out.println("'" + mth + "' is expected to be a collection, got " + override);
+				System.out.println("'" + mth + "' is expected to be a collection or String array, got " + override);
 			}
 		} catch (InvokeProblem e) {
 			System.out.println("Error when evaluating " + mth);

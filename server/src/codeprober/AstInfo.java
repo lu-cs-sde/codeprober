@@ -55,12 +55,12 @@ public class AstInfo {
 		if (!loadedLocatorTALRoot) {
 			loadedLocatorTALRoot = true;
 			try {
-				String underlyingType = (String)Reflect.invoke0(ast.underlyingAstNode, "pastaLocatorTALRoot");
+				String underlyingType = (String)Reflect.invoke0(ast.underlyingAstNode, "cpr_locatorTALRoot");
 				locatorTALRoot = loadAstClass.apply(getQualifiedAstType(underlyingType));
 			} catch (InvokeProblem e) {
 				// OK, this is an optional attribute after all
 			} catch (ClassCastException e) {
-				System.out.println("pastaLocatorTALRoot returned non-String value");
+				System.out.println("cpr_locatorTALRoot returned non-String value");
 				e.printStackTrace();
 			}
 		}

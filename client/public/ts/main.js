@@ -1154,7 +1154,7 @@ define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui
                     exampleAttrs.appendChild(document.createTextNode('Example (JastAdd syntax): '));
                     add('syntax-modifier', 'syn', 'right');
                     add('syntax-type', 'java.util.List<String> Function');
-                    add('syntax-attr', '.pastaAttrs', '');
+                    add('syntax-attr', '.cpr_propertyListShow', '');
                     add('', '() =', 'right');
                     add('syntax-type', 'Arrays.asList(', '');
                     add('syntax-string', '"eval"', '');
@@ -1190,18 +1190,29 @@ encode(value):
 `.trim();
                 return [
                     `Right click on some text in the editor and click 'Create Probe' to get started.`,
+                    `If you get the message 'No AST node at this location', then it likely means that something went wrong during parsing.`,
+                    `Look at the terminal where you started code-prober.jar for more information.`,
+                    ``,
                     `There are a number of 'magic' attributes you can add to your AST nodes to modify their behavior in this tool.`,
                     `All magic attributes are prefixed with 'cpr_' (CodePRober_) to avoid colliding with your own functionality.`,
                     `There three main magic attributes you may want to add are:`,
                     ``,
                     joinElements(`1) '`, createHeader('cpr_nodeListVisible'), `'. This controls whether or not a node will appear in the 'Create Probe' node list.`),
                     `Default: `,
-                    `--    false: for 'List' and 'Opt'. Note: this is only default, you can override it.`,
-                    `--     true: for all other types`,
+                    `-    false: for 'List' and 'Opt'. Note: this is only default, you can override it.`,
+                    `-     true: for all other types.`,
                     exampleVisible,
                     ``,
-                    joinElements(`2) '`, createHeader('pastaAttrs'), `'. A filter that can be used to specify which attributes should be visible.`),
-                    `Default: all public functions with serializable argument types (String, int, boolean, AST Nodes) visible.`,
+                    joinElements(`2) '`, createHeader('cpr_propertyListShow'), `'. A collection (List<String> or String[]) that is used to include extra properties in the property list seen when creating probes.`),
+                    `Functions are shown in the property list if all of the following is true:`,
+                    `- The function is public.`,
+                    `- The return type and argument types are 'String', 'int', 'boolean', or a subtype of the top AST Node type.`,
+                    `- One of the following is true:`,
+                    `-- The function is an attribute (originates from a jrag file, e.g 'z' in 'syn X Y.z() = ...)`,
+                    `-- The function is an AST child accessor (used to get members declared in an .ast file).`,
+                    `-- The function name is either 'toString', 'getChild', 'getNumChild' or 'getParent'`,
+                    `-- The function name is found in the return value from cpr_propertyListShow()`,
+                    `Default: empty array.`,
                     exampleAttrs,
                     ``,
                     joinElements(`3) '`, createHeader('cpr_getOutput'), `'. This controls how a value is shown in the output (lower part) of a probe.`),
@@ -1280,10 +1291,10 @@ encode(value):
                     `Finally, the title bar show where the probed node exists. You can hover this to highlight the node in the document.`,
                     '',
                     'Below the titlebar is the output of the probe.',
-                    `This is the resolved value of the probe, formatted according to the 'pastaView' logic (see general help window for more on this).`,
+                    `This is the resolved value of the probe, formatted according to the 'cpr_getOutput' logic (see general help window for more on this).`,
                     '',
                     `If you check 'Capture stdio' on the top right, you'll also see any messages printed to System.out and System.err in the window.`,
-                    'Each probe is evaluated in a fresh compiler instance in isolation, so any values and messages you see in the probe window belongs only to that window.',
+                    `If the cache strategy is set to 'None' or 'Purge', then each probe will get evaluated in a fresh compiler instance in isolation, so any values and messages you see in the probe window belongs only to that window.`,
                     '',
                     'The probes are automatically reevaluated whenever the document changes.',
                     `The probes also automatically update when the underlying jar file (usually 'compiler.jar') changes.`,
@@ -2874,7 +2885,7 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
                 return 'again';
             }
             const a = document.createElement('a');
-            a.href = `${repositoryUrl_2.default}/-/blob/master/pasta-server.jar`;
+            a.href = `${repositoryUrl_2.default}/-/blob/master/code-prober.jar`;
             a.target = '_blank';
             a.text = 'New version available';
             elem.appendChild(document.createElement('br'));

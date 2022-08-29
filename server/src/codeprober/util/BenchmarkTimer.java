@@ -5,15 +5,15 @@ public class BenchmarkTimer {
 	public static final BenchmarkTimer CREATE_LOCATOR = new BenchmarkTimer();
 	public static final BenchmarkTimer APPLY_LOCATOR = new BenchmarkTimer();
 	public static final BenchmarkTimer EVALUATE_ATTR = new BenchmarkTimer();
-	public static final BenchmarkTimer NODES_AT_POSITION = new BenchmarkTimer();
-	public static final BenchmarkTimer PASTA_ATTRS = new BenchmarkTimer();
+	public static final BenchmarkTimer LIST_NODES = new BenchmarkTimer();
+	public static final BenchmarkTimer LIST_PROPERTIES = new BenchmarkTimer();
 	
 	public static void resetAll() {
 		CREATE_LOCATOR.reset();
 		APPLY_LOCATOR.reset();
 		EVALUATE_ATTR.reset();
-		NODES_AT_POSITION.reset();
-		PASTA_ATTRS.reset();
+		LIST_NODES.reset();
+		LIST_PROPERTIES.reset();
 	}
 	
 	private int depth = 0;

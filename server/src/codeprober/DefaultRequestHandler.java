@@ -114,7 +114,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		case "meta:listNodes": {
 			final int rootStart = locator.getJSONObject("result").getInt("start");
 			final int rootEnd = locator.getJSONObject("result").getInt("end");
-			BenchmarkTimer.NODES_AT_POSITION.enter();
+			BenchmarkTimer.LIST_NODES.enter();
 			CreateLocator.setBuildFastButFragileLocator(true);
 			try {
 				retBuilder.put("nodes", new JSONArray(NodesAtPosition.get( //
@@ -122,17 +122,17 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				)));
 			} finally {
 				CreateLocator.setBuildFastButFragileLocator(false);
-				BenchmarkTimer.NODES_AT_POSITION.exit();
+				BenchmarkTimer.LIST_NODES.exit();
 			}
 			return;
 		}
 		case "meta:listProperties": {
-			BenchmarkTimer.PASTA_ATTRS.enter();
+			BenchmarkTimer.LIST_PROPERTIES.enter();
 			try {
 				retBuilder.put("properties",
 						AttrsInNode.get(info, match.node, AttrsInNode.extractFilter(info, match.node)));
 			} finally {
-				BenchmarkTimer.PASTA_ATTRS.exit();
+				BenchmarkTimer.LIST_PROPERTIES.exit();
 			}
 			return;
 		}
@@ -245,7 +245,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				return existing;
 			}
 			try {
-				final File tmpFile = File.createTempFile("pasta-server", queryObj.getString("tmpSuffix"));
+				final File tmpFile = File.createTempFile("code-prober", queryObj.getString("tmpSuffix"));
 				try {
 					Files.write(tmpFile.toPath(), inputText.getBytes(StandardCharsets.UTF_8),
 							StandardOpenOption.CREATE);
@@ -368,8 +368,8 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		retBuilder.put("createLocatorTime", BenchmarkTimer.CREATE_LOCATOR.getAccumulatedNano());
 		retBuilder.put("applyLocatorTime", BenchmarkTimer.APPLY_LOCATOR.getAccumulatedNano());
 		retBuilder.put("attrEvalTime", BenchmarkTimer.EVALUATE_ATTR.getAccumulatedNano());
-		retBuilder.put("nodesAtPositionTime", BenchmarkTimer.NODES_AT_POSITION.getAccumulatedNano());
-		retBuilder.put("pastaAttrsTime", BenchmarkTimer.PASTA_ATTRS.getAccumulatedNano());
+		retBuilder.put("nodesAtPositionTime", BenchmarkTimer.LIST_NODES.getAccumulatedNano());
+		retBuilder.put("pastaAttrsTime", BenchmarkTimer.LIST_PROPERTIES.getAccumulatedNano());
 
 		System.out.println("Request done");
 		return retBuilder;

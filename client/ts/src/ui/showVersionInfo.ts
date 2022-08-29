@@ -24,7 +24,7 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
     }
 
     const a = document.createElement('a');
-    a.href = `${repositoryUrl}/-/blob/master/pasta-server.jar`;
+    a.href = `${repositoryUrl}/-/blob/master/code-prober.jar`;
     a.target = '_blank';
     a.text = 'New version available';
     elem.appendChild(document.createElement('br'));
