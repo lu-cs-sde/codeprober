@@ -111,13 +111,13 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		final String queryAttrName = queryAttr.getString("name");
 		// First check for 'magic' methods
 		switch (queryAttrName) {
-		case "pasta_spansAndNodeTypes": {
+		case "meta:listNodes": {
 			final int rootStart = locator.getJSONObject("result").getInt("start");
 			final int rootEnd = locator.getJSONObject("result").getInt("end");
 			BenchmarkTimer.NODES_AT_POSITION.enter();
 			CreateLocator.setBuildFastButFragileLocator(true);
 			try {
-				retBuilder.put("spansAndNodeTypes", new JSONArray(NodesAtPosition.get( //
+				retBuilder.put("nodes", new JSONArray(NodesAtPosition.get( //
 						info, match.node, rootStart + (rootEnd - rootStart) / 2 //
 				)));
 			} finally {
@@ -126,10 +126,10 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			}
 			return;
 		}
-		case "pasta_pastaAttrs": {
+		case "meta:listProperties": {
 			BenchmarkTimer.PASTA_ATTRS.enter();
 			try {
-				retBuilder.put("pastaAttrs",
+				retBuilder.put("properties",
 						AttrsInNode.get(info, match.node, AttrsInNode.extractFilter(info, match.node)));
 			} finally {
 				BenchmarkTimer.PASTA_ATTRS.exit();
@@ -264,7 +264,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		try {
 			errors = StdIoInterceptor.performCaptured(MagicStdoutMessageParser::parse, () -> {
 				final String inputText = queryObj.getString("text");
-				
+
 				final String[] fwdArgs;
 				final JSONArray argsOverride = queryObj.optJSONArray("mainArgs");
 				if (argsOverride != null) {
@@ -276,12 +276,11 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					fwdArgs = defaultForwardArgs;
 				}
 
-				final boolean newFwdArgs = !Arrays.equals(lastForwardArgs, fwdArgs); 
+				final boolean newFwdArgs = !Arrays.equals(lastForwardArgs, fwdArgs);
 				boolean maybeCacheAST = cacheStrategy.canCacheAST() //
 						&& lastParsedInput != null //
 						&& lastInfo != null //
-						&& !newFwdArgs
-						&& ASTProvider.hasUnchangedJar(underlyingCompilerJar);
+						&& !newFwdArgs && ASTProvider.hasUnchangedJar(underlyingCompilerJar);
 
 				if (maybeCacheAST && !lastParsedInput.equals(inputText)) {
 					System.out.println("Can cache AST, but input is different..");
@@ -300,12 +299,13 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 						try {
 							final File tmpFile = createTmpFile.apply(inputText);
 							final long flushStart = System.nanoTime();
-							final Boolean replacedOk = (Boolean)optimizedFlusher.invoke(lastInfo.ast.underlyingAstNode, tmpFile.getAbsolutePath());
+							final Boolean replacedOk = (Boolean) optimizedFlusher.invoke(lastInfo.ast.underlyingAstNode,
+									tmpFile.getAbsolutePath());
 							System.out.println("Tried optimized flush, result: " + replacedOk);
 							if (replacedOk) {
 								retBuilder.put("parseTime", (System.nanoTime() - flushStart));
-								handleParsedAst(lastInfo.ast.underlyingAstNode, lastInfo.loadAstClass, queryObj, retBuilder,
-										bodyBuilder);
+								handleParsedAst(lastInfo.ast.underlyingAstNode, lastInfo.loadAstClass, queryObj,
+										retBuilder, bodyBuilder);
 								lastParsedInput = inputText;
 								return;
 							}

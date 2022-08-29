@@ -1,8 +1,6 @@
 import createModalTitle from "../create/createModalTitle";
 import showWindow from "../create/showWindow";
 
-type HelpType = 'general' | 'recovery-strategy' | 'probe-window' | 'magic-stdout-messages' | 'ast-cache-strategy' | 'syntax-highlighting' | 'main-args-override' | 'customize-file-suffix';
-
 const createSyntaxNode = (type: string, text: string, margins?: string) => {
   const retNode = document.createElement('span');
   if (type) {
@@ -15,7 +13,7 @@ const createSyntaxNode = (type: string, text: string, margins?: string) => {
 }
 
 const getHelpTitle = (type: HelpType) => ({
-  'general': 'How to use',
+  'general': 'How to use CodeProber 🔎',
   'recovery-strategy': 'Position recovery',
   'probe-window': 'Probe help',
   'magic-stdout-messages': 'Magic stdout messages',
@@ -102,7 +100,6 @@ encode(value):
 `.trim();
 
       return [
-        `PASTA : Probe-AST-Attributes 🍝 🤌`,
         `Right click on some text in the editor and click 'Create Probe' to get started`,
         `There are three magic attributes you may want to add:`,
         ``,
@@ -435,5 +432,4 @@ const displayHelp = (type: HelpType, setHelpButtonDisabled: (disabled: boolean) 
   });
 }
 
-export { HelpType };
 export default displayHelp;

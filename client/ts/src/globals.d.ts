@@ -138,11 +138,11 @@ interface RpcResponse {
   locator: NodeLocator;
   errors: { start: number; end: number; msg: string; }[];
 
-  // Expected for request pasta_spansAndNodeTypes
-  spansAndNodeTypes?: NodeLocator[];
+  // Expected for request meta:listNodes
+  nodes?: NodeLocator[];
 
-  // Expected for request pasta_pastaAttrs
-  pastaAttrs?: AstAttr[];
+  // Expected for request meta:listProperties
+  properties?: AstAttr[];
 
   totalTime?: number;
   parseTime?: number;

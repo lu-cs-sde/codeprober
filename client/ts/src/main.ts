@@ -1,7 +1,7 @@
 import addConnectionCloseNotice from "./ui/addConnectionCloseNotice";
 import displayProbeModal from "./ui/popup/displayProbeModal";
 import displayRagModal from "./ui/popup/displayRagModal";
-import displayHelp, { HelpType } from "./ui/popup/displayHelp";
+import displayHelp from "./ui/popup/displayHelp";
 import displayAttributeModal from "./ui/popup/displayAttributeModal";
 import settings from './settings';
 import StatisticsCollectorImpl from "./model/StatisticsCollectorImpl";
@@ -10,38 +10,14 @@ import displayMainArgsOverrideModal from "./ui/popup/displayMainArgsOverrideModa
 import { getAvailableLanguages } from "./model/syntaxHighlighting";
 import createWebsocketHandler, { WebsocketHandler } from "./createWebsocketHandler";
 import configureCheckboxWithHiddenButton from "./ui/configureCheckboxWithHiddenButton";
+import UIElements from "./ui/UIElements";
 
 window.clearUserSettings = () => {
   settings.set({});
   location.reload();
 }
 
-const uiElements = new (class UIElements {
-  // Use lazy getters since the dom elements haven't been loaded
-  // by the time this script initially runs.
-  get positionRecoverySelector() { return document.getElementById('control-position-recovery-strategy') as HTMLSelectElement; }
-  get positionRecoveryHelpButton() { return document.getElementById('control-position-recovery-strategy-help') as HTMLButtonElement; }
-
-  get astCacheStrategySelector() { return document.getElementById('ast-cache-strategy') as HTMLSelectElement; }
-  get astCacheStrategyHelpButton() { return document.getElementById('control-ast-cache-strategy-help') as HTMLButtonElement; }
-
-  get syntaxHighlightingSelector() { return document.getElementById('syntax-highlighting') as HTMLSelectElement; }
-  get syntaxHighlightingHelpButton() { return document.getElementById('control-syntax-highlighting-help') as HTMLButtonElement; }
-
-  get shouldOverrideMainArgsCheckbox() { return document.getElementById('control-should-override-main-args') as HTMLInputElement; }
-  get configureMainArgsOverrideButton() { return document.getElementById('configure-main-args') as HTMLButtonElement; }
-  get mainArgsOverrideHelpButton() { return document.getElementById('main-args-override-help') as HTMLButtonElement; }
-
-  get shouldCustomizeFileSuffixCheckbox() { return document.getElementById('control-customize-file-suffix') as HTMLInputElement; }
-  get configureCustomFileSuffixButton() { return document.getElementById('customize-file-suffix') as HTMLButtonElement; }
-  get customFileSuffixHelpButton() { return document.getElementById('customize-file-suffix-help') as HTMLButtonElement; }
-
-  get generalHelpButton() { return document.getElementById('display-help') as HTMLButtonElement; }
-  get captureStdoutCheckbox() { return document.getElementById('control-capture-stdout') as HTMLInputElement; }
-  get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr') as HTMLInputElement; }
-  get darkModeCheckbox() { return document.getElementById('control-dark-mode') as HTMLInputElement; }
-  get displayStatisticsButton() { return document.getElementById('display-statistics') as HTMLButtonElement; }
-})();
+const uiElements = new UIElements();
 
 const main = () => {
   let getLocalState = () => '';

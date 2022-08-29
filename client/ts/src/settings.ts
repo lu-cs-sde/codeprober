@@ -20,7 +20,8 @@ const settings = {
   get: (): Settings => {
     if (!settingsObj) {
       try {
-        settingsObj = JSON.parse(localStorage.getItem('pasta-settings') || '{}');
+        // TODO remove 'pasta-settings' fallback after an appropriate amount of time
+        settingsObj = JSON.parse(localStorage.getItem('codeprober-settings') || localStorage.getItem('pasta-settings') || '{}');
       } catch (e) {
         console.warn('Bad data in localStorage, resetting settings', e);
         settingsObj = {};
@@ -30,7 +31,7 @@ const settings = {
   },
   set: (newSettings: Settings) => {
     settingsObj = newSettings;
-    localStorage.setItem('pasta-settings', JSON.stringify(settingsObj));
+    localStorage.setItem('codeprober-settings', JSON.stringify(settingsObj));
   },
 
   getEditorContents: () => settings.get().editorContents,

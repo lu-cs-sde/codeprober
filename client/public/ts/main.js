@@ -985,15 +985,23 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                 }
             },
         });
+        /*
+        const foo = 'bar';
+      
+        const obj = { foo }
+        const obj = { foo: foo }
+        const obj = { "foo": foo }
+        const obj = { 'foo': foo }
+        const obj = { ['foo']: foo }
+        */
         env.performRpcQuery({
             attr: {
-                name: 'pasta_pastaAttrs'
+                name: 'meta:listProperties'
             },
-            locator: locator,
+            locator,
         })
             .then((result) => {
-            // if (cancelToken.cancelled) { return; }
-            const parsed = result.pastaAttrs;
+            const parsed = result.properties;
             if (!parsed) {
                 throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
             }
@@ -1091,7 +1099,7 @@ define("ui/popup/displayHelp", ["require", "exports", "ui/create/createModalTitl
         return retNode;
     };
     const getHelpTitle = (type) => ({
-        'general': 'How to use',
+        'general': 'How to use CodeProber 🔎',
         'recovery-strategy': 'Position recovery',
         'probe-window': 'Probe help',
         'magic-stdout-messages': 'Magic stdout messages',
@@ -1174,7 +1182,6 @@ encode(value):
   if no case above matched: output(value.toString())
 `.trim();
                 return [
-                    `PASTA : Probe-AST-Attributes 🍝 🤌`,
                     `Right click on some text in the editor and click 'Create Probe' to get started`,
                     `There are three magic attributes you may want to add:`,
                     ``,
@@ -1952,7 +1959,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                 };
                 env.performRpcQuery({
                     attr: {
-                        name: 'pasta_spansAndNodeTypes',
+                        name: 'meta:listNodes',
                     },
                     locator: {
                         // root: rootProgramLocator,
@@ -1979,13 +1986,13 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         },
                     }).element);
                     // const needle = 'SpansAndNodeTypes :: ';
-                    if (!parsed.spansAndNodeTypes) {
+                    if (!parsed.nodes) {
                         throw new Error(`Couldn't find expected line in output '${JSON.stringify(parsed)}'`);
                     }
                     const rowsContainer = document.createElement('div');
                     rowsContainer.style.padding = '2px';
                     root.appendChild(rowsContainer);
-                    parsed.spansAndNodeTypes.forEach((locator, entIdx) => {
+                    parsed.nodes.forEach((locator, entIdx) => {
                         const { start, end, type } = locator.result;
                         const span = { lineStart: (start >>> 12), colStart: (start & 0xFFF), lineEnd: (end >>> 12), colEnd: (end & 0xFFF) };
                         const node = document.createElement('div');
@@ -2137,7 +2144,8 @@ define("settings", ["require", "exports", "model/syntaxHighlighting"], function 
         get: () => {
             if (!settingsObj) {
                 try {
-                    settingsObj = JSON.parse(localStorage.getItem('pasta-settings') || '{}');
+                    // TODO remove 'pasta-settings' fallback after an appropriate amount of time
+                    settingsObj = JSON.parse(localStorage.getItem('codeprober-settings') || localStorage.getItem('pasta-settings') || '{}');
                 }
                 catch (e) {
                     console.warn('Bad data in localStorage, resetting settings', e);
@@ -2148,7 +2156,7 @@ define("settings", ["require", "exports", "model/syntaxHighlighting"], function 
         },
         set: (newSettings) => {
             settingsObj = newSettings;
-            localStorage.setItem('pasta-settings', JSON.stringify(settingsObj));
+            localStorage.setItem('codeprober-settings', JSON.stringify(settingsObj));
         },
         getEditorContents: () => settings.get().editorContents,
         setEditorContents: (editorContents) => settings.set({ ...settings.get(), editorContents }),
@@ -2809,25 +2817,10 @@ define("ui/configureCheckboxWithHiddenButton", ["require", "exports"], function 
     };
     exports.default = configureCheckboxWithHiddenButton;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_4, settings_2, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1) {
+define("ui/UIElements", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
-    displayProbeModal_3 = __importDefault(displayProbeModal_3);
-    displayRagModal_1 = __importDefault(displayRagModal_1);
-    displayHelp_2 = __importDefault(displayHelp_2);
-    displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
-    settings_2 = __importDefault(settings_2);
-    StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
-    displayStatistics_1 = __importDefault(displayStatistics_1);
-    displayMainArgsOverrideModal_1 = __importDefault(displayMainArgsOverrideModal_1);
-    createWebsocketHandler_1 = __importDefault(createWebsocketHandler_1);
-    configureCheckboxWithHiddenButton_1 = __importDefault(configureCheckboxWithHiddenButton_1);
-    window.clearUserSettings = () => {
-        settings_2.default.set({});
-        location.reload();
-    };
-    const uiElements = new (class UIElements {
+    class UIElements {
         // Use lazy getters since the dom elements haven't been loaded
         // by the time this script initially runs.
         get positionRecoverySelector() { return document.getElementById('control-position-recovery-strategy'); }
@@ -2847,7 +2840,29 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr'); }
         get darkModeCheckbox() { return document.getElementById('control-dark-mode'); }
         get displayStatisticsButton() { return document.getElementById('display-statistics'); }
-    })();
+    }
+    exports.default = UIElements;
+});
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_2, displayAttributeModal_4, settings_2, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
+    displayProbeModal_3 = __importDefault(displayProbeModal_3);
+    displayRagModal_1 = __importDefault(displayRagModal_1);
+    displayHelp_2 = __importDefault(displayHelp_2);
+    displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
+    settings_2 = __importDefault(settings_2);
+    StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
+    displayStatistics_1 = __importDefault(displayStatistics_1);
+    displayMainArgsOverrideModal_1 = __importDefault(displayMainArgsOverrideModal_1);
+    createWebsocketHandler_1 = __importDefault(createWebsocketHandler_1);
+    configureCheckboxWithHiddenButton_1 = __importDefault(configureCheckboxWithHiddenButton_1);
+    UIElements_1 = __importDefault(UIElements_1);
+    window.clearUserSettings = () => {
+        settings_2.default.set({});
+        location.reload();
+    };
+    const uiElements = new UIElements_1.default();
     const main = () => {
         let getLocalState = () => '';
         let updateSpanHighlight = (span) => { };

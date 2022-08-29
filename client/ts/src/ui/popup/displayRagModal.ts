@@ -38,7 +38,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
       };
       env.performRpcQuery({
         attr: {
-          name: 'pasta_spansAndNodeTypes',
+          name: 'meta:listNodes',
         },
         locator: {
           // root: rootProgramLocator,
@@ -65,13 +65,13 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
 
           // const needle = 'SpansAndNodeTypes :: ';
 
-          if (!parsed.spansAndNodeTypes) {
+          if (!parsed.nodes) {
             throw new Error(`Couldn't find expected line in output '${JSON.stringify(parsed)}'`);
           }
           const rowsContainer = document.createElement('div');
           rowsContainer.style.padding = '2px';
           root.appendChild(rowsContainer);
-          parsed.spansAndNodeTypes.forEach((locator, entIdx) => {
+          parsed.nodes.forEach((locator, entIdx) => {
             const { start, end, type } = locator.result;
             const span = { lineStart: (start >>> 12), colStart: (start & 0xFFF), lineEnd: (end >>> 12), colEnd: (end & 0xFFF) };
             const node = document.createElement('div');

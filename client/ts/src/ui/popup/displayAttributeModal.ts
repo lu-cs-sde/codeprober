@@ -202,15 +202,23 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
     },
   });
 
+  /*
+  const foo = 'bar';
+
+  const obj = { foo }
+  const obj = { foo: foo }
+  const obj = { "foo": foo }
+  const obj = { 'foo': foo }
+  const obj = { ['foo']: foo }
+  */
   env.performRpcQuery({
     attr: {
-      name: 'pasta_pastaAttrs'
+      name: 'meta:listProperties'
     },
-    locator: locator,
+    locator,
   })
     .then((result: RpcResponse) => {
-      // if (cancelToken.cancelled) { return; }
-      const parsed = result.pastaAttrs;
+      const parsed = result.properties;
       if (!parsed) {
         throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
       }

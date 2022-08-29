@@ -5,26 +5,6 @@ import org.json.JSONObject;
 
 public class ExtendJQueries {
 
-	private static void generateBusyLocatorStep(JSONArray out) {
-		out.put(new JSONObject() //
-				.put("type", "nta") //
-				.put("value", new JSONObject() //
-						.put("name", "getChild") //
-						.put("args", new JSONArray() //
-								.put(new JSONObject() //
-										.put("type", "int") //
-										.put("isNodeType", false) //
-										.put("value", 0) //
-								))));
-		out.put(new JSONObject() //
-				.put("type", "nta") //
-				.put("value", new JSONObject() //
-						.put("name", "getParent") //
-						.put("args", new JSONArray())));
-	}
-
-	// + Prob för Program.errors() (eller CompilationUnit.errors())
-
 	private static JSONObject createLookupTypeStep(String pkg, String name) {
 		return new JSONObject() //
 				.put("type", "nta") //
@@ -128,7 +108,7 @@ public class ExtendJQueries {
 		return createBaseMessageObject(rpcId, sourceFile) //
 				.put("query", new JSONObject() //
 						.put("attr", new JSONObject() //
-								.put("name", "pasta_spansAndNodeTypes") //
+								.put("name", "meta:listNodes") //
 						) //
 						.put("locator", new JSONObject() //
 								.put("steps", new JSONArray()) //
@@ -144,7 +124,7 @@ public class ExtendJQueries {
 		return createBaseMessageObject(rpcId, sourceFile) //
 				.put("query", new JSONObject() //
 						.put("attr", new JSONObject() //
-								.put("name", "pasta_pastaAttrs") //
+								.put("name", "meta:listProperties") //
 						) //
 						.put("locator", locator) //
 						);
