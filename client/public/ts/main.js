@@ -2921,7 +2921,7 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
                 // In the unlikely (but flattering!) scenario that somebody keeps the tool
                 // active on their computer for several days in a row, we will re-check version
                 // info periodically so they don't miss new releases.
-                await (new Promise((res) => setTimeout(res, 30 * 1000)));
+                await (new Promise((res) => setTimeout(res, 12 * 60 * 60 * 1000)));
             }
         })()
             .catch(err => console.warn('Error when polling for new versions', err));
