@@ -7,6 +7,7 @@ import formatAttr from "./formatAttr";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import displayHelp from "./displayHelp";
 import adjustLocator from "../../model/adjustLocator";
+import settings from "../../settings";
 
 const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -241,7 +242,6 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
   */
  let fetchState: 'idle' | 'fetching' | 'queued' = 'idle';
  const fetchAttrs = () => {
-   console.log('fetchAttrs from state', fetchState);
   switch (fetchState) {
     case 'idle': {
       fetchState = 'fetching'
@@ -256,7 +256,7 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
 
   env.performRpcQuery({
     attr: {
-      name: 'meta:listProperties'
+      name: settings.shouldShowAllProperties() ? 'meta:listAllProperties' : 'meta:listProperties'
     },
     locator,
   })
@@ -270,7 +270,6 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
         throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
       }
 
-      filter = '';
 
       attrs = [];
       const deudplicator = new Set();

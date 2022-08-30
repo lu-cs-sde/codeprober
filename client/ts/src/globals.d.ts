@@ -142,7 +142,7 @@ interface RpcResponse {
   // Expected for request meta:listNodes
   nodes?: NodeLocator[];
 
-  // Expected for request meta:listProperties
+  // Expected for requests meta:listAllProperties and meta:listProperties
   properties?: AstAttr[];
 
   totalTime?: number;

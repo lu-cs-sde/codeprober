@@ -1,5 +1,6 @@
 package codeprober.locator;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
@@ -19,7 +20,7 @@ import codeprober.protocol.create.CreateType;
 
 public class AttrsInNode {
 
-	public static JSONArray get(AstInfo info, AstNode node, List<String> whitelistFilter) {
+	public static JSONArray get(AstInfo info, AstNode node, List<String> whitelistFilter, boolean includeAll) {
 		if (whitelistFilter == null) {
 			whitelistFilter = new ArrayList<>();
 		} else {
@@ -30,13 +31,25 @@ public class AttrsInNode {
 
 		List<JSONObject> attrs = new ArrayList<>();
 		for (Method m : node.underlyingAstNode.getClass().getMethods()) { // getMethods() rather than getDeclaredMethods() to only get public methods
-			if (!MethodKindDetector.looksLikeAUserAccessibleJastaddRelatedMethod(m)
+			if (!includeAll && !MethodKindDetector.looksLikeAUserAccessibleJastaddRelatedMethod(m)
 					&& !whitelistFilter.contains(m.getName())) {
+
+				if (m.getName().equals("debugMePls")) {
+					System.out.println("skip due to everything " + m.getName());
+					for (Annotation a : m.getAnnotations()) {
+						System.out.println(a.annotationType().getName());
+					}
+					System.out.println("^---- dumped annotations.... wtf");
+					System.out.println(m.getAnnotations().length);
+					System.out.println(m.getDeclaredAnnotations().length);
+				}
 				continue;
 			}
+			System.out.println("include " + m.getName() +"; annotation len: " + m.getAnnotations().length);
 			final Parameter[] parameters = m.getParameters();
 			final ParameterType[] types = CreateType.fromParameters(info, parameters);
 			if (types == null) {
+				System.out.println("skip due to bad param types " + m.getName());
 				continue;
 			}
 			JSONObject attr = new JSONObject();

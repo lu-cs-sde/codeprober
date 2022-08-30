@@ -25,6 +25,10 @@ public class WebServer {
 			return "text/css";
 		case "svg":
 			return "image/svg+xml";
+		case "png":
+			return "image/png";
+		case "ico":
+			return "image/x-icon";
 
 		default:
 			System.out.println("Don't know mime type of path " + path);
@@ -59,11 +63,13 @@ public class WebServer {
 					path += "index.html";
 				}
 
+//				Integer sizeHint = null;
 				final InputStream stream;
 				if (srcDirectoryOverride != null) {
 					final File f = new File(srcDirectoryOverride, path);
 					if (f.exists()) {
 						stream = new FileInputStream(f);
+//						sizeHint = (int)f.length();
 					} else {
 						stream = null;
 					}
@@ -84,8 +90,11 @@ public class WebServer {
 				if (mimeType != null) {
 					out.write(("Content-Type: " + mimeType + "\r\n").getBytes("UTF-8"));
 				}
-
-				out.write("\r\n\r\n".getBytes("UTF-8"));
+//				if (sizeHint != null) {
+//					out.write(("Content-Length: " + sizeHint + "\r\n").getBytes("UTF-8"));
+//				}
+				
+				out.write("\r\n".getBytes("UTF-8"));
 
 				final byte[] buf = new byte[512];
 				int read;

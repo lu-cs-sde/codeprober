@@ -909,7 +909,7 @@ encode(value):
                     joinElements(`2) '`, createHeader('cpr_propertyListShow'), `'. A collection (List<String> or String[]) that is used to include extra properties in the property list seen when creating probes.`),
                     `Functions are shown in the property list if all of the following is true:`,
                     `- The function is public.`,
-                    `- The return type and argument types are 'String', 'int', 'boolean', or a subtype of the top AST Node type.`,
+                    `- The argument types are 'String', 'int', 'boolean', or a subtype of the top AST Node type.`,
                     `- One of the following is true:`,
                     `-- The function is an attribute (originates from a jrag file, e.g 'z' in 'syn X Y.z() = ...)`,
                     `-- The function is an AST child accessor (used to get members declared in an .ast file).`,
@@ -1169,7 +1169,7 @@ aspect MagicOutputDemo {
             case 'show-all-properties': return [
                 `By default, the property list shown while creating a probe is filtered according to the 'cpr_propertyListShow' logic (see general help window for more on this).`,
                 `The last criteria of that filter is that the function must follow one of a few predicates to be shown.`,
-                `This checkbox basically adds a '|| true' to the end of that predicate list. I.e any function that is public and has serializable return/argument types will be shown.`,
+                `This checkbox basically adds a '|| true' to the end of that predicate list. I.e any function that is public and has serializable argument types will be shown.`,
                 `There can potentially be a very large amount of functions shown is you check this box, which can be annoying.`,
                 `In addition, some of the non-standard functions might cause mutations (like 'setChild(int, ..)'), which can cause undefined behavior when used in this tool.`,
                 `In general, we recommend you keep this box unchecked, and only occasionally re-check it.`,
@@ -1289,7 +1289,148 @@ define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], f
     };
     exports.default = adjustLocator;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "model/adjustLocator"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayProbeModal_2, showWindow_4, displayArgModal_1, formatAttr_2, createTextSpanIndicator_2, displayHelp_1, adjustLocator_1) {
+define("model/syntaxHighlighting", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getAvailableLanguages = exports.getAppropriateFileSuffix = void 0;
+    const langstoSuffixes = {
+        plaintext: ['txt', 'Plain Text'],
+        abap: ['abap', 'abap'],
+        apex: ['cls', 'Apex'],
+        azcli: ['azcli', 'Azure CLI'],
+        bat: ['bat', 'Batch'],
+        bicep: ['bicep', 'Bicep'],
+        cameligo: ['mligo', 'Cameligo'],
+        clojure: ['clj', 'clojure'],
+        coffeescript: ['coffee', 'CoffeeScript'],
+        c: ['c', 'C'],
+        cpp: ['cpp', 'C++'],
+        csharp: ['cs', 'C#'],
+        csp: ['csp', 'CSP'],
+        css: ['css', 'CSS'],
+        dart: ['dart', 'Dart'],
+        dockerfile: ['dockerfile', 'Dockerfile'],
+        ecl: ['ecl', 'ECL'],
+        elixir: ['ex', 'Elixir'],
+        flow9: ['flow', 'Flow9'],
+        fsharp: ['fs', 'F#'],
+        go: ['go', 'Go'],
+        graphql: ['graphql', 'GraphQL'],
+        handlebars: ['handlebars', 'Handlebars'],
+        hcl: ['tf', 'Terraform'],
+        html: ['html', 'HTML'],
+        ini: ['ini', 'Ini'],
+        java: ['java', 'Java'],
+        javascript: ['js', 'JavaScript'],
+        julia: ['jl', 'Julia'],
+        kotlin: ['kt', 'Kotlin'],
+        less: ['less', 'Less'],
+        lexon: ['lex', 'Lexon'],
+        lua: ['lua', 'Lua'],
+        liquid: ['liquid', 'Liquid'],
+        m3: ['m3', 'Modula-3'],
+        markdown: ['md', 'Markdown'],
+        mips: ['s', 'MIPS'],
+        msdax: ['dax', 'DAX'],
+        mysql: ['mysql', 'MySQL'],
+        'objective-c': ['m', 'Objective-C'],
+        pascal: ['pas', 'Pascal'],
+        pascaligo: ['ligo', 'Pascaligo'],
+        perl: ['pl', 'Perl'],
+        pgsql: ['pgsql', 'PostgreSQL'],
+        php: ['php', 'PHP'],
+        postiats: ['dats', 'ATS'],
+        powerquery: ['pq', 'PQ'],
+        powershell: ['ps1', 'PowerShell'],
+        proto: ['proto', 'protobuf'],
+        pug: ['jade', 'Pug'],
+        python: ['py', 'Python'],
+        qsharp: ['qs', 'Q#'],
+        r: ['r', 'R'],
+        razor: ['cshtml', 'Razor'],
+        redis: ['redis', 'redis'],
+        redshift: ['redshift', 'Redshift'],
+        restructuredtext: ['rst', 'reStructuredText'],
+        ruby: ['rb', 'Ruby'],
+        rust: ['rs', 'Rust'],
+        sb: ['sb', 'Small Basic'],
+        scala: ['scala', 'Scala'],
+        scheme: ['scm', 'scheme'],
+        scss: ['scss', 'Sass'],
+        shell: ['sh', 'Shell'],
+        sol: ['sol', 'sol'],
+        aes: ['aes', 'aes'],
+        sparql: ['rq', 'sparql'],
+        sql: ['sql', 'SQL'],
+        st: ['st', 'StructuredText'],
+        swift: ['swift', 'Swift'],
+        systemverilog: ['sv', 'SV'],
+        verilog: ['v', 'V'],
+        tcl: ['tcl', 'tcl'],
+        twig: ['twig', 'Twig'],
+        typescript: ['ts', 'TypeScript'],
+        vb: ['vb', 'Visual Basic'],
+        xml: ['xml', 'XML'],
+        yaml: ['yaml', 'YAML'],
+        json: ['json', 'JSON']
+    };
+    const getAppropriateFileSuffix = (lang) => {
+        var _a, _b;
+        return (_b = (_a = langstoSuffixes[lang]) === null || _a === void 0 ? void 0 : _a[0]) !== null && _b !== void 0 ? _b : `.${lang.toLowerCase()}`;
+    };
+    exports.getAppropriateFileSuffix = getAppropriateFileSuffix;
+    const getAvailableLanguages = () => Object.assign(Object.entries(langstoSuffixes).map(([k, v]) => ({ id: k, alias: v[1] })));
+    exports.getAvailableLanguages = getAvailableLanguages;
+});
+define("settings", ["require", "exports", "model/syntaxHighlighting"], function (require, exports, syntaxHighlighting_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    let settingsObj = null;
+    const settings = {
+        get: () => {
+            if (!settingsObj) {
+                try {
+                    // TODO remove 'pasta-settings' fallback after an appropriate amount of time
+                    settingsObj = JSON.parse(localStorage.getItem('codeprober-settings') || localStorage.getItem('pasta-settings') || '{}');
+                }
+                catch (e) {
+                    console.warn('Bad data in localStorage, resetting settings', e);
+                    settingsObj = {};
+                }
+            }
+            return settingsObj || {};
+        },
+        set: (newSettings) => {
+            settingsObj = newSettings;
+            localStorage.setItem('codeprober-settings', JSON.stringify(settingsObj));
+        },
+        getEditorContents: () => settings.get().editorContents,
+        setEditorContents: (editorContents) => settings.set({ ...settings.get(), editorContents }),
+        isLightTheme: () => { var _a; return (_a = settings.get().lightTheme) !== null && _a !== void 0 ? _a : false; },
+        setLightTheme: (lightTheme) => settings.set({ ...settings.get(), lightTheme }),
+        shouldDuplicateProbeOnAttrClick: () => { var _a; return (_a = settings.get().duplicateProbeOnAttrClick) !== null && _a !== void 0 ? _a : true; },
+        setShouldDuplicateProbeOnAttrClick: (duplicateProbeOnAttrClick) => settings.set({ ...settings.get(), duplicateProbeOnAttrClick }),
+        shouldCaptureStdio: () => { var _a; return (_a = settings.get().captureStdio) !== null && _a !== void 0 ? _a : true; },
+        setShouldCaptureStdio: (captureStdio) => settings.set({ ...settings.get(), captureStdio }),
+        getPositionRecoveryStrategy: () => { var _a; return (_a = settings.get().positionRecoveryStrategy) !== null && _a !== void 0 ? _a : 'ALTERNATE_PARENT_CHILD'; },
+        setPositionRecoveryStrategy: (positionRecoveryStrategy) => settings.set({ ...settings.get(), positionRecoveryStrategy }),
+        getAstCacheStrategy: () => { var _a; return (_a = settings.get().astCacheStrategy) !== null && _a !== void 0 ? _a : 'PARTIAL'; },
+        setAstCacheStrategy: (astCacheStrategy) => settings.set({ ...settings.get(), astCacheStrategy }),
+        getProbeWindowStates: () => { var _a; return (_a = settings.get().probeWindowStates) !== null && _a !== void 0 ? _a : []; },
+        setProbeWindowStates: (probeWindowStates) => settings.set({ ...settings.get(), probeWindowStates }),
+        getSyntaxHighlighting: () => { var _a; return (_a = settings.get().syntaxHighlighting) !== null && _a !== void 0 ? _a : 'java'; },
+        setSyntaxHighlighting: (syntaxHighlighting) => settings.set({ ...settings.get(), syntaxHighlighting }),
+        getMainArgsOverride: () => { var _a; return (_a = settings.get().mainArgsOverride) !== null && _a !== void 0 ? _a : null; },
+        setMainArgsOverride: (mainArgsOverride) => settings.set({ ...settings.get(), mainArgsOverride }),
+        getCustomFileSuffix: () => { var _a; return (_a = settings.get().customFileSuffix) !== null && _a !== void 0 ? _a : null; },
+        setCustomFileSuffix: (customFileSuffix) => settings.set({ ...settings.get(), customFileSuffix }),
+        getCurrentFileSuffix: () => { var _a; return (_a = settings.getCustomFileSuffix()) !== null && _a !== void 0 ? _a : `.${(0, syntaxHighlighting_1.getAppropriateFileSuffix)(settings.getSyntaxHighlighting())}`; },
+        shouldShowAllProperties: () => { var _a; return (_a = settings.get().showAllProperties) !== null && _a !== void 0 ? _a : false; },
+        setShouldShowAllProperties: (showAllProperties) => settings.set({ ...settings.get(), showAllProperties }),
+    };
+    exports.default = settings;
+});
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "model/adjustLocator", "settings"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayProbeModal_2, showWindow_4, displayArgModal_1, formatAttr_2, createTextSpanIndicator_2, displayHelp_1, adjustLocator_1, settings_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
@@ -1301,6 +1442,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
     displayHelp_1 = __importDefault(displayHelp_1);
     adjustLocator_1 = __importDefault(adjustLocator_1);
+    settings_1 = __importDefault(settings_1);
     const displayAttributeModal = (env, modalPos, locator) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let filter = '';
@@ -1529,7 +1671,6 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
         */
         let fetchState = 'idle';
         const fetchAttrs = () => {
-            console.log('fetchAttrs from state', fetchState);
             switch (fetchState) {
                 case 'idle': {
                     fetchState = 'fetching';
@@ -1543,7 +1684,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
             }
             env.performRpcQuery({
                 attr: {
-                    name: 'meta:listProperties'
+                    name: settings_1.default.shouldShowAllProperties() ? 'meta:listAllProperties' : 'meta:listProperties'
                 },
                 locator,
             })
@@ -1556,7 +1697,6 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                 if (!parsed) {
                     throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
                 }
-                filter = '';
                 attrs = [];
                 const deudplicator = new Set();
                 parsed.forEach(attr => {
@@ -2129,147 +2269,6 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
     };
     exports.default = displayRagModal;
 });
-define("model/syntaxHighlighting", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.getAvailableLanguages = exports.getAppropriateFileSuffix = void 0;
-    const langstoSuffixes = {
-        plaintext: ['txt', 'Plain Text'],
-        abap: ['abap', 'abap'],
-        apex: ['cls', 'Apex'],
-        azcli: ['azcli', 'Azure CLI'],
-        bat: ['bat', 'Batch'],
-        bicep: ['bicep', 'Bicep'],
-        cameligo: ['mligo', 'Cameligo'],
-        clojure: ['clj', 'clojure'],
-        coffeescript: ['coffee', 'CoffeeScript'],
-        c: ['c', 'C'],
-        cpp: ['cpp', 'C++'],
-        csharp: ['cs', 'C#'],
-        csp: ['csp', 'CSP'],
-        css: ['css', 'CSS'],
-        dart: ['dart', 'Dart'],
-        dockerfile: ['dockerfile', 'Dockerfile'],
-        ecl: ['ecl', 'ECL'],
-        elixir: ['ex', 'Elixir'],
-        flow9: ['flow', 'Flow9'],
-        fsharp: ['fs', 'F#'],
-        go: ['go', 'Go'],
-        graphql: ['graphql', 'GraphQL'],
-        handlebars: ['handlebars', 'Handlebars'],
-        hcl: ['tf', 'Terraform'],
-        html: ['html', 'HTML'],
-        ini: ['ini', 'Ini'],
-        java: ['java', 'Java'],
-        javascript: ['js', 'JavaScript'],
-        julia: ['jl', 'Julia'],
-        kotlin: ['kt', 'Kotlin'],
-        less: ['less', 'Less'],
-        lexon: ['lex', 'Lexon'],
-        lua: ['lua', 'Lua'],
-        liquid: ['liquid', 'Liquid'],
-        m3: ['m3', 'Modula-3'],
-        markdown: ['md', 'Markdown'],
-        mips: ['s', 'MIPS'],
-        msdax: ['dax', 'DAX'],
-        mysql: ['mysql', 'MySQL'],
-        'objective-c': ['m', 'Objective-C'],
-        pascal: ['pas', 'Pascal'],
-        pascaligo: ['ligo', 'Pascaligo'],
-        perl: ['pl', 'Perl'],
-        pgsql: ['pgsql', 'PostgreSQL'],
-        php: ['php', 'PHP'],
-        postiats: ['dats', 'ATS'],
-        powerquery: ['pq', 'PQ'],
-        powershell: ['ps1', 'PowerShell'],
-        proto: ['proto', 'protobuf'],
-        pug: ['jade', 'Pug'],
-        python: ['py', 'Python'],
-        qsharp: ['qs', 'Q#'],
-        r: ['r', 'R'],
-        razor: ['cshtml', 'Razor'],
-        redis: ['redis', 'redis'],
-        redshift: ['redshift', 'Redshift'],
-        restructuredtext: ['rst', 'reStructuredText'],
-        ruby: ['rb', 'Ruby'],
-        rust: ['rs', 'Rust'],
-        sb: ['sb', 'Small Basic'],
-        scala: ['scala', 'Scala'],
-        scheme: ['scm', 'scheme'],
-        scss: ['scss', 'Sass'],
-        shell: ['sh', 'Shell'],
-        sol: ['sol', 'sol'],
-        aes: ['aes', 'aes'],
-        sparql: ['rq', 'sparql'],
-        sql: ['sql', 'SQL'],
-        st: ['st', 'StructuredText'],
-        swift: ['swift', 'Swift'],
-        systemverilog: ['sv', 'SV'],
-        verilog: ['v', 'V'],
-        tcl: ['tcl', 'tcl'],
-        twig: ['twig', 'Twig'],
-        typescript: ['ts', 'TypeScript'],
-        vb: ['vb', 'Visual Basic'],
-        xml: ['xml', 'XML'],
-        yaml: ['yaml', 'YAML'],
-        json: ['json', 'JSON']
-    };
-    const getAppropriateFileSuffix = (lang) => {
-        var _a, _b;
-        return (_b = (_a = langstoSuffixes[lang]) === null || _a === void 0 ? void 0 : _a[0]) !== null && _b !== void 0 ? _b : `.${lang.toLowerCase()}`;
-    };
-    exports.getAppropriateFileSuffix = getAppropriateFileSuffix;
-    const getAvailableLanguages = () => Object.assign(Object.entries(langstoSuffixes).map(([k, v]) => ({ id: k, alias: v[1] })));
-    exports.getAvailableLanguages = getAvailableLanguages;
-});
-define("settings", ["require", "exports", "model/syntaxHighlighting"], function (require, exports, syntaxHighlighting_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    let settingsObj = null;
-    const settings = {
-        get: () => {
-            if (!settingsObj) {
-                try {
-                    // TODO remove 'pasta-settings' fallback after an appropriate amount of time
-                    settingsObj = JSON.parse(localStorage.getItem('codeprober-settings') || localStorage.getItem('pasta-settings') || '{}');
-                }
-                catch (e) {
-                    console.warn('Bad data in localStorage, resetting settings', e);
-                    settingsObj = {};
-                }
-            }
-            return settingsObj || {};
-        },
-        set: (newSettings) => {
-            settingsObj = newSettings;
-            localStorage.setItem('codeprober-settings', JSON.stringify(settingsObj));
-        },
-        getEditorContents: () => settings.get().editorContents,
-        setEditorContents: (editorContents) => settings.set({ ...settings.get(), editorContents }),
-        isLightTheme: () => { var _a; return (_a = settings.get().lightTheme) !== null && _a !== void 0 ? _a : false; },
-        setLightTheme: (lightTheme) => settings.set({ ...settings.get(), lightTheme }),
-        shouldDuplicateProbeOnAttrClick: () => { var _a; return (_a = settings.get().duplicateProbeOnAttrClick) !== null && _a !== void 0 ? _a : true; },
-        setShouldDuplicateProbeOnAttrClick: (duplicateProbeOnAttrClick) => settings.set({ ...settings.get(), duplicateProbeOnAttrClick }),
-        shouldCaptureStdio: () => { var _a; return (_a = settings.get().captureStdio) !== null && _a !== void 0 ? _a : true; },
-        setShouldCaptureStdio: (captureStdio) => settings.set({ ...settings.get(), captureStdio }),
-        getPositionRecoveryStrategy: () => { var _a; return (_a = settings.get().positionRecoveryStrategy) !== null && _a !== void 0 ? _a : 'ALTERNATE_PARENT_CHILD'; },
-        setPositionRecoveryStrategy: (positionRecoveryStrategy) => settings.set({ ...settings.get(), positionRecoveryStrategy }),
-        getAstCacheStrategy: () => { var _a; return (_a = settings.get().astCacheStrategy) !== null && _a !== void 0 ? _a : 'PARTIAL'; },
-        setAstCacheStrategy: (astCacheStrategy) => settings.set({ ...settings.get(), astCacheStrategy }),
-        getProbeWindowStates: () => { var _a; return (_a = settings.get().probeWindowStates) !== null && _a !== void 0 ? _a : []; },
-        setProbeWindowStates: (probeWindowStates) => settings.set({ ...settings.get(), probeWindowStates }),
-        getSyntaxHighlighting: () => { var _a; return (_a = settings.get().syntaxHighlighting) !== null && _a !== void 0 ? _a : 'java'; },
-        setSyntaxHighlighting: (syntaxHighlighting) => settings.set({ ...settings.get(), syntaxHighlighting }),
-        getMainArgsOverride: () => { var _a; return (_a = settings.get().mainArgsOverride) !== null && _a !== void 0 ? _a : null; },
-        setMainArgsOverride: (mainArgsOverride) => settings.set({ ...settings.get(), mainArgsOverride }),
-        getCustomFileSuffix: () => { var _a; return (_a = settings.get().customFileSuffix) !== null && _a !== void 0 ? _a : null; },
-        setCustomFileSuffix: (customFileSuffix) => settings.set({ ...settings.get(), customFileSuffix }),
-        getCurrentFileSuffix: () => { var _a; return (_a = settings.getCustomFileSuffix()) !== null && _a !== void 0 ? _a : `.${(0, syntaxHighlighting_1.getAppropriateFileSuffix)(settings.getSyntaxHighlighting())}`; },
-        shouldShowAllProperties: () => { var _a; return (_a = settings.get().showAllProperties) !== null && _a !== void 0 ? _a : false; },
-        setShouldShowAllProperties: (showAllProperties) => settings.set({ ...settings.get(), showAllProperties }),
-    };
-    exports.default = settings;
-});
 define("model/StatisticsCollectorImpl", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -2595,14 +2594,14 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
     };
     exports.default = displayStatistics;
 });
-define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_1, createModalTitle_7, showWindow_8) {
+define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_2, createModalTitle_7, showWindow_8) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    settings_1 = __importDefault(settings_1);
+    settings_2 = __importDefault(settings_2);
     createModalTitle_7 = __importDefault(createModalTitle_7);
     showWindow_8 = __importDefault(showWindow_8);
     const getArgs = () => {
-        const re = settings_1.default.getMainArgsOverride();
+        const re = settings_2.default.getMainArgsOverride();
         if (!re) {
             return re;
         }
@@ -2745,7 +2744,7 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
         parseOuter();
         commit();
         // console.log('done parsing @', parsePos)
-        settings_1.default.setMainArgsOverride(args);
+        settings_2.default.setMainArgsOverride(args);
     };
     const displayMainArgsOverrideModal = (onClose, onChange) => {
         const windowInstance = (0, showWindow_8.default)({
@@ -2788,7 +2787,7 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
                     };
                     // liveView.appendChild(document.createTextNode('tool.main(\n'));
                     addTn('yourtool.main(new String[]{');
-                    [...((_a = settings_1.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : []), '/path/to/file.tmp'].forEach((part, partIdx) => {
+                    [...((_a = settings_2.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : []), '/path/to/file.tmp'].forEach((part, partIdx) => {
                         if (partIdx > 0) {
                             liveView.appendChild(document.createTextNode(', '));
                         }
@@ -2993,7 +2992,7 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
     };
     exports.default = showVersionInfo;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_3, displayAttributeModal_4, settings_2, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_3, displayAttributeModal_4, settings_3, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -3001,7 +3000,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_3 = __importDefault(displayHelp_3);
     displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
-    settings_2 = __importDefault(settings_2);
+    settings_3 = __importDefault(settings_3);
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
     displayStatistics_1 = __importDefault(displayStatistics_1);
     displayMainArgsOverrideModal_1 = __importDefault(displayMainArgsOverrideModal_1);
@@ -3010,7 +3009,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     UIElements_1 = __importDefault(UIElements_1);
     showVersionInfo_1 = __importDefault(showVersionInfo_1);
     window.clearUserSettings = () => {
-        settings_2.default.set({});
+        settings_3.default.set({});
         location.reload();
     };
     const uiElements = new UIElements_1.default();
@@ -3022,17 +3021,17 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             cache: uiElements.astCacheStrategySelector.value,
             type: 'query',
             text: getLocalState(),
-            stdout: settings_2.default.shouldCaptureStdio(),
+            stdout: settings_3.default.shouldCaptureStdio(),
             query: props,
-            mainArgs: settings_2.default.getMainArgsOverride(),
-            tmpSuffix: settings_2.default.getCurrentFileSuffix(),
+            mainArgs: settings_3.default.getMainArgsOverride(),
+            tmpSuffix: settings_3.default.getCurrentFileSuffix(),
         });
         const onChangeListeners = {};
         const probeWindowStateSavers = {};
         const triggerWindowSave = () => {
             const states = [];
             Object.values(probeWindowStateSavers).forEach(v => v(states));
-            settings_2.default.setProbeWindowStates(states);
+            settings_3.default.setProbeWindowStates(states);
         };
         const notifyLocalChangeListeners = (adjusters) => {
             // Short timeout to easier see changes happening. Remove in prod
@@ -3046,7 +3045,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 location.search = "editor=" + editorType;
                 return;
             }
-            document.body.setAttribute('data-theme-light', `${settings_2.default.isLightTheme()}`);
+            document.body.setAttribute('data-theme-light', `${settings_3.default.isLightTheme()}`);
             document.getElementById('connections').style.display = 'none';
             const wsHandler = (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:8080`), addConnectionCloseNotice_1.default);
             const rootElem = document.getElementById('root');
@@ -3054,7 +3053,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 console.log('got version:', clean, hash);
                 rootElem.style.display = "grid";
                 const onChange = (newValue, adjusters) => {
-                    settings_2.default.setEditorContents(newValue);
+                    settings_3.default.setEditorContents(newValue);
                     notifyLocalChangeListeners(adjusters);
                 };
                 let setLocalState = (value) => { };
@@ -3064,22 +3063,22 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     remove: () => { },
                 });
                 const darkModeCheckbox = uiElements.darkModeCheckbox;
-                darkModeCheckbox.checked = !settings_2.default.isLightTheme();
+                darkModeCheckbox.checked = !settings_3.default.isLightTheme();
                 const defineThemeToggler = (cb) => {
                     darkModeCheckbox.oninput = (e) => {
                         let lightTheme = !darkModeCheckbox.checked;
-                        settings_2.default.setLightTheme(lightTheme);
+                        settings_3.default.setLightTheme(lightTheme);
                         document.body.setAttribute('data-theme-light', `${lightTheme}`);
                         cb(lightTheme);
                     };
-                    cb(settings_2.default.isLightTheme());
+                    cb(settings_3.default.isLightTheme());
                 };
                 let syntaxHighlightingToggler;
                 if (window.definedEditors[editorType]) {
                     const { preload, init, } = window.definedEditors[editorType];
                     window.loadPreload(preload, () => {
                         var _a;
-                        const res = init((_a = settings_2.default.getEditorContents()) !== null && _a !== void 0 ? _a : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_2.default.getSyntaxHighlighting());
+                        const res = init((_a = settings_3.default.getEditorContents()) !== null && _a !== void 0 ? _a : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_3.default.getSyntaxHighlighting());
                         setLocalState = res.setLocalState || setLocalState;
                         getLocalState = res.getLocalState || getLocalState;
                         updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
@@ -3120,15 +3119,15 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     input.checked = initial;
                     input.oninput = () => { update(input.checked); notifyLocalChangeListeners(); };
                 };
-                setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_2.default.shouldCaptureStdio(), cb => settings_2.default.setShouldCaptureStdio(cb));
-                setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_2.default.shouldDuplicateProbeOnAttrClick(), cb => settings_2.default.setShouldDuplicateProbeOnAttrClick(cb));
-                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_2.default.shouldShowAllProperties(), cb => settings_2.default.setShouldShowAllProperties(cb));
+                setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_3.default.shouldCaptureStdio(), cb => settings_3.default.setShouldCaptureStdio(cb));
+                setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_3.default.shouldDuplicateProbeOnAttrClick(), cb => settings_3.default.setShouldDuplicateProbeOnAttrClick(cb));
+                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_3.default.shouldShowAllProperties(), cb => settings_3.default.setShouldShowAllProperties(cb));
                 const setupSimpleSelector = (input, initial, update) => {
                     input.value = initial;
                     input.oninput = () => { update(input.value); notifyLocalChangeListeners(); };
                 };
-                setupSimpleSelector(uiElements.astCacheStrategySelector, settings_2.default.getAstCacheStrategy(), cb => settings_2.default.setAstCacheStrategy(cb));
-                setupSimpleSelector(uiElements.positionRecoverySelector, settings_2.default.getPositionRecoveryStrategy(), cb => settings_2.default.setPositionRecoveryStrategy(cb));
+                setupSimpleSelector(uiElements.astCacheStrategySelector, settings_3.default.getAstCacheStrategy(), cb => settings_3.default.setAstCacheStrategy(cb));
+                setupSimpleSelector(uiElements.positionRecoverySelector, settings_3.default.getPositionRecoveryStrategy(), cb => settings_3.default.setPositionRecoveryStrategy(cb));
                 const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
                 syntaxHighlightingSelector.innerHTML = '';
                 (0, syntaxHighlighting_2.getAvailableLanguages)().forEach(({ id, alias }) => {
@@ -3137,37 +3136,37 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     option.innerText = alias;
                     syntaxHighlightingSelector.appendChild(option);
                 });
-                setupSimpleSelector(syntaxHighlightingSelector, settings_2.default.getSyntaxHighlighting(), cb => {
-                    settings_2.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
-                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_2.default.getSyntaxHighlighting());
+                setupSimpleSelector(syntaxHighlightingSelector, settings_3.default.getSyntaxHighlighting(), cb => {
+                    settings_3.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
+                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_3.default.getSyntaxHighlighting());
                 });
                 const overrideCfg = (0, configureCheckboxWithHiddenButton_1.default)(uiElements.shouldOverrideMainArgsCheckbox, uiElements.configureMainArgsOverrideButton, (checked) => {
-                    settings_2.default.setMainArgsOverride(checked ? [] : null);
+                    settings_3.default.setMainArgsOverride(checked ? [] : null);
                     overrideCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }, onClose => (0, displayMainArgsOverrideModal_1.default)(onClose, () => {
                     overrideCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }), () => {
-                    const overrides = settings_2.default.getMainArgsOverride();
+                    const overrides = settings_3.default.getMainArgsOverride();
                     return overrides === null ? null : `Edit (${overrides.length})`;
                 });
                 const suffixCfg = (0, configureCheckboxWithHiddenButton_1.default)(uiElements.shouldCustomizeFileSuffixCheckbox, uiElements.configureCustomFileSuffixButton, (checked) => {
-                    settings_2.default.setCustomFileSuffix(checked ? settings_2.default.getCurrentFileSuffix() : null);
+                    settings_3.default.setCustomFileSuffix(checked ? settings_3.default.getCurrentFileSuffix() : null);
                     suffixCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }, onClose => {
-                    const newVal = prompt('Enter new suffix', settings_2.default.getCurrentFileSuffix());
+                    const newVal = prompt('Enter new suffix', settings_3.default.getCurrentFileSuffix());
                     if (newVal !== null) {
-                        settings_2.default.setCustomFileSuffix(newVal);
+                        settings_3.default.setCustomFileSuffix(newVal);
                         suffixCfg.refreshButton();
                         notifyLocalChangeListeners();
                     }
                     onClose();
                     return { forceClose: () => { }, };
                 }, () => {
-                    const overrides = settings_2.default.getCustomFileSuffix();
-                    return overrides === null ? null : `Edit (${settings_2.default.getCurrentFileSuffix()})`;
+                    const overrides = settings_3.default.getCustomFileSuffix();
+                    return overrides === null ? null : `Edit (${settings_3.default.getCurrentFileSuffix()})`;
                 });
                 const statCollectorImpl = new StatisticsCollectorImpl_1.default();
                 if (location.search.includes('debug=true')) {
@@ -3203,7 +3202,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 setTimeout(() => {
                     try {
-                        settings_2.default.getProbeWindowStates().forEach((state) => {
+                        settings_3.default.getProbeWindowStates().forEach((state) => {
                             (0, displayProbeModal_3.default)(modalEnv, state.modalPos, state.locator, state.attr);
                         });
                     }

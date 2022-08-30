@@ -120,7 +120,7 @@ encode(value):
         joinElements(`2) '`, createHeader('cpr_propertyListShow'), `'. A collection (List<String> or String[]) that is used to include extra properties in the property list seen when creating probes.`),
         `Functions are shown in the property list if all of the following is true:`,
         `- The function is public.`,
-        `- The return type and argument types are 'String', 'int', 'boolean', or a subtype of the top AST Node type.`,
+        `- The argument types are 'String', 'int', 'boolean', or a subtype of the top AST Node type.`,
         `- One of the following is true:`,
         `-- The function is an attribute (originates from a jrag file, e.g 'z' in 'syn X Y.z() = ...)`,
         `-- The function is an AST child accessor (used to get members declared in an .ast file).`,
@@ -400,7 +400,7 @@ aspect MagicOutputDemo {
       case 'show-all-properties': return [
         `By default, the property list shown while creating a probe is filtered according to the 'cpr_propertyListShow' logic (see general help window for more on this).`,
         `The last criteria of that filter is that the function must follow one of a few predicates to be shown.`,
-        `This checkbox basically adds a '|| true' to the end of that predicate list. I.e any function that is public and has serializable return/argument types will be shown.`,
+        `This checkbox basically adds a '|| true' to the end of that predicate list. I.e any function that is public and has serializable argument types will be shown.`,
         `There can potentially be a very large amount of functions shown is you check this box, which can be annoying.`,
         `In addition, some of the non-standard functions might cause mutations (like 'setChild(int, ..)'), which can cause undefined behavior when used in this tool.`,
         `In general, we recommend you keep this box unchecked, and only occasionally re-check it.`,

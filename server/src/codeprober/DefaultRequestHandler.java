@@ -130,11 +130,12 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			}
 			return;
 		}
+		case "meta:listAllProperties": // Fall through
 		case "meta:listProperties": {
 			BenchmarkTimer.LIST_PROPERTIES.enter();
 			try {
-				retBuilder.put("properties",
-						AttrsInNode.get(info, match.node, AttrsInNode.extractFilter(info, match.node)));
+				retBuilder.put("properties", AttrsInNode.get(info, match.node,
+						AttrsInNode.extractFilter(info, match.node), queryAttrName.equals("meta:listAllProperties")));
 			} finally {
 				BenchmarkTimer.LIST_PROPERTIES.exit();
 			}
@@ -226,7 +227,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		case "query":
 			// Break & fall down to implementation below
 			break;
-			
+
 		case "fetch":
 			// Client needs to bypass cors
 			try {
@@ -235,17 +236,16 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				con.setRequestMethod("GET");
 				con.setConnectTimeout(5000);
 				con.setReadTimeout(5000);
-				
+
 				int status = con.getResponseCode();
 				if (status != 200) {
 					throw new RuntimeException("Unexpected status code " + status);
 				}
-				BufferedReader in = new BufferedReader(
-				  new InputStreamReader(con.getInputStream()));
+				BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
 				String inputLine;
 				final StringBuffer content = new StringBuffer();
 				while ((inputLine = in.readLine()) != null) {
-				    content.append(inputLine + "\n");
+					content.append(inputLine + "\n");
 				}
 				JSONObject res = new JSONObject();
 				res.put("result", content.toString());
@@ -257,9 +257,9 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				e.printStackTrace();
 				throw new RuntimeException(e);
 			}
-			
-			default:
-				throw new RuntimeException("Invalid request type on " + queryObj);
+
+		default:
+			throw new RuntimeException("Invalid request type on " + queryObj);
 		}
 
 //		System.out.println("Incoming query: " + queryObj.toString(2));
