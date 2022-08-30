@@ -5,7 +5,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.NoSuchAlgorithmException;
@@ -32,16 +31,15 @@ public class WebServer {
 			return null;
 		}
 	}
-	
-	private static final String srcDirectoryOverride = System.getenv("WEB_RESOURCES_OVERRIDE"); 
+
+	private static final String srcDirectoryOverride = System.getenv("WEB_RESOURCES_OVERRIDE");
 	static {
 		if (srcDirectoryOverride != null) {
 			System.out.println("Using web override dir: " + srcDirectoryOverride);
 		}
 	}
 
-	private static void handleRequest(Socket socket)
-			throws IOException, NoSuchAlgorithmException {
+	private static void handleRequest(Socket socket) throws IOException, NoSuchAlgorithmException {
 		System.out.println("Incoming HTTP request from: " + socket.getRemoteSocketAddress());
 //		socket.getRemoteSocketAddress()
 		InputStream in = socket.getInputStream();
@@ -76,7 +74,7 @@ public class WebServer {
 					stream = CodeProber.class.getResourceAsStream("resources/" + path);
 				}
 				if (stream == null) {
-					System.out.println("Found no resource for path '" + path +"' in req " + data);
+					System.out.println("Found no resource for path '" + path + "' in req " + data);
 					out.write("HTTP/1.1 404 Not Found\r\n\r\n".getBytes("UTF-8"));
 					return;
 				}
@@ -104,9 +102,19 @@ public class WebServer {
 	}
 
 	public static void start() {
-		final int port = 8000;
-		try (ServerSocket server = new ServerSocket(port, 0, InetAddress.getByName(null))) {
-			System.out.println("Started web server on port " + port + ", visit http://localhost:8000/ in your browser");
+		int port = 8000;
+		final String portOverride = System.getenv("WEB_SERVER_PORT");
+		if (portOverride != null) {
+			try {
+				port = Integer.parseInt(portOverride);
+			} catch (NumberFormatException e) {
+				System.out.println("Invalid web port override '" + portOverride + "', ignoring");
+				e.printStackTrace();
+			}
+		}
+		try (ServerSocket server = new ServerSocket(port, 0, WebSocketServer.createServerFilter())) {
+			System.out.println(
+					"Started web server on port " + port + ", visit http://localhost:" + port + "/ in your browser");
 			while (true) {
 				Socket s = server.accept();
 				new Thread(() -> {

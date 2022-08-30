@@ -7,6 +7,7 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -253,10 +254,32 @@ public class WebSocketServer {
 		}
 		System.out.println("Not a get request.. ? From " + socket.getRemoteSocketAddress() + " :: " + data);
 	}
+	
+	public static InetAddress createServerFilter() {
+		if ("true".equals(System.getenv("PERMIT_REMOTE_CONNECTIONS"))) {
+			return null;
+		}
+		try {
+			return InetAddress.getByName(null);
+		} catch (UnknownHostException e) {
+			System.out.println("'Should never happen' - failed to resolve null address");
+			e.printStackTrace();
+			return null;
+		}
+	}
 
 	public static void start(List<Runnable> onJarChangeListeners, Function<JSONObject, String> onQuery) {
-		final int port = 8080;
-		try (ServerSocket server = new ServerSocket(port, 0, InetAddress.getByName(null))) {
+		int port = 8080;
+		final String portOverride = System.getenv("WEBSOCKET_SERVER_PORT");
+		if (portOverride != null) {
+			try {
+				port = Integer.parseInt(portOverride);
+			} catch (NumberFormatException e) {
+				System.out.println("Invalid websocket port override '" + portOverride +"', ignoring");
+				e.printStackTrace();
+			}
+		}
+		try (ServerSocket server = new ServerSocket(port, 0, createServerFilter())) {
 			System.out.println("Started WebSocket server on port " + port);
 			while (true) {
 				Socket s = server.accept();

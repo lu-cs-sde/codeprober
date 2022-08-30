@@ -19,6 +19,21 @@ For information about the name "DrAST", see https://bitbucket.org/jastadd/drast/
 Once started, you should open http://localhost:8000 in your browser.
 When the page is loaded, you'll find a `Help` button on the right side which can help you further.
 
+### Environment variables
+
+There are a few optional environment variables that can be set.
+| Key      | Default value | Description |
+| ----------- | ----------- | ----------- |
+| WEB_SERVER_PORT | 8000 | The port to serve HTML/JS/etc from. This is the port you visit in your browser, e.g 8000 in 'localhost:8000'. |
+| WEBSOCKET_SERVER_PORT   | 8080        | The port to run the websocket server on. This isn't visible to the user, only change it if necessary (such as if you have another process listening on port 8080). |
+| PERMIT_REMOTE_CONNECTIONS   | false        | Whether or not to permit remote (non-local) connections to the server. Most compilers/analyzers read/write files on your computer based on user input. By allowing remote connections, you open up a potential vulnerability. Only set to true when on a trusted network or if running inside e.g a VM. |
+| WEB_RESOURCES_OVERRIDE   | null        | A file path that should be used to serve web resources (e.g HTML/JS/etc). If null, then resources are read from the classpath. Setting this can be benificial during development of the code prober tool itself (set it to `client/public/`), but there is very little point in setting it for normal tool users. |
+
+Example invocation where some of these are set:
+```sh
+WEB_SERVER_PORT=8005 WEB_RESOURCES_OVERRIDE=client/public/ java -jar code-prober.jar /path/to/your/compiler/or/analyzer.jar
+```
+
 ## Building - Client
 
 The client is built with TypeScript. Do the following to generate the JavaScript files:
