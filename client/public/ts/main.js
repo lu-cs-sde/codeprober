@@ -2938,21 +2938,32 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     repositoryUrl_2 = __importDefault(repositoryUrl_2);
-    const showVersionInfo = (elem, ourHash, ourClean) => {
+    const showVersionInfo = (elem, ourHash, ourClean, wsHandler) => {
         elem.innerHTML = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
         if (!ourClean) {
             // No need to poll for new versions, 'DEV' label already shown
             return;
         }
         const pollNewVersion = async () => {
-            const header = await fetch(`https://code-prober.s3.eu-central-1.amazonaws.com/VERSION`);
-            if (header.status !== 200) {
-                console.warn('Unexpected response code when fetching version info: ', header.status);
+            var _a;
+            let fetched;
+            try {
+                fetched = (_a = (await wsHandler.sendRpc({
+                    type: 'fetch',
+                    url: `${repositoryUrl_2.default}/-/raw/master/VERSION`
+                }))) === null || _a === void 0 ? void 0 : _a.result;
+            }
+            catch (e) {
+                console.warn('Error when fetching version', e);
                 return 'done';
             }
-            const text = (await header.text());
-            console.log('Newest version hash:', text);
-            if (ourHash === text) {
+            if (!fetched) {
+                console.warn('Unexpected response:', fetched);
+                return 'done';
+            }
+            const hash = fetched.trim().split('\n').slice(-1)[0];
+            console.log('Newest version hash:', hash);
+            if (ourHash === hash) {
                 // Status is clean.. for now.
                 // Check again (much) later
                 return 'again';
@@ -3041,7 +3052,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             const rootElem = document.getElementById('root');
             wsHandler.on('init', ({ version: { clean, hash } }) => {
                 console.log('got version:', clean, hash);
-                (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean);
                 rootElem.style.display = "grid";
                 const onChange = (newValue, adjusters) => {
                     settings_2.default.setEditorContents(newValue);
@@ -3176,6 +3186,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     statisticsCollector: statCollectorImpl,
                     currentlyLoadingModals: new Set(),
                 };
+                (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, wsHandler);
                 window.displayHelp = (type) => {
                     const common = (type, button) => (0, displayHelp_3.default)(type, disabled => button.disabled = disabled);
                     switch (type) {

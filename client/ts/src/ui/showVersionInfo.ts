@@ -1,7 +1,8 @@
+import { WebsocketHandler } from "../createWebsocketHandler";
 import repositoryUrl from "../model/repositoryUrl";
 
 
-const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolean) => {
+const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolean, wsHandler: WebsocketHandler) => {
 
   elem.innerHTML = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
   if (!ourClean) {
@@ -10,15 +11,24 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
   }
 
   const pollNewVersion = async (): Promise<'done' | 'again'> => {
-    const header = await fetch(`https://code-prober.s3.eu-central-1.amazonaws.com/VERSION`);
-    if (header.status !== 200) {
-      console.warn('Unexpected response code when fetching version info: ', header.status);
+    let fetched: string;
+    try {
+      fetched = (await wsHandler.sendRpc({
+        type: 'fetch',
+        url: `${repositoryUrl}/-/raw/master/VERSION`
+      }))?.result;
+    } catch (e) {
+      console.warn('Error when fetching version', e);
       return 'done';
     }
-    const text = (await header.text());
-    console.log('Newest version hash:', text);
+    if (!fetched) {
+      console.warn('Unexpected response:', fetched);
+      return 'done';
+    }
+    const hash = fetched.trim().split('\n').slice(-1)[0];
+    console.log('Newest version hash:', hash);
 
-    if (ourHash === text) {
+    if (ourHash === hash) {
       // Status is clean.. for now.
       // Check again (much) later
       return 'again';

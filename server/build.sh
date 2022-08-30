@@ -35,7 +35,6 @@ else
   DST=../../code-prober-dev.jar
 fi
 
-
 jar cfm $DST Manifest.txt cpr.properties **/*
 
 cd ..

@@ -1,9 +1,13 @@
 package codeprober;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
@@ -17,10 +21,10 @@ import org.json.JSONObject;
 
 import codeprober.ast.AstNode;
 import codeprober.locator.ApplyLocator;
+import codeprober.locator.ApplyLocator.ResolvedNode;
 import codeprober.locator.AttrsInNode;
 import codeprober.locator.CreateLocator;
 import codeprober.locator.NodesAtPosition;
-import codeprober.locator.ApplyLocator.ResolvedNode;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.PositionRepresentation;
 import codeprober.metaprogramming.Reflect;
@@ -218,6 +222,45 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 	@Override
 	public JSONObject handleRequest(JSONObject queryObj) {
+		switch (queryObj.getString("type")) {
+		case "query":
+			// Break & fall down to implementation below
+			break;
+			
+		case "fetch":
+			// Client needs to bypass cors
+			try {
+				final URL url = new URL(queryObj.getString("url"));
+				final HttpURLConnection con = (HttpURLConnection) url.openConnection();
+				con.setRequestMethod("GET");
+				con.setConnectTimeout(5000);
+				con.setReadTimeout(5000);
+				
+				int status = con.getResponseCode();
+				if (status != 200) {
+					throw new RuntimeException("Unexpected status code " + status);
+				}
+				BufferedReader in = new BufferedReader(
+				  new InputStreamReader(con.getInputStream()));
+				String inputLine;
+				final StringBuffer content = new StringBuffer();
+				while ((inputLine = in.readLine()) != null) {
+				    content.append(inputLine + "\n");
+				}
+				JSONObject res = new JSONObject();
+				res.put("result", content.toString());
+				con.disconnect();
+
+				return res;
+			} catch (IOException e) {
+				System.out.println("Error when performing fetch request " + queryObj);
+				e.printStackTrace();
+				throw new RuntimeException(e);
+			}
+			
+			default:
+				throw new RuntimeException("Invalid request type on " + queryObj);
+		}
 
 //		System.out.println("Incoming query: " + queryObj.toString(2));
 		final long requestStart = System.nanoTime();

@@ -68,7 +68,7 @@ const main = () => {
     const rootElem = document.getElementById('root') as HTMLElement;
     wsHandler.on('init', ({ version: { clean, hash } }) => {
       console.log('got version:', clean, hash);
-      showVersionInfo(uiElements.versionInfo, hash, clean);
+
       rootElem.style.display = "grid";
 
       const onChange = (newValue: string, adjusters?: LocationAdjuster[]) => {
@@ -226,6 +226,8 @@ const main = () => {
         statisticsCollector: statCollectorImpl,
         currentlyLoadingModals: new Set<string>(),
        };
+
+       showVersionInfo(uiElements.versionInfo, hash, clean, wsHandler);
 
       window.displayHelp = (type) => {
         const common = (type: HelpType, button: HTMLButtonElement) => displayHelp(type, disabled => button.disabled = disabled);
