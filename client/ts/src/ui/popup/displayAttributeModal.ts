@@ -6,11 +6,18 @@ import displayArgModal from "./displayArgModal";
 import formatAttr from "./formatAttr";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import displayHelp from "./displayHelp";
+import adjustLocator from "../../model/adjustLocator";
 
 const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator) => {
+  const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   let filter: string = '';
   let attrs: AstAttr[] | null = null;
   let showErr = false;
+  const cleanup = () => {
+    delete env.onChangeListeners[queryId];
+    popup.remove();
+  };
+  let isFirstRender = true;
   const popup = showWindow({
     pos: modalPos,
     rootStyle: `
@@ -42,7 +49,7 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
           }));
         },
         onClose: () => {
-          popup.remove();
+          cleanup();
         },
         extraActions: [
           {
@@ -94,7 +101,10 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
             }
           }
         }
-        setTimeout(() => filterInput.focus(), 50);
+        if (isFirstRender) {
+          isFirstRender = false;
+          setTimeout(() => filterInput.focus(), 50);
+        }
         root.appendChild(filterInput);
 
         root.style.minHeight = '4rem';
@@ -124,7 +134,7 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
           const misses = attrs.filter(a => !match(a));
 
           const showProbe = (attr: AstAttr) => {
-            popup.remove();
+            cleanup();
 
             if (!attr.args || attr.args.length === 0) {
               displayProbeModal(env, popup.getPos(), locator, { name: attr.name });
@@ -207,10 +217,18 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
         root.style.textAlign = 'center';
         root.style.color = '#F88';
         root.innerText = 'Error while\nloading attributes..';
-        setTimeout(() => popup.remove(), 1000);
+        setTimeout(() => cleanup(), 1000);
       }
     },
   });
+  env.onChangeListeners[queryId] = (adjusters) => {
+    if (adjusters) {
+      adjusters.forEach(adj => adjustLocator(adj, locator));
+    }
+    attrs = null;
+    fetchAttrs();
+    popup.refresh();
+  };
 
   /*
   const foo = 'bar';
@@ -221,6 +239,21 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
   const obj = { 'foo': foo }
   const obj = { ['foo']: foo }
   */
+ let fetchState: 'idle' | 'fetching' | 'queued' = 'idle';
+ const fetchAttrs = () => {
+   console.log('fetchAttrs from state', fetchState);
+  switch (fetchState) {
+    case 'idle': {
+      fetchState = 'fetching'
+      break;
+    }
+    case 'fetching': {
+      fetchState = 'queued';
+      return;
+    }
+    case 'queued': return;
+  }
+
   env.performRpcQuery({
     attr: {
       name: 'meta:listProperties'
@@ -228,6 +261,10 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
     locator,
   })
     .then((result: RpcResponse) => {
+      const refetch = fetchState == 'queued';
+      fetchState = 'idle';
+      if (refetch) fetchAttrs();
+
       const parsed = result.properties;
       if (!parsed) {
         throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
@@ -245,15 +282,16 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
         deudplicator.add(uniqId);
         attrs?.push(attr);
       });
-      // attrs = [...new Set(parsed)];
       popup.refresh();
 
     })
     .catch(err => {
-      console.warn('UserPA err:', err);
+      console.warn('Error when loading attributes', err);
       showErr = true;
       popup.refresh();
     });
+ };
+ fetchAttrs();
 }
 
 export default displayAttributeModal;

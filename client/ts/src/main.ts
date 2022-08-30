@@ -148,6 +148,7 @@ const main = () => {
       };
       setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings.shouldCaptureStdio(), cb => settings.setShouldCaptureStdio(cb));
       setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings.shouldDuplicateProbeOnAttrClick(), cb => settings.setShouldDuplicateProbeOnAttrClick(cb));
+      setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings.shouldShowAllProperties(), cb => settings.setShouldShowAllProperties(cb));
 
       const setupSimpleSelector = (input: HTMLSelectElement, initial: string, update: (val: string) => void) => {
         input.value = initial;
@@ -241,6 +242,7 @@ const main = () => {
           case 'syntax-highlighting': return common('syntax-highlighting', uiElements.syntaxHighlightingHelpButton);
           case 'main-args-override': return common('main-args-override', uiElements.mainArgsOverrideHelpButton);
           case 'customize-file-suffix':  return common('customize-file-suffix', uiElements.customFileSuffixHelpButton);
+          case 'show-all-properties': return common('show-all-properties', uiElements.showAllPropertiesHelpButton)
           default: return console.error('Unknown help type', type);
         }
       }

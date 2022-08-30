@@ -19,6 +19,9 @@ class UIElements {
   get configureCustomFileSuffixButton() { return document.getElementById('customize-file-suffix') as HTMLButtonElement; }
   get customFileSuffixHelpButton() { return document.getElementById('customize-file-suffix-help') as HTMLButtonElement; }
 
+  get showAllPropertiesCheckbox() { return document.getElementById('control-show-all-properties') as HTMLInputElement; }
+  get showAllPropertiesHelpButton() { return document.getElementById('show-all-properties-help') as HTMLButtonElement; }
+
   get generalHelpButton() { return document.getElementById('display-help') as HTMLButtonElement; }
   get captureStdoutCheckbox() { return document.getElementById('control-capture-stdout') as HTMLInputElement; }
   get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr') as HTMLInputElement; }

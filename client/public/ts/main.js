@@ -784,6 +784,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "ui/create/createModal
 define("model/repositoryUrl", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    // Also update versionCheckerFragment.html if the repository changes
     const repositoryUrl = `https://git.cs.lth.se/an6308ri/code-prober`;
     exports.default = repositoryUrl;
 });
@@ -814,7 +815,8 @@ define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui
         'syntax-highlighting': 'Syntax Highlighting',
         'main-args-override': 'Main args override',
         'customize-file-suffix': 'Temp file suffix',
-        'property-list-usage': 'Property list help'
+        'property-list-usage': 'Property list help',
+        'show-all-properties': 'Show all properties',
     })[type];
     const getHelpContents = (type) => {
         const createHeader = (text) => {
@@ -1051,10 +1053,11 @@ aspect MagicOutputDemo {
     to Program.thingsToHighlightBlue()
     for program();
 
-  public void ASTNode.drawBlueSquigglys() {
+  syn Object ASTNode.drawBlueSquigglys() {
     for (ASTNode node : program().thingsToHighlightBlue()) {
       node.outputMagic("INFO", "This thing is highlighted because [..]");
     }
+    return null;
   }
 }
 `.trim();
@@ -1163,6 +1166,14 @@ aspect MagicOutputDemo {
                 `1) Properties that match the filter. The filter is case insensitive and allows arbitrary characters to appear in between the filter characters. For example, 'gl' matches 'getLorem' but not 'getIpsum'.`,
                 `2) Alphabetical ordering`,
             ];
+            case 'show-all-properties': return [
+                `By default, the property list shown while creating a probe is filtered according to the 'cpr_propertyListShow' logic (see general help window for more on this).`,
+                `The last criteria of that filter is that the function must follow one of a few predicates to be shown.`,
+                `This checkbox basically adds a '|| true' to the end of that predicate list. I.e any function that is public and has serializable return/argument types will be shown.`,
+                `There can potentially be a very large amount of functions shown is you check this box, which can be annoying.`,
+                `In addition, some of the non-standard functions might cause mutations (like 'setChild(int, ..)'), which can cause undefined behavior when used in this tool.`,
+                `In general, we recommend you keep this box unchecked, and only occasionally re-check it.`,
+            ];
         }
     };
     const displayHelp = (type, setHelpButtonDisabled) => {
@@ -1224,7 +1235,61 @@ aspect MagicOutputDemo {
     };
     exports.default = displayHelp;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayProbeModal_2, showWindow_4, displayArgModal_1, formatAttr_2, createTextSpanIndicator_2, displayHelp_1) {
+define("model/adjustTypeAtLoc", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const adjustTypeAtLoc = (adjuster, tal) => {
+        const span = startEndToSpan(tal.start, tal.end);
+        let [ls, cs] = adjuster(span.lineStart, span.colStart);
+        let [le, ce] = adjuster(span.lineEnd, span.colEnd);
+        if (ls == le && cs == ce) {
+            if (span.lineStart === span.lineEnd && span.colStart === span.colEnd) {
+                // Accept it, despite it being strange
+            }
+            else {
+                // Instead of accepting change to zero-width span, take same line/col diff as before
+                le = ls + (span.lineEnd - span.lineStart);
+                ce = cs + (span.colEnd - span.colStart);
+                // console.log('Ignoring adjustmpent from', span, 'to', { lineStart: ls, colStart: cs, lineEnd: le, colEnd: ce }, 'because it looks very improbable');
+                // return;
+            }
+        }
+        tal.start = (ls << 12) + Math.max(0, cs);
+        tal.end = (le << 12) + ce;
+    };
+    exports.default = adjustTypeAtLoc;
+});
+define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], function (require, exports, adjustTypeAtLoc_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    adjustTypeAtLoc_1 = __importDefault(adjustTypeAtLoc_1);
+    const adjustLocator = (adj, loc) => {
+        (0, adjustTypeAtLoc_1.default)(adj, loc.result);
+        const adjustStep = (step) => {
+            switch (step.type) {
+                case 'tal': {
+                    (0, adjustTypeAtLoc_1.default)(adj, step.value);
+                    break;
+                }
+                case 'nta': {
+                    step.value.args.forEach(({ args }) => {
+                        if (args) {
+                            args.forEach(({ value }) => {
+                                if (value && typeof value === 'object') {
+                                    adjustLocator(adj, value);
+                                }
+                            });
+                        }
+                    });
+                    break;
+                }
+            }
+        };
+        loc.steps.forEach(adjustStep);
+    };
+    exports.default = adjustLocator;
+});
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "model/adjustLocator"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayProbeModal_2, showWindow_4, displayArgModal_1, formatAttr_2, createTextSpanIndicator_2, displayHelp_1, adjustLocator_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
@@ -1235,10 +1300,17 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     formatAttr_2 = __importDefault(formatAttr_2);
     createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
     displayHelp_1 = __importDefault(displayHelp_1);
+    adjustLocator_1 = __importDefault(adjustLocator_1);
     const displayAttributeModal = (env, modalPos, locator) => {
+        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let filter = '';
         let attrs = null;
         let showErr = false;
+        const cleanup = () => {
+            delete env.onChangeListeners[queryId];
+            popup.remove();
+        };
+        let isFirstRender = true;
         const popup = (0, showWindow_4.default)({
             pos: modalPos,
             rootStyle: `
@@ -1268,7 +1340,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                         }));
                     },
                     onClose: () => {
-                        popup.remove();
+                        cleanup();
                     },
                     extraActions: [
                         {
@@ -1319,7 +1391,10 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                             }
                         }
                     };
-                    setTimeout(() => filterInput.focus(), 50);
+                    if (isFirstRender) {
+                        isFirstRender = false;
+                        setTimeout(() => filterInput.focus(), 50);
+                    }
                     root.appendChild(filterInput);
                     root.style.minHeight = '4rem';
                     const sortedAttrs = document.createElement('div');
@@ -1346,7 +1421,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                         const matches = attrs.filter(match);
                         const misses = attrs.filter(a => !match(a));
                         const showProbe = (attr) => {
-                            popup.remove();
+                            cleanup();
                             if (!attr.args || attr.args.length === 0) {
                                 (0, displayProbeModal_2.default)(env, popup.getPos(), locator, { name: attr.name });
                             }
@@ -1431,10 +1506,18 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                     root.style.textAlign = 'center';
                     root.style.color = '#F88';
                     root.innerText = 'Error while\nloading attributes..';
-                    setTimeout(() => popup.remove(), 1000);
+                    setTimeout(() => cleanup(), 1000);
                 }
             },
         });
+        env.onChangeListeners[queryId] = (adjusters) => {
+            if (adjusters) {
+                adjusters.forEach(adj => (0, adjustLocator_1.default)(adj, locator));
+            }
+            attrs = null;
+            fetchAttrs();
+            popup.refresh();
+        };
         /*
         const foo = 'bar';
       
@@ -1444,94 +1527,59 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
         const obj = { 'foo': foo }
         const obj = { ['foo']: foo }
         */
-        env.performRpcQuery({
-            attr: {
-                name: 'meta:listProperties'
-            },
-            locator,
-        })
-            .then((result) => {
-            const parsed = result.properties;
-            if (!parsed) {
-                throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
-            }
-            filter = '';
-            attrs = [];
-            const deudplicator = new Set();
-            parsed.forEach(attr => {
-                const uniqId = JSON.stringify(attr);
-                if (deudplicator.has(uniqId)) {
+        let fetchState = 'idle';
+        const fetchAttrs = () => {
+            console.log('fetchAttrs from state', fetchState);
+            switch (fetchState) {
+                case 'idle': {
+                    fetchState = 'fetching';
+                    break;
+                }
+                case 'fetching': {
+                    fetchState = 'queued';
                     return;
                 }
-                deudplicator.add(uniqId);
-                attrs === null || attrs === void 0 ? void 0 : attrs.push(attr);
+                case 'queued': return;
+            }
+            env.performRpcQuery({
+                attr: {
+                    name: 'meta:listProperties'
+                },
+                locator,
+            })
+                .then((result) => {
+                const refetch = fetchState == 'queued';
+                fetchState = 'idle';
+                if (refetch)
+                    fetchAttrs();
+                const parsed = result.properties;
+                if (!parsed) {
+                    throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
+                }
+                filter = '';
+                attrs = [];
+                const deudplicator = new Set();
+                parsed.forEach(attr => {
+                    const uniqId = JSON.stringify(attr);
+                    if (deudplicator.has(uniqId)) {
+                        return;
+                    }
+                    deudplicator.add(uniqId);
+                    attrs === null || attrs === void 0 ? void 0 : attrs.push(attr);
+                });
+                popup.refresh();
+            })
+                .catch(err => {
+                console.warn('Error when loading attributes', err);
+                showErr = true;
+                popup.refresh();
             });
-            // attrs = [...new Set(parsed)];
-            popup.refresh();
-        })
-            .catch(err => {
-            console.warn('UserPA err:', err);
-            showErr = true;
-            popup.refresh();
-        });
+        };
+        fetchAttrs();
     };
     exports.default = displayAttributeModal;
 });
-define("model/adjustTypeAtLoc", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    const adjustTypeAtLoc = (adjuster, tal) => {
-        const span = startEndToSpan(tal.start, tal.end);
-        let [ls, cs] = adjuster(span.lineStart, span.colStart);
-        let [le, ce] = adjuster(span.lineEnd, span.colEnd);
-        if (ls == le && cs == ce) {
-            if (span.lineStart === span.lineEnd && span.colStart === span.colEnd) {
-                // Accept it, despite it being strange
-            }
-            else {
-                // Instead of accepting change to zero-width span, take same line/col diff as before
-                le = ls + (span.lineEnd - span.lineStart);
-                ce = cs + (span.colEnd - span.colStart);
-                // console.log('Ignoring adjustmpent from', span, 'to', { lineStart: ls, colStart: cs, lineEnd: le, colEnd: ce }, 'because it looks very improbable');
-                // return;
-            }
-        }
-        tal.start = (ls << 12) + Math.max(0, cs);
-        tal.end = (le << 12) + ce;
-    };
-    exports.default = adjustTypeAtLoc;
-});
-define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], function (require, exports, adjustTypeAtLoc_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    adjustTypeAtLoc_1 = __importDefault(adjustTypeAtLoc_1);
-    const adjustLocator = (adj, loc) => {
-        (0, adjustTypeAtLoc_1.default)(adj, loc.result);
-        const adjustStep = (step) => {
-            switch (step.type) {
-                case 'tal': {
-                    (0, adjustTypeAtLoc_1.default)(adj, step.value);
-                    break;
-                }
-                case 'nta': {
-                    step.value.args.forEach(({ args }) => {
-                        if (args) {
-                            args.forEach(({ value }) => {
-                                if (value && typeof value === 'object') {
-                                    adjustLocator(adj, value);
-                                }
-                            });
-                        }
-                    });
-                    break;
-                }
-            }
-        };
-        loc.steps.forEach(adjustStep);
-    };
-    exports.default = adjustLocator;
-});
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/create/registerOnHover", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, createTextSpanIndicator_3, displayAttributeModal_2, showWindow_5, registerOnHover_3, formatAttr_3, displayArgModal_2, registerNodeSelector_2, adjustLocator_1, displayHelp_2) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/create/registerOnHover", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, createTextSpanIndicator_3, displayAttributeModal_2, showWindow_5, registerOnHover_3, formatAttr_3, displayArgModal_2, registerNodeSelector_2, adjustLocator_2, displayHelp_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
@@ -1543,7 +1591,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     formatAttr_3 = __importDefault(formatAttr_3);
     displayArgModal_2 = __importDefault(displayArgModal_2);
     registerNodeSelector_2 = __importDefault(registerNodeSelector_2);
-    adjustLocator_1 = __importDefault(adjustLocator_1);
+    adjustLocator_2 = __importDefault(adjustLocator_2);
     displayHelp_2 = __importDefault(displayHelp_2);
     const displayProbeModal = (env, modalPos, locator, attr) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -1938,10 +1986,10 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         env.onChangeListeners[queryId] = (adjusters) => {
             var _a;
             if (adjusters) {
-                adjusters.forEach(adj => (0, adjustLocator_1.default)(adj, locator));
+                adjusters.forEach(adj => (0, adjustLocator_2.default)(adj, locator));
                 (_a = attr.args) === null || _a === void 0 ? void 0 : _a.forEach(({ value }) => {
                     if (value && typeof value === 'object') {
-                        adjusters.forEach(adj => (0, adjustLocator_1.default)(adj, value));
+                        adjusters.forEach(adj => (0, adjustLocator_2.default)(adj, value));
                     }
                 });
                 // console.log('Adjusted span to:', span);
@@ -2217,6 +2265,8 @@ define("settings", ["require", "exports", "model/syntaxHighlighting"], function 
         getCustomFileSuffix: () => { var _a; return (_a = settings.get().customFileSuffix) !== null && _a !== void 0 ? _a : null; },
         setCustomFileSuffix: (customFileSuffix) => settings.set({ ...settings.get(), customFileSuffix }),
         getCurrentFileSuffix: () => { var _a; return (_a = settings.getCustomFileSuffix()) !== null && _a !== void 0 ? _a : `.${(0, syntaxHighlighting_1.getAppropriateFileSuffix)(settings.getSyntaxHighlighting())}`; },
+        shouldShowAllProperties: () => { var _a; return (_a = settings.get().showAllProperties) !== null && _a !== void 0 ? _a : false; },
+        setShouldShowAllProperties: (showAllProperties) => settings.set({ ...settings.get(), showAllProperties }),
     };
     exports.default = settings;
 });
@@ -2873,6 +2923,8 @@ define("ui/UIElements", ["require", "exports"], function (require, exports) {
         get shouldCustomizeFileSuffixCheckbox() { return document.getElementById('control-customize-file-suffix'); }
         get configureCustomFileSuffixButton() { return document.getElementById('customize-file-suffix'); }
         get customFileSuffixHelpButton() { return document.getElementById('customize-file-suffix-help'); }
+        get showAllPropertiesCheckbox() { return document.getElementById('control-show-all-properties'); }
+        get showAllPropertiesHelpButton() { return document.getElementById('show-all-properties-help'); }
         get generalHelpButton() { return document.getElementById('display-help'); }
         get captureStdoutCheckbox() { return document.getElementById('control-capture-stdout'); }
         get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr'); }
@@ -2892,13 +2944,65 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
             // No need to poll for new versions, 'DEV' label already shown
             return;
         }
+        // const pollNewVersion = async (): Promise<'done' | 'again'> => new Promise((resolve, reject) => {
+        //   const iframe = document.createElement('iframe');
+        //   iframe.src = `${repositoryUrl}/-/raw/master/client/public/versionCheckerFragment.html`;
+        //   iframe.width = '0px';
+        //   iframe.height = '0px';
+        //   iframe.style.borderWidth = '0px';
+        //   document.body.appendChild(iframe);
+        //   iframe.onload = () => {
+        //     const nonce = `v-${(Math.random()*Number.MAX_SAFE_INTEGER)|0}`;
+        //     const listener = (event: MessageEvent) => {
+        //       switch (event.data.type) {
+        //         case 'version-fetch-result': {
+        //           if (event.data.nonce === nonce) {
+        //             window.removeEventListener('message', listener);
+        //             clearTimeout(timeout);
+        //             iframe.remove();
+        //             if (event.data.error) {
+        //               console.warn('Error when fetching version:', event.data.error);
+        //               reject('Timeout');
+        //             } else if (ourHash === event.data.result) {
+        //               // Status is clean.. for now.
+        //               // Check again (much) later
+        //               resolve('again');
+        //             } else {
+        //               console.log('New version available:', event.data.result);
+        //               const a = document.createElement('a');
+        //               a.href = `${repositoryUrl}/-/blob/master/code-prober.jar`;
+        //               a.target = '_blank';
+        //               a.text = 'New version available';
+        //               elem.appendChild(document.createElement('br'));
+        //               elem.appendChild(a);
+        //               resolve('done');
+        //             }
+        //           }
+        //           break;
+        //         }
+        //       }
+        //     };
+        //     iframe.contentWindow?.postMessage({
+        //       type: 'get-version-please',
+        //       nonce,
+        //     });
+        //     window.addEventListener('message', listener)
+        //     let timeout = setTimeout(() => {
+        //       console.log('Timed out checking version')
+        //       reject('Timeout');
+        //       window.removeEventListener('message', listener)
+        //       iframe.remove();
+        //     }, 60 * 1000);
+        //   }
+        // });
         const pollNewVersion = async () => {
-            const header = await fetch(`${repositoryUrl_2.default}/-/raw/master/VERSION`);
+            const header = await fetch(`https://code-prober.s3.eu-central-1.amazonaws.com/VERSION`);
             if (header.status !== 200) {
                 console.warn('Unexpected response code when fetching version info: ', header.status);
                 return 'done';
             }
-            const text = (await header.text()).trim().split('\n').slice(-1)[0];
+            const text = (await header.text());
+            console.log('Newest version hash:', text);
             if (ourHash === text) {
                 // Status is clean.. for now.
                 // Check again (much) later
@@ -3059,6 +3163,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_2.default.shouldCaptureStdio(), cb => settings_2.default.setShouldCaptureStdio(cb));
                 setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_2.default.shouldDuplicateProbeOnAttrClick(), cb => settings_2.default.setShouldDuplicateProbeOnAttrClick(cb));
+                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_2.default.shouldShowAllProperties(), cb => settings_2.default.setShouldShowAllProperties(cb));
                 const setupSimpleSelector = (input, initial, update) => {
                     input.value = initial;
                     input.oninput = () => { update(input.value); notifyLocalChangeListeners(); };
@@ -3132,6 +3237,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         case 'syntax-highlighting': return common('syntax-highlighting', uiElements.syntaxHighlightingHelpButton);
                         case 'main-args-override': return common('main-args-override', uiElements.mainArgsOverrideHelpButton);
                         case 'customize-file-suffix': return common('customize-file-suffix', uiElements.customFileSuffixHelpButton);
+                        case 'show-all-properties': return common('show-all-properties', uiElements.showAllPropertiesHelpButton);
                         default: return console.error('Unknown help type', type);
                     }
                 };

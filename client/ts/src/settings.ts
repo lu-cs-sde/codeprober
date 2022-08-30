@@ -6,6 +6,7 @@ interface Settings {
   lightTheme?: boolean;
   captureStdio?: boolean;
   duplicateProbeOnAttrClick?: boolean;
+  showAllProperties?: boolean;
   positionRecoveryStrategy?: string;
   astCacheStrategy?: string;
   probeWindowStates?: ProbeWindowState[];
@@ -63,6 +64,9 @@ const settings = {
   getCustomFileSuffix: () => settings.get().customFileSuffix ?? null,
   setCustomFileSuffix: (customFileSuffix: string | null) => settings.set({ ...settings.get(), customFileSuffix }),
   getCurrentFileSuffix: (): string => settings.getCustomFileSuffix() ?? `.${getAppropriateFileSuffix(settings.getSyntaxHighlighting())}`,
+
+  shouldShowAllProperties: () => settings.get().showAllProperties ?? false,
+  setShouldShowAllProperties: (showAllProperties: boolean) => settings.set({ ...settings.get(), showAllProperties }),
 };
 
 export default settings;

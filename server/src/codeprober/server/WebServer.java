@@ -37,8 +37,6 @@ public class WebServer {
 	static {
 		if (srcDirectoryOverride != null) {
 			System.out.println("Using web override dir: " + srcDirectoryOverride);
-		} else {
-			System.out.println("no web override");
 		}
 	}
 
