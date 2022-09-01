@@ -390,11 +390,8 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					retBuilder.put("parseTime", (System.nanoTime() - parseStart));
 					handleParsedAst(ast, loadCls, queryObj, retBuilder, bodyBuilder);
 				});
-				if (!parsed) {
-					System.out.println("Parsing failed..");
-				}
 				if (!parsed && bodyBuilder.length() == 0) {
-					bodyBuilder.put("🍝 Probe error");
+					bodyBuilder.put("Parsing failed");
 				}
 			});
 		} finally {

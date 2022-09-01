@@ -1053,8 +1053,8 @@ aspect MagicOutputDemo {
     to Program.thingsToHighlightBlue()
     for program();
 
-  syn Object ASTNode.drawBlueSquigglys() {
-    for (ASTNode node : program().thingsToHighlightBlue()) {
+  syn Object Program.drawBlueSquigglys() {
+    for (ASTNode node : thingsToHighlightBlue()) {
       node.outputMagic("INFO", "This thing is highlighted because [..]");
     }
     return null;

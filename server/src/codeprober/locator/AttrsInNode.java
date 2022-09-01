@@ -26,7 +26,7 @@ public class AttrsInNode {
 		} else {
 			whitelistFilter = new ArrayList<>(whitelistFilter);
 		}
-		whitelistFilter.addAll(Arrays.asList(new String[] { "getChild", "getParent", "getNumChild", "toString" }));
+		whitelistFilter.addAll(Arrays.asList(new String[] { "getChild", "getParent", "getNumChild", "toString", "dumpTree" }));
 //		final Pattern illegalNamePattern = Pattern.compile(".*(\\$|_).*");
 
 		List<JSONObject> attrs = new ArrayList<>();

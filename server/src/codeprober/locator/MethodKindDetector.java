@@ -43,19 +43,14 @@ public class MethodKindDetector {
 		}
 		return false;
 	}
-	
-	public static String getAstChildName(Method m) {
-//		astChildName
 
+	public static String getAstChildName(Method m) {
 		for (Annotation a : m.getAnnotations()) {
 			final String name = a.annotationType().getName();
-			if (name.contains(".ASTNodeAnnotation$OptChild")) {
-				return (String) Reflect.invoke0(a, "name");
-			}
-			if (name.contains(".ASTNodeAnnotation$ListChild")) {
-				return (String) Reflect.invoke0(a, "name");
-			}
-			if (name.contains(".ASTNodeAnnotation$Token")) {
+			if (name.contains(".ASTNodeAnnotation$Child") //
+					|| name.contains(".ASTNodeAnnotation$OptChild") //
+					|| name.contains(".ASTNodeAnnotation$ListChild") //
+					|| name.contains(".ASTNodeAnnotation$Token")) {
 				return (String) Reflect.invoke0(a, "name");
 			}
 		}
