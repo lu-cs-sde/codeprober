@@ -2939,6 +2939,13 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
     repositoryUrl_2 = __importDefault(repositoryUrl_2);
     const showVersionInfo = (elem, ourHash, ourClean, wsHandler) => {
         elem.innerHTML = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
+        if ('false' === localStorage.getItem('enable-version-checker')) {
+            // In case somebody wants to stay on an old version for a long time,
+            // then the "new version available" popup can become annoying.
+            // This flag allows you to disable version checking.
+            // Don't tell anybody about it though! 🤫 We want people staying updated.
+            return;
+        }
         if (!ourClean) {
             // No need to poll for new versions, 'DEV' label already shown
             return;
