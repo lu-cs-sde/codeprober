@@ -104,7 +104,7 @@ public class ExtendJQueries {
 										.put(createLookupTypeStep(lookupPkg, lookupName)))));
 	}
 
-	public static JSONObject createNodesAtPosition(int rpcId, String sourceFile) {
+	public static JSONObject createListNodes(int rpcId, String sourceFile) {
 		return createBaseMessageObject(rpcId, sourceFile) //
 				.put("query", new JSONObject() //
 						.put("attr", new JSONObject() //
@@ -120,7 +120,7 @@ public class ExtendJQueries {
 						));
 	}
 
-	public static JSONObject createPastaAttrs(int rpcId, String sourceFile, JSONObject locator) {
+	public static JSONObject createListProperties(int rpcId, String sourceFile, JSONObject locator) {
 		return createBaseMessageObject(rpcId, sourceFile) //
 				.put("query", new JSONObject() //
 						.put("attr", new JSONObject() //

@@ -197,14 +197,14 @@ public class ExtendJBenchmark extends BaseBenchmark {
 
 			switch (ACTION_TYPE) {
 			case CREATE_PROBE:
-				sendMessageAndWaitForResponse(ExtendJQueries.createNodesAtPosition(expectedId, sourceFile));
-				final JSONArray searchResults = lastResult.getJSONObject("result").getJSONArray("spansAndNodeTypes");
+				sendMessageAndWaitForResponse(ExtendJQueries.createListNodes(expectedId, sourceFile));
+				final JSONArray searchResults = lastResult.getJSONObject("result").getJSONArray("nodes");
 
 //				System.out.println(lastResult);
 				synchronized (this) {
 					expectedId = (int) (Math.random() * Integer.MAX_VALUE);
 				}
-				msgObj = ExtendJQueries.createPastaAttrs(expectedId, sourceFile,
+				msgObj = ExtendJQueries.createListProperties(expectedId, sourceFile,
 						searchResults.getJSONObject((probe + probeOffset) % searchResults.length()));
 				break;
 
