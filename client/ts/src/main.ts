@@ -20,7 +20,7 @@ window.clearUserSettings = () => {
 
 const uiElements = new UIElements();
 
-const main = () => {
+const doMain = (wsPort: number) => {
   let getLocalState = () => '';
   let updateSpanHighlight = (span: Span | null) => {};
   const performRpcQuery = (handler: WebsocketHandler, props: { [key: string]: any }) => handler.sendRpc({
@@ -58,15 +58,13 @@ const main = () => {
       }
       document.body.setAttribute('data-theme-light', `${settings.isLightTheme()}`);
 
-      document.getElementById('connections')!.style.display = 'none';
-
     const wsHandler = createWebsocketHandler(
-      new WebSocket(`ws://${location.hostname}:8080`),
+      new WebSocket(`ws://${location.hostname}:${wsPort}`),
       addConnectionCloseNotice
     );
 
     const rootElem = document.getElementById('root') as HTMLElement;
-    wsHandler.on('init', ({ version: { clean, hash } }) => {
+    wsHandler.on('init', ({ wsPort, version: { clean, hash } }) => {
       console.log('got version:', clean, hash);
 
       rootElem.style.display = "grid";
@@ -272,11 +270,23 @@ const main = () => {
     });
   }
 
-  window.maybeAutoInit = () => {
-    initEditor('Monaco');
-  }
-  window.initEditor = initEditor;
+  initEditor('Monaco');
 }
 
-window.MiniEditorMain = main;
-// export default main;
+window.initCodeProber = () => {
+  (async () => {
+    const socketRes = await fetch('/WS_PORT');
+    if (socketRes.status !== 200) {
+      throw new Error(`Unexpected status code when fetch websocket port ${socketRes.status}`);
+    }
+    const txt = await socketRes.text();
+    const port = Number.parseInt(txt, 10);
+    if (Number.isNaN(port)) {
+      throw new Error(`Bad websocket response text ${txt}`);
+    }
+    return doMain(port);
+  })().catch(err => {
+    console.warn('Failed fetching websocket port, falling back to 8080', err);
+    doMain(8080);
+  })
+}

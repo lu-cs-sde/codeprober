@@ -45,15 +45,12 @@ public class WebServer {
 
 	private static void handleRequest(Socket socket) throws IOException, NoSuchAlgorithmException {
 		System.out.println("Incoming HTTP request from: " + socket.getRemoteSocketAddress());
-//		socket.getRemoteSocketAddress()
 		InputStream in = socket.getInputStream();
 		OutputStream out = socket.getOutputStream();
 		@SuppressWarnings("resource")
-		Scanner s = new Scanner(in, "UTF-8");
-		String data = s.useDelimiter("\\r\\n\\r\\n").next();
-//		System.out.println("data: " + data);
-//		System.out.println("---");
-		Matcher get = Pattern.compile("^GET").matcher(data);
+		final Scanner s = new Scanner(in, "UTF-8");
+		final String data = s.useDelimiter("\\r\\n\\r\\n").next();
+		final Matcher get = Pattern.compile("^GET").matcher(data);
 		if (get.find()) {
 			Matcher normalGetReq = Pattern.compile("^GET (.*) HTTP").matcher(data);
 			if (normalGetReq.find()) {
@@ -61,6 +58,17 @@ public class WebServer {
 				String path = normalGetReq.group(1).split("[?#]")[0];
 				if (path.endsWith("/")) {
 					path += "index.html";
+				}
+				
+				System.out.println("get " + path);
+				if (path.equals("/WS_PORT")) {
+					// Special magical resource, don't actually read from classPath/file system
+					out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
+					out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
+					out.write(("\r\n").getBytes("UTF-8"));
+					out.write(("" + WebSocketServer.getPort()).getBytes("UTF-8"));
+					out.flush();
+					return;
 				}
 
 //				Integer sizeHint = null;

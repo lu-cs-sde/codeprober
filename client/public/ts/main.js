@@ -3013,7 +3013,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         location.reload();
     };
     const uiElements = new UIElements_1.default();
-    const main = () => {
+    const doMain = (wsPort) => {
         let getLocalState = () => '';
         let updateSpanHighlight = (span) => { };
         const performRpcQuery = (handler, props) => handler.sendRpc({
@@ -3046,10 +3046,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 return;
             }
             document.body.setAttribute('data-theme-light', `${settings_3.default.isLightTheme()}`);
-            document.getElementById('connections').style.display = 'none';
-            const wsHandler = (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:8080`), addConnectionCloseNotice_1.default);
+            const wsHandler = (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:${wsPort}`), addConnectionCloseNotice_1.default);
             const rootElem = document.getElementById('root');
-            wsHandler.on('init', ({ version: { clean, hash } }) => {
+            wsHandler.on('init', ({ wsPort, version: { clean, hash } }) => {
                 console.log('got version:', clean, hash);
                 rootElem.style.display = "grid";
                 const onChange = (newValue, adjusters) => {
@@ -3224,14 +3223,26 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 notifyLocalChangeListeners();
             });
         }
-        window.maybeAutoInit = () => {
-            initEditor('Monaco');
-        };
-        window.initEditor = initEditor;
+        initEditor('Monaco');
     };
-    window.MiniEditorMain = main;
+    window.initCodeProber = () => {
+        (async () => {
+            const socketRes = await fetch('/WS_PORT');
+            if (socketRes.status !== 200) {
+                throw new Error(`Unexpected status code when fetch websocket port ${socketRes.status}`);
+            }
+            const txt = await socketRes.text();
+            const port = Number.parseInt(txt, 10);
+            if (Number.isNaN(port)) {
+                throw new Error(`Bad websocket response text ${txt}`);
+            }
+            return doMain(port);
+        })().catch(err => {
+            console.warn('Failed fetching websocket port, falling back to 8080', err);
+            doMain(8080);
+        });
+    };
 });
-// export default main;
 // const isLightTheme = () => localStorage.getItem('editor-theme-light') === 'true';
 // const setIsLightTheme = (light: boolean) => {
 //   localStorage.setItem('editor-theme-light', `${light}`);

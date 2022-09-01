@@ -268,17 +268,21 @@ public class WebSocketServer {
 		}
 	}
 
-	public static void start(List<Runnable> onJarChangeListeners, Function<JSONObject, String> onQuery) {
-		int port = 8080;
+	public static int getPort() {
 		final String portOverride = System.getenv("WEBSOCKET_SERVER_PORT");
 		if (portOverride != null) {
 			try {
-				port = Integer.parseInt(portOverride);
+				return Integer.parseInt(portOverride);
 			} catch (NumberFormatException e) {
 				System.out.println("Invalid websocket port override '" + portOverride +"', ignoring");
 				e.printStackTrace();
 			}
 		}
+		return 8080;
+	}
+	
+	public static void start(List<Runnable> onJarChangeListeners, Function<JSONObject, String> onQuery) {
+		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, createServerFilter())) {
 			System.out.println("Started WebSocket server on port " + port);
 			while (true) {

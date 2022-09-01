@@ -84,14 +84,13 @@
     return moduleExports;
   }
   loadModule('main');
-  window.MiniEditorMain();
 </script>
 
-<body onload="maybeAutoInit()" data-theme-light="false">
-  <div id="connections">
+<body onload="initCodeProber()" data-theme-light="false">
+  <!-- <div id="connections">
     <p>Pick an editor</p>
     <button onclick="init('Monaco')">Monaco</button>
-  </div>
+  </div> -->
   <div id="root" style="display: none;">
     <span id="input-header">
       Input

@@ -163,13 +163,8 @@ interface Window {
     };
   };
   loadPreload: (preloader: EditorPreloader, onDone: () => void) => void;
-  // displayGeneralHelp: () => void;
-  // displayProbeStatistics: () => void;
-  // displayRecoveryStrategyHelp: () => void;
-  // displayAstCacheStrategyHelp: () => void;
   displayHelp: (type: HelpType | 'probe-statistics') => void;
-  maybeAutoInit: () => void;
-  initEditor: (editorType: string) => void;
+  initCodeProber: () => void;
   MiniEditorMain: () => void;
   clearUserSettings: () => void;
   ActiveLocatorRequest?: ActiveNodeLocatorRequest;
