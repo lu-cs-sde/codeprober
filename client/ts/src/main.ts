@@ -64,8 +64,8 @@ const doMain = (wsPort: number) => {
     );
 
     const rootElem = document.getElementById('root') as HTMLElement;
-    wsHandler.on('init', ({ wsPort, version: { clean, hash } }) => {
-      console.log('got version:', clean, hash);
+    wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds } }) => {
+      console.log('got version:', clean, hash, buildTimeSeconds);
 
       rootElem.style.display = "grid";
 
@@ -225,7 +225,7 @@ const doMain = (wsPort: number) => {
         currentlyLoadingModals: new Set<string>(),
        };
 
-       showVersionInfo(uiElements.versionInfo, hash, clean, wsHandler);
+       showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);
 
       window.displayHelp = (type) => {
         const common = (type: HelpType, button: HTMLButtonElement) => displayHelp(type, disabled => button.disabled = disabled);

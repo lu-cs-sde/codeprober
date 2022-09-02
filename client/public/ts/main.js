@@ -2937,8 +2937,15 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     repositoryUrl_2 = __importDefault(repositoryUrl_2);
-    const showVersionInfo = (elem, ourHash, ourClean, wsHandler) => {
-        elem.innerHTML = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
+    const showVersionInfo = (elem, ourHash, ourClean, ourBuildTime, wsHandler) => {
+        const innerPrefix = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
+        if (ourBuildTime !== undefined) {
+            const d = new Date(ourBuildTime * 1000);
+            elem.innerText = `${innerPrefix}, ${d.toLocaleDateString()}`;
+        }
+        else {
+            elem.innerText = innerPrefix;
+        }
         if ('false' === localStorage.getItem('enable-version-checker')) {
             // In case somebody wants to stay on an old version for a long time,
             // then the "new version available" popup can become annoying.
@@ -3055,8 +3062,8 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             document.body.setAttribute('data-theme-light', `${settings_3.default.isLightTheme()}`);
             const wsHandler = (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:${wsPort}`), addConnectionCloseNotice_1.default);
             const rootElem = document.getElementById('root');
-            wsHandler.on('init', ({ wsPort, version: { clean, hash } }) => {
-                console.log('got version:', clean, hash);
+            wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds } }) => {
+                console.log('got version:', clean, hash, buildTimeSeconds);
                 rootElem.style.display = "grid";
                 const onChange = (newValue, adjusters) => {
                     settings_3.default.setEditorContents(newValue);
@@ -3191,7 +3198,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     statisticsCollector: statCollectorImpl,
                     currentlyLoadingModals: new Set(),
                 };
-                (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, wsHandler);
+                (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);
                 window.displayHelp = (type) => {
                     const common = (type, button) => (0, displayHelp_3.default)(type, disabled => button.disabled = disabled);
                     switch (type) {

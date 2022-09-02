@@ -2,10 +2,15 @@ import { WebsocketHandler } from "../createWebsocketHandler";
 import repositoryUrl from "../model/repositoryUrl";
 
 
-const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolean, wsHandler: WebsocketHandler) => {
+const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolean, ourBuildTime: number | undefined, wsHandler: WebsocketHandler) => {
 
-
-  elem.innerHTML = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
+  const innerPrefix = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
+  if (ourBuildTime !== undefined) {
+    const d = new Date(ourBuildTime * 1000);
+    elem.innerText = `${innerPrefix}, ${d.toLocaleDateString()}`;
+  } else {
+    elem.innerText = innerPrefix;
+  }
   if ('false' === localStorage.getItem('enable-version-checker')) {
     // In case somebody wants to stay on an old version for a long time,
     // then the "new version available" popup can become annoying.

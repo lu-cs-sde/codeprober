@@ -12,12 +12,18 @@ public abstract class StreamInterceptor extends OutputStream {
 
 	public final PrintStream prev;
 
+	private Thread threadFilter = Thread.currentThread();
+
 	public StreamInterceptor(PrintStream prev) {
 		this.prev = prev;
 	}
 
 	@Override
 	public void write(int b) throws IOException {
+		if (Thread.currentThread() != threadFilter) {
+			prev.write(b);
+			return;
+		}
 		if (b == (int) '\n') {
 			consume(true);
 		} else {

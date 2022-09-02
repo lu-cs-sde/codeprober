@@ -155,8 +155,13 @@ public class WebSocketServer {
 				initMsg.put("type", "init");
 				
 				final JSONObject versionMsg = new JSONObject();
-				versionMsg.put("hash", VersionInfo.getInstance().revision);
-				versionMsg.put("clean", VersionInfo.getInstance().clean);
+				final VersionInfo vinfo = VersionInfo.getInstance();
+				versionMsg.put("hash", vinfo.revision);
+				versionMsg.put("clean", vinfo.clean);
+				final Integer buildTimeSeconds = vinfo.buildTimeSeconds;
+				if (buildTimeSeconds != null) {
+					versionMsg.put("buildTimeSeconds", buildTimeSeconds.intValue());
+				}
 				initMsg.put("version", versionMsg);
 
 				writeWsMessage(out, initMsg.toString());
