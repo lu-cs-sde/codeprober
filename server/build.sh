@@ -9,7 +9,7 @@ find src -name "*.java" > sources.txt
 
 echo "Building.."
 # "Our own" class files
-javac @sources.txt -cp libs/json.jar -d build_tmp
+javac @sources.txt -cp libs/json.jar -d build_tmp -source 8 -target 8
 # Third party class files
 unzip libs/json.jar '*.class' -x */* -d build_tmp
 # Resources
