@@ -95,6 +95,7 @@ public class ASTProvider {
 			// root.
 			try {
 				long start = System.currentTimeMillis();
+				Object prevRoot = ljar.drAstField.get(ljar.mainClazz);
 				try {
 					SystemExitControl.disableSystemExit();
 					ljar.mainMth.invoke(null, new Object[] { args });
@@ -113,6 +114,13 @@ public class ASTProvider {
 					System.out.printf("Compiler finished after : %d ms\n", (System.currentTimeMillis() - start));
 				}
 				Object root = ljar.drAstField.get(ljar.mainClazz);
+				if (root == prevRoot) {
+					// Parse ended without unexpected error (System.exit is expected), but nothing changed
+					System.out.println("DrAST_root_node didn't change after main invocation, treating this as a parse failure.");
+					System.out.println("If you perform semantic checks and call System.exit(..) if you get errors, then please do so *after* assigning DrAST_root_node");
+					System.out.println("I.e do 1: parse. 2: update DrAST_root_node. 3: perform semantic checks (optional)");
+					return false;
+				}
 				rootConsumer.accept(root, otherCls -> {
 					try {
 						return Class.forName(otherCls, true, ljar.classLoader);

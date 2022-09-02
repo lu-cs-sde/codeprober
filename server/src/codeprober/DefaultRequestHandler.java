@@ -390,6 +390,14 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					retBuilder.put("parseTime", (System.nanoTime() - parseStart));
 					handleParsedAst(ast, loadCls, queryObj, retBuilder, bodyBuilder);
 				});
+				if (!parsed) {
+					// Consider this sequence of requests:
+					// 1) Successful parse -> lastInfo set
+					// 2) Failed parse
+					// 3) Cacheable parse -> reuse lastInfo if available
+					// To avoid step 3 reusing a faulty 'lastInfo' from step 1, clear it in step 2.
+					lastInfo = null;
+				}
 				if (!parsed && bodyBuilder.length() == 0) {
 					bodyBuilder.put("Parsing failed");
 				}
