@@ -8,12 +8,14 @@ import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import displayHelp from "./displayHelp";
 import adjustLocator from "../../model/adjustLocator";
 import settings from "../../settings";
+import encodeRpcBodyLines from "./encodeRpcBodyLines";
 
 const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   let filter: string = '';
-  let attrs: AstAttr[] | null = null;
-  let showErr = false;
+  let state: { type: 'attrs', attrs: AstAttr[] } | { type: 'err', body: RpcBodyLine[] } | null = null;
+
+ let fetchState: 'idle' | 'fetching' | 'queued' = 'idle';
   const cleanup = () => {
     delete env.onChangeListeners[queryId];
     popup.remove();
@@ -26,7 +28,7 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
       min-height: 8rem;
       80vh;
     `,
-    render: (root, cancelToken) => {
+    render: (root) => {
       while (root.firstChild) root.firstChild.remove();
       // root.innerText = 'Loading..';
 
@@ -62,7 +64,7 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
         ],
       }).element);
 
-      if (!attrs && !showErr) {
+      const addSpinner = () => {
         const spinner = createLoadingSpinner();
         spinner.classList.add('absoluteCenter');
         const spinnerWrapper = document.createElement('div');
@@ -71,10 +73,26 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
         spinnerWrapper.style.position = 'relative';
         spinnerWrapper.appendChild(spinner);
         root.appendChild(spinnerWrapper);
+      }
+
+      if (state === null) {
+        addSpinner();
         return;
       }
 
-      if (attrs) {
+      if (state.type === 'err') {
+        if (state.body.length === 0) {
+          const text = document.createElement('span');
+          text.classList.add('captured-stderr');
+          // text.style.color = '#F88';
+          text.innerText = `Failed listing properties`;
+          root.appendChild(text);
+          return;
+        }
+        root.appendChild(encodeRpcBodyLines(env, state.body));
+      } else {
+
+        const attrs = state.attrs;
         let resortList = () => {};
         let submit = () => {};
 
@@ -199,26 +217,17 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
             const sep = document.createElement('div');
             sep.classList.add('search-list-separator')
             sortedAttrs.appendChild(sep);
-            // sortedAttrs.appendChild(document.createElement('hr'));
-            // sortedAttrs.appendChild(document.createElement('hr'));
-            // sortedAttrs.appendChild(document.createElement('hr'));
           }
           misses.forEach((attr, idx) => buildNode(attr, idx > 0, !matches.length && misses.length === 1));
         };
         resortList();
         root.appendChild(sortedAttrs);
-      } else {
-        // showErr
+      }
 
-        // if (cancelToken.cancelled) { return; }
-        while (root.firstChild) root.removeChild(root.firstChild);
-        root.style.display = 'flex';
-        root.style.justifyContent = 'center';
-        root.style.padding = 'auto';
-        root.style.textAlign = 'center';
-        root.style.color = '#F88';
-        root.innerText = 'Error while\nloading attributes..';
-        setTimeout(() => cleanup(), 1000);
+      if (fetchState !== 'idle') {
+        const spinner = createLoadingSpinner();
+        spinner.classList.add('absoluteCenter');
+        root.appendChild(spinner);
       }
     },
   });
@@ -226,21 +235,10 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
     if (adjusters) {
       adjusters.forEach(adj => adjustLocator(adj, locator));
     }
-    attrs = null;
     fetchAttrs();
     popup.refresh();
   };
 
-  /*
-  const foo = 'bar';
-
-  const obj = { foo }
-  const obj = { foo: foo }
-  const obj = { "foo": foo }
-  const obj = { 'foo': foo }
-  const obj = { ['foo']: foo }
-  */
- let fetchState: 'idle' | 'fetching' | 'queued' = 'idle';
  const fetchAttrs = () => {
   switch (fetchState) {
     case 'idle': {
@@ -267,11 +265,18 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
 
       const parsed = result.properties;
       if (!parsed) {
+        // root.appendChild(createTitle('err'));
+        if (result.body?.length) {
+          state = { type: 'err', body: result.body };
+          popup.refresh();
+          // root.appendChild(encodeRpcBodyLines(env, parsed.body));
+          return;
+        }
         throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
       }
 
 
-      attrs = [];
+      const uniq: AstAttr[] = [];
       const deudplicator = new Set();
       parsed.forEach(attr => {
         const uniqId = JSON.stringify(attr);
@@ -279,14 +284,16 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
           return;
         }
         deudplicator.add(uniqId);
-        attrs?.push(attr);
+        uniq.push(attr);
       });
+      state = { type: 'attrs', attrs: uniq };
       popup.refresh();
 
     })
     .catch(err => {
       console.warn('Error when loading attributes', err);
-      showErr = true;
+      state = { type: 'err', body: [] };
+      // showErr = true;
       popup.refresh();
     });
  };

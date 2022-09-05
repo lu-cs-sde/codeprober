@@ -110,11 +110,13 @@
         </div>
         <div>
           <input type='checkbox' id='control-capture-stdout'></input>
-          <label for='control-capture-stdout'>Capture stdio</label>
+          <label for='control-capture-stdout'>Capture stdout</label>
+          <button onClick="displayHelp('capture-stdout')" id="capture-stdout-help" style="border-radius: 50%; ">?</button>
         </div>
         <div>
           <input type='checkbox' id='control-duplicate-probe-on-attr' checked></input>
           <label for='control-duplicate-probe-on-attr'>Duplicate probe on attr click</label>
+          <button onClick="displayHelp('duplicate-probe-on-attr')" id="duplicate-probe-on-attr-help" style="border-radius: 50%; ">?</button>
         </div>
         <div>
           <input type='checkbox' id='control-should-override-main-args'></input>
@@ -166,6 +168,16 @@
           </select>
           <label for='syntax-highlighting'>Syntax highlighting</label>
           <button onClick="displayHelp('syntax-highlighting')" id="control-syntax-highlighting-help" style="border-radius: 50%; ">?</button>
+        </div>
+        <div>
+          <select id="location-style">
+            <option value="full">Full</option>
+            <option value="lines">Line span</option>
+            <option value="start">Start</option>
+            <option value="start-line">Start line</option>
+          </select>
+          <label for='location-style'>Location style</label>
+          <button onClick="displayHelp('location-style')" id="control-location-style-help" style="border-radius: 50%; ">?</button>
         </div>
         <button id="display-help" onclick="displayHelp('general')">Help</button>
         <button id="clear-settings" onclick="clearUserSettings()">Clear state and reload</button>

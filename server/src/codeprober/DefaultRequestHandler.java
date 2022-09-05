@@ -167,7 +167,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 						if (param == null) {
 							bodyBuilder.put("Failed decoding parameter " + i);
 							if (!captureStdio) {
-								bodyBuilder.put("Click 'Capture stdio' to see more information.");
+								bodyBuilder.put("Click 'Capture stdout' to see more information.");
 							}
 							return;
 						}
@@ -203,7 +203,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					}
 					bodyBuilder.put("Exception thrown while evaluating attribute.");
 					if (!captureStdio) {
-						bodyBuilder.put("Click 'Capture stdio' to see full error.");
+						bodyBuilder.put("Click 'Capture stdout' to see full error.");
 					}
 				}
 			}
@@ -386,20 +386,28 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				lastForwardArgs = fwdArgs;
 
 				final long parseStart = System.nanoTime();
-				final boolean parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs, (ast, loadCls) -> {
+				
+				final ASTProvider.ParseResult parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs, (ast, loadCls) -> {
 					retBuilder.put("parseTime", (System.nanoTime() - parseStart));
 					handleParsedAst(ast, loadCls, queryObj, retBuilder, bodyBuilder);
 				});
-				if (!parsed) {
+				if (!parsed.success) {
+					if (bodyBuilder.length() == 0) {
+						bodyBuilder.put("Parsing failed");
+					}
 					// Consider this sequence of requests:
 					// 1) Successful parse -> lastInfo set
 					// 2) Failed parse
 					// 3) Cacheable parse -> reuse lastInfo if available
 					// To avoid step 3 reusing a faulty 'lastInfo' from step 1, clear it in step 2.
 					lastInfo = null;
-				}
-				if (!parsed && bodyBuilder.length() == 0) {
-					bodyBuilder.put("Parsing failed");
+					
+					bodyBuilder.put("Stdout messages during parsing:");
+					if (parsed.captures != null && parsed.captures.length() > 0) {
+						for (Object obj : parsed.captures) {
+							bodyBuilder.put(obj);
+						}
+					}
 				}
 			});
 		} finally {

@@ -1,3 +1,4 @@
+import adjustLocator from "../../model/adjustLocator";
 import createModalTitle from "../create/createModalTitle";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import registerNodeSelector from "../create/registerNodeSelector";
@@ -28,6 +29,8 @@ const startLocatorRequest = (onSelected: (locator: NodeLocator) => void) => {
 }
 
 const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLocator, attr: AstAttrWithValue) => {
+  const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+
   let lastLocatorRequest: ActiveNodeLocatorRequest | null = null;
   const cleanup = () => {
     if (window.ActiveLocatorRequest === lastLocatorRequest) {
@@ -38,6 +41,12 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
   if (!args || !args.length) {
     throw new Error('Created arg modal for attribute without arguments - create probe modal instead');
   }
+
+  env.onChangeListeners[queryId] = (adjusters) => {
+    if (adjusters) {
+      adjusters.forEach(adj => adjustLocator(adj, locator));
+    }
+  };
 
   const createTitle = () => {
     return createModalTitle({

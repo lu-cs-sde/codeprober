@@ -12,6 +12,7 @@ import createWebsocketHandler, { WebsocketHandler } from "./createWebsocketHandl
 import configureCheckboxWithHiddenButton from "./ui/configureCheckboxWithHiddenButton";
 import UIElements from "./ui/UIElements";
 import showVersionInfo from "./ui/showVersionInfo";
+import { TextSpanStyle } from "./ui/create/createTextSpanIndicator";
 
 window.clearUserSettings = () => {
   settings.set({});
@@ -154,6 +155,7 @@ const doMain = (wsPort: number) => {
       };
       setupSimpleSelector(uiElements.astCacheStrategySelector, settings.getAstCacheStrategy(), cb => settings.setAstCacheStrategy(cb));
       setupSimpleSelector(uiElements.positionRecoverySelector, settings.getPositionRecoveryStrategy(), cb => settings.setPositionRecoveryStrategy(cb));
+      setupSimpleSelector(uiElements.locationStyleSelector, `${settings.getLocationStyle()}`, cb => settings.setLocationStyle(cb as TextSpanStyle));
 
       const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
       syntaxHighlightingSelector.innerHTML = '';
@@ -243,6 +245,9 @@ const doMain = (wsPort: number) => {
           case 'main-args-override': return common('main-args-override', uiElements.mainArgsOverrideHelpButton);
           case 'customize-file-suffix':  return common('customize-file-suffix', uiElements.customFileSuffixHelpButton);
           case 'show-all-properties': return common('show-all-properties', uiElements.showAllPropertiesHelpButton)
+          case 'duplicate-probe-on-attr': return common('duplicate-probe-on-attr', uiElements.duplicateProbeHelpButton)
+          case 'capture-stdout': return common('capture-stdout', uiElements.captureStdoutHelpButton);
+          case 'location-style': return common('location-style', uiElements.locationStyleHelpButton);
           default: return console.error('Unknown help type', type);
         }
       }

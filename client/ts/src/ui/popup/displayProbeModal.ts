@@ -3,12 +3,12 @@ import createModalTitle from "../create/createModalTitle";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import displayAttributeModal from "./displayAttributeModal";
 import showModal from "../create/showWindow";
-import registerOnHover from "../create/registerOnHover";
 import formatAttr from "./formatAttr";
 import displayArgModal from "./displayArgModal";
 import registerNodeSelector from "../create/registerNodeSelector";
 import adjustLocator from "../../model/adjustLocator";
 import displayHelp from "./displayHelp";
+import encodeRpcBodyLines from "./encodeRpcBodyLines";
 
 const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLocator, attr: AstAttrWithValue) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -275,107 +275,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
           const titleRow = createTitle();
           root.append(titleRow.element);
 
-          const encodeLine = (target: HTMLElement, line: RpcBodyLine, respectIndent = false) => {
-            if (typeof line === 'string') {
-              const trimmed = line.trimStart();
-              if (trimmed.length !== line.length) {
-                target.appendChild(document.createTextNode(' '.repeat(line.length - trimmed.length)));
-              }
-              if (line.trim()) {
-                target.appendChild(document.createTextNode(line.trim()));
-              }
-              target.appendChild(document.createElement('br'));
-            } else if (Array.isArray(line)) {
-              if (!respectIndent) {
-                // First level indent, 'inline' it
-                line.forEach(sub => encodeLine(target, sub, true));
-              } else {
-                // >=2 level indent, respect it
-                const deeper = document.createElement('pre');
-                // deeper.style.borderLeft = '1px solid #88888877';
-                deeper.style.marginLeft = '1rem';
-                deeper.style.marginTop = '0.125rem';
-                line.forEach(sub => encodeLine(deeper, sub, true));
-                target.appendChild(deeper);
-              }
-            } else {
-              switch (line.type) {
-                case "stdout": {
-                  const span = document.createElement('span');
-                  span.classList.add('captured-stdout');
-                  span.innerText = `> ${line.value}`;
-                  target.appendChild(span);
-                  target.appendChild(document.createElement('br'));
-                  break;
-                }
-                case "stderr": {
-                  const span = document.createElement('span');
-                  span.classList.add('captured-stderr');
-                  span.innerText = `> ${line.value}`;
-                  target.appendChild(span);
-                  target.appendChild(document.createElement('br'));
-                  break;
-                }
-                case "node": {
-                  const { start, end, type } = line.value.result;
-
-                  const container = document.createElement('div');
-                  const span: Span = {
-                    lineStart: (start >>> 12), colStart: (start & 0xFFF),
-                    lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
-                  };
-
-                  container.appendChild(createTextSpanIndicator({
-                    span,
-                    marginLeft: false,
-                  }));
-                  const typeNode = document.createElement('span');
-                  typeNode.classList.add('syntax-type');
-                  typeNode.innerText = type;
-                  container.appendChild(typeNode);
-
-                  container.classList.add('clickHighlightOnHover');
-                  container.style.width = 'fit-content';
-                  container.style.display = 'inline';
-                  registerOnHover(container, on => {
-                    env.updateSpanHighlight(on ? span : null)
-                  });
-                  container.onmousedown = (e) => {
-                    e.stopPropagation();
-                  }
-                  registerNodeSelector(container, () => line.value);
-                  container.addEventListener('click', () => {
-                    displayAttributeModal(env, null, line.value);
-                  });
-                  target.appendChild(container);
-                  break;
-                }
-
-                default: {
-                  console.warn('Unknown body line type', line);
-                  break;
-                }
-              }
-            }
-          }
-
-          const pre = document.createElement('pre');
-          pre.style.margin = '0px';
-          pre.style.padding = '0.5rem';
-          pre.style.fontSize = '0.75rem';
-          // pre.innerHtml = lines.slice(outputStart + 1).join('\n').trim();
-          body
-            .filter((line, lineIdx, arr) => {
-              // Keep empty lines only if they are followed by a non-empty line
-              // Removes two empty lines in a row, and removes trailing empty lines
-              if (!line && !arr[lineIdx+1]) { return false; }
-              return true;
-            })
-            .forEach((line) => {
-              encodeLine(pre, line);
-              // '\n'
-            });
-          root.appendChild(pre);
+          root.appendChild(encodeRpcBodyLines(env, body));
 
           const spinner = createLoadingSpinner();
           spinner.style.display = 'none';
@@ -394,11 +294,11 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
           env.currentlyLoadingModals.delete(queryId);
           console.log('ProbeModal RPC catch', err);
           root.innerHTML = '';
-          root.innerText = 'Failed refreshing query..';
-          setTimeout(() => {
-            queryWindow.remove();
-            cleanup();
-          }, 1000);
+          root.innerText = 'Failed refreshing probe..';
+          // setTimeout(() => {
+          //   queryWindow.remove();
+          //   cleanup();
+          // }, 1000);
         })
     },
   });

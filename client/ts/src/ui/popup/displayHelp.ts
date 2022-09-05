@@ -1,5 +1,6 @@
 import repositoryUrl from "../../model/repositoryUrl";
 import createModalTitle from "../create/createModalTitle";
+import createTextSpanIndicator, { TextSpanStyle } from "../create/createTextSpanIndicator";
 import showWindow from "../create/showWindow";
 
 const createSyntaxNode = (type: string, text: string, margins?: string) => {
@@ -24,6 +25,9 @@ const getHelpTitle = (type: HelpType) => ({
   'customize-file-suffix': 'Temp file suffix',
   'property-list-usage': 'Property list help',
   'show-all-properties': 'Show all properties',
+  'duplicate-probe-on-attr': 'Duplicate probe',
+  'capture-stdout': 'Capture stdout',
+  'location-style': 'Location styles',
 })[type];
 
 const getHelpContents = (type: HelpType) => {
@@ -104,7 +108,7 @@ encode(value):
 
       return [
         `Right click on some text in the editor and click 'Create Probe' to get started.`,
-        `If you get the message 'No AST node at this location', then it likely means that something went wrong during parsing.`,
+        `If you get the message 'Node listing failed', then it likely means that something went wrong during parsing.`,
         `Look at the terminal where you started code-prober.jar for more information.`,
         ``,
         `There are a number of 'magic' attributes you can add to your AST nodes to modify their behavior in this tool.`,
@@ -122,9 +126,9 @@ encode(value):
         `- The function is public.`,
         `- The argument types are 'String', 'int', 'boolean', or a subtype of the top AST Node type.`,
         `- One of the following is true:`,
-        `-- The function is an attribute (originates from a jrag file, e.g 'z' in 'syn X Y.z() = ...)`,
+        `-- The function is an attribute (originates from a jrag file, e.g 'z' in 'syn X Y.z() = ...')`,
         `-- The function is an AST child accessor (used to get members declared in an .ast file).`,
-        `-- The function name is either 'toString', 'getChild', 'getNumChild' or 'getParent'`,
+        `-- The function name is either 'toString', 'getChild', 'getNumChild', 'getParent' or 'dumpTree'`,
         `-- The function name is found in the return value from cpr_propertyListShow()`,
         `Default: empty array.`,
         exampleAttrs,
@@ -177,12 +181,55 @@ encode(value):
         const tailNode = document.createElement('span');
         tailNode.innerText = tail;
         settingsExplanation.appendChild(tailNode);
-      })
+      });
+
+
+      const sampleAttr = document.createElement('pre');
+      sampleAttr.style.marginTop = '6px';
+      sampleAttr.style.marginLeft = '2px';
+      sampleAttr.style.fontSize = '0.875rem';
+      sampleAttr.innerText = `
+aspect DumpSubtree {
+
+  // Bypass/inline Opt/List
+  void ASTNode.bypassDumpSubtree(java.util.List<Object> dst, int budget) {
+    if (budget <= 0) return;
+    for (ASTNode child : astChildren()) child.dumpSubtree(dst, budget);
+  }
+  void Opt.dumpSubtree(java.util.List<Object> dst, int budget) { bypassDumpSubtree(dst, budget); }
+  void List.dumpSubtree(java.util.List<Object> dst, int budget) { bypassDumpSubtree(dst, budget); }
+
+  void ASTNode.dumpSubtree(java.util.List<Object> dst, int budget) {
+    dst.add(this);
+    if (getNumChild() == 0 || budget <= 0) { return; }
+
+    final java.util.List<Object> ret = new java.util.ArrayList<>();
+    for (ASTNode child : astChildren()) child.dumpSubtree(ret, budget - 1);
+    dst.add(ret);
+  }
+
+  syn Object ASTNode.dumpSubtree(int budget) {
+    java.util.List<Object> dst = new java.util.ArrayList<>();
+    for (ASTNode child : astChildren()) child.dumpSubtree(dst, budget);
+    if (dst.size() == 1 && dst.get(0) instanceof java.util.List<?>) {
+      return dst.get(0);
+    }
+    return dst;
+  }
+  syn Object ASTNode.dumpSubtree() { return dumpSubtree(999); }
+
+}
+`.trim();
+      const copyButton = document.createElement('button');
+      copyButton.innerText = 'Copy to clipboard';
+      copyButton.onclick = () => {
+        navigator.clipboard.writeText(sampleAttr.innerText);
+      }
       return [
-        'Some nodes in your AST might be missing location information',
-        'This editor is built around the idea that all AST nodes have positions, and the experience is worsened for nodes where this isn\'t true.',
+        'Some nodes in your AST might be missing location information.',
+        'CodeProber is heavily built around the idea that all AST nodes have positions, and the experience is worsened for nodes where this isn\'t true.',
         '',
-        'There are two solutions',
+        'There are two solutions:',
         '',
         '1) Fix your parser',
         'Usually position information is missing because of how you structured your parser.',
@@ -198,6 +245,9 @@ encode(value):
         '',
         `No strategy guarantees success. If position is missing, it will be marked with '⚠️', and you\'ll likely run into problems when using it`,
         `If you are unsure of what to use, 'Zigzag' is usually a pretty good option.`,
+        `An efficient way to root out parser problems is to pick 'Fail', then dump the entire tree using the following 'dumpSubtree' attribute (JastAdd syntax):`,
+        sampleAttr,
+        copyButton,
       ];
     }
 
@@ -211,7 +261,7 @@ encode(value):
         'Below the titlebar is the output of the probe.',
         `This is the resolved value of the probe, formatted according to the 'cpr_getOutput' logic (see general help window for more on this).`,
         '',
-        `If you check 'Capture stdio' on the top right, you'll also see any messages printed to System.out and System.err in the window.`,
+        `If you check 'Capture stdout' on the top right, you'll also see any messages printed to System.out and System.err in the window.`,
         `If the cache strategy is set to 'None' or 'Purge', then each probe will get evaluated in a fresh compiler instance in isolation, so any values and messages you see in the probe window belongs only to that window.`,
         '',
         'The probes are automatically reevaluated whenever the document changes.',
@@ -289,7 +339,7 @@ aspect MagicOutputDemo {
         }
         return [
           `There are a number of 'magic' messages you can print to System.out.`,
-          `Whenever probes are evaluated, these messages are intercepted (even if 'Capture stdio' isn't checked!).`,
+          `Whenever probes are evaluated, these messages are intercepted (even if 'Capture stdout' isn't checked!).`,
           `The patterns and effects of the magic messages are shown below:`,
           '',
           patternsParent,
@@ -401,10 +451,77 @@ aspect MagicOutputDemo {
         `By default, the property list shown while creating a probe is filtered according to the 'cpr_propertyListShow' logic (see general help window for more on this).`,
         `The last criteria of that filter is that the function must follow one of a few predicates to be shown.`,
         `This checkbox basically adds a '|| true' to the end of that predicate list. I.e any function that is public and has serializable argument types will be shown.`,
-        `There can potentially be a very large amount of functions shown is you check this box, which can be annoying.`,
+        `There is potentially a very large amount of functions shown is you check this box, which can be annoying.`,
         `In addition, some of the non-standard functions might cause mutations (like 'setChild(int, ..)'), which can cause undefined behavior when used in this tool.`,
         `In general, we recommend you keep this box unchecked, and only occasionally re-check it.`,
-      ]
+      ];
+
+      case 'duplicate-probe-on-attr': return [
+        `When you have created a probe, you can click the property name to create a new probe on the same node, but with a different property.`,
+        `This click can either create a new probe window, or replace the old one.`,
+        `If this box is checked, then a new window will be created.`,
+        `If this box is unchecked, then it will replace the old window.`,
+        `By holding 'Shift' while clicking the property name, you can access the 'reverse' functionality.`,
+        `I.e if the box is checked and you hold shift, then the window will be replaced, and vice versa.`,
+      ];
+
+      case 'capture-stdout': {
+        const styled = (text:string, cls: string) => {
+          const span = document.createElement('span');
+          span.classList.add(cls);
+          span.innerText = text;
+          return span;
+        };
+        return [
+          `Check this if you want messages to stdout and stderr to be shown in probe outputs.`,
+          `'printf-debugging' should generally be avoided if possible, but if you feel it is strictly needed then you can use this checkbox to access it.`,
+          joinElements(`Captured messages are displayed with a `, styled('blue', 'captured-stdout'), ` color if they were printed to stdout, and a `, styled('red', 'captured-stderr'), ` color if they were printed to stderr.`),
+          ``,
+          `Note that only messages printed during property evaluation are captured.`,
+          `Messages printed during parsing are not shown here, but can still be seen in the terminal where you started code-prober.jar.`,
+          `An exception to this is when parsing fails, in which case messages during parsing are displayed (even if this checkbox is unchecked).`,
+        ];
+      }
+
+      case 'location-style': {
+        const settingsExplanation = document.createElement('div');
+        settingsExplanation.style.display = 'grid';
+        settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
+        settingsExplanation.style.gridColumnGap = '0.5rem';
+
+        const entries: [string, TextSpanStyle][] = [
+          [`Full`, 'full'],
+          [`Line span`, 'lines'],
+          [`Start`, 'start'],
+          [`Start line`, `start-line`],
+        ];
+        entries.forEach(([head, tail]) => {
+          const headNode = document.createElement('span');
+          headNode.style.textAlign = 'right';
+          headNode.classList.add('syntax-attr');
+          headNode.innerText = head;
+          settingsExplanation.appendChild(headNode);
+
+          settingsExplanation.appendChild(document.createTextNode('-'));
+
+          settingsExplanation.appendChild(createTextSpanIndicator({
+            span: { lineStart: 1, colStart: 2, lineEnd: 3, colEnd: 4 },
+            styleOverride: tail,
+          }))
+          // const tailNode = document.createElement('span');
+          // tailNode.innerText = tail;
+          // settingsExplanation.appendChild(tailNode);
+        })
+
+        return [
+          `In several locations in CodeProber you can see location indicators.`,
+          `This setting control how the location indicators are presented. Example values can be seen below for a location that starts at line 1, column 2 and ends at line 3, column 4.`,
+          ``,
+          settingsExplanation,
+          ``,
+          `Note that this doesn't affect the hover highlighting. The exact line/column is highlighted, even if the indicator only shows the start line for example.`,
+        ];
+      }
   }
 }
 

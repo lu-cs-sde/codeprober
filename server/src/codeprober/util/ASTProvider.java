@@ -6,9 +6,15 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.jar.JarFile;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import codeprober.metaprogramming.StdIoInterceptor;
 
 /**
  * Provides an AST by running a compiler and using reflection to fetch the
@@ -82,11 +88,21 @@ public class ASTProvider {
 		final long jarLastMod = jarFile.lastModified();
 		return lastJar != null && lastJar.jarPath.equals(jarPath) && lastJar.jarLastModified == jarLastMod;
 	}
+	
+	public static class ParseResult {
+		public final boolean success;
+		public final JSONArray captures;
+
+		public ParseResult(boolean success, JSONArray captures) {
+			this.success = success;
+			this.captures = captures;
+		}
+	}
 
 	/**
 	 * Runs the target compiler.
 	 */
-	public static boolean parseAst(String jarPath, String[] args,
+	public static ParseResult parseAst(String jarPath, String[] args,
 			BiConsumer<Object, Function<String, Class<?>>> rootConsumer) {
 		try {
 			LoadedJar ljar = loadJar(jarPath);
@@ -96,9 +112,21 @@ public class ASTProvider {
 			try {
 				long start = System.currentTimeMillis();
 				Object prevRoot = ljar.drAstField.get(ljar.mainClazz);
+				JSONArray captures = null;
 				try {
 					SystemExitControl.disableSystemExit();
-					ljar.mainMth.invoke(null, new Object[] { args });
+					
+					final AtomicReference<Exception> innerError = new AtomicReference<>();
+					captures = StdIoInterceptor.performDefaultCapture(() -> {
+						try {
+							ljar.mainMth.invoke(null, new Object[] { args });
+						} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+							innerError.set(e);
+						}
+					});
+					if (innerError.get() != null) {
+						throw innerError.get();
+					}
 				} catch (InvocationTargetException e) {
 					System.out.println("ASTPRovider caught " + e);
 					e.printStackTrace();
@@ -107,7 +135,7 @@ public class ASTProvider {
 						e.printStackTrace();
 						System.err.println(
 								"compiler error : " + (e.getMessage() != null ? e.getMessage() : e.getCause()));
-						return false;
+						return new ParseResult(false, captures);
 					}
 				} finally {
 					SystemExitControl.enableSystemExit();
@@ -119,7 +147,7 @@ public class ASTProvider {
 					System.out.println("DrAST_root_node didn't change after main invocation, treating this as a parse failure.");
 					System.out.println("If you perform semantic checks and call System.exit(..) if you get errors, then please do so *after* assigning DrAST_root_node");
 					System.out.println("I.e do 1: parse. 2: update DrAST_root_node. 3: perform semantic checks (optional)");
-					return false;
+					return new ParseResult(false, captures);
 				}
 				rootConsumer.accept(root, otherCls -> {
 					try {
@@ -130,7 +158,7 @@ public class ASTProvider {
 						throw new RuntimeException(e);
 					}
 				});
-				return true;
+				return new ParseResult(true, captures);
 			} catch (IllegalAccessException e) {
 				e.printStackTrace();
 			} finally {
@@ -147,7 +175,7 @@ public class ASTProvider {
 			e.printStackTrace();
 		}
 		SystemExitControl.enableSystemExit();
-		return false;
+		return new ParseResult(false, null);
 	}
 
 //	public static boolean parseAst(String jarPath, String[] args,

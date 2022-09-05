@@ -1,4 +1,5 @@
 import { getAppropriateFileSuffix } from "./model/syntaxHighlighting";
+import { TextSpanStyle } from "./ui/create/createTextSpanIndicator";
 
 
 interface Settings {
@@ -13,6 +14,7 @@ interface Settings {
   syntaxHighlighting?: SyntaxHighlightingLanguageId;
   mainArgsOverride?: string[] | null;
   customFileSuffix?: string | null;
+  locationStyle?: TextSpanStyle | null;
 }
 
 let settingsObj: Settings | null = null;
@@ -67,6 +69,9 @@ const settings = {
 
   shouldShowAllProperties: () => settings.get().showAllProperties ?? false,
   setShouldShowAllProperties: (showAllProperties: boolean) => settings.set({ ...settings.get(), showAllProperties }),
+
+  getLocationStyle: () => settings.get().locationStyle ?? 'full',
+  setLocationStyle: (locationStyle: TextSpanStyle | null) => settings.set({ ...settings.get(), locationStyle }),
 };
 
 export default settings;

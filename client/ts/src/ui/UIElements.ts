@@ -22,9 +22,16 @@ class UIElements {
   get showAllPropertiesCheckbox() { return document.getElementById('control-show-all-properties') as HTMLInputElement; }
   get showAllPropertiesHelpButton() { return document.getElementById('show-all-properties-help') as HTMLButtonElement; }
 
-  get generalHelpButton() { return document.getElementById('display-help') as HTMLButtonElement; }
-  get captureStdoutCheckbox() { return document.getElementById('control-capture-stdout') as HTMLInputElement; }
   get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr') as HTMLInputElement; }
+  get duplicateProbeHelpButton() { return document.getElementById('duplicate-probe-on-attr-help') as HTMLButtonElement; }
+
+  get captureStdoutCheckbox() { return document.getElementById('control-capture-stdout') as HTMLInputElement; }
+  get captureStdoutHelpButton() { return document.getElementById('capture-stdout-help') as HTMLButtonElement; }
+
+  get locationStyleSelector() { return document.getElementById('location-style') as HTMLSelectElement; }
+  get locationStyleHelpButton() { return document.getElementById('control-location-style-help') as HTMLButtonElement; }
+
+  get generalHelpButton() { return document.getElementById('display-help') as HTMLButtonElement; }
   get darkModeCheckbox() { return document.getElementById('control-dark-mode') as HTMLInputElement; }
   get displayStatisticsButton() { return document.getElementById('display-statistics') as HTMLButtonElement; }
   get versionInfo() { return document.getElementById('version') as HTMLDivElement; }

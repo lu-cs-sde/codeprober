@@ -67,4 +67,13 @@ public abstract class StdIoInterceptor {
 		}
 		return ret;
 	}
+	
+	public static JSONArray performDefaultCapture(Runnable body) {
+		return performCaptured((stdout, line) -> {
+			JSONObject fmt = new JSONObject();
+			fmt.put("type", stdout ? "stdout" : "stderr");
+			fmt.put("value", line);
+			return fmt;
+		}, body);
+	}
 }

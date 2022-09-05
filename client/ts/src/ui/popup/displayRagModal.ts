@@ -4,6 +4,7 @@ import displayAttributeModal from "./displayAttributeModal";
 import registerOnHover from "../create/registerOnHover";
 import showWindow from "../create/showWindow";
 import registerNodeSelector from "../create/registerNodeSelector";
+import encodeRpcBodyLines from "./encodeRpcBodyLines";
 
 const displayRagModal = (env: ModalEnv, line: number, col: number) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -19,16 +20,26 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
         min-height: 4rem;
       `,
     render: (root, cancelToken) => {
-      while (root.firstChild) {
-        root.firstChild.remove();
-      }
+      // while (root.firstChild) {
+      //   root.firstChild.remove();
+      // }
       // root.innerText = 'Loading..';
       root.style.display = 'contents';
       const spinner = createLoadingSpinner();
-      // spinner.style.width = '16rem';
-      // spinner.style.height = '4rem';
       spinner.classList.add('absoluteCenter');
       root.appendChild(spinner);
+
+      const createTitle = (status: 'ok' | 'err') => createModalTitle({
+        renderLeft: (container) => {
+          const headType = document.createElement('span');
+          headType.classList.add('syntax-stype');
+          headType.innerText =  status === 'ok' ? 'Select node..' : `⚠️ Node listing failed..`;
+          container.appendChild(headType);
+        },
+        onClose: () => {
+          cleanup();
+        },
+      }).element;
 
       const rootProgramLocator: TypeAtLocStep = {
         type: '?',
@@ -51,23 +62,16 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
           while (root.firstChild) root.removeChild(root.firstChild);
           root.style.minHeight = '4rem';
 
-          root.appendChild(createModalTitle({
-            renderLeft: (container) => {
-              const headType = document.createElement('span');
-              headType.classList.add('syntax-stype');
-              headType.innerText = `Select node..`;
-              container.appendChild(headType);
-            },
-            onClose: () => {
-              cleanup();
-            },
-          }).element);
-
-          // const needle = 'SpansAndNodeTypes :: ';
 
           if (!parsed.nodes) {
-            throw new Error(`Couldn't find expected line in output '${JSON.stringify(parsed)}'`);
+            root.appendChild(createTitle('err'));
+            if (parsed.body?.length) {
+              root.appendChild(encodeRpcBodyLines(env, parsed.body));
+              return;
+            }
+            throw new Error(`Couldn't find expected line or body in output '${JSON.stringify(parsed)}'`);
           }
+          root.appendChild(createTitle('ok'));
           const rowsContainer = document.createElement('div');
           rowsContainer.style.padding = '2px';
           root.appendChild(rowsContainer);
@@ -95,15 +99,26 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
         })
         .catch(err => {
           if (cancelToken.cancelled) { return; }
+          // TODO handle this better, show an informative, refresh-aware modal that doesn't autoclose
+          // When starting it might be nice to open a modal and then tinker with settings until it refreshes successfully
           console.warn('query failed', err);
           while (root.firstChild) root.removeChild(root.firstChild);
-          root.style.display = 'flex';
-          root.style.justifyContent = 'center';
-          root.style.padding = 'auto';
-          root.style.textAlign = 'center';
-          root.style.color = '#F88';
-          root.innerText = 'No AST node\nat this location..';
-          setTimeout(() => cleanup(), 1000);
+
+
+          root.appendChild(createTitle('err'));
+
+          const errMsg = document.createElement('div');
+
+
+          errMsg.style.display = 'flex';
+          errMsg.style.justifyContent = 'center';
+          errMsg.style.padding = 'auto';
+          errMsg.style.textAlign = 'center';
+          errMsg.style.color = '#F88';
+          errMsg.style.padding = '0.25rem';
+          errMsg.innerText = 'Parsing failed..\nPerhaps a custom file suffix\nor main args override would help?\nLook at your terminal for more information.';
+          root.appendChild(errMsg);
+          // setTimeout(() => cleanup(), 1000);
         })
     }
   });
