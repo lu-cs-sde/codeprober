@@ -40,7 +40,6 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
       return 'done';
     }
     const hash = fetched.trim().split('\n').slice(-1)[0];
-    console.log('Newest version hash:', hash);
 
     if (ourHash === hash) {
       // Status is clean.. for now.

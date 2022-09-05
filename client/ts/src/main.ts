@@ -66,8 +66,6 @@ const doMain = (wsPort: number) => {
 
     const rootElem = document.getElementById('root') as HTMLElement;
     wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds } }) => {
-      console.log('got version:', clean, hash, buildTimeSeconds);
-
       rootElem.style.display = "grid";
 
       const onChange = (newValue: string, adjusters?: LocationAdjuster[]) => {

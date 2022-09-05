@@ -1,7 +1,7 @@
 import settings from "../../settings";
 import registerOnHover from "./registerOnHover";
 
-type TextSpanStyle = 'full' | 'lines' | 'start' | 'start-line';
+type TextSpanStyle = 'full' | 'full-compact' | 'lines' | 'lines-compact' | 'start' | 'start-line';
 
 interface TextSpanIndicatorArgs {
   span: Span;
@@ -21,9 +21,21 @@ const createTextSpanIndicator = (args: TextSpanIndicatorArgs) => {
 
   const warn = span.lineStart === 0 && span.colStart === 0 && span.lineEnd === 0 && span.colEnd === 0 ? '⚠️' : '';
   switch (args.styleOverride ?? settings.getLocationStyle()) {
+    case 'full-compact':
+      if (span.lineStart === span.lineEnd) {
+        indicator.innerText = `[${span.lineStart}:${span.colStart}-${span.colEnd}]${warn}`;
+        break;
+      }
+      // Else, fall through
     case 'full':
       indicator.innerText = `[${span.lineStart}:${span.colStart}→${span.lineEnd}:${span.colEnd}]${warn}`;
       break;
+    case 'lines-compact':
+      if (span.lineStart === span.lineEnd) {
+        indicator.innerText = `[${span.lineStart}]${warn}`;
+        break;
+      }
+      // Else, fall through
     case 'lines':
       indicator.innerText = `[${span.lineStart}→${span.lineEnd}]${warn}`;
       break;

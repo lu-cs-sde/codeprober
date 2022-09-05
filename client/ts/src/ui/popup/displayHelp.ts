@@ -484,42 +484,52 @@ aspect MagicOutputDemo {
       }
 
       case 'location-style': {
-        const settingsExplanation = document.createElement('div');
-        settingsExplanation.style.display = 'grid';
-        settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
-        settingsExplanation.style.gridColumnGap = '0.5rem';
 
-        const entries: [string, TextSpanStyle][] = [
-          [`Full`, 'full'],
-          [`Line span`, 'lines'],
-          [`Start`, 'start'],
-          [`Start line`, `start-line`],
-        ];
-        entries.forEach(([head, tail]) => {
-          const headNode = document.createElement('span');
-          headNode.style.textAlign = 'right';
-          headNode.classList.add('syntax-attr');
-          headNode.innerText = head;
-          settingsExplanation.appendChild(headNode);
+        const sp: Span = { lineStart: 1, colStart: 2, lineEnd: 3, colEnd: 4 };
+        const createExplanationPanel = (entries: [string, TextSpanStyle, Span][]) => {
+          const settingsExplanation = document.createElement('div');
+          settingsExplanation.style.paddingLeft = '1rem';
+          settingsExplanation.style.display = 'grid';
+          settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
+          settingsExplanation.style.gridColumnGap = '0.5rem';
+          entries.forEach(([head, tail, span]) => {
+            const headNode = document.createElement('span');
+            headNode.style.textAlign = 'right';
+            headNode.classList.add('syntax-attr');
+            headNode.innerText = head;
+            settingsExplanation.appendChild(headNode);
 
-          settingsExplanation.appendChild(document.createTextNode('-'));
+            settingsExplanation.appendChild(document.createTextNode('-'));
 
-          settingsExplanation.appendChild(createTextSpanIndicator({
-            span: { lineStart: 1, colStart: 2, lineEnd: 3, colEnd: 4 },
-            styleOverride: tail,
-          }))
-          // const tailNode = document.createElement('span');
-          // tailNode.innerText = tail;
-          // settingsExplanation.appendChild(tailNode);
-        })
+            settingsExplanation.appendChild(createTextSpanIndicator({
+              span,
+              styleOverride: tail,
+            }))
+            // const tailNode = document.createElement('span');
+            // tailNode.innerText = tail;
+            // settingsExplanation.appendChild(tailNode);
+          });
+          return settingsExplanation;
+        }
 
         return [
           `In several locations in CodeProber you can see location indicators.`,
           `This setting control how the location indicators are presented. Example values can be seen below for a location that starts at line 1, column 2 and ends at line 3, column 4.`,
           ``,
-          settingsExplanation,
+          createExplanationPanel([
+            [`Full`, 'full', sp],
+            [`Lines`, 'lines', sp],
+            [`Start`, 'start', sp],
+            [`Start line`, `start-line`, sp],
+          ]),
           ``,
-          `Note that this doesn't affect the hover highlighting. The exact line/column is highlighted, even if the indicator only shows the start line for example.`,
+          `The 'compact' options look like the non-compact options if the start and end lines are different. If start and end lines are equal, then it looks like this:`,
+          createExplanationPanel([
+            [`Full compact`, 'full-compact', { ...sp, lineEnd: 1 }],
+            [`Lines compact`, 'lines-compact', { ...sp, lineEnd: 1 }],
+          ]),
+          ``,
+          `Note that this setting doesn't affect the hover highlighting. The exact line/column is highlighted, even if the indicator only shows the start line for example.`,
         ];
       }
   }
