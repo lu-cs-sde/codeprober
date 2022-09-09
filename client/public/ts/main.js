@@ -673,6 +673,15 @@ define("ui/create/registerNodeSelector", ["require", "exports"], function (requi
     };
     exports.default = registerNodeSelector;
 });
+define("ui/trimTypeName", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const trimTypeName = (typeName) => {
+        const lastDot = typeName.lastIndexOf(".");
+        return lastDot === -1 ? typeName : typeName.slice(lastDot + 1);
+    };
+    exports.default = trimTypeName;
+});
 define("ui/popup/formatAttr", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -689,7 +698,7 @@ define("ui/popup/formatAttr", ["require", "exports"], function (require, exports
         : '')}`;
     exports.default = formatAttr;
 });
-define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/create/showWindow", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, adjustLocator_1, createModalTitle_1, createTextSpanIndicator_1, registerNodeSelector_1, registerOnHover_2, showWindow_2, displayAttributeModal_1, displayProbeModal_1, formatAttr_1) {
+define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/create/showWindow", "ui/trimTypeName", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, adjustLocator_1, createModalTitle_1, createTextSpanIndicator_1, registerNodeSelector_1, registerOnHover_2, showWindow_2, trimTypeName_1, displayAttributeModal_1, displayProbeModal_1, formatAttr_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     adjustLocator_1 = __importDefault(adjustLocator_1);
@@ -698,6 +707,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
     registerNodeSelector_1 = __importDefault(registerNodeSelector_1);
     registerOnHover_2 = __importDefault(registerOnHover_2);
     showWindow_2 = __importDefault(showWindow_2);
+    trimTypeName_1 = __importDefault(trimTypeName_1);
     displayAttributeModal_1 = __importDefault(displayAttributeModal_1);
     displayProbeModal_1 = __importDefault(displayProbeModal_1);
     formatAttr_1 = __importStar(formatAttr_1);
@@ -750,7 +760,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                 renderLeft: (container) => {
                     const headType = document.createElement('span');
                     headType.classList.add('syntax-type');
-                    headType.innerText = `${locator.result.type}`;
+                    headType.innerText = `${(0, trimTypeName_1.default)(locator.result.type)}`;
                     const headAttr = document.createElement('span');
                     headAttr.classList.add('syntax-attr');
                     headAttr.innerText = `.${(0, formatAttr_1.default)(attr)}`;
@@ -930,7 +940,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                                     }));
                                     const typeNode = document.createElement('span');
                                     typeNode.classList.add('syntax-type');
-                                    typeNode.innerText = pickedNode.result.type;
+                                    typeNode.innerText = (0, trimTypeName_1.default)(pickedNode.result.type);
                                     nodeWrapper.appendChild(typeNode);
                                     pickedNodePanel.appendChild(nodeWrapper);
                                     pickedNodePanel.classList.add('clickHighlightOnHover');
@@ -1585,12 +1595,13 @@ aspect MagicOutputDemo {
     };
     exports.default = displayHelp;
 });
-define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/popup/displayAttributeModal"], function (require, exports, createTextSpanIndicator_3, registerNodeSelector_2, registerOnHover_3, displayAttributeModal_2) {
+define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal"], function (require, exports, createTextSpanIndicator_3, registerNodeSelector_2, registerOnHover_3, trimTypeName_2, displayAttributeModal_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createTextSpanIndicator_3 = __importDefault(createTextSpanIndicator_3);
     registerNodeSelector_2 = __importDefault(registerNodeSelector_2);
     registerOnHover_3 = __importDefault(registerOnHover_3);
+    trimTypeName_2 = __importDefault(trimTypeName_2);
     displayAttributeModal_2 = __importDefault(displayAttributeModal_2);
     const encodeLine = (env, target, line, respectIndent = false) => {
         if (typeof line === 'string') {
@@ -1649,7 +1660,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
                     }));
                     const typeNode = document.createElement('span');
                     typeNode.classList.add('syntax-type');
-                    typeNode.innerText = type;
+                    typeNode.innerText = (0, trimTypeName_2.default)(type);
                     container.appendChild(typeNode);
                     container.classList.add('clickHighlightOnHover');
                     container.style.width = 'fit-content';
@@ -1697,7 +1708,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
     };
     exports.default = encodeRpcBodyLines;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "model/adjustLocator", "settings", "ui/popup/encodeRpcBodyLines"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayProbeModal_2, showWindow_4, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_1, adjustLocator_2, settings_2, encodeRpcBodyLines_1) {
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "model/adjustLocator", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayProbeModal_2, showWindow_4, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_1, adjustLocator_2, settings_2, encodeRpcBodyLines_1, trimTypeName_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
@@ -1711,6 +1722,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     adjustLocator_2 = __importDefault(adjustLocator_2);
     settings_2 = __importDefault(settings_2);
     encodeRpcBodyLines_1 = __importDefault(encodeRpcBodyLines_1);
+    trimTypeName_3 = __importDefault(trimTypeName_3);
     const displayAttributeModal = (env, modalPos, locator) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let filter = '';
@@ -1736,7 +1748,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                     renderLeft: (container) => {
                         const headType = document.createElement('span');
                         headType.classList.add('syntax-type');
-                        headType.innerText = `${locator.result.type}`;
+                        headType.innerText = `${(0, trimTypeName_3.default)(locator.result.type)}`;
                         const headAttr = document.createElement('span');
                         headAttr.classList.add('syntax-attr');
                         headAttr.innerText = `.?`;
@@ -1990,7 +2002,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     };
     exports.default = displayAttributeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, createTextSpanIndicator_5, displayAttributeModal_3, showWindow_5, formatAttr_3, displayArgModal_2, registerNodeSelector_3, adjustLocator_3, displayHelp_2, encodeRpcBodyLines_2) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, createTextSpanIndicator_5, displayAttributeModal_3, showWindow_5, formatAttr_3, displayArgModal_2, registerNodeSelector_3, adjustLocator_3, displayHelp_2, encodeRpcBodyLines_2, trimTypeName_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
@@ -2004,6 +2016,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     adjustLocator_3 = __importDefault(adjustLocator_3);
     displayHelp_2 = __importDefault(displayHelp_2);
     encodeRpcBodyLines_2 = __importDefault(encodeRpcBodyLines_2);
+    trimTypeName_4 = __importDefault(trimTypeName_4);
     const displayProbeModal = (env, modalPos, locator, attr) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
@@ -2064,7 +2077,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     var _a;
                     const headType = document.createElement('span');
                     headType.classList.add('syntax-type');
-                    headType.innerText = `${locator.result.type}`;
+                    headType.innerText = `${(0, trimTypeName_4.default)(locator.result.type)}`;
                     const headAttr = document.createElement('span');
                     headAttr.classList.add('syntax-attr');
                     headAttr.classList.add('clickHighlightOnHover');
@@ -2287,10 +2300,11 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     console.log('ProbeModal RPC catch', err);
                     root.innerHTML = '';
                     root.innerText = 'Failed refreshing probe..';
-                    // setTimeout(() => {
-                    //   queryWindow.remove();
-                    //   cleanup();
-                    // }, 1000);
+                    console.warn('Failed refreshing probe w/ args:', JSON.stringify({ locator, attr }, null, 2));
+                    setTimeout(() => {
+                        queryWindow.remove();
+                        cleanup();
+                    }, 2000);
                 });
             },
         });
@@ -2317,7 +2331,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     };
     exports.default = displayProbeModal;
 });
-define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines"], function (require, exports, createLoadingSpinner_3, createModalTitle_5, displayAttributeModal_4, registerOnHover_4, showWindow_6, registerNodeSelector_4, encodeRpcBodyLines_3) {
+define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName"], function (require, exports, createLoadingSpinner_3, createModalTitle_5, displayAttributeModal_4, registerOnHover_4, showWindow_6, registerNodeSelector_4, encodeRpcBodyLines_3, trimTypeName_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_3 = __importDefault(createLoadingSpinner_3);
@@ -2327,6 +2341,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
     showWindow_6 = __importDefault(showWindow_6);
     registerNodeSelector_4 = __importDefault(registerNodeSelector_4);
     encodeRpcBodyLines_3 = __importDefault(encodeRpcBodyLines_3);
+    trimTypeName_5 = __importDefault(trimTypeName_5);
     const displayRagModal = (env, line, col) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const cleanup = () => {
@@ -2403,7 +2418,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         if (entIdx !== 0) {
                             node.style.borderTop = '1px solid gray';
                         }
-                        node.innerText = `${type}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
+                        node.innerText = `${(0, trimTypeName_5.default)(type)}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
                         (0, registerOnHover_4.default)(node, on => env.updateSpanHighlight(on ? span : null));
                         node.onmousedown = (e) => { e.stopPropagation(); };
                         (0, registerNodeSelector_4.default)(node, () => locator);

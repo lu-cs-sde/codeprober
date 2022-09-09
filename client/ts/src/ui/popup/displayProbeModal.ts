@@ -9,6 +9,7 @@ import registerNodeSelector from "../create/registerNodeSelector";
 import adjustLocator from "../../model/adjustLocator";
 import displayHelp from "./displayHelp";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
+import trimTypeName from "../trimTypeName";
 
 const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLocator, attr: AstAttrWithValue) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -72,7 +73,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
       renderLeft: (container) => {
         const headType = document.createElement('span');
         headType.classList.add('syntax-type');
-        headType.innerText = `${locator.result.type}`;
+        headType.innerText = `${trimTypeName(locator.result.type)}`;
 
         const headAttr = document.createElement('span');
         headAttr.classList.add('syntax-attr');
@@ -295,10 +296,11 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
           console.log('ProbeModal RPC catch', err);
           root.innerHTML = '';
           root.innerText = 'Failed refreshing probe..';
-          // setTimeout(() => {
-          //   queryWindow.remove();
-          //   cleanup();
-          // }, 1000);
+          console.warn('Failed refreshing probe w/ args:', JSON.stringify({ locator, attr }, null, 2));
+          setTimeout(() => { // TODO remove this again, once the title bar is added so we can close it
+            queryWindow.remove();
+            cleanup();
+          }, 2000);
         })
     },
   });

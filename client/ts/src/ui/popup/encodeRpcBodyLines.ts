@@ -1,6 +1,7 @@
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import registerNodeSelector from "../create/registerNodeSelector";
 import registerOnHover from "../create/registerOnHover";
+import trimTypeName from "../trimTypeName";
 import displayAttributeModal from "./displayAttributeModal";
 
 const encodeLine = (env: ModalEnv, target: HTMLElement, line: RpcBodyLine, respectIndent = false) => {
@@ -59,7 +60,7 @@ const encodeLine = (env: ModalEnv, target: HTMLElement, line: RpcBodyLine, respe
         }));
         const typeNode = document.createElement('span');
         typeNode.classList.add('syntax-type');
-        typeNode.innerText = type;
+        typeNode.innerText = trimTypeName(type);
         container.appendChild(typeNode);
 
         container.classList.add('clickHighlightOnHover');

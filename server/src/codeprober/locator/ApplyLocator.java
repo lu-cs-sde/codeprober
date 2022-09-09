@@ -136,7 +136,7 @@ public class ApplyLocator {
 //			final JSONObject tal = step.getJSONObject("value");
 		try {
 			final MatchedNode match = bestMatchingNode(info, sourceNode,
-					info.loadAstClass.apply(info.getQualifiedAstType(tal.type)), tal.loc.start, tal.loc.end, depth,
+					info.loadAstClass.apply(tal.type), tal.loc.start, tal.loc.end, depth,
 					info.recoveryStrategy, true, ignoreTraversalOn, Integer.MIN_VALUE);
 			if (ignoreTraversalOn != null) {
 				// Matching anything means that there are >=two matches -> ambiguous
@@ -193,7 +193,7 @@ public class ApplyLocator {
 						final int start = tal.getInt("start");
 						final int end = tal.getInt("end");
 						final int depth = tal.getInt("depth");
-						final Class<?> clazz = info.loadAstClass.apply(info.getQualifiedAstType(tal.getString("type")));
+						final Class<?> clazz = info.loadAstClass.apply(tal.getString("type"));
 						final AstNode parent = matchedNode;
 						MatchedNode result = bestMatchingNode(info, parent, clazz, start, end, depth,
 								info.recoveryStrategy, false);

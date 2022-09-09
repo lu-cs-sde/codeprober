@@ -9,6 +9,7 @@ import displayHelp from "./displayHelp";
 import adjustLocator from "../../model/adjustLocator";
 import settings from "../../settings";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
+import trimTypeName from "../trimTypeName";
 
 const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -36,7 +37,7 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
         renderLeft: (container) => {
           const headType = document.createElement('span');
           headType.classList.add('syntax-type');
-          headType.innerText = `${locator.result.type}`;
+          headType.innerText = `${trimTypeName(locator.result.type)}`;
 
           const headAttr = document.createElement('span');
           headAttr.classList.add('syntax-attr');

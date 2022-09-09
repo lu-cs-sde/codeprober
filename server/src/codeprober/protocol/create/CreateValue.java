@@ -24,7 +24,7 @@ public abstract class CreateValue {
 	}
 
 	public static ParameterValue fromInstance(AstInfo info, Class<?> valueClazz, Type valueType, Object value) {
-		final ParameterType type = CreateType.fromClass(valueClazz, info.basAstClazz);
+		final ParameterType type = CreateType.fromClass(valueClazz, info.baseAstClazz);
 		if (type == null) {
 			return null;
 		}

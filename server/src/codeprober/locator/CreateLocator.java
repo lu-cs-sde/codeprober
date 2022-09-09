@@ -70,7 +70,7 @@ public class CreateLocator {
 			final Span astPos = astNode.getRecoveredSpan(info);
 			robustResult.put("start", astPos.start);
 			robustResult.put("end", astPos.end);
-			robustResult.put("type", astNode.underlyingAstNode.getClass().getSimpleName());
+			robustResult.put("type", astNode.underlyingAstNode.getClass().getName());
 
 			final JSONArray steps = new JSONArray();
 			for (NodeEdge step : id.steps) {
@@ -124,7 +124,6 @@ public class CreateLocator {
 				for (int i = trimPos; i >= 0; --i) {
 					++disambiguationDepth;
 					final NodeEdge parentEdge = res.get(i);
-//					System.out.println("Locator parentEdge target class: " + parentEdge.targetNode.underlyingAstNode.getClass().getSimpleName());
 					
 					if (parentEdge.targetNode.isLocatorTALRoot(info)) {
 						foundTopSubstitutableNode = true;

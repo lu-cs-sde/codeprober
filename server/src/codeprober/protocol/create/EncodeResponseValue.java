@@ -23,7 +23,7 @@ public class EncodeResponseValue {
 		// visited it.
 		alreadyVisitedNodes = new HashSet<Object>(alreadyVisitedNodes);
 
-		if (value != null && info.basAstClazz.isInstance(value)) {
+		if (value != null && info.baseAstClazz.isInstance(value)) {
 			value = new AstNode(value);
 		}
 
@@ -71,7 +71,8 @@ public class EncodeResponseValue {
 					out.put("somewhere even after a re-parse or flushTreeCache() is called.");
 					out.put("Try setting the 'AST caching strategy' to 'None' or 'Purge'.");
 					out.put("If that helps, then you maybe have a caching problem somewhere in the AST.");
-					out.put("If that doesn't help, then you may have found a bug. Please report it!");
+					out.put("If that doesn't help, then please look at any error messages in the terminal where you started code-prober.jar.");
+					out.put("If that doesn't help either, then you may have found a bug. Please report it!");
 				}
 				return;
 			} catch (InvokeProblem e) {

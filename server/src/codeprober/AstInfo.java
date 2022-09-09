@@ -16,7 +16,7 @@ public class AstInfo {
 	public final PositionRecoveryStrategy recoveryStrategy;
 	public final AstNodeApiStyle astApiStyle;
 	public final Function<String, Class<?>> loadAstClass;
-	public final Class<?> basAstClazz;
+	public final Class<?> baseAstClazz;
 	
 	private Class<?> locatorTALRoot;
 	private boolean loadedLocatorTALRoot;
@@ -39,14 +39,15 @@ public class AstInfo {
 			}
 			baseAstType = parentType;
 		}
-		this.basAstClazz = baseAstType;
+		this.baseAstClazz = baseAstType;
+		System.out.println("baseAstClazz: " + this.baseAstClazz);
 	}
 
 	public String getQualifiedAstType(String simpleName) {
-		if (basAstClazz.getEnclosingClass() != null) {
-			return basAstClazz.getEnclosingClass().getName() + "$" + simpleName;
+		if (baseAstClazz.getEnclosingClass() != null) {
+			return baseAstClazz.getEnclosingClass().getName() + "$" + simpleName;
 		}
-		return basAstClazz.getPackage().getName() + "." + simpleName;
+		return baseAstClazz.getPackage().getName() + "." + simpleName;
 	}
 	
 	public Class<?> getLocatorTALRoot() {

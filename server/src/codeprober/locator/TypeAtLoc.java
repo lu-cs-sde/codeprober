@@ -24,7 +24,7 @@ public class TypeAtLoc {
 	}
 
 	public static TypeAtLoc from(AstInfo info, AstNode astNode) throws InvokeProblem {
-		return new TypeAtLoc(astNode.underlyingAstNode.getClass().getSimpleName(), astNode.getRecoveredSpan(info));
+		return new TypeAtLoc(astNode.underlyingAstNode.getClass().getName(), astNode.getRecoveredSpan(info));
 	}
 
 	@Override

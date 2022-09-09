@@ -4,6 +4,7 @@ import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import registerNodeSelector from "../create/registerNodeSelector";
 import registerOnHover from "../create/registerOnHover";
 import showModal from "../create/showWindow";
+import trimTypeName from "../trimTypeName";
 import displayAttributeModal from "./displayAttributeModal";
 import displayProbeModal from "./displayProbeModal";
 import formatAttr, { formatAttrType } from "./formatAttr";
@@ -62,7 +63,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
       renderLeft: (container) => {
         const headType = document.createElement('span');
         headType.classList.add('syntax-type');
-        headType.innerText = `${locator.result.type}`;
+        headType.innerText = `${trimTypeName(locator.result.type)}`;
 
         const headAttr = document.createElement('span');
         headAttr.classList.add('syntax-attr');
@@ -270,7 +271,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
                 }));
                 const typeNode = document.createElement('span');
                 typeNode.classList.add('syntax-type');
-                typeNode.innerText = pickedNode.result.type;
+                typeNode.innerText = trimTypeName(pickedNode.result.type);
                 nodeWrapper.appendChild(typeNode);
 
                 pickedNodePanel.appendChild(nodeWrapper);

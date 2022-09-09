@@ -134,7 +134,7 @@ public class TestCreateLocator extends TestCase {
 		final AstNode root = new AstNode(TestData.getWithParameterizedNta());
 		final AstInfo info = TestData.getInfo(root);
 		final AstNode bar = new AstNode(Reflect.invokeN(info.ast.underlyingAstNode, "parameterizedNTA",
-				new Class<?>[] { Integer.TYPE, info.basAstClazz },
+				new Class<?>[] { Integer.TYPE, info.baseAstClazz },
 				new Object[] { 1, info.ast.getNthChild(info, 0).underlyingAstNode })).getNthChild(info, 1);
 
 		final JSONObject locator = CreateLocator.fromNode(info, bar);
@@ -161,7 +161,7 @@ public class TestCreateLocator extends TestCase {
 
 		final JSONObject nodeArg = args.getJSONObject(1);
 		assertEquals(true, nodeArg.getBoolean("isNodeType"));
-		assertEquals(info.basAstClazz.getName(), nodeArg.getString("type"));
+		assertEquals(info.baseAstClazz.getName(), nodeArg.getString("type"));
 
 		final JSONObject nodeLocator = nodeArg.getJSONObject("value");
 		Consumer<JSONObject> assertFooLocator = (fooLoc) -> {

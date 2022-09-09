@@ -5,6 +5,7 @@ import registerOnHover from "../create/registerOnHover";
 import showWindow from "../create/showWindow";
 import registerNodeSelector from "../create/registerNodeSelector";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
+import trimTypeName from "../trimTypeName";
 
 const displayRagModal = (env: ModalEnv, line: number, col: number) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -84,7 +85,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
             if (entIdx !== 0) {
               node.style.borderTop = '1px solid gray';
             }
-            node.innerText = `${type}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
+            node.innerText = `${trimTypeName(type)}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
             registerOnHover(node, on => env.updateSpanHighlight(on ? span : null));
             node.onmousedown = (e) => { e.stopPropagation(); }
 

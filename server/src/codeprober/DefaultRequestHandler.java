@@ -203,7 +203,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				final Throwable cause = e.getCause();
 				if (cause instanceof NoSuchMethodException) {
 					bodyBuilder.put("No such attribute '" + queryAttrName + "' on "
-							+ match.node.underlyingAstNode.getClass().getSimpleName());
+							+ match.node.underlyingAstNode.getClass().getName());
 				} else {
 					if (cause != null && cause.getCause() != null) {
 						cause.getCause().printStackTrace();
@@ -395,11 +395,12 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				lastForwardArgs = fwdArgs;
 
 				final long parseStart = System.nanoTime();
-				
-				final ASTProvider.ParseResult parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs, (ast, loadCls) -> {
-					retBuilder.put("parseTime", (System.nanoTime() - parseStart));
-					handleParsedAst(ast, loadCls, queryObj, retBuilder, bodyBuilder);
-				});
+
+				final ASTProvider.ParseResult parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs,
+						(ast, loadCls) -> {
+							retBuilder.put("parseTime", (System.nanoTime() - parseStart));
+							handleParsedAst(ast, loadCls, queryObj, retBuilder, bodyBuilder);
+						});
 				if (!parsed.success) {
 					if (bodyBuilder.length() == 0) {
 						bodyBuilder.put("Parsing failed");
@@ -410,7 +411,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					// 3) Cacheable parse -> reuse lastInfo if available
 					// To avoid step 3 reusing a faulty 'lastInfo' from step 1, clear it in step 2.
 					lastInfo = null;
-					
+
 					if (parsed.captures != null && parsed.captures.length() > 0) {
 						bodyBuilder.put("Stdout messages during parsing:");
 						for (Object obj : parsed.captures) {

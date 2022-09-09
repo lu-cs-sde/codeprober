@@ -29,7 +29,7 @@ public abstract class CreateType {
 	public static ParameterType[] fromParameters(AstInfo info, Parameter[] parameters) {
 		final ParameterType[] ret = new ParameterType[parameters.length];
 		for (int i = 0; i < ret.length; i++) {
-			ret[i] = fromClass(parameters[i].getType(), info.basAstClazz);
+			ret[i] = fromClass(parameters[i].getType(), info.baseAstClazz);
 			if (ret[i] == null) {
 				return null;
 			}
