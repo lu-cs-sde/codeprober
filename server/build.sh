@@ -35,7 +35,6 @@ else
   DST=../../code-prober-dev.jar
 fi
 
-
 if hash date 2>/dev/null; then
   echo "Build-Time: $(date -u +%s)" >> cpr.properties
 fi

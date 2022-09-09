@@ -1,14 +1,12 @@
 package codeprober;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
 
 import codeprober.ast.AstNode;
+import codeprober.metaprogramming.AstNodeApiStyle;
 import codeprober.metaprogramming.InvokeProblem;
-import codeprober.metaprogramming.PositionRepresentation;
 import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.PositionRecoveryStrategy;
 
@@ -16,7 +14,7 @@ public class AstInfo {
 
 	public final AstNode ast;
 	public final PositionRecoveryStrategy recoveryStrategy;
-	public final PositionRepresentation positionRepresentation;
+	public final AstNodeApiStyle astApiStyle;
 	public final Function<String, Class<?>> loadAstClass;
 	public final Class<?> basAstClazz;
 	
@@ -27,10 +25,10 @@ public class AstInfo {
 	private final Map<Class<?>, Map<String, Boolean>> hasOverrides = new HashMap<>();
 	
 	public AstInfo(AstNode ast, PositionRecoveryStrategy recoveryStrategy,
-			PositionRepresentation positionRepresentation, Function<String, Class<?>> loadAstClass) {
+			AstNodeApiStyle astApiStyle, Function<String, Class<?>> loadAstClass) {
 		this.ast = ast;
 		this.recoveryStrategy = recoveryStrategy;
-		this.positionRepresentation = positionRepresentation;
+		this.astApiStyle = astApiStyle;
 		this.loadAstClass = loadAstClass;
 
 		Class<?> baseAstType = ast.underlyingAstNode.getClass();

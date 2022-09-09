@@ -8,18 +8,14 @@ import org.json.JSONObject;
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.ast.TestData;
-import codeprober.locator.ApplyLocator;
-import codeprober.locator.CreateLocator;
-import codeprober.locator.TypeAtLoc;
-import codeprober.locator.TypeAtLocEdge;
 import codeprober.locator.ApplyLocator.ResolvedNode;
 import junit.framework.TestCase;
 
 public class TestApplyLocator extends TestCase {
 
-	private void assertMirror(Object ast, Function<AstNode, AstNode> pickTestNode) {
+	private void assertMirror(Object ast, Function<AstInfo, AstNode> pickTestNode) {
 		final AstInfo info = TestData.getInfo(new AstNode(ast));
-		final AstNode node = pickTestNode.apply(info.ast);
+		final AstNode node = pickTestNode.apply(info);
 
 		final JSONObject locator = CreateLocator.fromNode(info, node);
 		final ResolvedNode result = ApplyLocator.toNode(info, locator);
@@ -29,33 +25,33 @@ public class TestApplyLocator extends TestCase {
 	}
 
 	public void testMirrorSimpleProgram() {
-		assertMirror(TestData.getSimple(), ast -> ast);
+		assertMirror(TestData.getSimple(), info -> info.ast);
 	}
 
 	public void testMirrorSimpleFoo() {
-		assertMirror(TestData.getSimple(), ast -> ast.getNthChild(0));
+		assertMirror(TestData.getSimple(), info -> info.ast.getNthChild(info, 0));
 	}
 
 	public void testMirrorSimpleBar() {
-		assertMirror(TestData.getSimple(), ast -> ast.getNthChild(0).getNthChild(0));
+		assertMirror(TestData.getSimple(), info -> info.ast.getNthChild(info, 0).getNthChild(info, 0));
 	}
 
 	public void testMirrorSimpleBaz() {
-		assertMirror(TestData.getSimple(), ast -> ast.getNthChild(1));
+		assertMirror(TestData.getSimple(), info -> info.ast.getNthChild(info, 1));
 	}
 
 	public void testMirrorAmbiguousProgram() {
-		assertMirror(TestData.getFlatAmbiguous(), ast -> ast);
+		assertMirror(TestData.getFlatAmbiguous(), info -> info.ast);
 	}
 
 	public void testMirrorAmbiguousFoo() {
-		assertMirror(TestData.getFlatAmbiguous(), ast -> ast.getNthChild(0));
+		assertMirror(TestData.getFlatAmbiguous(), info -> info.ast.getNthChild(info, 0));
 	}
 
 	public void testMirrorHillyAmbiguousBar() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
-		final AstNode shallowBar = info.ast.getNthChild(0);
-		final AstNode deepBar = info.ast.getNthChild(1).getNthChild(0);
+		final AstNode shallowBar = info.ast.getNthChild(info, 0);
+		final AstNode deepBar = info.ast.getNthChild(info, 1).getNthChild(info, 0);
 		final JSONObject locator = new JSONObject().put("steps", new JSONArray().put(//
 				new TypeAtLocEdge(info.ast, TypeAtLoc.from(info, info.ast), shallowBar, TypeAtLoc.from(info, shallowBar), 1).toJson()));
 
@@ -79,13 +75,13 @@ public class TestApplyLocator extends TestCase {
 
 //	.add(new Bar(lc(1, 2), lc(1, 4))) //
 	public void testMirrorAmbiguousBar() {
-		assertMirror(TestData.getFlatAmbiguous(), ast -> ast.getNthChild(0).getNthChild(0));
-		assertMirror(TestData.getFlatAmbiguous(), ast -> ast.getNthChild(0).getNthChild(1));
+		assertMirror(TestData.getFlatAmbiguous(), info -> info.ast.getNthChild(info, 0).getNthChild(info, 0));
+		assertMirror(TestData.getFlatAmbiguous(), info -> info.ast.getNthChild(info, 0).getNthChild(info, 1));
 	}
 
 	public void testSlightlyIncorrectLocator() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getSimple()));
-		final AstNode foo = info.ast.getNthChild(0);
+		final AstNode foo = info.ast.getNthChild(info, 0);
 		final JSONObject locator = CreateLocator.fromNode(info, foo);
 
 		final JSONObject talStep = locator.getJSONArray("steps").getJSONObject(0);

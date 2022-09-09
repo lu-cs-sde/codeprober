@@ -176,7 +176,7 @@ public class CreateLocator {
 		final TypeAtLoc source = TypeAtLoc.from(info, parent);
 		final TypeAtLoc target = TypeAtLoc.from(info, astNode);
 		int childIdxCounter = 0;
-		for (AstNode child : parent.getChildren()) {
+		for (AstNode child : parent.getChildren(info)) {
 			if (child.sharesUnderlyingNode(astNode)) {
 				out.add(new ChildIndexEdge(parent, source, astNode, target, childIdxCounter));
 				extractStepsTo(info, parent, out);
@@ -188,7 +188,7 @@ public class CreateLocator {
 			return;
 		}
 
-		if (parent.getNumChildren() == 0) {
+		if (parent.getNumChildren(info) == 0) {
 			// Strange proxy node that appears in NTA+param cases
 			// RealParent -> Proxy -> Value
 			// In this case, 'parent' is the proxy. We want the grandparent instead

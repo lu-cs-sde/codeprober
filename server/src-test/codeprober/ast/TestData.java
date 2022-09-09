@@ -8,7 +8,7 @@ import java.util.Map;
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.ast.ASTNodeAnnotation.Attribute;
-import codeprober.metaprogramming.PositionRepresentation;
+import codeprober.metaprogramming.AstNodeApiStyle;
 import codeprober.protocol.PositionRecoveryStrategy;
 
 public class TestData {
@@ -251,7 +251,7 @@ public class TestData {
 	}
 
 	public static AstInfo getInfo(AstNode root) {
-		return new AstInfo(root, PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD, PositionRepresentation.PACKED_BITS,
+		return new AstInfo(root, PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD, AstNodeApiStyle.BEAVER_PACKED_BITS,
 				cn -> {
 					try {
 						return Class.forName(cn);

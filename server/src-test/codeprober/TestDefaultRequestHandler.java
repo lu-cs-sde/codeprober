@@ -24,7 +24,7 @@ public class TestDefaultRequestHandler extends TestCase {
 		requestObj.put("query", query);
 
 		query.put("locator", CreateLocator.fromNode(info,
-				new AstNode(Reflect.invoke0(ast.underlyingAstNode, "simpleNTA")).getNthChild(1)));
+				new AstNode(Reflect.invoke0(ast.underlyingAstNode, "simpleNTA")).getNthChild(info, 1)));
 
 		final JSONObject attr = new JSONObject();
 		query.put("attr", attr);

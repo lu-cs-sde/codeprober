@@ -52,14 +52,14 @@ public class EncodeResponseValue {
 
 					out.put("\n");
 					if (node.isList() && !alreadyVisitedNodes.contains(node.underlyingAstNode)) {
-						final int numEntries = node.getNumChildren();
+						final int numEntries = node.getNumChildren(info);
 						out.put("");
 						if (numEntries == 0) {
 							out.put("<empty list>");
 						} else {
 							alreadyVisitedNodes.add(node.underlyingAstNode);
 							out.put("List contents [" + numEntries + "]:");
-							for (AstNode child : node.getChildren()) {
+							for (AstNode child : node.getChildren(info)) {
 								encode(info, out, child, alreadyVisitedNodes);
 							}
 						}

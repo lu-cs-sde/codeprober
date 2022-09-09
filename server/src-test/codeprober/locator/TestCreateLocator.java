@@ -37,7 +37,7 @@ public class TestCreateLocator extends TestCase {
 	public void testSimpleFoo() {
 		final AstNode root = new AstNode(TestData.getSimple());
 		final AstInfo info = TestData.getInfo(root);
-		final AstNode foo = root.getNthChild(0);
+		final AstNode foo = root.getNthChild(info, 0);
 
 		final JSONObject locator = CreateLocator.fromNode(info, foo);
 
@@ -59,7 +59,7 @@ public class TestCreateLocator extends TestCase {
 	public void testSimpleBar() {
 		final AstNode root = new AstNode(TestData.getSimple());
 		final AstInfo info = TestData.getInfo(root);
-		final AstNode bar = root.getNthChild(0).getNthChild(0);
+		final AstNode bar = root.getNthChild(info, 0).getNthChild(info, 0);
 
 		final JSONObject locator = CreateLocator.fromNode(info, bar);
 
@@ -82,8 +82,8 @@ public class TestCreateLocator extends TestCase {
 	public void testAmbiguousBar() {
 		final AstNode root = new AstNode(TestData.getFlatAmbiguous());
 		final AstInfo info = TestData.getInfo(root);
-		final AstNode foo = root.getNthChild(0);
-		final AstNode bar = foo.getNthChild(1);
+		final AstNode foo = root.getNthChild(info, 0);
+		final AstNode bar = foo.getNthChild(info, 1);
 
 		final JSONObject locator = CreateLocator.fromNode(info, bar);
 
@@ -135,7 +135,7 @@ public class TestCreateLocator extends TestCase {
 		final AstInfo info = TestData.getInfo(root);
 		final AstNode bar = new AstNode(Reflect.invokeN(info.ast.underlyingAstNode, "parameterizedNTA",
 				new Class<?>[] { Integer.TYPE, info.basAstClazz },
-				new Object[] { 1, info.ast.getNthChild(0).underlyingAstNode })).getNthChild(1);
+				new Object[] { 1, info.ast.getNthChild(info, 0).underlyingAstNode })).getNthChild(info, 1);
 
 		final JSONObject locator = CreateLocator.fromNode(info, bar);
 
@@ -165,7 +165,7 @@ public class TestCreateLocator extends TestCase {
 
 		final JSONObject nodeLocator = nodeArg.getJSONObject("value");
 		Consumer<JSONObject> assertFooLocator = (fooLoc) -> {
-			assertSpan(info.ast.getNthChild(0).getRecoveredSpan(info), fooLoc.getInt("start"),
+			assertSpan(info.ast.getNthChild(info, 0).getRecoveredSpan(info), fooLoc.getInt("start"),
 					fooLoc.getInt("end"));
 			assertEquals("Foo", fooLoc.getString("type"));
 		};
@@ -186,7 +186,7 @@ public class TestCreateLocator extends TestCase {
 	public void testAmbiguousUncle() {
 		AstNode root = new AstNode(TestData.getAmbiguousUncle());
 		final AstInfo info = TestData.getInfo(root);
-		final AstNode bar = root.getNthChild(1).getNthChild(0);
+		final AstNode bar = root.getNthChild(info, 1).getNthChild(info, 0);
 
 		final JSONObject locator = CreateLocator.fromNode(info, bar);
 

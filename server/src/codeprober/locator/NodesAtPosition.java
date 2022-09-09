@@ -59,7 +59,7 @@ public class NodesAtPosition {
 			}
 		}
 		if (includeNode) {
-			for (AstNode child : astNode.getChildren()) {
+			for (AstNode child : astNode.getChildren(info)) {
 				getTo(out, info, child, pos);
 			}
 		}

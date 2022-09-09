@@ -10,18 +10,6 @@ public class Reflect {
 		return Reflect.invoke0(astNode, "getParent");
 	}
 
-	public static Object getFirstChild(Object astNode) {
-		return getNthChild(astNode, 0);
-	}
-
-	public static Object getNthChild(Object astNode, int n) {
-		int numCh = (Integer) invoke0(astNode, "getNumChild");
-		if (n >= numCh) {
-			return null;
-		}
-		return invokeN(astNode, "getChild", new Class<?>[] { Integer.TYPE }, new Object[] { n });
-	}
-
 	public static Object invokeN(Object astNode, String mth, Class<?>[] argTypes, Object[] argValues) {
 		try {
 			return astNode.getClass().getMethod(mth, argTypes).invoke(astNode, argValues);

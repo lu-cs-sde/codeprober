@@ -7,7 +7,7 @@ import java.util.Set;
 import codeprober.AstInfo;
 import codeprober.locator.Span;
 import codeprober.metaprogramming.InvokeProblem;
-import codeprober.metaprogramming.PositionRepresentation;
+import codeprober.metaprogramming.AstNodeApiStyle;
 import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.PositionRecoveryStrategy;
 
@@ -23,12 +23,12 @@ public class AstNode {
 	private final Set<Object> visitedNodes = new HashSet<>();
 
 	private Span rawSpan;
-	
+
 	private PositionRecoveryStrategy recoveredSpanStrategy;
 	private Span recoveredSpan;
 
 	private Boolean isNonOverlappingSibling = null;
-	
+
 	public AstNode(Object underlyingAstNode) {
 		if (underlyingAstNode == null) {
 			throw new NullPointerException("Missing underlying node");
@@ -43,7 +43,7 @@ public class AstNode {
 	public boolean isLocatorTALRoot(AstInfo info) {
 		return underlyingAstNode.getClass() == info.getLocatorTALRoot();
 	}
-	
+
 	public Boolean showInNodeList(AstInfo info) {
 		if (!info.hasOverride0(underlyingAstNode.getClass(), "cpr_nodeListVisible")) {
 			return null;
@@ -55,13 +55,13 @@ public class AstNode {
 			return null;
 		}
 	}
-	
+
 	public Boolean cutoffNodeListTree(AstInfo info) {
 		if (!info.hasOverride0(underlyingAstNode.getClass(), "cpr_cutoffNodeListTree")) {
 			return null;
 		}
 //		try {
-			return (Boolean) Reflect.invoke0(underlyingAstNode, "cpr_cutoffNodeListTree");
+		return (Boolean) Reflect.invoke0(underlyingAstNode, "cpr_cutoffNodeListTree");
 //		} catch (InvokeProblem e) {
 //			// Perfectly fine to not override this, ignore the error
 //			return null;
@@ -73,7 +73,7 @@ public class AstNode {
 		if (isNonOverlappingSibling != null) {
 			return isNonOverlappingSibling;
 		}
-		
+
 		if (parent == null) {
 			isNonOverlappingSibling = false;
 		} else {
@@ -83,7 +83,7 @@ public class AstNode {
 //				return false;
 //			}
 			boolean foundSelf = false;
-			for (AstNode sibling : parent.getChildren()) {
+			for (AstNode sibling : parent.getChildren(info)) {
 				if (sibling.underlyingAstNode == this.underlyingAstNode) {
 					foundSelf = true;
 					continue;
@@ -98,22 +98,31 @@ public class AstNode {
 		}
 		return isNonOverlappingSibling;
 	}
+
 	public Span getRawSpan(AstInfo info) throws InvokeProblem {
-		return getRawSpan(info.positionRepresentation);
+		return getRawSpan(info.astApiStyle);
 	}
 
-	public Span getRawSpan(PositionRepresentation positionRepresentation) throws InvokeProblem {
+	public Span getRawSpan(AstNodeApiStyle positionRepresentation) throws InvokeProblem {
 		if (this.rawSpan == null) {
 			switch (positionRepresentation) {
-			case PACKED_BITS: {
+			case BEAVER_PACKED_BITS: {
 				this.rawSpan = new Span((Integer) Reflect.invoke0(underlyingAstNode, "getStart"),
 						(Integer) Reflect.invoke0(underlyingAstNode, "getEnd"));
 				break;
 			}
-			case SEPARATE_LINE_COLUMN: {
+			case JASTADD_SEPARATE_LINE_COLUMN: {
 				this.rawSpan = new Span( //
 						((Integer) Reflect.invoke0(underlyingAstNode, "getStartLine") << 12)
 								+ ((Number) Reflect.invoke0(underlyingAstNode, "getStartColumn")).intValue(),
+						((Integer) Reflect.invoke0(underlyingAstNode, "getEndLine") << 12)
+								+ ((Number) Reflect.invoke0(underlyingAstNode, "getEndColumn")).intValue());
+				break;
+			}
+			case PMD_SEPARATE_LINE_COLUMN: {
+				this.rawSpan = new Span( //
+						((Integer) Reflect.invoke0(underlyingAstNode, "getBeginLine") << 12)
+								+ ((Number) Reflect.invoke0(underlyingAstNode, "getBeginColumn")).intValue(),
 						((Integer) Reflect.invoke0(underlyingAstNode, "getEndLine") << 12)
 								+ ((Number) Reflect.invoke0(underlyingAstNode, "getEndColumn")).intValue());
 				break;
@@ -129,7 +138,7 @@ public class AstNode {
 	public static Span extractPositionDownwards(AstInfo info, AstNode astNode) {
 		final Span ownPos = astNode.getRawSpan(info);
 		if (!ownPos.isMeaningful()) {
-			final AstNode child = astNode.getNumChildren() > 0 ? astNode.getNthChild(0) : null;
+			final AstNode child = astNode.getNumChildren(info) > 0 ? astNode.getNthChild(info, 0) : null;
 			if (child != null) {
 				return extractPositionDownwards(info, child);
 			}
@@ -147,13 +156,13 @@ public class AstNode {
 		}
 		return ownPos;
 	}
-	
+
 	private Span setAndGetRecoveredSpan(AstInfo info, Span recoveredSpan) {
 		this.recoveredSpanStrategy = info.recoveryStrategy;
 		this.recoveredSpan = recoveredSpan;
 		return this.recoveredSpan;
 	}
-	
+
 	public Span getRecoveredSpan(AstInfo info) {
 		if (this.recoveredSpan != null && this.recoveredSpanStrategy == info.recoveryStrategy) {
 			return this.recoveredSpan;
@@ -191,7 +200,7 @@ public class AstNode {
 					}
 				}
 				if (child != null) {
-					child = child.getNumChildren() > 0 ? child.getNthChild(0) : null;
+					child = child.getNumChildren(info) > 0 ? child.getNthChild(info, 0) : null;
 					if (child != null) {
 						final Span childPos = child.getRawSpan(info);
 						if (childPos.isMeaningful()) {
@@ -234,16 +243,30 @@ public class AstNode {
 		return parent;
 	}
 
-	public int getNumChildren() {
+	public int getNumChildren(AstInfo info) {
 		if (children == null) {
-			int numCh = (Integer) Reflect.invoke0(underlyingAstNode, "getNumChild");
+			int numCh;
+			switch (info.astApiStyle) {
+			case BEAVER_PACKED_BITS: // Fall through
+			case JASTADD_SEPARATE_LINE_COLUMN:
+				numCh = (Integer) Reflect.invoke0(underlyingAstNode, "getNumChild");
+				break;
+
+			case PMD_SEPARATE_LINE_COLUMN:
+				numCh = (Integer) Reflect.invoke0(underlyingAstNode, "getNumChildren");
+				break;
+
+			default:
+				throw new Error("Unsupported api style " + info.astApiStyle);
+			}
+
 			this.children = new AstNode[numCh];
 		}
 		return this.children.length;
 	}
 
-	public AstNode getNthChild(int n) {
-		final int len = getNumChildren();
+	public AstNode getNthChild(AstInfo info, int n) {
+		final int len = getNumChildren(info);
 		if (n < 0 || n >= len) {
 			throw new ArrayIndexOutOfBoundsException(
 					"This node has " + len + " " + (len == 1 ? "child" : "children") + ", index " + n + " is invalid");
@@ -258,8 +281,8 @@ public class AstNode {
 		return children[n];
 	}
 
-	public Iterable<AstNode> getChildren() {
-		final int len = getNumChildren();
+	public Iterable<AstNode> getChildren(AstInfo info) {
+		final int len = getNumChildren(info);
 		return new Iterable<AstNode>() {
 
 			@Override
@@ -275,7 +298,7 @@ public class AstNode {
 
 					@Override
 					public AstNode next() {
-						return getNthChild(pos++);
+						return getNthChild(info, pos++);
 					}
 				};
 			}

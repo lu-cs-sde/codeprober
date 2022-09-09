@@ -26,7 +26,7 @@ import codeprober.locator.AttrsInNode;
 import codeprober.locator.CreateLocator;
 import codeprober.locator.NodesAtPosition;
 import codeprober.metaprogramming.InvokeProblem;
-import codeprober.metaprogramming.PositionRepresentation;
+import codeprober.metaprogramming.AstNodeApiStyle;
 import codeprober.metaprogramming.Reflect;
 import codeprober.metaprogramming.StdIoInterceptor;
 import codeprober.protocol.AstCacheStrategy;
@@ -72,17 +72,26 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		System.out.println("Parsed, got: " + ast);
 		AstNode astNode = new AstNode(ast);
 
-		PositionRepresentation positionRepresentation = null;
+		AstNodeApiStyle positionRepresentation = null;
 		try {
 			if (Reflect.invoke0(ast, "getStartLine") instanceof Integer) {
-				positionRepresentation = PositionRepresentation.SEPARATE_LINE_COLUMN;
+				positionRepresentation = AstNodeApiStyle.JASTADD_SEPARATE_LINE_COLUMN;
 			}
 		} catch (RuntimeException e) {
 			// Not getStartLine..
 		}
 		if (positionRepresentation == null) {
+			try {
+				if (Reflect.invoke0(ast, "getBeginLine") instanceof Integer) {
+					positionRepresentation = AstNodeApiStyle.PMD_SEPARATE_LINE_COLUMN;
+				}
+			} catch (RuntimeException e) {
+				// Not getBeginLine..
+			}
+		}
+		if (positionRepresentation == null) {
 			if (Reflect.invoke0(ast, "getStart") instanceof Integer) {
-				positionRepresentation = PositionRepresentation.PACKED_BITS;
+				positionRepresentation = AstNodeApiStyle.BEAVER_PACKED_BITS;
 			}
 		}
 		if (positionRepresentation == null) {
@@ -402,11 +411,14 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					// To avoid step 3 reusing a faulty 'lastInfo' from step 1, clear it in step 2.
 					lastInfo = null;
 					
-					bodyBuilder.put("Stdout messages during parsing:");
 					if (parsed.captures != null && parsed.captures.length() > 0) {
+						bodyBuilder.put("Stdout messages during parsing:");
 						for (Object obj : parsed.captures) {
 							bodyBuilder.put(obj);
 						}
+					} else {
+						bodyBuilder.put("No messages printed to stdout/stderr during parsing.");
+						bodyBuilder.put("Look at your terminal for more information.");
 					}
 				}
 			});

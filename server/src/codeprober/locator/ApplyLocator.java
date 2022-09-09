@@ -97,7 +97,7 @@ public class ApplyLocator {
 			}
 			failOnDepthBelowLevel = Math.max(failOnDepthBelowLevel, -bestDepthDiff);
 		}
-		for (AstNode child : astNode.getChildren()) {
+		for (AstNode child : astNode.getChildren(info)) {
 			if (ignoreTraversalOn != null && ignoreTraversalOn.underlyingAstNode == child.underlyingAstNode) {
 				continue;
 			}
@@ -210,10 +210,10 @@ public class ApplyLocator {
 					}
 					case "child": {
 						final int childIndex = step.getInt("value");
-						if (childIndex < 0 || childIndex >= matchedNode.getNumChildren()) {
+						if (childIndex < 0 || childIndex >= matchedNode.getNumChildren(info)) {
 							return null;
 						}
-						matchedNode = matchedNode.getNthChild(childIndex);
+						matchedNode = matchedNode.getNthChild(info, childIndex);
 						break;
 					}
 					default: {
