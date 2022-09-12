@@ -122,6 +122,7 @@ type NodeLocatorStep =
 
 interface TypeAtLoc {
   type: string;
+  label?: string;
   start: number;
   end: number;
 }

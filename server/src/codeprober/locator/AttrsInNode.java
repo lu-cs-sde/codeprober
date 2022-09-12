@@ -26,11 +26,14 @@ public class AttrsInNode {
 		} else {
 			whitelistFilter = new ArrayList<>(whitelistFilter);
 		}
-		whitelistFilter.addAll(Arrays.asList(new String[] { "getChild", "getParent", "getNumChild", "toString", "dumpTree" }));
+		whitelistFilter
+				.addAll(Arrays.asList(new String[] { "getChild", "getParent", "getNumChild", "toString", "dumpTree" }));
 //		final Pattern illegalNamePattern = Pattern.compile(".*(\\$|_).*");
 
 		List<JSONObject> attrs = new ArrayList<>();
-		for (Method m : node.underlyingAstNode.getClass().getMethods()) { // getMethods() rather than getDeclaredMethods() to only get public methods
+		for (Method m : node.underlyingAstNode.getClass().getMethods()) { // getMethods() rather than
+																			// getDeclaredMethods() to only get public
+																			// methods
 			if (!includeAll && !MethodKindDetector.looksLikeAUserAccessibleJastaddRelatedMethod(m)
 					&& !whitelistFilter.contains(m.getName())) {
 
@@ -45,7 +48,7 @@ public class AttrsInNode {
 				}
 				continue;
 			}
-			System.out.println("include " + m.getName() +"; annotation len: " + m.getAnnotations().length);
+			System.out.println("include " + m.getName() + "; annotation len: " + m.getAnnotations().length);
 			final Parameter[] parameters = m.getParameters();
 			final ParameterType[] types = CreateType.fromParameters(info, parameters);
 			if (types == null) {
@@ -63,13 +66,22 @@ public class AttrsInNode {
 				args.put(arg);
 			}
 			attr.put("args", args);
-			
+
 			final String astChildName = MethodKindDetector.getAstChildName(m);
 			if (astChildName != null) {
 				attr.put("astChildName", astChildName);
 			}
 
 			attrs.add(attr);
+		}
+		for (String filter : whitelistFilter) {
+			if (filter.startsWith("l:")) {
+				// Special "label-invoke" method, always add it
+				JSONObject attr = new JSONObject();
+				attr.put("name", filter);
+				attr.put("args", new JSONArray());
+				attrs.add(attr);
+			}
 		}
 
 		attrs.sort((a, b) -> a.getString("name").compareTo(b.getString("name")));

@@ -46,7 +46,7 @@ const encodeLine = (env: ModalEnv, target: HTMLElement, line: RpcBodyLine, respe
         break;
       }
       case "node": {
-        const { start, end, type } = line.value.result;
+        const { start, end, type, label } = line.value.result;
 
         const container = document.createElement('div');
         const span: Span = {
@@ -60,7 +60,7 @@ const encodeLine = (env: ModalEnv, target: HTMLElement, line: RpcBodyLine, respe
         }));
         const typeNode = document.createElement('span');
         typeNode.classList.add('syntax-type');
-        typeNode.innerText = trimTypeName(type);
+        typeNode.innerText = label ?? trimTypeName(type);
         container.appendChild(typeNode);
 
         container.classList.add('clickHighlightOnHover');

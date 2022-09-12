@@ -63,7 +63,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
       renderLeft: (container) => {
         const headType = document.createElement('span');
         headType.classList.add('syntax-type');
-        headType.innerText = `${trimTypeName(locator.result.type)}`;
+        headType.innerText = `${locator.result.label ?? trimTypeName(locator.result.type)}`;
 
         const headAttr = document.createElement('span');
         headAttr.classList.add('syntax-attr');
@@ -271,7 +271,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
                 }));
                 const typeNode = document.createElement('span');
                 typeNode.classList.add('syntax-type');
-                typeNode.innerText = trimTypeName(pickedNode.result.type);
+                typeNode.innerText = pickedNode.result.label ?? trimTypeName(pickedNode.result.type);
                 nodeWrapper.appendChild(typeNode);
 
                 pickedNodePanel.appendChild(nodeWrapper);

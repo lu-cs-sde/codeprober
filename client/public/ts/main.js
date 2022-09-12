@@ -693,7 +693,7 @@ define("ui/popup/formatAttr", ["require", "exports"], function (require, exports
         }
     };
     exports.formatAttrType = formatAttrType;
-    const formatAttr = (attr) => `${attr.name}${(attr.args
+    const formatAttr = (attr) => `${attr.name.startsWith('l:') ? attr.name.slice(2) : attr.name}${(attr.args
         ? `(${attr.args.map(a => formatAttrType(a.type)).join(', ')})`
         : '')}`;
     exports.default = formatAttr;
@@ -758,9 +758,10 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                     }
                 ],
                 renderLeft: (container) => {
+                    var _a;
                     const headType = document.createElement('span');
                     headType.classList.add('syntax-type');
-                    headType.innerText = `${(0, trimTypeName_1.default)(locator.result.type)}`;
+                    headType.innerText = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_1.default)(locator.result.type)}`;
                     const headAttr = document.createElement('span');
                     headAttr.classList.add('syntax-attr');
                     headAttr.innerText = `.${(0, formatAttr_1.default)(attr)}`;
@@ -904,6 +905,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                                 (0, registerOnHover_2.default)(pickedNodePanel, (on) => pickedNodeHighlighter(on));
                                 let state = (argValues[argIdx] && typeof argValues[argIdx] === 'object') ? 'node' : 'null';
                                 const refreshPickedNode = () => {
+                                    var _a;
                                     while (pickedNodePanel.firstChild) {
                                         pickedNodePanel.firstChild.remove();
                                     }
@@ -940,7 +942,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                                     }));
                                     const typeNode = document.createElement('span');
                                     typeNode.classList.add('syntax-type');
-                                    typeNode.innerText = (0, trimTypeName_1.default)(pickedNode.result.type);
+                                    typeNode.innerText = (_a = pickedNode.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_1.default)(pickedNode.result.type);
                                     nodeWrapper.appendChild(typeNode);
                                     pickedNodePanel.appendChild(nodeWrapper);
                                     pickedNodePanel.classList.add('clickHighlightOnHover');
@@ -1648,7 +1650,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
                     break;
                 }
                 case "node": {
-                    const { start, end, type } = line.value.result;
+                    const { start, end, type, label } = line.value.result;
                     const container = document.createElement('div');
                     const span = {
                         lineStart: (start >>> 12), colStart: (start & 0xFFF),
@@ -1660,7 +1662,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
                     }));
                     const typeNode = document.createElement('span');
                     typeNode.classList.add('syntax-type');
-                    typeNode.innerText = (0, trimTypeName_2.default)(type);
+                    typeNode.innerText = label !== null && label !== void 0 ? label : (0, trimTypeName_2.default)(type);
                     container.appendChild(typeNode);
                     container.classList.add('clickHighlightOnHover');
                     container.style.width = 'fit-content';
@@ -1746,9 +1748,10 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                 // root.innerText = 'Loading..';
                 root.appendChild((0, createModalTitle_3.default)({
                     renderLeft: (container) => {
+                        var _a;
                         const headType = document.createElement('span');
                         headType.classList.add('syntax-type');
-                        headType.innerText = `${(0, trimTypeName_3.default)(locator.result.type)}`;
+                        headType.innerText = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_3.default)(locator.result.type)}`;
                         const headAttr = document.createElement('span');
                         headAttr.classList.add('syntax-attr');
                         headAttr.innerText = `.?`;
@@ -2074,10 +2077,10 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 //   displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, JSON.parse(JSON.stringify(locator)), attr);
                 // },
                 renderLeft: (container) => {
-                    var _a;
+                    var _a, _b;
                     const headType = document.createElement('span');
                     headType.classList.add('syntax-type');
-                    headType.innerText = `${(0, trimTypeName_4.default)(locator.result.type)}`;
+                    headType.innerText = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_4.default)(locator.result.type)}`;
                     const headAttr = document.createElement('span');
                     headAttr.classList.add('syntax-attr');
                     headAttr.classList.add('clickHighlightOnHover');
@@ -2150,7 +2153,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     container.appendChild(headType);
                     container.appendChild(headAttr);
                     // TODO add edit pen here?
-                    if ((_a = attr.args) === null || _a === void 0 ? void 0 : _a.length) {
+                    if ((_b = attr.args) === null || _b === void 0 ? void 0 : _b.length) {
                         const editButton = document.createElement('img');
                         editButton.src = '/icons/edit_white_24dp.svg';
                         editButton.classList.add('modalEditButton');
@@ -2410,7 +2413,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                     rowsContainer.style.padding = '2px';
                     root.appendChild(rowsContainer);
                     parsed.nodes.forEach((locator, entIdx) => {
-                        const { start, end, type } = locator.result;
+                        const { start, end, type, label } = locator.result;
                         const span = { lineStart: (start >>> 12), colStart: (start & 0xFFF), lineEnd: (end >>> 12), colEnd: (end & 0xFFF) };
                         const node = document.createElement('div');
                         node.classList.add('clickHighlightOnHover');
@@ -2418,7 +2421,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         if (entIdx !== 0) {
                             node.style.borderTop = '1px solid gray';
                         }
-                        node.innerText = `${(0, trimTypeName_5.default)(type)}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
+                        node.innerText = `${label !== null && label !== void 0 ? label : (0, trimTypeName_5.default)(type)}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
                         (0, registerOnHover_4.default)(node, on => env.updateSpanHighlight(on ? span : null));
                         node.onmousedown = (e) => { e.stopPropagation(); };
                         (0, registerNodeSelector_4.default)(node, () => locator);

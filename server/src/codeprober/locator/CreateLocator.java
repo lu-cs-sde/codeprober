@@ -19,6 +19,7 @@ import org.json.JSONObject;
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.locator.NodeEdge.NodeEdgeType;
+import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.ParameterValue;
 import codeprober.protocol.create.CreateValue;
@@ -41,6 +42,16 @@ public class CreateLocator {
 			this.steps = steps;
 		}
 	}
+	
+	public static void putNodeTypeName(JSONObject dst, Object node) {
+		dst.put("type", node.getClass().getName());
+		try {
+			final String lbl = (String)Reflect.invoke0(node, "cpr_nodeLabel");
+			dst.put("label", lbl);
+		} catch (InvokeProblem | ClassCastException e) {
+			// Ignore
+		}
+	}
 
 	public static JSONObject fromNode(AstInfo info, AstNode astNode) {
 		BenchmarkTimer.CREATE_LOCATOR.enter();
@@ -61,16 +72,12 @@ public class CreateLocator {
 
 			}
 
-//		final JSONObject robustRoot = new JSONObject();
-//		robustRoot.put("start", id.root.loc.start);
-//		robustRoot.put("end", id.root.loc.end);
-//		robustRoot.put("type", id.root.type);
-
 			final JSONObject robustResult = new JSONObject();
 			final Span astPos = astNode.getRecoveredSpan(info);
 			robustResult.put("start", astPos.start);
 			robustResult.put("end", astPos.end);
-			robustResult.put("type", astNode.underlyingAstNode.getClass().getName());
+			putNodeTypeName(robustResult, astNode.underlyingAstNode);
+			
 
 			final JSONArray steps = new JSONArray();
 			for (NodeEdge step : id.steps) {

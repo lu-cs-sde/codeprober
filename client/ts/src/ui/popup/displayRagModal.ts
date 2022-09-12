@@ -77,7 +77,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
           rowsContainer.style.padding = '2px';
           root.appendChild(rowsContainer);
           parsed.nodes.forEach((locator, entIdx) => {
-            const { start, end, type } = locator.result;
+            const { start, end, type, label } = locator.result;
             const span = { lineStart: (start >>> 12), colStart: (start & 0xFFF), lineEnd: (end >>> 12), colEnd: (end & 0xFFF) };
             const node = document.createElement('div');
             node.classList.add('clickHighlightOnHover');
@@ -85,7 +85,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
             if (entIdx !== 0) {
               node.style.borderTop = '1px solid gray';
             }
-            node.innerText = `${trimTypeName(type)}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
+            node.innerText = `${label ?? trimTypeName(type)}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
             registerOnHover(node, on => env.updateSpanHighlight(on ? span : null));
             node.onmousedown = (e) => { e.stopPropagation(); }
 

@@ -154,13 +154,25 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 		final boolean captureStdio = queryObj.optBoolean("stdout", false);
 		final Runnable evaluateAttr = () -> {
+
 			try {
 				final JSONArray args = queryAttr.optJSONArray("args");
 				final Object value;
 
 				// Respond with new args, just like we respond with a new locator
 				JSONArray updatedArgs = new JSONArray();
-				if (args == null) {
+
+				if (queryAttrName.startsWith("l:")) {
+					// Special zero-arg attr invocation
+					BenchmarkTimer.EVALUATE_ATTR.enter();
+					try {
+						value = Reflect.invokeN(match.node.underlyingAstNode, "cpr_lInvoke",
+								new Class[] { String.class }, new Object[] { queryAttrName.substring(2) });
+					} finally {
+						BenchmarkTimer.EVALUATE_ATTR.exit();
+					}
+
+				} else if (args == null) {
 					BenchmarkTimer.EVALUATE_ATTR.enter();
 					try {
 						value = Reflect.invoke0(match.node.underlyingAstNode, queryAttrName);

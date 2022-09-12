@@ -73,7 +73,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
       renderLeft: (container) => {
         const headType = document.createElement('span');
         headType.classList.add('syntax-type');
-        headType.innerText = `${trimTypeName(locator.result.type)}`;
+        headType.innerText = `${locator.result.label ?? trimTypeName(locator.result.type)}`;
 
         const headAttr = document.createElement('span');
         headAttr.classList.add('syntax-attr');
