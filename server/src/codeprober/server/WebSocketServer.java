@@ -145,7 +145,7 @@ public class WebSocketServer {
 //				136
 				final JSONObject initMsg = new JSONObject();
 				initMsg.put("type", "init");
-				
+
 				final JSONObject versionMsg = new JSONObject();
 				final VersionInfo vinfo = VersionInfo.getInstance();
 				versionMsg.put("hash", vinfo.revision);
@@ -187,9 +187,9 @@ public class WebSocketServer {
 							} else if (lenIndicator == 126) {
 								reqData = new byte[(in.read() << 8) | in.read()];
 							} else {
-								reqData = new byte[(in.read() << 56) | (in.read() << 48) | (in.read() << 40)
-										| (in.read() << 32) | (in.read() << 24) | (in.read() << 16) | (in.read() << 8)
-										| in.read()];
+								reqData = new byte[(int) ((((long) in.read()) << 56) | (((long) in.read()) << 48)
+										| ((long) in.read() << 40) | ((long) in.read() << 32) | (in.read() << 24)
+										| (in.read() << 16) | (in.read() << 8) | in.read())];
 							}
 //							System.out.println("Got req w/ len " + reqData.length + ", lenid: " + lenIndicator);
 
@@ -217,7 +217,8 @@ public class WebSocketServer {
 								}
 								frameBuffer.write(reqData);
 								if (isFin) {
-									final JSONObject jobj = new JSONObject(new String(frameBuffer.toByteArray(), StandardCharsets.UTF_8));
+									final JSONObject jobj = new JSONObject(
+											new String(frameBuffer.toByteArray(), StandardCharsets.UTF_8));
 									writeWsMessage(out, onQuery.apply(jobj));
 									break readFrame;
 								} else {
@@ -251,7 +252,7 @@ public class WebSocketServer {
 		}
 		System.out.println("Not a get request.. ? From " + socket.getRemoteSocketAddress() + " :: " + data);
 	}
-	
+
 	public static InetAddress createServerFilter() {
 		if ("true".equals(System.getenv("PERMIT_REMOTE_CONNECTIONS"))) {
 			return null;
@@ -271,13 +272,13 @@ public class WebSocketServer {
 			try {
 				return Integer.parseInt(portOverride);
 			} catch (NumberFormatException e) {
-				System.out.println("Invalid websocket port override '" + portOverride +"', ignoring");
+				System.out.println("Invalid websocket port override '" + portOverride + "', ignoring");
 				e.printStackTrace();
 			}
 		}
 		return 8080;
 	}
-	
+
 	public static void start(List<Runnable> onJarChangeListeners, Function<JSONObject, String> onQuery) {
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, createServerFilter())) {

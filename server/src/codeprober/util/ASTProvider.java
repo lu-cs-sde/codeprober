@@ -12,7 +12,6 @@ import java.util.function.Function;
 import java.util.jar.JarFile;
 
 import org.json.JSONArray;
-import org.json.JSONObject;
 
 import codeprober.metaprogramming.StdIoInterceptor;
 
@@ -139,7 +138,7 @@ public class ASTProvider {
 					}
 				} finally {
 					SystemExitControl.enableSystemExit();
-					System.out.printf("Compiler finished after : %d ms\n", (System.currentTimeMillis() - start));
+					System.out.printf("Compiler finished after : %d ms%n", (System.currentTimeMillis() - start));
 				}
 				Object root = ljar.drAstField.get(ljar.mainClazz);
 				if (root == prevRoot) {

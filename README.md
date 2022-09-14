@@ -4,6 +4,10 @@ An implementation of property probes.
 
 ⚠️ In active development ⚠️
 
+Quick overview of features (5 minutes): https://www.youtube.com/watch?v=d-KvFy5h9W0
+
+Installation & getting started: https://www.youtube.com/watch?v=1beyfNhUQEg
+
 ## Compatibility
 
 To use CodeProber, you must have a compiler or analyzer that follows certain conventions.

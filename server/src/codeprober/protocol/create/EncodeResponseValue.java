@@ -23,7 +23,7 @@ public class EncodeResponseValue {
 		// visited it.
 		alreadyVisitedNodes = new HashSet<Object>(alreadyVisitedNodes);
 
-		if (value != null && info.baseAstClazz.isInstance(value)) {
+		if (info.baseAstClazz.isInstance(value)) {
 			value = new AstNode(value);
 		}
 
