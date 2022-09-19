@@ -90,7 +90,7 @@ interface ModalEnv {
 }
 
 type RpcBodyLine = string
-  | { type: ('stdout' | 'stderr'); value: string }
+  | { type: ('stdout' | 'stderr' | 'stream-arg'); value: string }
   | RpcBodyLine[]
   | { type: 'node'; value: NodeLocator }
   ;
@@ -98,7 +98,7 @@ type RpcBodyLine = string
 interface AstAttrArg {
   type: string;
   name: string;
-  isNodeType: boolean;
+  detail: 'NORMAL' | 'AST_NODE' | 'OUTPUTSTREAM';
 }
 
 interface AstAttr {

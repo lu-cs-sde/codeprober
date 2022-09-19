@@ -5,16 +5,16 @@ import org.json.JSONObject;
 public class ParameterType {
 
 	public final Class<?> paramType;
-	public final boolean isNodeType;
+	public final ParameterTypeDetail detail;
 
-	public ParameterType(Class<?> paramType, boolean isNodeType) {
+	public ParameterType(Class<?> paramType, ParameterTypeDetail detail) {
 		this.paramType = paramType;
-		this.isNodeType = isNodeType;
+		this.detail = detail;
 	}
 
 	public void serializeTo(JSONObject out) {
 		out.put("type", paramType.getName());
-		out.put("isNodeType", isNodeType);
+		out.put("detail", detail.toString());
 	}
 
 	public JSONObject toJson() {

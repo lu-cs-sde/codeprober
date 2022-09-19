@@ -224,103 +224,115 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
             break;
           }
           default:
-            if (arg.isNodeType) {
-              argValues[argIdx] = arg.value || null;
+            switch (arg.detail) {
+              case 'AST_NODE': {
+                argValues[argIdx] = arg.value || null;
 
-              let pickedNodePanel = document.createElement('div');
+                let pickedNodePanel = document.createElement('div');
 
-              let pickedNodeHighlighter: (on: boolean) => void = () => {};
-              registerOnHover(pickedNodePanel, (on) => pickedNodeHighlighter(on));
-              let state: 'null' | 'node' = (argValues[argIdx] && typeof argValues[argIdx] === 'object') ? 'node' : 'null';
-              const refreshPickedNode = () => {
-                while (pickedNodePanel.firstChild) {
-                  pickedNodePanel.firstChild.remove();
-                }
-                pickedNodePanel.style.fontStyle = 'unset';
-                pickedNodePanel.classList.remove('clickHighlightOnHover');
-                pickedNodeHighlighter = () => {};
-                // const state = argValues[argIdx];
-                if (state === 'null') {
-                  pickedNodePanel.style.display = 'hidden';
-                  pickedNodePanel.style.height= '0px';
-                  return;
-                }
-                pickedNodePanel.style.height= '';
-                const pickedNode = argValues[argIdx];
-                if (!pickedNode || typeof pickedNode !== 'object') {
-                  pickedNodePanel.style.display = 'block';
-                  pickedNodePanel.style.fontStyle = 'italic';
-                  pickedNodePanel.innerText = 'No node picked yet..';
-                  return;
-                }
-                // if (typeof state !== 'object') {
-                //   console.warn('unknown state', state);
-                //   pickedNodePanel.style.display = 'none';
-                //   return;
-                // }
-
-                const nodeWrapper = document.createElement('div');
-                registerNodeSelector(nodeWrapper, () => pickedNode);
-                nodeWrapper.addEventListener('click', () => {
-                  displayAttributeModal(env, null, pickedNode);
-
-                })
-                const span = startEndToSpan(pickedNode.result.start, pickedNode.result.end);
-                nodeWrapper.appendChild(createTextSpanIndicator({
-                  span,
-                }));
-                const typeNode = document.createElement('span');
-                typeNode.classList.add('syntax-type');
-                typeNode.innerText = pickedNode.result.label ?? trimTypeName(pickedNode.result.type);
-                nodeWrapper.appendChild(typeNode);
-
-                pickedNodePanel.appendChild(nodeWrapper);
-                pickedNodePanel.classList.add('clickHighlightOnHover');
-                pickedNodeHighlighter = (on) => env.updateSpanHighlight(on ? span : null);
-              };
-              refreshPickedNode();
-              attrList.appendChild(setupTwoPillInput(
-                (parent, left, right) => {
-                  left.innerText = 'null';
-                  // right.innerText = '';
-                  // right.classList.add('locator-symbol');
-                  right.style.display = 'flex';
-                  right.style.flexDirection= 'row';
-                  right.style.justifyContent= 'space-around';
-
-                  const lbl = document.createElement('span');
-                  lbl.innerText = 'Select node';
-                  lbl.style.margin = 'auto';
-                  right.appendChild(lbl);
-
-                  const icon = document.createElement('img');
-                  icon.src = '/icons/my_location_white_24dp.svg';
-                  icon.style.height = '18px';
-                  icon.style.alignSelf = 'center';
-                  icon.style.margin = '0 4px 0 0';
-                  right.appendChild(icon);
-                },
-                () => state === 'null' ? 'left' : 'right',
-                (node, updateActive) => {
-                  if (node === 'left') {
-                    state = 'null';
-                    argValues[argIdx] = null;
-                    cancelLocatorRequest();
-                  } else {
-                    state = 'node';
-                    lastLocatorRequest = startLocatorRequest(locator => {
-                      argValues[argIdx] = locator;
-                      refreshPickedNode();
-                      updateActive();
-                    });
+                let pickedNodeHighlighter: (on: boolean) => void = () => {};
+                registerOnHover(pickedNodePanel, (on) => pickedNodeHighlighter(on));
+                let state: 'null' | 'node' = (argValues[argIdx] && typeof argValues[argIdx] === 'object') ? 'node' : 'null';
+                const refreshPickedNode = () => {
+                  while (pickedNodePanel.firstChild) {
+                    pickedNodePanel.firstChild.remove();
                   }
-                  refreshPickedNode();
-                  updateActive();
-                }
-              ));
-              attrList.appendChild(document.createElement('span')); // <-- for grid alignment
-              attrList.appendChild(pickedNodePanel);
-              break;
+                  pickedNodePanel.style.fontStyle = 'unset';
+                  pickedNodePanel.classList.remove('clickHighlightOnHover');
+                  pickedNodeHighlighter = () => {};
+                  // const state = argValues[argIdx];
+                  if (state === 'null') {
+                    pickedNodePanel.style.display = 'hidden';
+                    pickedNodePanel.style.height= '0px';
+                    return;
+                  }
+                  pickedNodePanel.style.height= '';
+                  const pickedNode = argValues[argIdx];
+                  if (!pickedNode || typeof pickedNode !== 'object') {
+                    pickedNodePanel.style.display = 'block';
+                    pickedNodePanel.style.fontStyle = 'italic';
+                    pickedNodePanel.innerText = 'No node picked yet..';
+                    return;
+                  }
+                  // if (typeof state !== 'object') {
+                  //   console.warn('unknown state', state);
+                  //   pickedNodePanel.style.display = 'none';
+                  //   return;
+                  // }
+
+                  const nodeWrapper = document.createElement('div');
+                  registerNodeSelector(nodeWrapper, () => pickedNode);
+                  nodeWrapper.addEventListener('click', () => {
+                    displayAttributeModal(env, null, pickedNode);
+
+                  })
+                  const span = startEndToSpan(pickedNode.result.start, pickedNode.result.end);
+                  nodeWrapper.appendChild(createTextSpanIndicator({
+                    span,
+                  }));
+                  const typeNode = document.createElement('span');
+                  typeNode.classList.add('syntax-type');
+                  typeNode.innerText = pickedNode.result.label ?? trimTypeName(pickedNode.result.type);
+                  nodeWrapper.appendChild(typeNode);
+
+                  pickedNodePanel.appendChild(nodeWrapper);
+                  pickedNodePanel.classList.add('clickHighlightOnHover');
+                  pickedNodeHighlighter = (on) => env.updateSpanHighlight(on ? span : null);
+                };
+                refreshPickedNode();
+                attrList.appendChild(setupTwoPillInput(
+                  (parent, left, right) => {
+                    left.innerText = 'null';
+                    // right.innerText = '';
+                    // right.classList.add('locator-symbol');
+                    right.style.display = 'flex';
+                    right.style.flexDirection= 'row';
+                    right.style.justifyContent= 'space-around';
+
+                    const lbl = document.createElement('span');
+                    lbl.innerText = 'Select node';
+                    lbl.style.margin = 'auto';
+                    right.appendChild(lbl);
+
+                    const icon = document.createElement('img');
+                    icon.src = '/icons/my_location_white_24dp.svg';
+                    icon.style.height = '18px';
+                    icon.style.alignSelf = 'center';
+                    icon.style.margin = '0 4px 0 0';
+                    right.appendChild(icon);
+                  },
+                  () => state === 'null' ? 'left' : 'right',
+                  (node, updateActive) => {
+                    if (node === 'left') {
+                      state = 'null';
+                      argValues[argIdx] = null;
+                      cancelLocatorRequest();
+                    } else {
+                      state = 'node';
+                      lastLocatorRequest = startLocatorRequest(locator => {
+                        argValues[argIdx] = locator;
+                        refreshPickedNode();
+                        updateActive();
+                      });
+                    }
+                    refreshPickedNode();
+                    updateActive();
+                  }
+                ));
+                attrList.appendChild(document.createElement('span')); // <-- for grid alignment
+                attrList.appendChild(pickedNodePanel);
+                return;
+              }
+
+              case 'OUTPUTSTREAM': {
+                argValues[argIdx] = null;
+
+                const node = document.createElement('span');
+                node.innerText = '<captured to probe output>';
+                node.classList.add('stream-arg-msg');
+                attrList.appendChild(node);
+                return;
+              }
             }
             console.warn('Unknown arg type', arg.type, ', defaulting to string input');
             // Fall through

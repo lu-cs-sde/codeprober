@@ -8,6 +8,7 @@ import java.util.Collection;
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.protocol.ParameterType;
+import codeprober.protocol.ParameterTypeDetail;
 import codeprober.protocol.ParameterValue;
 
 public abstract class CreateValue {
@@ -58,12 +59,12 @@ public abstract class CreateValue {
 				}
 				remapped.add(childVal);
 			}
-			return new ParameterValue(type.paramType, type.isNodeType, info, remapped);
+			return new ParameterValue(type.paramType, type.detail, info, remapped);
 		}
-		if (!type.isNodeType) {
-			return new ParameterValue(type.paramType, type.isNodeType, info, value);
+		if (type.detail == ParameterTypeDetail.NORMAL) {
+			return new ParameterValue(type.paramType, type.detail, info, value);
 		}
 
-		return new ParameterValue(type.paramType, type.isNodeType, info, new AstNode(value));
+		return new ParameterValue(type.paramType, type.detail, info, new AstNode(value));
 	}
 }

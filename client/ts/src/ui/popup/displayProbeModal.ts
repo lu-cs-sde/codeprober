@@ -109,19 +109,30 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
                 break;
               }
               default: {
-                if (arg.isNodeType) {
-                  const node = document.createElement('span');
-                  node.classList.add('syntax-type');
-                  if (!arg.value || (typeof arg.value !== 'object')) {
-                    // Probably null
-                    node.innerText = `${arg.value}`;
-                  } else {
-                    node.innerText = arg.value.result.type;
+                switch (arg.detail) {
+                  case 'AST_NODE': {
+                    const node = document.createElement('span');
+                    node.classList.add('syntax-type');
+                    if (!arg.value || (typeof arg.value !== 'object')) {
+                      // Probably null
+                      node.innerText = `${arg.value}`;
+                    } else {
+                      node.innerText = arg.value.result.type;
+                    }
+                    headAttr.appendChild(node);
+                    break;
                   }
-                  headAttr.appendChild(node);
-                } else {
-                  console.warn('Unsure of how to render', arg.type);
-                  headAttr.appendChild(document.createTextNode(`${arg.value}`));
+                  case 'OUTPUTSTREAM': {
+                    const node = document.createElement('span');
+                    node.classList.add('stream-arg-msg');
+                    node.innerText = '<stream>';
+                    headAttr.appendChild(node);
+                    break;
+                  }
+                  default: {
+                    console.warn('Unsure of how to render', arg.type);
+                    headAttr.appendChild(document.createTextNode(`${arg.value}`));
+                  }
                 }
                 break;
               }
@@ -262,7 +273,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
             refreshMarkers = true;
             attr.args?.forEach((arg, argIdx) => {
               arg.type = updatedArgs[argIdx].type;
-              arg.isNodeType = updatedArgs[argIdx].isNodeType;
+              arg.detail = updatedArgs[argIdx].detail;
               arg.value = updatedArgs[argIdx].value;
             })
           }

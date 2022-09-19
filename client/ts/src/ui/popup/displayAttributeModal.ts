@@ -159,13 +159,25 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
             if (!attr.args || attr.args.length === 0) {
               displayProbeModal(env, popup.getPos(), locator, { name: attr.name });
             } else {
-              displayArgModal(env, popup.getPos(), locator, {
-                name: attr.name,
-                args: attr.args.map(arg => ({
-                  ...arg,
-                  value: ''
-                })),
-              });
+              if (attr.args.every(arg => arg.detail === 'OUTPUTSTREAM')) {
+                // Shortcut directly to probe since there is nothing for user to add in arg modal
+                displayProbeModal(env, popup.getPos(), locator, {
+                  name: attr.name,
+                  args: attr.args.map(arg => ({
+                    ...arg,
+                    value: null
+                  })),
+                });
+              } else {
+                displayArgModal(env, popup.getPos(), locator, {
+                  name: attr.name,
+                  args: attr.args.map(arg => ({
+                    ...arg,
+                    value: ''
+                  })),
+                });
+              }
+
             }
           }
           const buildNode = (attr: AstAttr, borderTop: boolean, highlight: boolean) => {

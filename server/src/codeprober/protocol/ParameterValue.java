@@ -16,8 +16,8 @@ public class ParameterValue extends ParameterType {
 	private final AstInfo info;
 	private final Object value;
 
-	public ParameterValue(Class<?> paramType, boolean isNodeType, AstInfo info, Object value) {
-		super(paramType, isNodeType);
+	public ParameterValue(Class<?> paramType, ParameterTypeDetail detail, AstInfo info, Object value) {
+		super(paramType, detail);
 		this.info = info;
 		this.value = value;
 		if (value instanceof Collection) {
@@ -35,17 +35,24 @@ public class ParameterValue extends ParameterType {
 		if (value == null) {
 			return null;
 		}
-		if (isNodeType) {
+		switch (detail) {
+		case AST_NODE:
 			return ((AstNode) value).underlyingAstNode;
-		}
-		if (value instanceof Collection) {
-			final List<Object> recursivelyUnpacked = new ArrayList<>();
-			for (Object child : ((Collection<?>) value)) {
-				recursivelyUnpacked.add(((ParameterValue) child).getUnpackedValue());
+
+		case OUTPUTSTREAM:
+			return value;
+
+		case NORMAL: // Fall through
+		default:
+			if (value instanceof Collection) {
+				final List<Object> recursivelyUnpacked = new ArrayList<>();
+				for (Object child : ((Collection<?>) value)) {
+					recursivelyUnpacked.add(((ParameterValue) child).getUnpackedValue());
+				}
+				return recursivelyUnpacked;
 			}
-			return recursivelyUnpacked;
+			return value;
 		}
-		return (isNodeType && value != null) ? ((AstNode) value).underlyingAstNode : value;
 	}
 
 	public void serializeTo(JSONObject out) {
@@ -53,17 +60,31 @@ public class ParameterValue extends ParameterType {
 
 		if (value == null) {
 			out.put("value", JSONObject.NULL);
-		} else if (isNodeType) {
-			out.put("value", CreateLocator.fromNode(info, (AstNode) value));
-		} else if (value instanceof Collection) {
-			final Collection<?> c = (Collection<?>) value;
-			JSONArray arr = new JSONArray();
-			for (Object child : c) {
-				arr.put(((ParameterValue) child).toJson());
-			}
-			out.put("value", arr);
 		} else {
-			out.put("value", value);
+
+			switch (detail) {
+			case AST_NODE:
+				out.put("value", CreateLocator.fromNode(info, (AstNode) value));
+				break;
+
+			case OUTPUTSTREAM:
+				out.put("value", JSONObject.NULL);
+				break;
+
+			case NORMAL: // Fall through
+			default:
+				if (value instanceof Collection) {
+					final Collection<?> c = (Collection<?>) value;
+					JSONArray arr = new JSONArray();
+					for (Object child : c) {
+						arr.put(((ParameterValue) child).toJson());
+					}
+					out.put("value", arr);
+				} else {
+					out.put("value", value);
+				}
+				break;
+			}
 		}
 	}
 

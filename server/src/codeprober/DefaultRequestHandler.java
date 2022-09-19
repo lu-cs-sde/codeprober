@@ -14,6 +14,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.json.JSONArray;
@@ -29,6 +30,7 @@ import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.AstNodeApiStyle;
 import codeprober.metaprogramming.Reflect;
 import codeprober.metaprogramming.StdIoInterceptor;
+import codeprober.metaprogramming.StreamInterceptor;
 import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.ParameterValue;
 import codeprober.protocol.PositionRecoveryStrategy;
@@ -163,7 +165,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				JSONArray updatedArgs = new JSONArray();
 
 				if (queryAttrName.startsWith("l:")) {
-					// Special zero-arg attr invocation
+					// Special labeled zero-arg attr invocation
 					BenchmarkTimer.EVALUATE_ATTR.enter();
 					try {
 						value = Reflect.invokeN(match.node.underlyingAstNode, "cpr_lInvoke",
@@ -184,7 +186,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					final Class<?>[] argTypes = new Class<?>[numArgs];
 					final Object[] argValues = new Object[numArgs];
 					for (int i = 0; i < numArgs; ++i) {
-						final ParameterValue param = DecodeValue.decode(info, args.getJSONObject(i));
+						final ParameterValue param = DecodeValue.decode(info, args.getJSONObject(i), bodyBuilder);
 						if (param == null) {
 							bodyBuilder.put("Failed decoding parameter " + i);
 							if (!captureStdio) {
@@ -202,13 +204,21 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					} finally {
 						BenchmarkTimer.EVALUATE_ATTR.exit();
 					}
+					for (Object argValue : argValues) {
+						// Flush all StreamInterceptor args
+						if (argValue instanceof StreamInterceptor) {
+							((StreamInterceptor) argValue).consume();
+						}
+					}
 				}
 
-				CreateLocator.setBuildFastButFragileLocator(true);
-				try {
-					EncodeResponseValue.encode(info, bodyBuilder, value, new HashSet<>());
-				} finally {
-					CreateLocator.setBuildFastButFragileLocator(false);
+				if (value != Reflect.VOID_RETURN_VALUE) {
+					CreateLocator.setBuildFastButFragileLocator(true);
+					try {
+						EncodeResponseValue.encode(info, bodyBuilder, value, new HashSet<>());
+					} finally {
+						CreateLocator.setBuildFastButFragileLocator(false);
+					}
 				}
 				retBuilder.put("args", updatedArgs);
 			} catch (InvokeProblem e) {
@@ -231,12 +241,11 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		};
 
 		if (captureStdio) {
-			bodyBuilder.putAll(StdIoInterceptor.performCaptured((stdout, line) -> {
-				JSONObject fmt = new JSONObject();
-				fmt.put("type", stdout ? "stdout" : "stderr");
-				fmt.put("value", line);
-				return fmt;
-			}, evaluateAttr));
+			// TODO add messages live instead of after everything finishes
+			final BiFunction<Boolean, String, JSONObject> encoder = StdIoInterceptor.createDefaultLineEncoder();
+			StdIoInterceptor.performLiveCaptured((stdout, line) -> {
+				bodyBuilder.put(encoder.apply(stdout, line));
+			}, evaluateAttr);
 		} else {
 			evaluateAttr.run();
 		}

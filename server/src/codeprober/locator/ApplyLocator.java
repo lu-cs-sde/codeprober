@@ -176,7 +176,7 @@ public class ApplyLocator {
 						final Class<?>[] argsTypes = new Class<?>[args.length()];
 						final String ntaName = mth.getString("name");
 						for (int j = 0; j < args.length(); ++j) {
-							final ParameterValue param = DecodeValue.decode(info, args.getJSONObject(j));
+							final ParameterValue param = DecodeValue.decode(info, args.getJSONObject(j), new JSONArray());
 							if (param == null) {
 								System.out.println("Failed decoding parameter " + i + " for NTA '" + ntaName + "'");
 								return null;

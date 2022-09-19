@@ -8,9 +8,8 @@ import org.json.JSONObject;
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.ast.TestData;
-import codeprober.locator.CreateLocator;
-import codeprober.locator.Span;
 import codeprober.metaprogramming.Reflect;
+import codeprober.protocol.ParameterTypeDetail;
 import junit.framework.TestCase;
 
 public class TestCreateLocator extends TestCase {
@@ -28,7 +27,7 @@ public class TestCreateLocator extends TestCase {
 
 		final JSONObject res = locator.getJSONObject("result");
 		assertSpan(root.getRawSpan(info), res.getInt("start"), res.getInt("end"));
-		assertEquals("Program", res.getString("type"));
+		assertEquals(TestData.Program.class.getName(), res.getString("type"));
 
 		final JSONArray steps = locator.getJSONArray("steps");
 		assertEquals(0, steps.length());
@@ -43,7 +42,7 @@ public class TestCreateLocator extends TestCase {
 
 		final Consumer<JSONObject> assertFooLoc = (res) -> {
 			assertSpan(foo.getRawSpan(info), res.getInt("start"), res.getInt("end"));
-			assertEquals("Foo", res.getString("type"));
+			assertEquals(TestData.Foo.class.getName(), res.getString("type"));
 		};
 		assertFooLoc.accept(locator.getJSONObject("result"));
 
@@ -53,7 +52,6 @@ public class TestCreateLocator extends TestCase {
 		final JSONObject step = steps.getJSONObject(0);
 		assertEquals("tal", step.getString("type"));
 		assertFooLoc.accept(step.getJSONObject("value"));
-//		assertEquals(0, step.getInt("value"));
 	}
 
 	public void testSimpleBar() {
@@ -65,7 +63,7 @@ public class TestCreateLocator extends TestCase {
 
 		final Consumer<JSONObject> assertBarLoc = (res) -> {
 			assertSpan(bar.getRawSpan(info), res.getInt("start"), res.getInt("end"));
-			assertEquals("Bar", res.getString("type"));
+			assertEquals(TestData.Bar.class.getName(), res.getString("type"));
 		};
 		assertBarLoc.accept(locator.getJSONObject("result"));
 
@@ -89,7 +87,7 @@ public class TestCreateLocator extends TestCase {
 
 		final Consumer<JSONObject> assertBarLoc = (res) -> {
 			assertSpan(bar.getRawSpan(info), res.getInt("start"), res.getInt("end"));
-			assertEquals("Bar", res.getString("type"));
+			assertEquals(TestData.Bar.class.getName(), res.getString("type"));
 		};
 		assertBarLoc.accept(locator.getJSONObject("result"));
 
@@ -100,7 +98,7 @@ public class TestCreateLocator extends TestCase {
 		assertEquals("tal", fooStep.getString("type"));
 		final JSONObject fooLocator = fooStep.getJSONObject("value");
 		assertSpan(foo.getRawSpan(info), fooLocator.getInt("start"), fooLocator.getInt("end"));
-		assertEquals("Foo", fooLocator.getString("type"));
+		assertEquals(TestData.Foo.class.getName(), fooLocator.getString("type"));
 
 		final JSONObject barStep = steps.getJSONObject(1);
 		assertEquals("child", barStep.getString("type"));
@@ -116,7 +114,7 @@ public class TestCreateLocator extends TestCase {
 
 		final JSONObject res = locator.getJSONObject("result");
 		assertSpan(foo.getRecoveredSpan(info), res.getInt("start"), res.getInt("end"));
-		assertEquals("Foo", res.getString("type"));
+		assertEquals(TestData.Foo.class.getName(), res.getString("type"));
 
 		final JSONArray steps = locator.getJSONArray("steps");
 		assertEquals(1, steps.length());
@@ -141,7 +139,7 @@ public class TestCreateLocator extends TestCase {
 
 		final JSONObject res = locator.getJSONObject("result");
 		assertSpan(bar.getRecoveredSpan(info), res.getInt("start"), res.getInt("end"));
-		assertEquals("Bar", res.getString("type"));
+		assertEquals(TestData.Bar.class.getName(), res.getString("type"));
 
 		final JSONArray steps = locator.getJSONArray("steps");
 		assertEquals(2, steps.length());
@@ -155,25 +153,25 @@ public class TestCreateLocator extends TestCase {
 		assertEquals(2, args.length());
 
 		final JSONObject intArg = args.getJSONObject(0);
-		assertEquals(false, intArg.getBoolean("isNodeType"));
+		assertEquals(ParameterTypeDetail.NORMAL.toString(), intArg.getString("detail"));
 		assertEquals("int", intArg.getString("type"));
 		assertEquals(1, intArg.getInt("value"));
 
 		final JSONObject nodeArg = args.getJSONObject(1);
-		assertEquals(true, nodeArg.getBoolean("isNodeType"));
+		assertEquals(ParameterTypeDetail.AST_NODE.toString(), nodeArg.getString("detail"));
 		assertEquals(info.baseAstClazz.getName(), nodeArg.getString("type"));
 
 		final JSONObject nodeLocator = nodeArg.getJSONObject("value");
 		Consumer<JSONObject> assertFooLocator = (fooLoc) -> {
 			assertSpan(info.ast.getNthChild(info, 0).getRecoveredSpan(info), fooLoc.getInt("start"),
 					fooLoc.getInt("end"));
-			assertEquals("Foo", fooLoc.getString("type"));
+			assertEquals(TestData.Foo.class.getName(), fooLoc.getString("type"));
 		};
 		assertFooLocator.accept(nodeLocator.getJSONObject("result"));
 
 		final JSONArray nodeLocatorSteps = nodeLocator.getJSONArray("steps");
 		assertEquals(1, nodeLocatorSteps.length());
-		
+
 		final JSONObject fooStep = nodeLocatorSteps.getJSONObject(0);
 		assertEquals("tal", fooStep.getString("type"));
 		assertFooLocator.accept(fooStep.getJSONObject("value"));
@@ -182,7 +180,7 @@ public class TestCreateLocator extends TestCase {
 		assertEquals("child", childStep.getString("type"));
 		assertEquals(1, childStep.getInt("value"));
 	}
-	
+
 	public void testAmbiguousUncle() {
 		AstNode root = new AstNode(TestData.getAmbiguousUncle());
 		final AstInfo info = TestData.getInfo(root);
@@ -192,16 +190,16 @@ public class TestCreateLocator extends TestCase {
 
 		final JSONObject res = locator.getJSONObject("result");
 		assertSpan(bar.getRawSpan(info), res.getInt("start"), res.getInt("end"));
-		assertEquals("Bar", res.getString("type"));
+		assertEquals(TestData.Bar.class.getName(), res.getString("type"));
 
 		final JSONArray steps = locator.getJSONArray("steps");
 		assertEquals(1, steps.length());
-		
+
 		final JSONObject step = steps.getJSONObject(0);
 		assertEquals("tal", step.getString("type"));
-		
+
 		final JSONObject tal = step.getJSONObject("value");
 		assertSpan(bar.getRawSpan(info), tal.getInt("start"), tal.getInt("end"));
-		assertEquals("Bar", tal.getString("type"));
+		assertEquals(TestData.Bar.class.getName(), tal.getString("type"));
 	}
 }

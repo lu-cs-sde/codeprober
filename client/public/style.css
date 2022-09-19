@@ -321,6 +321,10 @@ body[data-theme-light="true"] .syntax-modifier { color: #0000FF; }
                                    .syntax-int { color: #B5CEA8; }
 body[data-theme-light="true"]      .syntax-int { color: #098658; }
 
+                                   .stream-arg-msg { color: #B5CEA8; }
+body[data-theme-light="true"]      .stream-arg-msg { color: #098658; }
+
+
 .bg-syntax-attr-dim,
 .syntax-attr-dim-focus:focus {
   background: #DCDCAA66;

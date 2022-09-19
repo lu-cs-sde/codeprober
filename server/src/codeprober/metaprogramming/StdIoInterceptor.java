@@ -1,6 +1,7 @@
 package codeprober.metaprogramming;
 
 import java.io.PrintStream;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 import org.json.JSONArray;
@@ -34,28 +35,23 @@ public abstract class StdIoInterceptor {
 	}
 
 	public void flush() {
-		out.consume(false);
-		err.consume(false);
+		out.consume();
+		err.consume();
 	}
 
 	public void restore() {
-		System.setOut(out.prev);
-		System.setErr(err.prev);
+		System.setOut(out.getPrev());
+		System.setErr(err.getPrev());
 	}
 
 	public abstract void onLine(boolean stdout, String line);
-	
-	
-	public static JSONArray performCaptured(BiFunction<Boolean, String, JSONObject> lineParser, Runnable body) {
-		final JSONArray ret = new JSONArray();
-		StdIoInterceptor rootInterceptor = new StdIoInterceptor() {
+
+	public static void performLiveCaptured(BiConsumer<Boolean, String> onLine, Runnable body) {
+		final StdIoInterceptor rootInterceptor = new StdIoInterceptor() {
 
 			@Override
 			public void onLine(boolean stdout, String line) {
-				final JSONObject magicMsg = lineParser.apply(stdout, line);
-				if (magicMsg != null) {
-					ret.put(magicMsg);
-				}
+				onLine.accept(stdout, line);
 			}
 		};
 		rootInterceptor.install();
@@ -65,15 +61,29 @@ public abstract class StdIoInterceptor {
 			rootInterceptor.flush();
 			rootInterceptor.restore();
 		}
+	}
+
+	public static JSONArray performCaptured(BiFunction<Boolean, String, JSONObject> lineParser, Runnable body) {
+		final JSONArray ret = new JSONArray();
+		performLiveCaptured((stdout, line) -> {
+			final JSONObject magicMsg = lineParser.apply(stdout, line);
+			if (magicMsg != null) {
+				ret.put(magicMsg);
+			}
+		}, body);
 		return ret;
 	}
-	
+
 	public static JSONArray performDefaultCapture(Runnable body) {
-		return performCaptured((stdout, line) -> {
+		return performCaptured(createDefaultLineEncoder(), body);
+	}
+
+	public static BiFunction<Boolean, String, JSONObject> createDefaultLineEncoder() {
+		return (stdout, line) -> {
 			JSONObject fmt = new JSONObject();
 			fmt.put("type", stdout ? "stdout" : "stderr");
 			fmt.put("value", line);
 			return fmt;
-		}, body);
+		};
 	}
 }

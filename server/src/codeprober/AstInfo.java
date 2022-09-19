@@ -21,7 +21,6 @@ public class AstInfo {
 	private Class<?> locatorTALRoot;
 	private boolean loadedLocatorTALRoot;
 
-	
 	private final Map<Class<?>, Map<String, Boolean>> hasOverrides = new HashMap<>();
 	
 	public AstInfo(AstNode ast, PositionRecoveryStrategy recoveryStrategy,
@@ -40,7 +39,6 @@ public class AstInfo {
 			baseAstType = parentType;
 		}
 		this.baseAstClazz = baseAstType;
-		System.out.println("baseAstClazz: " + this.baseAstClazz);
 	}
 
 	public String getQualifiedAstType(String simpleName) {

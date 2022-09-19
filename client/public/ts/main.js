@@ -898,94 +898,104 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                             break;
                         }
                         default:
-                            if (arg.isNodeType) {
-                                argValues[argIdx] = arg.value || null;
-                                let pickedNodePanel = document.createElement('div');
-                                let pickedNodeHighlighter = () => { };
-                                (0, registerOnHover_2.default)(pickedNodePanel, (on) => pickedNodeHighlighter(on));
-                                let state = (argValues[argIdx] && typeof argValues[argIdx] === 'object') ? 'node' : 'null';
-                                const refreshPickedNode = () => {
-                                    var _a;
-                                    while (pickedNodePanel.firstChild) {
-                                        pickedNodePanel.firstChild.remove();
-                                    }
-                                    pickedNodePanel.style.fontStyle = 'unset';
-                                    pickedNodePanel.classList.remove('clickHighlightOnHover');
-                                    pickedNodeHighlighter = () => { };
-                                    // const state = argValues[argIdx];
-                                    if (state === 'null') {
-                                        pickedNodePanel.style.display = 'hidden';
-                                        pickedNodePanel.style.height = '0px';
-                                        return;
-                                    }
-                                    pickedNodePanel.style.height = '';
-                                    const pickedNode = argValues[argIdx];
-                                    if (!pickedNode || typeof pickedNode !== 'object') {
-                                        pickedNodePanel.style.display = 'block';
-                                        pickedNodePanel.style.fontStyle = 'italic';
-                                        pickedNodePanel.innerText = 'No node picked yet..';
-                                        return;
-                                    }
-                                    // if (typeof state !== 'object') {
-                                    //   console.warn('unknown state', state);
-                                    //   pickedNodePanel.style.display = 'none';
-                                    //   return;
-                                    // }
-                                    const nodeWrapper = document.createElement('div');
-                                    (0, registerNodeSelector_1.default)(nodeWrapper, () => pickedNode);
-                                    nodeWrapper.addEventListener('click', () => {
-                                        (0, displayAttributeModal_1.default)(env, null, pickedNode);
-                                    });
-                                    const span = startEndToSpan(pickedNode.result.start, pickedNode.result.end);
-                                    nodeWrapper.appendChild((0, createTextSpanIndicator_1.default)({
-                                        span,
-                                    }));
-                                    const typeNode = document.createElement('span');
-                                    typeNode.classList.add('syntax-type');
-                                    typeNode.innerText = (_a = pickedNode.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_1.default)(pickedNode.result.type);
-                                    nodeWrapper.appendChild(typeNode);
-                                    pickedNodePanel.appendChild(nodeWrapper);
-                                    pickedNodePanel.classList.add('clickHighlightOnHover');
-                                    pickedNodeHighlighter = (on) => env.updateSpanHighlight(on ? span : null);
-                                };
-                                refreshPickedNode();
-                                attrList.appendChild(setupTwoPillInput((parent, left, right) => {
-                                    left.innerText = 'null';
-                                    // right.innerText = '';
-                                    // right.classList.add('locator-symbol');
-                                    right.style.display = 'flex';
-                                    right.style.flexDirection = 'row';
-                                    right.style.justifyContent = 'space-around';
-                                    const lbl = document.createElement('span');
-                                    lbl.innerText = 'Select node';
-                                    lbl.style.margin = 'auto';
-                                    right.appendChild(lbl);
-                                    const icon = document.createElement('img');
-                                    icon.src = '/icons/my_location_white_24dp.svg';
-                                    icon.style.height = '18px';
-                                    icon.style.alignSelf = 'center';
-                                    icon.style.margin = '0 4px 0 0';
-                                    right.appendChild(icon);
-                                }, () => state === 'null' ? 'left' : 'right', (node, updateActive) => {
-                                    if (node === 'left') {
-                                        state = 'null';
-                                        argValues[argIdx] = null;
-                                        cancelLocatorRequest();
-                                    }
-                                    else {
-                                        state = 'node';
-                                        lastLocatorRequest = startLocatorRequest(locator => {
-                                            argValues[argIdx] = locator;
-                                            refreshPickedNode();
-                                            updateActive();
+                            switch (arg.detail) {
+                                case 'AST_NODE': {
+                                    argValues[argIdx] = arg.value || null;
+                                    let pickedNodePanel = document.createElement('div');
+                                    let pickedNodeHighlighter = () => { };
+                                    (0, registerOnHover_2.default)(pickedNodePanel, (on) => pickedNodeHighlighter(on));
+                                    let state = (argValues[argIdx] && typeof argValues[argIdx] === 'object') ? 'node' : 'null';
+                                    const refreshPickedNode = () => {
+                                        var _a;
+                                        while (pickedNodePanel.firstChild) {
+                                            pickedNodePanel.firstChild.remove();
+                                        }
+                                        pickedNodePanel.style.fontStyle = 'unset';
+                                        pickedNodePanel.classList.remove('clickHighlightOnHover');
+                                        pickedNodeHighlighter = () => { };
+                                        // const state = argValues[argIdx];
+                                        if (state === 'null') {
+                                            pickedNodePanel.style.display = 'hidden';
+                                            pickedNodePanel.style.height = '0px';
+                                            return;
+                                        }
+                                        pickedNodePanel.style.height = '';
+                                        const pickedNode = argValues[argIdx];
+                                        if (!pickedNode || typeof pickedNode !== 'object') {
+                                            pickedNodePanel.style.display = 'block';
+                                            pickedNodePanel.style.fontStyle = 'italic';
+                                            pickedNodePanel.innerText = 'No node picked yet..';
+                                            return;
+                                        }
+                                        // if (typeof state !== 'object') {
+                                        //   console.warn('unknown state', state);
+                                        //   pickedNodePanel.style.display = 'none';
+                                        //   return;
+                                        // }
+                                        const nodeWrapper = document.createElement('div');
+                                        (0, registerNodeSelector_1.default)(nodeWrapper, () => pickedNode);
+                                        nodeWrapper.addEventListener('click', () => {
+                                            (0, displayAttributeModal_1.default)(env, null, pickedNode);
                                         });
-                                    }
+                                        const span = startEndToSpan(pickedNode.result.start, pickedNode.result.end);
+                                        nodeWrapper.appendChild((0, createTextSpanIndicator_1.default)({
+                                            span,
+                                        }));
+                                        const typeNode = document.createElement('span');
+                                        typeNode.classList.add('syntax-type');
+                                        typeNode.innerText = (_a = pickedNode.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_1.default)(pickedNode.result.type);
+                                        nodeWrapper.appendChild(typeNode);
+                                        pickedNodePanel.appendChild(nodeWrapper);
+                                        pickedNodePanel.classList.add('clickHighlightOnHover');
+                                        pickedNodeHighlighter = (on) => env.updateSpanHighlight(on ? span : null);
+                                    };
                                     refreshPickedNode();
-                                    updateActive();
-                                }));
-                                attrList.appendChild(document.createElement('span')); // <-- for grid alignment
-                                attrList.appendChild(pickedNodePanel);
-                                break;
+                                    attrList.appendChild(setupTwoPillInput((parent, left, right) => {
+                                        left.innerText = 'null';
+                                        // right.innerText = '';
+                                        // right.classList.add('locator-symbol');
+                                        right.style.display = 'flex';
+                                        right.style.flexDirection = 'row';
+                                        right.style.justifyContent = 'space-around';
+                                        const lbl = document.createElement('span');
+                                        lbl.innerText = 'Select node';
+                                        lbl.style.margin = 'auto';
+                                        right.appendChild(lbl);
+                                        const icon = document.createElement('img');
+                                        icon.src = '/icons/my_location_white_24dp.svg';
+                                        icon.style.height = '18px';
+                                        icon.style.alignSelf = 'center';
+                                        icon.style.margin = '0 4px 0 0';
+                                        right.appendChild(icon);
+                                    }, () => state === 'null' ? 'left' : 'right', (node, updateActive) => {
+                                        if (node === 'left') {
+                                            state = 'null';
+                                            argValues[argIdx] = null;
+                                            cancelLocatorRequest();
+                                        }
+                                        else {
+                                            state = 'node';
+                                            lastLocatorRequest = startLocatorRequest(locator => {
+                                                argValues[argIdx] = locator;
+                                                refreshPickedNode();
+                                                updateActive();
+                                            });
+                                        }
+                                        refreshPickedNode();
+                                        updateActive();
+                                    }));
+                                    attrList.appendChild(document.createElement('span')); // <-- for grid alignment
+                                    attrList.appendChild(pickedNodePanel);
+                                    return;
+                                }
+                                case 'OUTPUTSTREAM': {
+                                    argValues[argIdx] = null;
+                                    const node = document.createElement('span');
+                                    node.innerText = '<captured to probe output>';
+                                    node.classList.add('stream-arg-msg');
+                                    attrList.appendChild(node);
+                                    return;
+                                }
                             }
                             console.warn('Unknown arg type', arg.type, ', defaulting to string input');
                         // Fall through
@@ -1605,89 +1615,114 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
     registerOnHover_3 = __importDefault(registerOnHover_3);
     trimTypeName_2 = __importDefault(trimTypeName_2);
     displayAttributeModal_2 = __importDefault(displayAttributeModal_2);
-    const encodeLine = (env, target, line, respectIndent = false) => {
-        if (typeof line === 'string') {
-            const trimmed = line.trimStart();
-            if (trimmed.length !== line.length) {
-                target.appendChild(document.createTextNode(' '.repeat(line.length - trimmed.length)));
-            }
-            if (line.trim()) {
-                target.appendChild(document.createTextNode(line.trim()));
-            }
-            target.appendChild(document.createElement('br'));
+    const getCommonStreamArgWhitespacePrefix = (line) => {
+        if (Array.isArray(line)) {
+            return Math.min(...line.map(getCommonStreamArgWhitespacePrefix));
         }
-        else if (Array.isArray(line)) {
-            if (!respectIndent) {
-                // First level indent, 'inline' it
-                line.forEach(sub => encodeLine(env, target, sub, true));
-            }
-            else {
-                // >=2 level indent, respect it
-                const deeper = document.createElement('pre');
-                // deeper.style.borderLeft = '1px solid #88888877';
-                deeper.style.marginLeft = '1rem';
-                deeper.style.marginTop = '0.125rem';
-                line.forEach(sub => encodeLine(env, deeper, sub, true));
-                target.appendChild(deeper);
-            }
-        }
-        else {
+        if (line && typeof line === 'object') {
             switch (line.type) {
-                case "stdout": {
-                    const span = document.createElement('span');
-                    span.classList.add('captured-stdout');
-                    span.innerText = `> ${line.value}`;
-                    target.appendChild(span);
-                    target.appendChild(document.createElement('br'));
-                    break;
-                }
-                case "stderr": {
-                    const span = document.createElement('span');
-                    span.classList.add('captured-stderr');
-                    span.innerText = `> ${line.value}`;
-                    target.appendChild(span);
-                    target.appendChild(document.createElement('br'));
-                    break;
-                }
-                case "node": {
-                    const { start, end, type, label } = line.value.result;
-                    const container = document.createElement('div');
-                    const span = {
-                        lineStart: (start >>> 12), colStart: (start & 0xFFF),
-                        lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
-                    };
-                    container.appendChild((0, createTextSpanIndicator_3.default)({
-                        span,
-                        marginLeft: false,
-                    }));
-                    const typeNode = document.createElement('span');
-                    typeNode.classList.add('syntax-type');
-                    typeNode.innerText = label !== null && label !== void 0 ? label : (0, trimTypeName_2.default)(type);
-                    container.appendChild(typeNode);
-                    container.classList.add('clickHighlightOnHover');
-                    container.style.width = 'fit-content';
-                    container.style.display = 'inline';
-                    (0, registerOnHover_3.default)(container, on => {
-                        env.updateSpanHighlight(on ? span : null);
-                    });
-                    container.onmousedown = (e) => {
-                        e.stopPropagation();
-                    };
-                    (0, registerNodeSelector_2.default)(container, () => line.value);
-                    container.addEventListener('click', () => {
-                        (0, displayAttributeModal_2.default)(env, null, line.value);
-                    });
-                    target.appendChild(container);
-                    break;
-                }
-                default: {
-                    console.warn('Unknown body line type', line);
-                    break;
+                case 'stream-arg': {
+                    const v = line.value;
+                    return v.length - v.trimStart().length;
                 }
             }
         }
+        return Number.MAX_SAFE_INTEGER;
     };
     const encodeRpcBodyLines = (env, body) => {
+        let needCapturedStreamArgExplanation = false;
+        const streamArgPrefix = Math.min(...body.map(getCommonStreamArgWhitespacePrefix));
+        const encodeLine = (target, line, respectIndent = false) => {
+            if (typeof line === 'string') {
+                const trimmed = line.trimStart();
+                if (trimmed.length !== line.length) {
+                    target.appendChild(document.createTextNode(' '.repeat(line.length - trimmed.length)));
+                }
+                if (line.trim()) {
+                    target.appendChild(document.createTextNode(line.trim()));
+                }
+                target.appendChild(document.createElement('br'));
+            }
+            else if (Array.isArray(line)) {
+                if (!respectIndent) {
+                    // First level indent, 'inline' it
+                    line.forEach(sub => encodeLine(target, sub, true));
+                }
+                else {
+                    // >=2 level indent, respect it
+                    const deeper = document.createElement('pre');
+                    // deeper.style.borderLeft = '1px solid #88888877';
+                    deeper.style.marginLeft = '1rem';
+                    deeper.style.marginTop = '0.125rem';
+                    line.forEach(sub => encodeLine(deeper, sub, true));
+                    target.appendChild(deeper);
+                }
+            }
+            else {
+                switch (line.type) {
+                    case "stdout": {
+                        const span = document.createElement('span');
+                        span.classList.add('captured-stdout');
+                        span.innerText = `> ${line.value}`;
+                        target.appendChild(span);
+                        target.appendChild(document.createElement('br'));
+                        break;
+                    }
+                    case "stderr": {
+                        const span = document.createElement('span');
+                        span.classList.add('captured-stderr');
+                        span.innerText = `> ${line.value}`;
+                        target.appendChild(span);
+                        target.appendChild(document.createElement('br'));
+                        break;
+                    }
+                    case 'stream-arg': {
+                        needCapturedStreamArgExplanation = true;
+                        const span = document.createElement('span');
+                        span.classList.add('stream-arg-msg');
+                        span.innerText = `> ${line.value.slice(streamArgPrefix)}`;
+                        target.appendChild(span);
+                        target.appendChild(document.createElement('br'));
+                        break;
+                    }
+                    case "node": {
+                        const { start, end, type, label } = line.value.result;
+                        const container = document.createElement('div');
+                        const span = {
+                            lineStart: (start >>> 12), colStart: (start & 0xFFF),
+                            lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
+                        };
+                        container.appendChild((0, createTextSpanIndicator_3.default)({
+                            span,
+                            marginLeft: false,
+                        }));
+                        const typeNode = document.createElement('span');
+                        typeNode.classList.add('syntax-type');
+                        typeNode.innerText = label !== null && label !== void 0 ? label : (0, trimTypeName_2.default)(type);
+                        container.appendChild(typeNode);
+                        container.classList.add('clickHighlightOnHover');
+                        container.style.width = 'fit-content';
+                        container.style.display = 'inline';
+                        (0, registerOnHover_3.default)(container, on => {
+                            env.updateSpanHighlight(on ? span : null);
+                        });
+                        container.onmousedown = (e) => {
+                            e.stopPropagation();
+                        };
+                        (0, registerNodeSelector_2.default)(container, () => line.value);
+                        container.addEventListener('click', () => {
+                            (0, displayAttributeModal_2.default)(env, null, line.value);
+                        });
+                        target.appendChild(container);
+                        break;
+                    }
+                    default: {
+                        console.warn('Unknown body line type', line);
+                        break;
+                    }
+                }
+            }
+        };
         const pre = document.createElement('pre');
         pre.style.margin = '0px';
         pre.style.padding = '0.5rem';
@@ -1703,9 +1738,30 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
             return true;
         })
             .forEach((line) => {
-            encodeLine(env, pre, line);
+            encodeLine(pre, line);
             // '\n'
         });
+        if (needCapturedStreamArgExplanation) {
+            const expl = document.createElement('span');
+            expl.style.fontStyle = 'italic';
+            expl.style.fontSize = '0.5rem';
+            // expl.classList.add('syntax-attr-dim');
+            const add = (msg, styled) => {
+                const node = document.createElement('span');
+                if (styled) {
+                    node.classList.add('stream-arg-msg');
+                }
+                node.innerText = msg;
+                expl.appendChild(node);
+            };
+            add(`Values printed to `, false);
+            add(`<stream>`, true);
+            add(` shown in `, false);
+            add(`green`, true);
+            add(` above`, false);
+            pre.appendChild(expl);
+            pre.appendChild(document.createElement('br'));
+        }
         return pre;
     };
     exports.default = encodeRpcBodyLines;
@@ -1866,13 +1922,25 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                                 (0, displayProbeModal_2.default)(env, popup.getPos(), locator, { name: attr.name });
                             }
                             else {
-                                (0, displayArgModal_1.default)(env, popup.getPos(), locator, {
-                                    name: attr.name,
-                                    args: attr.args.map(arg => ({
-                                        ...arg,
-                                        value: ''
-                                    })),
-                                });
+                                if (attr.args.every(arg => arg.detail === 'OUTPUTSTREAM')) {
+                                    // Shortcut directly to probe since there is nothing for user to add in arg modal
+                                    (0, displayProbeModal_2.default)(env, popup.getPos(), locator, {
+                                        name: attr.name,
+                                        args: attr.args.map(arg => ({
+                                            ...arg,
+                                            value: null
+                                        })),
+                                    });
+                                }
+                                else {
+                                    (0, displayArgModal_1.default)(env, popup.getPos(), locator, {
+                                        name: attr.name,
+                                        args: attr.args.map(arg => ({
+                                            ...arg,
+                                            value: ''
+                                        })),
+                                    });
+                                }
                             }
                         };
                         const buildNode = (attr, borderTop, highlight) => {
@@ -2116,21 +2184,31 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     break;
                                 }
                                 default: {
-                                    if (arg.isNodeType) {
-                                        const node = document.createElement('span');
-                                        node.classList.add('syntax-type');
-                                        if (!arg.value || (typeof arg.value !== 'object')) {
-                                            // Probably null
-                                            node.innerText = `${arg.value}`;
+                                    switch (arg.detail) {
+                                        case 'AST_NODE': {
+                                            const node = document.createElement('span');
+                                            node.classList.add('syntax-type');
+                                            if (!arg.value || (typeof arg.value !== 'object')) {
+                                                // Probably null
+                                                node.innerText = `${arg.value}`;
+                                            }
+                                            else {
+                                                node.innerText = arg.value.result.type;
+                                            }
+                                            headAttr.appendChild(node);
+                                            break;
                                         }
-                                        else {
-                                            node.innerText = arg.value.result.type;
+                                        case 'OUTPUTSTREAM': {
+                                            const node = document.createElement('span');
+                                            node.classList.add('stream-arg-msg');
+                                            node.innerText = '<stream>';
+                                            headAttr.appendChild(node);
+                                            break;
                                         }
-                                        headAttr.appendChild(node);
-                                    }
-                                    else {
-                                        console.warn('Unsure of how to render', arg.type);
-                                        headAttr.appendChild(document.createTextNode(`${arg.value}`));
+                                        default: {
+                                            console.warn('Unsure of how to render', arg.type);
+                                            headAttr.appendChild(document.createTextNode(`${arg.value}`));
+                                        }
                                     }
                                     break;
                                 }
@@ -2269,7 +2347,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         refreshMarkers = true;
                         (_a = attr.args) === null || _a === void 0 ? void 0 : _a.forEach((arg, argIdx) => {
                             arg.type = updatedArgs[argIdx].type;
-                            arg.isNodeType = updatedArgs[argIdx].isNodeType;
+                            arg.detail = updatedArgs[argIdx].detail;
                             arg.value = updatedArgs[argIdx].value;
                         });
                     }

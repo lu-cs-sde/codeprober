@@ -6,13 +6,22 @@ import java.util.Arrays;
 
 public class Reflect {
 
+	public static final Object VOID_RETURN_VALUE = new Object() {
+		@Override
+		public String toString() {
+			return "<void>";
+		}
+	};
+
 	public static Object getParent(Object astNode) {
 		return Reflect.invoke0(astNode, "getParent");
 	}
 
 	public static Object invokeN(Object astNode, String mth, Class<?>[] argTypes, Object[] argValues) {
 		try {
-			return astNode.getClass().getMethod(mth, argTypes).invoke(astNode, argValues);
+			final Method m = astNode.getClass().getMethod(mth, argTypes);
+			final Object val = m.invoke(astNode, argValues);
+			return m.getReturnType() == Void.TYPE ? VOID_RETURN_VALUE : val;
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException
 				| SecurityException e) {
 			e.printStackTrace();
@@ -28,7 +37,9 @@ public class Reflect {
 
 	public static Object invoke0(Object astNode, String mth) {
 		try {
-			return astNode.getClass().getMethod(mth).invoke(astNode);
+			final Method m = astNode.getClass().getMethod(mth);
+			final Object val = m.invoke(astNode);
+			return m.getReturnType() == Void.TYPE ? VOID_RETURN_VALUE : val;
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException
 				| SecurityException e) {
 //			e.printStackTrace();

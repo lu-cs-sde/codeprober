@@ -1,12 +1,12 @@
 package codeprober.ast;
 
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import codeprober.AstInfo;
-import codeprober.ast.AstNode;
 import codeprober.ast.ASTNodeAnnotation.Attribute;
 import codeprober.metaprogramming.AstNodeApiStyle;
 import codeprober.protocol.PositionRecoveryStrategy;
@@ -48,6 +48,11 @@ public class TestData {
 
 		public Object getParent() {
 			return parent;
+		}
+		
+		public void mthWithPrintStreamArg(PrintStream ps) {
+			ps.println("First msg with linebreak");
+			ps.print("Second msg without linebreak");
 		}
 
 		private Object simpleNTA_value;
