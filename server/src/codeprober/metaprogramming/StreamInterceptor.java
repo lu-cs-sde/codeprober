@@ -64,7 +64,7 @@ public abstract class StreamInterceptor extends PrintStream {
 		super.flush();
 		dst.consume(false);
 	}
-	
+
 	public PrintStream getPrev() {
 		return dst.prev;
 	}

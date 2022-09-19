@@ -1167,7 +1167,7 @@ encode(value):
                     joinElements(`2) '`, createHeader('cpr_propertyListShow'), `'. A collection (List<String> or String[]) that is used to include extra properties in the property list seen when creating probes.`),
                     `Functions are shown in the property list if all of the following is true:`,
                     `- The function is public.`,
-                    `- The argument types are 'String', 'int', 'boolean', or a subtype of the top AST Node type.`,
+                    `- The argument types are 'String', 'int', 'boolean', 'java.io.OutputStream', 'java.io.PrintStream' or a subtype of the top AST Node type.`,
                     `- One of the following is true:`,
                     `-- The function is an attribute (originates from a jrag file, e.g 'z' in 'syn X Y.z() = ...')`,
                     `-- The function is an AST child accessor (used to get members declared in an .ast file).`,

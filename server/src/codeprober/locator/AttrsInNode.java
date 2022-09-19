@@ -36,19 +36,9 @@ public class AttrsInNode {
 																			// methods
 			if (!includeAll && !MethodKindDetector.looksLikeAUserAccessibleJastaddRelatedMethod(m)
 					&& !whitelistFilter.contains(m.getName())) {
-
-				if (m.getName().equals("debugMePls")) {
-					System.out.println("skip due to everything " + m.getName());
-					for (Annotation a : m.getAnnotations()) {
-						System.out.println(a.annotationType().getName());
-					}
-					System.out.println("^---- dumped annotations.... wtf");
-					System.out.println(m.getAnnotations().length);
-					System.out.println(m.getDeclaredAnnotations().length);
-				}
 				continue;
 			}
-			System.out.println("include " + m.getName() + "; annotation len: " + m.getAnnotations().length);
+//			System.out.println("include " + m.getName() + "; annotation len: " + m.getAnnotations().length);
 			final Parameter[] parameters = m.getParameters();
 			final ParameterType[] types = CreateType.fromParameters(info, parameters);
 			if (types == null) {
