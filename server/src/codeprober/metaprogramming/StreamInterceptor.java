@@ -40,7 +40,14 @@ public abstract class StreamInterceptor extends PrintStream {
 			if (stdOut.size() == 0 && !forceLine) {
 				return;
 			}
-			String s = new String(stdOut.toByteArray(), StandardCharsets.UTF_8);
+			final byte[] barr = stdOut.toByteArray();
+			String s;
+			if (barr[barr.length - 1] == '\r') {
+				// Running on windows, remove carriage return
+				s = new String(barr, 0, barr.length - 1, StandardCharsets.UTF_8);
+			} else {
+				s = new String(barr, StandardCharsets.UTF_8);
+			}
 			stdOut.reset();
 
 			prev.println(s);
