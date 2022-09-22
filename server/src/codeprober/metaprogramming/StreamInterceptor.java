@@ -42,7 +42,7 @@ public abstract class StreamInterceptor extends PrintStream {
 			}
 			final byte[] barr = stdOut.toByteArray();
 			String s;
-			if (barr[barr.length - 1] == '\r') {
+			if (barr.length > 0 && barr[barr.length - 1] == '\r') {
 				// Running on windows, remove carriage return
 				s = new String(barr, 0, barr.length - 1, StandardCharsets.UTF_8);
 			} else {
