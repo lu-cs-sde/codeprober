@@ -117,11 +117,16 @@ class MyWrapper {
   MyWrapper[] children;
 
   private MyWrapper[] getChildren() {
-    // Lazily initialized for performance reasons
-    // Iterate over all child nodes in n, wrap in 'MyWrapper',
-    // set parent on the wrapped nodes to `this`
-    // return list
+    // Lazily initialized for performance reasons.
+    // Iterate over all child nodes in n, wrap in 'MyWrapper'.
+    // Set parent on the wrapped nodes to `this`.
+    // assign list to this.children.
+    // return this.children.
+    // It is important that the same 'Node' is only wrapped *once*
+    // This is because CodeProber uses identity comparison, so wrapping the same 'Node' twice
+    // would create two different wrapper instances that won't pass identity comparison.
   }
+
   public int getNumChild() { return getChildren().length; }
   public MyWrapper getChild(int idx) { return getChildren()[idx]; }
   public MyWrapper getParent() { return parent; }
