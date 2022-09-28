@@ -11,7 +11,7 @@ Installation & getting started: https://www.youtube.com/watch?v=1beyfNhUQEg
 ## Compatibility
 
 To use CodeProber, you must have a compiler or analyzer that follows certain conventions.
-Any tool built using [JastAdd](https://jastadd.cs.lth.se/web/) follow these conventions automatically. Support for non-JastAdd tools (and formalizing the conventions) is planned future work.
+Any tool built using [JastAdd](https://jastadd.cs.lth.se/web/) follow these conventions automatically. Support for non-JastAdd tools (and formalizing the conventions) is planned future work (also, see 'I didn't use JastAdd' below).
 
 Even if you built your tool with JastAdd, there are ~2 lines of code you need to add.
 In your main java file, add the following declaration:
@@ -88,3 +88,64 @@ If your git status is clean, then this will instead generate two files: `code-pr
 `VERSION` is a file containing the current git hash. This is used by the client to detect when new versions are available.
 
 If you want to "deploy" a new version, i.e make the tiny "New version available" prompt appear in the corner for everybody using the tool, then you must first commit your changes, make sure `git status` says `working tree clean`, and then build, and commit again.
+
+## I didn't use JastAdd, what now?
+
+As mentioned above, the API that CodeProber demands of the ASTs found in `DrAST_root_node` hasn't been formalized yet.
+However, if you are willing to explore a bit yourself then looking in [AstNodeApiStyle.java](server/src/codeprober/metaprogramming/AstNodeApiStyle.java) is a good start. It is an enum describing different styles of "AST APIs". CodeProber tries to detect which style is present by experimentally invoking some methods within each style.
+You can also look in [TestData.java->Node](server/src-test/codeprober/ast/TestData.java), which shows the non-JastAdd node implementation used for test cases.
+
+CodeProber needs to know a shared supertype of all AST nodes. Any subtype of this supertype is expected to implement the "API style" mentioned above. CodeProber tries to automatically detect the common supertype with the following pseudocode:
+
+```
+def find_super(type)
+  if (type.supertype.package == type.package)
+    return find_super(type.supertype)
+  else
+    return type
+```
+
+`find_super` is called with `DrAST_root_node`. In other words, it finds the top supertype that belongs to the same package as `DrAST_root_node`.
+
+If you already have an AST structure and don't want/cannot modify it, you can create a wrapper class that fulfills the API above. Something like:
+
+```java
+
+class MyWrapper {
+  Node n;
+  MyWrapper parent;
+  MyWrapper[] children;
+
+  private MyWrapper[] getChildren() {
+    // Lazily initialized for performance reasons
+    // Iterate over all child nodes in n, wrap in 'MyWrapper',
+    // set parent on the wrapped nodes to `this`
+    // return list
+  }
+  public int getNumChild() { return getChildren().length; }
+  public MyWrapper getChild(int idx) { return getChildren()[idx]; }
+  public MyWrapper getParent() { return parent; }
+
+  // Replace n.X() with correct values for your node
+  public int getStartLine() { return n.X(); }
+  public int getStartColumn() { return n.X(); }
+  public int getEndLine() { return n.X(); }
+  public int getEndColumn() { return n.X(); }
+
+  public String cpr_nodeLabel() {
+    // Optional method, can return a label here that will presented in the UI instead of 'MyWrapper'.
+    // This allows you to differentiate between different node types, even though you are using a wrapper.
+  }
+
+  // This method can be used to make properties appear in the property list
+  // even when the user hasn't checked 'Show all properties'.
+  public java.util.List<String> cpr_propertyListShow() {
+    return java.util.Arrays.asList("foo", "bar");
+  }
+  public X foo() { ... }
+  public Y bar() { ... }
+}
+```
+
+At the time of writing, the live node tracking used in CodeProber doesn't work well with wrapper implementations, since all types will be the same. This will be improved in the future, at least for nodes that implement cpr_nodeLabel().
+
