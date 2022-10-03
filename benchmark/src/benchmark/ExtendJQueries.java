@@ -127,7 +127,7 @@ public class ExtendJQueries {
 								.put("name", "meta:listProperties") //
 						) //
 						.put("locator", locator) //
-						);
+				);
 	}
 
 	public static JSONObject createGetNumChild(int rpcId, String sourceFile, JSONArray steps) {

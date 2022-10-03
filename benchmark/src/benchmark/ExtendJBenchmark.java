@@ -26,6 +26,7 @@ public class ExtendJBenchmark extends BaseBenchmark {
 
 	private static final double COV_WARMUP_THRESHOLD;
 	private static final int COV_WARMUP_IMPLIED_STEADY_STATE_TIMEOUT;
+	private static final int WARMUP_CYCLE_ITERATION_COUNT;
 
 	static {
 		NUM_ITERATIONS = Integer.parseInt(System.getProperty("benchmark.iterations", "1000"));
@@ -35,6 +36,8 @@ public class ExtendJBenchmark extends BaseBenchmark {
 		COV_WARMUP_THRESHOLD = Double.parseDouble(System.getProperty("benchmark.warmupCovThreshold", "0.01"));
 		COV_WARMUP_IMPLIED_STEADY_STATE_TIMEOUT = Integer
 				.parseInt(System.getProperty("benchmark.warmupImpliedSteadyStateTimeout", "10"));
+		WARMUP_CYCLE_ITERATION_COUNT = Integer
+				.parseInt(System.getProperty("benchmark.warmupCycleIterationCount", "100"));
 	}
 
 	private static class Measurement {
@@ -241,7 +244,7 @@ public class ExtendJBenchmark extends BaseBenchmark {
 							.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(100)) // = Our file, it is always
 							// last
 							// (=100)
-							.put(ExtendJQueries.createTALStep("StringLiteral", (4 << 12), (5 << 12))) //
+							.put(ExtendJQueries.createTALStep("org.extendj.ast.StringLiteral", (4 << 12), (5 << 12))) //
 					);
 					break;
 				case 3:
@@ -249,7 +252,7 @@ public class ExtendJBenchmark extends BaseBenchmark {
 					// compilationUnitList.get(..75%..).tal(Modifiers).getNumChild()
 					msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
 							.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(75)) //
-							.put(ExtendJQueries.createTALStep("Modifiers", (1 << 12), (1024 << 12))) //
+							.put(ExtendJQueries.createTALStep("org.extendj.ast.Modifiers", (1 << 12), (1024 << 12))) //
 					);
 				}
 				break;
@@ -282,7 +285,7 @@ public class ExtendJBenchmark extends BaseBenchmark {
 		if (ACTION_TYPE.requiresWarmup()) {
 			warmup();
 		} else {
-			System.out.println("Skipping warmup beccause action type is " + ACTION_TYPE);
+			System.out.println("Skipping warmup because action type is " + ACTION_TYPE);
 		}
 
 		measurements.reset();
@@ -328,11 +331,11 @@ public class ExtendJBenchmark extends BaseBenchmark {
 	}
 
 	private void warmup() throws InterruptedException {
-		// Warm up for multiples of 100 iterations until the standard deviation goes
+		// Warm up for multiples of N iterations until the standard deviation goes
 		// below a threshold
 		double prevBestCov = Double.MAX_VALUE;
 		int numSequentialInsubstantialIterations = 0;
-		final double[] requestTimes = new double[100];
+		final double[] requestTimes = new double[WARMUP_CYCLE_ITERATION_COUNT];
 		System.out.println("Warming up...");
 		System.out.println("Performing cycles of " + requestTimes.length
 				+ " requests until 'Coefficient of Variation' (CoV) goes below " + COV_WARMUP_THRESHOLD);
