@@ -22,7 +22,7 @@ window.clearUserSettings = () => {
 const uiElements = new UIElements();
 
 const doMain = (wsPort: number) => {
-  let getLocalState = () => '';
+  let getLocalState = () => settings.getEditorContents() ?? '';
   let updateSpanHighlight = (span: Span | null) => {};
   const performRpcQuery = (handler: WebsocketHandler, props: { [key: string]: any }) => handler.sendRpc({
     posRecovery: uiElements.positionRecoverySelector.value,

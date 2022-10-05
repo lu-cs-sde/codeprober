@@ -3309,7 +3309,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     };
     const uiElements = new UIElements_1.default();
     const doMain = (wsPort) => {
-        let getLocalState = () => '';
+        let getLocalState = () => { var _a; return (_a = settings_4.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
         let updateSpanHighlight = (span) => { };
         const performRpcQuery = (handler, props) => handler.sendRpc({
             posRecovery: uiElements.positionRecoverySelector.value,

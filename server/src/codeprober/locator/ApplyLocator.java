@@ -161,7 +161,6 @@ public class ApplyLocator {
 
 		BenchmarkTimer.APPLY_LOCATOR.enter();
 		try {
-
 			if (matchedNode != null) {
 				final List<Object> matchSequence = new ArrayList<>();
 				final JSONArray steps = locator.getJSONArray("steps");

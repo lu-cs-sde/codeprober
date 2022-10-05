@@ -1,3 +1,4 @@
 *.class
 code-prober-dev.jar
+server/bin
 
