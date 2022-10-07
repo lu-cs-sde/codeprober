@@ -56,6 +56,36 @@ Example invocation where some of these are set:
 WEB_SERVER_PORT=8005 WEB_RESOURCES_OVERRIDE=client/public/ java -jar code-prober.jar /path/to/your/compiler/or/analyzer.jar
 ```
 
+## Troubleshooting
+
+CodeProber should run on any OS on Java 8 and above. However, sometimes things don't work as they should. This section has some known issues and their workarounds.
+
+### CodeProber is running, but I cannot access localhost:8000 in my browser
+
+By default, CodeProber only accepts requests from localhost. When you run CodeProber inside a container (for example WSL or Docker) then requests from your host machine can appear as remote, not local. To solve this, add the `PERMIT_REMOTE_CONNECTIONS` environment variable mentioned above.
+
+### System.exit/SecurityManager problem
+
+If you run Java version 18+ then you'll likely run into error messages that mention "Failed installing System.exit interceptor".
+For many language tools, the main function behaves like this:
+
+1) Parse the incoming document
+2) Perform semantic analysis, print results
+3) If any errors were detected, call System.exit(1);
+
+To avoid the System.exit call killing the CodeProber process, CodeProber uses `System.setSecurityManager(..)` to intercept all calls to System.exit.
+As of Java 18, this feature is disabled by default. You can re-enable it by adding the system property 'java.security.manager=allow'. I.e run CodeProber with:
+
+```bash
+java -Djava.security.manager=allow -jar code-prober.jar path/to/your/analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
+```
+
+For more information about this issue, see https://openjdk.org/jeps/411 and https://bugs.openjdk.org/browse/JDK-8199704.
+
+### My problem isn't listed above
+
+Check the terminal where you started code-prober.jar If no message there helps you, please open an issue in this repository!
+
 ## Building - Client
 
 The client is built with TypeScript. Do the following to generate the JavaScript files:
@@ -152,5 +182,5 @@ class MyWrapper {
 }
 ```
 
-At the time of writing, the live node tracking used in CodeProber doesn't work well with wrapper implementations, since all types will be the same. This will be improved in the future, at least for nodes that implement cpr_nodeLabel().
+At the time of writing, the live node tracking used in CodeProber doesn't work well with wrapper implementations, since all types will be the same. This might be improved in the future, at least for nodes that implement cpr_nodeLabel().
 
