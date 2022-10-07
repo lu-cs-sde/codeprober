@@ -113,7 +113,19 @@ public class ASTProvider {
 				Object prevRoot = ljar.drAstField.get(ljar.mainClazz);
 				JSONArray captures = null;
 				try {
-					SystemExitControl.disableSystemExit();
+					System.setProperty("java.security.manager", "allow");
+					try {
+						SystemExitControl.disableSystemExit();
+					} catch (UnsupportedOperationException uoe) {
+						uoe.printStackTrace();
+						captures = StdIoInterceptor.performDefaultCapture(() -> {
+							System.err.println("Failed installing System.exit manager");
+							System.err.println("Restart code-prober.jar with the system property 'java.security.manager=allow'");
+							System.err.println("Example:");
+							System.err.println("   java -Djava.security.manager=allow -jar path/to/code-prober.jar path/to/your/analyzer-or-compiler.jar");
+						});
+						return new ParseResult(false, captures);
+					}
 					
 					final AtomicReference<Exception> innerError = new AtomicReference<>();
 					captures = StdIoInterceptor.performDefaultCapture(() -> {
