@@ -1,4 +1,4 @@
-import repositoryUrl from "../../model/repositoryUrl";
+import { repositoryUrl } from "../../model/repositoryUrl";
 import createModalTitle from "../create/createModalTitle";
 import createTextSpanIndicator, { TextSpanStyle } from "../create/createTextSpanIndicator";
 import showWindow from "../create/showWindow";

@@ -1,5 +1,5 @@
 import { WebsocketHandler } from "../createWebsocketHandler";
-import repositoryUrl from "../model/repositoryUrl";
+import { repositoryUrl, rawUrl } from "../model/repositoryUrl";
 
 
 const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolean, ourBuildTime: number | undefined, wsHandler: WebsocketHandler) => {
@@ -29,7 +29,7 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
     try {
       fetched = (await wsHandler.sendRpc({
         type: 'fetch',
-        url: `${repositoryUrl}/-/raw/master/VERSION`
+        url: rawUrl('VERSION'),
       }))?.result;
     } catch (e) {
       console.warn('Error when fetching version', e);
@@ -48,7 +48,7 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
     }
 
     const a = document.createElement('a');
-    a.href = `${repositoryUrl}/-/blob/master/code-prober.jar`;
+    a.href = `${repositoryUrl}/blob/master/code-prober.jar`;
     a.target = '_blank';
     a.text = 'New version available';
     elem.appendChild(document.createElement('br'));

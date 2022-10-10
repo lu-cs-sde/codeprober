@@ -1038,14 +1038,15 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
 define("model/repositoryUrl", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    // Also update versionCheckerFragment.html if the repository changes
-    const repositoryUrl = `https://git.cs.lth.se/an6308ri/code-prober`;
-    exports.default = repositoryUrl;
+    exports.rawUrl = exports.repositoryUrl = void 0;
+    const repositoryUrl = `https://github.com/lu-cs-sde/codeprober`;
+    exports.repositoryUrl = repositoryUrl;
+    const rawUrl = (resource) => `https://raw.githubusercontent.com/lu-cs-sde/codeprober/master/${resource}`;
+    exports.rawUrl = rawUrl;
 });
 define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/showWindow"], function (require, exports, repositoryUrl_1, createModalTitle_2, createTextSpanIndicator_2, showWindow_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    repositoryUrl_1 = __importDefault(repositoryUrl_1);
     createModalTitle_2 = __importDefault(createModalTitle_2);
     createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
     showWindow_3 = __importDefault(showWindow_3);
@@ -1192,8 +1193,8 @@ encode(value):
                     ``,
                     joinElements(`Contributions welcome at `, (() => {
                         const a = document.createElement('a');
-                        a.href = repositoryUrl_1.default;
-                        a.innerText = repositoryUrl_1.default;
+                        a.href = repositoryUrl_1.repositoryUrl;
+                        a.innerText = repositoryUrl_1.repositoryUrl;
                         a.target = '_blank';
                         return a;
                     })()),
@@ -3218,7 +3219,6 @@ define("ui/UIElements", ["require", "exports"], function (require, exports) {
 define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], function (require, exports, repositoryUrl_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    repositoryUrl_2 = __importDefault(repositoryUrl_2);
     const showVersionInfo = (elem, ourHash, ourClean, ourBuildTime, wsHandler) => {
         const innerPrefix = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
         if (ourBuildTime !== undefined) {
@@ -3245,7 +3245,7 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
             try {
                 fetched = (_a = (await wsHandler.sendRpc({
                     type: 'fetch',
-                    url: `${repositoryUrl_2.default}/-/raw/master/VERSION`
+                    url: (0, repositoryUrl_2.rawUrl)('VERSION'),
                 }))) === null || _a === void 0 ? void 0 : _a.result;
             }
             catch (e) {
@@ -3263,7 +3263,7 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
                 return 'again';
             }
             const a = document.createElement('a');
-            a.href = `${repositoryUrl_2.default}/-/blob/master/code-prober.jar`;
+            a.href = `${repositoryUrl_2.repositoryUrl}/blob/master/code-prober.jar`;
             a.target = '_blank';
             a.text = 'New version available';
             elem.appendChild(document.createElement('br'));

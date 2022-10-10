@@ -1,5 +1,5 @@
 
-// Also update versionCheckerFragment.html if the repository changes
-const repositoryUrl = `https://git.cs.lth.se/an6308ri/code-prober`;
+const repositoryUrl = `https://github.com/lu-cs-sde/codeprober`;
+const rawUrl = (resource: string) => `https://raw.githubusercontent.com/lu-cs-sde/codeprober/master/${resource}`;
 
-export default repositoryUrl;
+export { repositoryUrl, rawUrl };
