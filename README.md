@@ -2,8 +2,6 @@
 
 An implementation of property probes.
 
-⚠️ In active development ⚠️
-
 Quick overview of features (5 minutes): https://www.youtube.com/watch?v=d-KvFy5h9W0
 
 Installation & getting started: https://www.youtube.com/watch?v=1beyfNhUQEg
@@ -184,3 +182,7 @@ class MyWrapper {
 
 At the time of writing, the live node tracking used in CodeProber doesn't work well with wrapper implementations, since all types will be the same. This might be improved in the future, at least for nodes that implement cpr_nodeLabel().
 
+## Artifact
+
+If you want to try CodeProber, but don't have an analysis tool of your own, you can follow the instructions in the artifact to our Property probe paper, found here: https://doi.org/10.5281/zenodo.7185242.
+This will let you use CodeProber with a Java compiler/analyzer called IntraJ (https://github.com/lu-cs-sde/IntraJ).

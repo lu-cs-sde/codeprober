@@ -1,7 +1,6 @@
 import { WebsocketHandler } from "../createWebsocketHandler";
 import { repositoryUrl, rawUrl } from "../model/repositoryUrl";
 
-
 const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolean, ourBuildTime: number | undefined, wsHandler: WebsocketHandler) => {
 
   const innerPrefix = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
