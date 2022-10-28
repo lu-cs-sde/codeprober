@@ -2107,7 +2107,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             if (localErrors.length > 0) {
                 env.updateMarkers();
             }
-            // stickyMarker.remove();
+            if (activeStickyColorClass) {
+                env.clearStickyHighlight(queryId);
+            }
         };
         let copyBody = [];
         const createTitle = () => {
@@ -3640,103 +3642,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             doMain(8080);
         });
     };
-});
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation, Christoph Reichenbach.  All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
-define("languages/installTeal0", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    const tealTokens = {
-        keywords: [
-            'fun', 'var', 'while', 'if', 'else', 'return',
-            'not', 'and', 'or', 'null', 'new',
-            'for', 'in', 'qualifier', 'type',
-            'assert',
-            'class', 'self'
-        ],
-        typeKeywords: [
-            'int', 'string', 'array', 'any', 'nonnull'
-        ],
-        operators: [
-            '+', '-', '*', '/', '%',
-            ':=',
-            '>', '<', '==', '<=', '>=', '!=', '=',
-            ':', '<:'
-        ],
-        brackets: [['{', '}', 'delimiter.curly'],
-            ['[', ']', 'delimiter.square'],
-            ['(', ')', 'delimiter.parenthesis']],
-        // we include these common regular expressions
-        symbols: /[=><!~?:&|+\-*\/\^%]+/,
-        escapes: /\\(?:[\\"])/,
-        // The main tokenizer for our languages
-        tokenizer: {
-            root: [
-                // identifiers and keywords
-                [/[a-zA-Z_][a-zA-Z_0-9]*/, { cases: { '@typeKeywords': 'keyword',
-                            '@keywords': 'keyword',
-                            '@default': 'identifier' } }],
-                [/[A-Z][a-zA-Z_0-9]*/, 'type.identifier'],
-                // whitespace
-                { include: '@whitespace' },
-                // delimiters and operators
-                [/[{}()\[\]]/, '@brackets'],
-                [/@symbols/, { cases: { '@operators': 'operator',
-                            '@default': '' } }],
-                // // @ annotations.
-                // // As an example, we emit a debugging log message on these tokens.
-                // // Note: message are supressed during the first load -- change some lines to see them.
-                // [/@\s*[a-zA-Z_\$][\w\$]*/, { token: 'annotation', log: 'annotation token: $0' }],
-                // numbers
-                [/\d+/, 'number'],
-                // delimiter: after number because of .\d floats
-                [/[;,.]/, 'delimiter'],
-                // strings
-                [/"([^"\\]|\\.)*$/, 'string.invalid'],
-                [/"/, { token: 'string.quote', bracket: '@open', next: '@string' }],
-                // characters
-                [/'[^\\']'/, 'string'],
-                [/(')(@escapes)(')/, ['string', 'string.escape', 'string']],
-                [/'/, 'string.invalid']
-            ],
-            comment: [
-                [/[^\/*]+/, 'comment'],
-                [/\*\//, 'comment', '@pop'],
-                [/[\/*]/, 'comment']
-            ],
-            string: [
-                [/[^\\"]+/, 'string'],
-                [/@escapes/, 'string.escape'],
-                [/\\./, 'string.escape.invalid'],
-                [/"/, { token: 'string.quote', bracket: '@close', next: '@pop' }]
-            ],
-            whitespace: [
-                [/[ \t\r\n]+/, ''],
-                [/\/\*/, 'comment', '@comment'],
-                [/\/\/.*$/, 'comment']
-            ],
-        },
-    };
-    const tealConf = {
-        comments: {
-            lineComment: '//',
-            blockComment: ['/*', '*/']
-        },
-        brackets: [
-            ['{', '}'],
-            ['[', ']'],
-            ['(', ')']
-        ],
-    };
-    const installTeal0 = (monaco) => {
-        var languages = monaco.languages;
-        languages.register({ id: 'teal' });
-        languages.setMonarchTokensProvider('teal', tealTokens);
-        languages.setLanguageConfiguration('teal', tealConf);
-    };
-    exports.default = installTeal0;
 });
 // const isLightTheme = () => localStorage.getItem('editor-theme-light') === 'true';
 // const setIsLightTheme = (light: boolean) => {

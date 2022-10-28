@@ -27,7 +27,9 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
     if (localErrors.length > 0) {
       env.updateMarkers();
     }
-    // stickyMarker.remove();
+    if (activeStickyColorClass) {
+      env.clearStickyHighlight(queryId);
+    }
   };
 
   let copyBody: RpcBodyLine[] = [];
