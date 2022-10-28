@@ -31,7 +31,7 @@ type SyntaxHighlightingLanguageId = 'plaintext' | 'abap' | 'apex' | 'azcli' | 'b
 type EditorInitializer = (initialValue: string, onChange: (newValue: string, adjusters?: LocationAdjuster[] ) => void, initialSyntaxHIghlight: SyntaxHighlightingLanguageId) => {
   setLocalState?: (newValue: string) => void;
   getLocalState?: () => string;
-  updateSpanHighlight?: (span: Span | null) => void;
+  updateSpanHighlight?: (baseHighlight: Span | null, stickyHighlights: StickyHighlight[]) => void;
   registerStickyMarker?: (initialSpan: Span) => StickyMarker;
   markText?: TextMarkFn;
   themeToggler: (isLightTheme: boolean) => void;
@@ -70,6 +70,10 @@ interface ProbeStatisticsCollector {
   addProbeEvaluationTime: (measurement: ProbeMeasurement) => void;
 };
 
+interface StickyHighlight {
+  classNames: string[];
+  span: Span;
+}
 interface ModalEnv {
   performRpcQuery: (args: {
     attr: AstAttrWithValue;
@@ -77,6 +81,8 @@ interface ModalEnv {
   }) => Promise<any>;
   getLocalState: () => string;
   updateSpanHighlight: (span: Span | null) => void;
+  setStickyHighlight: (probeId: string, hl: StickyHighlight) => void;
+  clearStickyHighlight: (probeId: string) => void;
   probeMarkers: { [probeId: string]: ProbeMarker[] };
   onChangeListeners: { [key: string]: (adjusters?: LocationAdjuster[]) => void };
   probeWindowStateSavers: { [key: string]: (target: ProbeWindowState[]) => void };
@@ -142,7 +148,7 @@ interface RpcResponse {
   args?: (Omit<AstAttrArg, 'name'> & { value: ArgValue })[];
   // args?: AstAttrWithValue['args'],
   locator: NodeLocator;
-  errors: { start: number; end: number; msg: string; }[];
+  errors: { severity: ('error' | 'warning' | 'info'); start: number; end: number; msg: string; }[];
 
   // Expected for request meta:listNodes
   nodes?: NodeLocator[];

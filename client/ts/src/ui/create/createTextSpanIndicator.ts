@@ -7,10 +7,11 @@ interface TextSpanIndicatorArgs {
   span: Span;
   marginLeft?: boolean;
   onHover?: (isHovered: boolean) => void;
+  onClick?: () => void;
   styleOverride?: TextSpanStyle;
 }
 const createTextSpanIndicator = (args: TextSpanIndicatorArgs) => {
-  const { span, marginLeft, onHover } = args;
+  const { span, marginLeft, onHover, onClick } = args;
   const indicator = document.createElement('span');
   indicator.style.fontSize = '0.75rem';
   indicator.style.color = 'gray';
@@ -50,6 +51,9 @@ const createTextSpanIndicator = (args: TextSpanIndicatorArgs) => {
   if (onHover) {
     indicator.classList.add('highlightOnHover');
     registerOnHover(indicator, onHover);
+  }
+  if (onClick) {
+    indicator.onclick = () => onClick();
   }
   return indicator;
 }

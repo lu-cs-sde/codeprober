@@ -15,6 +15,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   const localErrors: ProbeMarker[] = [];
   env.probeMarkers[queryId] = localErrors;
+  let activeStickyColorClass = '';
   // const stickyMarker = env.registerStickyMarker(span)
 
   const cleanup = () => {
@@ -168,20 +169,44 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
             cleanup();
             displayArgModal(env, queryWindow.getPos(), locator, attr);
           };
-          // const editHolder = document.createElement('div');
-          // editHolder.style.display = 'flex';
-          // editHolder.style.flexDirection = 'column';
-          // editHolder.style.justifyContent = 'space-around';
-          // editHolder.appendChild(editButton);
 
           container.appendChild(editButton);
         }
 
+        const applySticky = () => {
+          env.setStickyHighlight(queryId, {
+            classNames: [
+              `monaco-rag-highlight-sticky`,
+              activeStickyColorClass,
+            ],
+            span: startEndToSpan(locator.result.start, locator.result.end),
+          });
+          spanIndicator.classList.add(`monaco-rag-highlight-sticky`);
+          spanIndicator.classList.add(activeStickyColorClass);
+        };
         const spanIndicator = createTextSpanIndicator({
           span: startEndToSpan(locator.result.start, locator.result.end),
           marginLeft: true,
           onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
+          onClick: () => {
+            if (!activeStickyColorClass) {
+              activeStickyColorClass = `monaco-rag-highlight-sticky-${Math.floor(Math.random() * 5)}`;
+              applySticky();
+            } else {
+              env.clearStickyHighlight(queryId);
+              if (activeStickyColorClass) {
+                spanIndicator.classList.remove(`monaco-rag-highlight-sticky`);
+                spanIndicator.classList.remove(activeStickyColorClass);
+                activeStickyColorClass = '';
+              }
+            }
+          },
         });
+        if (activeStickyColorClass) {
+          applySticky();
+        } else {
+          env.clearStickyHighlight(queryId);
+        }
         registerNodeSelector(spanIndicator, () => locator);
         container.appendChild(spanIndicator);
       },
@@ -264,8 +289,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
           let refreshMarkers = localErrors.length > 0;
           localErrors.length = 0;
 
-          // console.log('probe errors:', parsed.errors);
-          (parsed.errors as { severity: ('error' | 'warning' | 'info') ; start: number; end: number; msg: string }[]).forEach(({severity, start: errStart, end: errEnd, msg }) => {
+          parsed.errors.forEach(({severity, start: errStart, end: errEnd, msg }) => {
             localErrors.push({ severity, errStart, errEnd, msg });
           })
           const updatedArgs = parsed.args;

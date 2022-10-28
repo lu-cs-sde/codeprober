@@ -403,20 +403,25 @@ textarea {
   color: black;
 }
 
-
-
-
-
-
-
 .monaco-rag-highlight {
-	/* color: red !important; */
-	/* cursor: pointer; */
-	/* text-decoration: underline; */
-	/* font-weight: bold; */
-	font-style: oblique;
+  font-style: oblique;
   background: #8888;
 }
+.monaco-rag-highlight-sticky {
+  border-bottom: 2px solid;
+  margin-bottom: -2px;
+}
+.monaco-rag-highlight-sticky-0 { border-bottom-color: lime; }
+.monaco-rag-highlight-sticky-1 { border-bottom-color: orange; }
+.monaco-rag-highlight-sticky-2 { border-bottom-color: hotpink; }
+.monaco-rag-highlight-sticky-3 { border-bottom-color: tomato; }
+.monaco-rag-highlight-sticky-4 { border-bottom-color: lightsalmon; }
+.monaco-rag-highlight-sticky-5 { border-bottom-color: magenta; }
+.monaco-rag-highlight-sticky-6 { border-bottom-color: mediumaquamarine; }
+.monaco-rag-highlight-sticky-7 { border-bottom-color: mediumslateblue; }
+.monaco-rag-highlight-sticky-8 { border-bottom-color: royalblue; }
+.monaco-rag-highlight-sticky-9 { border-bottom-color: skyblue; }
+
 body[data-theme-light="true"] .monaco-rag-highlight {
   background: #8884;
 }

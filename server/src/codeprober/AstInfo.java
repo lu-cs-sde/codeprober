@@ -17,12 +17,12 @@ public class AstInfo {
 	public final AstNodeApiStyle astApiStyle;
 	public final Function<String, Class<?>> loadAstClass;
 	public final Class<?> baseAstClazz;
-	
+
 	private Class<?> locatorTALRoot;
 	private boolean loadedLocatorTALRoot;
 
 	private final Map<Class<?>, Map<String, Boolean>> hasOverrides = new HashMap<>();
-	
+
 	public AstInfo(AstNode ast, PositionRecoveryStrategy recoveryStrategy,
 			AstNodeApiStyle astApiStyle, Function<String, Class<?>> loadAstClass) {
 		this.ast = ast;
@@ -47,7 +47,7 @@ public class AstInfo {
 		}
 		return baseAstClazz.getPackage().getName() + "." + simpleName;
 	}
-	
+
 	public Class<?> getLocatorTALRoot() {
 		if (!loadedLocatorTALRoot) {
 			loadedLocatorTALRoot = true;
@@ -63,17 +63,17 @@ public class AstInfo {
 		}
 		return locatorTALRoot;
 	}
-	
+
 	public boolean hasOverride0(Class<?> cls, String mthName) {
 		Map<String, Boolean> inner = hasOverrides.get(cls);
 		if (inner == null) {
 			inner = new HashMap<>();
 			hasOverrides.put(cls, inner);
 		}
-		
+
 		Boolean ex = inner.get(mthName);
 		if (ex != null) { return ex; }
-		
+
 		boolean fresh;
 		try {
 			cls.getMethod(mthName);

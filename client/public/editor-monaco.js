@@ -412,16 +412,20 @@ window.defineEditor(
     });
 
     let lastDecorations = [];
-    const updateSpanHighlight = (span) => {
+    const updateSpanHighlight = (span, stickies) => {
       let newDecorations = [];
       if (span) {
-        newDecorations = [
-          {
-            range: new monaco.Range(span.lineStart, span.colStart, span.lineEnd, span.colEnd + 1),
-            options: { inlineClassName: 'monaco-rag-highlight' }
-          }
-        ];
+        newDecorations.push({
+          range: new monaco.Range(span.lineStart, span.colStart, span.lineEnd, span.colEnd + 1),
+          options: { inlineClassName: 'monaco-rag-highlight' }
+        });
       }
+      stickies.forEach(({ classNames, span }) => {
+        newDecorations.push({
+          range: new monaco.Range(span.lineStart, span.colStart, span.lineEnd, span.colEnd + 1),
+          options: { className: classNames.join(' ') },
+        });
+      })
       lastDecorations = editor.deltaDecorations(lastDecorations, newDecorations);
     };
 

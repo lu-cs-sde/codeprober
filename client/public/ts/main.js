@@ -559,7 +559,7 @@ define("ui/create/createTextSpanIndicator", ["require", "exports", "settings", "
     registerOnHover_1 = __importDefault(registerOnHover_1);
     const createTextSpanIndicator = (args) => {
         var _a;
-        const { span, marginLeft, onHover } = args;
+        const { span, marginLeft, onHover, onClick } = args;
         const indicator = document.createElement('span');
         indicator.style.fontSize = '0.75rem';
         indicator.style.color = 'gray';
@@ -597,6 +597,9 @@ define("ui/create/createTextSpanIndicator", ["require", "exports", "settings", "
         if (onHover) {
             indicator.classList.add('highlightOnHover');
             (0, registerOnHover_1.default)(indicator, onHover);
+        }
+        if (onClick) {
+            indicator.onclick = () => onClick();
         }
         return indicator;
     };
@@ -2093,6 +2096,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
         env.probeMarkers[queryId] = localErrors;
+        let activeStickyColorClass = '';
         // const stickyMarker = env.registerStickyMarker(span)
         const cleanup = () => {
             delete env.onChangeListeners[queryId];
@@ -2243,18 +2247,44 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             cleanup();
                             (0, displayArgModal_2.default)(env, queryWindow.getPos(), locator, attr);
                         };
-                        // const editHolder = document.createElement('div');
-                        // editHolder.style.display = 'flex';
-                        // editHolder.style.flexDirection = 'column';
-                        // editHolder.style.justifyContent = 'space-around';
-                        // editHolder.appendChild(editButton);
                         container.appendChild(editButton);
                     }
+                    const applySticky = () => {
+                        env.setStickyHighlight(queryId, {
+                            classNames: [
+                                `monaco-rag-highlight-sticky`,
+                                activeStickyColorClass,
+                            ],
+                            span: startEndToSpan(locator.result.start, locator.result.end),
+                        });
+                        spanIndicator.classList.add(`monaco-rag-highlight-sticky`);
+                        spanIndicator.classList.add(activeStickyColorClass);
+                    };
                     const spanIndicator = (0, createTextSpanIndicator_5.default)({
                         span: startEndToSpan(locator.result.start, locator.result.end),
                         marginLeft: true,
                         onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
+                        onClick: () => {
+                            if (!activeStickyColorClass) {
+                                activeStickyColorClass = `monaco-rag-highlight-sticky-${Math.floor(Math.random() * 5)}`;
+                                applySticky();
+                            }
+                            else {
+                                env.clearStickyHighlight(queryId);
+                                if (activeStickyColorClass) {
+                                    spanIndicator.classList.remove(`monaco-rag-highlight-sticky`);
+                                    spanIndicator.classList.remove(activeStickyColorClass);
+                                    activeStickyColorClass = '';
+                                }
+                            }
+                        },
                     });
+                    if (activeStickyColorClass) {
+                        applySticky();
+                    }
+                    else {
+                        env.clearStickyHighlight(queryId);
+                    }
                     (0, registerNodeSelector_3.default)(spanIndicator, () => locator);
                     container.appendChild(spanIndicator);
                 },
@@ -2339,7 +2369,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         root.removeChild(root.firstChild);
                     let refreshMarkers = localErrors.length > 0;
                     localErrors.length = 0;
-                    // console.log('probe errors:', parsed.errors);
                     parsed.errors.forEach(({ severity, start: errStart, end: errEnd, msg }) => {
                         localErrors.push({ severity, errStart, errEnd, msg });
                     });
@@ -3287,7 +3316,58 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
     };
     exports.default = showVersionInfo;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_3, displayAttributeModal_5, settings_4, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1) {
+define("model/runBgProbe", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const runInvisibleProbe = (env, locator, attr) => {
+        const id = `invisible-probe-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const localErrors = [];
+        env.probeMarkers[id] = localErrors;
+        let state = 'idle';
+        let reloadOnDone = false;
+        const onRpcDone = () => {
+            state = 'idle';
+            if (reloadOnDone) {
+                reloadOnDone = false;
+                performRpc();
+            }
+        };
+        const performRpc = () => {
+            state = 'loading';
+            env.performRpcQuery({
+                attr,
+                locator,
+            })
+                .then((res) => {
+                const prevLen = localErrors.length;
+                localErrors.length = 0;
+                res.errors.forEach(({ severity, start: errStart, end: errEnd, msg }) => {
+                    localErrors.push({ severity, errStart, errEnd, msg });
+                });
+                if (prevLen !== 0 || localErrors.length !== 0) {
+                    env.updateMarkers();
+                }
+                onRpcDone();
+            })
+                .catch((err) => {
+                console.warn('Failed refreshing invisible probe', err);
+                onRpcDone();
+            });
+        };
+        const refresh = () => {
+            if (state === 'loading') {
+                reloadOnDone = true;
+            }
+            else {
+                performRpc();
+            }
+        };
+        env.onChangeListeners[id] = refresh;
+        refresh();
+    };
+    exports.default = runInvisibleProbe;
+});
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_3, displayAttributeModal_5, settings_4, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1, runBgProbe_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -3303,6 +3383,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     configureCheckboxWithHiddenButton_1 = __importDefault(configureCheckboxWithHiddenButton_1);
     UIElements_1 = __importDefault(UIElements_1);
     showVersionInfo_1 = __importDefault(showVersionInfo_1);
+    runBgProbe_1 = __importDefault(runBgProbe_1);
     window.clearUserSettings = () => {
         settings_4.default.set({});
         location.reload();
@@ -3310,7 +3391,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     const uiElements = new UIElements_1.default();
     const doMain = (wsPort) => {
         let getLocalState = () => { var _a; return (_a = settings_4.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
-        let updateSpanHighlight = (span) => { };
+        let basicHighlight = null;
+        const stickyHighlights = {};
+        let updateSpanHighlight = (span, stickies) => { };
         const performRpcQuery = (handler, props) => handler.sendRpc({
             posRecovery: uiElements.positionRecoverySelector.value,
             cache: uiElements.astCacheStrategySelector.value,
@@ -3381,6 +3464,12 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             defineThemeToggler(res.themeToggler);
                         }
                         syntaxHighlightingToggler = res.syntaxHighlightingToggler;
+                        location.search.split(/\?|&/g).forEach((kv) => {
+                            const needle = `bgProbe=`;
+                            if (kv.startsWith(needle)) {
+                                (0, runBgProbe_1.default)(modalEnv, { result: { start: 0, end: 0, type: '<ROOT>' }, steps: [] }, { name: kv.slice(needle.length), });
+                            }
+                        });
                     });
                 }
                 else {
@@ -3473,8 +3562,19 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     captureStdout: () => uiElements.captureStdoutCheckbox.checked,
                     duplicateOnAttr: () => uiElements.duplicateProbeCheckbox.checked,
                     registerStickyMarker: (...args) => registerStickyMarker(...args),
-                    updateSpanHighlight: (hl) => updateSpanHighlight(hl),
+                    updateSpanHighlight: (hl) => {
+                        basicHighlight = hl;
+                        updateSpanHighlight(basicHighlight, Object.values(stickyHighlights));
+                    },
                     probeWindowStateSavers,
+                    setStickyHighlight: (pi, hl) => {
+                        stickyHighlights[pi] = hl;
+                        updateSpanHighlight(basicHighlight, Object.values(stickyHighlights));
+                    },
+                    clearStickyHighlight: (pi) => {
+                        delete stickyHighlights[pi];
+                        updateSpanHighlight(basicHighlight, Object.values(stickyHighlights));
+                    },
                     triggerWindowSave,
                     statisticsCollector: statCollectorImpl,
                     currentlyLoadingModals: new Set(),
@@ -3540,6 +3640,103 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             doMain(8080);
         });
     };
+});
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation, Christoph Reichenbach.  All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+define("languages/installTeal0", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const tealTokens = {
+        keywords: [
+            'fun', 'var', 'while', 'if', 'else', 'return',
+            'not', 'and', 'or', 'null', 'new',
+            'for', 'in', 'qualifier', 'type',
+            'assert',
+            'class', 'self'
+        ],
+        typeKeywords: [
+            'int', 'string', 'array', 'any', 'nonnull'
+        ],
+        operators: [
+            '+', '-', '*', '/', '%',
+            ':=',
+            '>', '<', '==', '<=', '>=', '!=', '=',
+            ':', '<:'
+        ],
+        brackets: [['{', '}', 'delimiter.curly'],
+            ['[', ']', 'delimiter.square'],
+            ['(', ')', 'delimiter.parenthesis']],
+        // we include these common regular expressions
+        symbols: /[=><!~?:&|+\-*\/\^%]+/,
+        escapes: /\\(?:[\\"])/,
+        // The main tokenizer for our languages
+        tokenizer: {
+            root: [
+                // identifiers and keywords
+                [/[a-zA-Z_][a-zA-Z_0-9]*/, { cases: { '@typeKeywords': 'keyword',
+                            '@keywords': 'keyword',
+                            '@default': 'identifier' } }],
+                [/[A-Z][a-zA-Z_0-9]*/, 'type.identifier'],
+                // whitespace
+                { include: '@whitespace' },
+                // delimiters and operators
+                [/[{}()\[\]]/, '@brackets'],
+                [/@symbols/, { cases: { '@operators': 'operator',
+                            '@default': '' } }],
+                // // @ annotations.
+                // // As an example, we emit a debugging log message on these tokens.
+                // // Note: message are supressed during the first load -- change some lines to see them.
+                // [/@\s*[a-zA-Z_\$][\w\$]*/, { token: 'annotation', log: 'annotation token: $0' }],
+                // numbers
+                [/\d+/, 'number'],
+                // delimiter: after number because of .\d floats
+                [/[;,.]/, 'delimiter'],
+                // strings
+                [/"([^"\\]|\\.)*$/, 'string.invalid'],
+                [/"/, { token: 'string.quote', bracket: '@open', next: '@string' }],
+                // characters
+                [/'[^\\']'/, 'string'],
+                [/(')(@escapes)(')/, ['string', 'string.escape', 'string']],
+                [/'/, 'string.invalid']
+            ],
+            comment: [
+                [/[^\/*]+/, 'comment'],
+                [/\*\//, 'comment', '@pop'],
+                [/[\/*]/, 'comment']
+            ],
+            string: [
+                [/[^\\"]+/, 'string'],
+                [/@escapes/, 'string.escape'],
+                [/\\./, 'string.escape.invalid'],
+                [/"/, { token: 'string.quote', bracket: '@close', next: '@pop' }]
+            ],
+            whitespace: [
+                [/[ \t\r\n]+/, ''],
+                [/\/\*/, 'comment', '@comment'],
+                [/\/\/.*$/, 'comment']
+            ],
+        },
+    };
+    const tealConf = {
+        comments: {
+            lineComment: '//',
+            blockComment: ['/*', '*/']
+        },
+        brackets: [
+            ['{', '}'],
+            ['[', ']'],
+            ['(', ')']
+        ],
+    };
+    const installTeal0 = (monaco) => {
+        var languages = monaco.languages;
+        languages.register({ id: 'teal' });
+        languages.setMonarchTokensProvider('teal', tealTokens);
+        languages.setLanguageConfiguration('teal', tealConf);
+    };
+    exports.default = installTeal0;
 });
 // const isLightTheme = () => localStorage.getItem('editor-theme-light') === 'true';
 // const setIsLightTheme = (light: boolean) => {
