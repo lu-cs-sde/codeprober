@@ -42,18 +42,56 @@ public class CreateLocator {
 			this.steps = steps;
 		}
 	}
-	
+
 	public static void putNodeTypeName(JSONObject dst, Object node) {
 		dst.put("type", node.getClass().getName());
 		try {
-			final String lbl = (String)Reflect.invoke0(node, "cpr_nodeLabel");
+			final String lbl = (String) Reflect.invoke0(node, "cpr_nodeLabel");
 			dst.put("label", lbl);
 		} catch (InvokeProblem | ClassCastException e) {
 			// Ignore
 		}
 	}
 
+	private static List<Object> fromNodeCycleDetectorStack = new ArrayList<>();
+
 	public static JSONObject fromNode(AstInfo info, AstNode astNode) {
+		if (fromNodeCycleDetectorStack.contains(astNode.underlyingAstNode)) {
+			System.err.println("Illegal cycle in AST parent chain");
+			for (Object n : fromNodeCycleDetectorStack) {
+				System.err.print(n.getClass().getSimpleName() + "@" + System.identityHashCode(n) + " -> ");
+			}
+			System.err.println(astNode.underlyingAstNode.getClass().getSimpleName() + "@"
+					+ System.identityHashCode(astNode.underlyingAstNode));
+
+			System.err.println("In JastAdd, this can happen for parameterized nta's that use eachother as parameters.");
+			System.err.println("For example, if working with lambda calculus you might have:");
+			System.err.println(" syn nta Number Program.zero() = new Zero();");
+			System.err.println(" syn nta Number Program.successor(Number n) = new Successor(n);");
+			System.err.println(" syn Number Program.one() = successor(zero());");
+			System.err.println("If you create a probe for one(), we need to create a locator for the result.");
+			System.err.println("This requires us to located successor(zero()), which in turns requires us to locate zero().");
+			System.err.println("However, after running successor(), the parent of zero() is changed from Program to Successor.");
+			System.err.println("..so to locate zero(), we need to locate its parent, which  is successor(zero())..");
+			System.err.println("..but that can only be located if we can locate zero(), etc, etc, etc.");
+			System.err.println("Changing the parent violates the immutability of the tree,");
+			System.err.println("and this in turn breaks some assumptions that CodeProber makes.");
+			System.err.println("The recommended solution here is to clone the parameters to your nta. I.e:");
+			System.err.println(" syn nta Number Program.successor(Number n) = new Successor(n.treeCopyNoTransform());");
+			System.err.println("Another, less recommended solution is to make the field an intra-AST token reference. I.e:");
+			System.err.println(" Successor : Number ::= <Num:Number>; // The '<' and '>' changes Num from a normal field to a token reference");
+			throw new RuntimeException("Failed creating locator");
+		}
+
+		fromNodeCycleDetectorStack.add(astNode.underlyingAstNode);
+		try {
+			return doFromNode(info, astNode);
+		} finally {
+			fromNodeCycleDetectorStack.remove(fromNodeCycleDetectorStack.size() - 1);
+		}
+	}
+
+	private static JSONObject doFromNode(AstInfo info, AstNode astNode) {
 		BenchmarkTimer.CREATE_LOCATOR.enter();
 		try {
 			// TODO add position recovery things here(?)
@@ -77,7 +115,6 @@ public class CreateLocator {
 			robustResult.put("start", astPos.start);
 			robustResult.put("end", astPos.end);
 			putNodeTypeName(robustResult, astNode.underlyingAstNode);
-			
 
 			final JSONArray steps = new JSONArray();
 			for (NodeEdge step : id.steps) {
@@ -131,7 +168,7 @@ public class CreateLocator {
 				for (int i = trimPos; i >= 0; --i) {
 					++disambiguationDepth;
 					final NodeEdge parentEdge = res.get(i);
-					
+
 					if (parentEdge.targetNode.isLocatorTALRoot(info)) {
 						foundTopSubstitutableNode = true;
 						break;
@@ -166,7 +203,7 @@ public class CreateLocator {
 
 			}
 		}
-		
+
 		return new Locator(res);
 	}
 

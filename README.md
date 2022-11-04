@@ -64,7 +64,7 @@ By default, CodeProber only accepts requests from localhost. When you run CodePr
 
 ### System.exit/SecurityManager problem
 
-If you run Java version 18+ then you'll likely run into error messages that mention "Failed installing System.exit interceptor".
+If you run Java version 17+ then you'll likely run into error messages that mention "Failed installing System.exit interceptor".
 For many language tools, the main function behaves like this:
 
 1) Parse the incoming document
@@ -72,7 +72,7 @@ For many language tools, the main function behaves like this:
 3) If any errors were detected, call System.exit(1);
 
 To avoid the System.exit call killing the CodeProber process, CodeProber uses `System.setSecurityManager(..)` to intercept all calls to System.exit.
-As of Java 18, this feature is disabled by default. You can re-enable it by adding the system property 'java.security.manager=allow'. I.e run CodeProber with:
+As of Java 17, this feature is disabled by default. You can re-enable it by adding the system property 'java.security.manager=allow'. I.e run CodeProber with:
 
 ```bash
 java -Djava.security.manager=allow -jar code-prober.jar path/to/your/analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]

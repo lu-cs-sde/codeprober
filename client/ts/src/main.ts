@@ -152,7 +152,6 @@ const doMain = (wsPort: number) => {
         Object.values(probeMarkers).forEach(arr => arr.forEach(({ severity, errStart, errEnd, msg }) => filteredAddMarker(severity, errStart, errEnd, msg)));
       };
 
-
       const setupSimpleCheckbox = (input: HTMLInputElement, initial: boolean, update: (checked: boolean) => void) => {
         input.checked = initial;
         input.oninput = () => { update(input.checked); notifyLocalChangeListeners(); }

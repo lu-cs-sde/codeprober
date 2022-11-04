@@ -1,4 +1,5 @@
 *.class
 code-prober-dev.jar
 server/bin
+.DS_Store
 
