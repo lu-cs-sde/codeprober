@@ -33,7 +33,7 @@ public class NodesAtPosition {
 			return;
 		}
 		boolean includeNode = out.isEmpty()
-				|| (nodePos.start == 0 || nodePos.end == 0 || (nodePos.start <= pos && nodePos.end >= pos));
+				|| (nodePos.start == 0 || nodePos.end == 0 || (nodePos.start <= pos && (nodePos.end + 1) >= pos));
 		if (includeNode) {
 
 			// Default false for List/Opt, they are very rarely useful

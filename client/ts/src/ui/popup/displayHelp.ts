@@ -394,7 +394,7 @@ aspect MagicOutputDemo {
 
         return [
           `When multiple probes are active, the same editor state will be evaluated multiple times (once for each probe).`,
-          `When this happens, we can re-use the AST multiple to avoid unnecessary re-parses. There are however reasons that you might not want to re-use the AST, or at least not fully.`,
+          `When this happens, we can re-use the AST multiple times to avoid unnecessary re-parses. There are however reasons that you might not want to re-use the AST, or at least not fully.`,
           '',
           `While it is technically bad practice, you can use "printf-style" debugging in your attributes (System.out.println(..)).`,
           `Cached attributes will only output such printf-messages once. With multiple active probes, this makes it uncertain which probe will capture the message.`,
