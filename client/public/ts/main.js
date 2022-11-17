@@ -28,6 +28,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 define("createWebsocketHandler", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createWebsocketOverHttpHandler = void 0;
     let rpcIdGenerator = 1;
     const createWebsocketHandler = (socket, onClose) => {
         const pendingCallbacks = {};
@@ -85,6 +86,67 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
             }),
         };
     };
+    const createWebsocketOverHttpHandler = () => {
+        const pendingCallbacks = {};
+        const messageHandlers = {
+            rpc: ({ id, ...res }) => {
+                const handler = pendingCallbacks[id];
+                if (handler) {
+                    delete pendingCallbacks[id];
+                    handler(res);
+                }
+                else {
+                    console.warn('Received RPC response for', id, ', expected one of', Object.keys(pendingCallbacks));
+                }
+            },
+        };
+        let didReceiveAtLeastOneMessage = false;
+        const wsHandler = {
+            on: (id, cb) => messageHandlers[id] = cb,
+            sendRpc: (msg) => new Promise(async (res, rej) => {
+                const id = rpcIdGenerator++;
+                const body = { ...msg, id };
+                pendingCallbacks[id] = ({ error, result }) => {
+                    cleanup();
+                    if (error) {
+                        console.warn('RPC request failed', error);
+                        rej(error);
+                    }
+                    else {
+                        res(result);
+                    }
+                };
+                const cleanup = () => delete pendingCallbacks[id];
+                setTimeout(() => {
+                    cleanup();
+                    rej('Timeout');
+                }, 30000);
+                try {
+                    const fetchResult = await (await fetch('/wsput', { method: 'PUT', body: JSON.stringify(body) })).json();
+                    if (messageHandlers[fetchResult.type]) {
+                        messageHandlers[fetchResult.type](fetchResult);
+                    }
+                    else {
+                        console.log('No handler for message', fetchResult, ', got handlers for', Object.keys(messageHandlers));
+                        cleanup();
+                        rej('Bad response');
+                    }
+                }
+                catch (e) {
+                    console.warn('Error when performing ws-over-http request', e);
+                    cleanup();
+                    rej('Unknown error');
+                }
+                // socket.send(JSON.stringify({
+                //   ...msg,
+                //   id,
+                // }));
+            }),
+        };
+        wsHandler.sendRpc({ type: 'init' });
+        return wsHandler;
+    };
+    exports.createWebsocketOverHttpHandler = createWebsocketOverHttpHandler;
     exports.default = createWebsocketHandler;
 });
 define("ui/addConnectionCloseNotice", ["require", "exports"], function (require, exports) {
@@ -3381,7 +3443,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
     displayStatistics_1 = __importDefault(displayStatistics_1);
     displayMainArgsOverrideModal_1 = __importDefault(displayMainArgsOverrideModal_1);
-    createWebsocketHandler_1 = __importDefault(createWebsocketHandler_1);
+    createWebsocketHandler_1 = __importStar(createWebsocketHandler_1);
     configureCheckboxWithHiddenButton_1 = __importDefault(configureCheckboxWithHiddenButton_1);
     UIElements_1 = __importDefault(UIElements_1);
     showVersionInfo_1 = __importDefault(showVersionInfo_1);
@@ -3426,7 +3488,12 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 return;
             }
             document.body.setAttribute('data-theme-light', `${settings_4.default.isLightTheme()}`);
-            const wsHandler = (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:${wsPort}`), addConnectionCloseNotice_1.default);
+            const wsHandler = (() => {
+                if (location.search.includes('wsOverHttp=true')) {
+                    return (0, createWebsocketHandler_1.createWebsocketOverHttpHandler)();
+                }
+                return (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:${wsPort}`), addConnectionCloseNotice_1.default);
+            })();
             const rootElem = document.getElementById('root');
             wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds } }) => {
                 rootElem.style.display = "grid";

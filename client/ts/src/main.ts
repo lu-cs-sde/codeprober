@@ -8,7 +8,7 @@ import StatisticsCollectorImpl from "./model/StatisticsCollectorImpl";
 import displayStatistics from "./ui/popup/displayStatistics";
 import displayMainArgsOverrideModal from "./ui/popup/displayMainArgsOverrideModal";
 import { getAvailableLanguages } from "./model/syntaxHighlighting";
-import createWebsocketHandler, { WebsocketHandler } from "./createWebsocketHandler";
+import createWebsocketHandler, { WebsocketHandler, createWebsocketOverHttpHandler } from "./createWebsocketHandler";
 import configureCheckboxWithHiddenButton from "./ui/configureCheckboxWithHiddenButton";
 import UIElements from "./ui/UIElements";
 import showVersionInfo from "./ui/showVersionInfo";
@@ -62,10 +62,15 @@ const doMain = (wsPort: number) => {
       }
       document.body.setAttribute('data-theme-light', `${settings.isLightTheme()}`);
 
-    const wsHandler = createWebsocketHandler(
-      new WebSocket(`ws://${location.hostname}:${wsPort}`),
-      addConnectionCloseNotice
-    );
+    const wsHandler = ((): WebsocketHandler => {
+      if (location.search.includes('wsOverHttp=true')) {
+        return createWebsocketOverHttpHandler();
+      }
+      return createWebsocketHandler(
+        new WebSocket(`ws://${location.hostname}:${wsPort}`),
+        addConnectionCloseNotice
+      );
+    })();
 
     const rootElem = document.getElementById('root') as HTMLElement;
     wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds } }) => {

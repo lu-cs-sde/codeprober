@@ -5,6 +5,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
+
+import org.json.JSONObject;
 
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.server.WebServer;
@@ -29,10 +32,11 @@ public class CodeProber {
 		final JsonRequestHandler handler = new DefaultRequestHandler(jarPath,
 				Arrays.copyOfRange(mainArgs, 1, mainArgs.length));
 
-		new Thread(WebServer::start).start();
+		final Function<JSONObject, String> reqHandler = handler.createRpcRequestHandler();
+		new Thread(() -> WebServer.start(reqHandler)).start();
 
 		final List<Runnable> onJarChangeListeners = Collections.<Runnable>synchronizedList(new ArrayList<>());
-		new Thread(() -> WebSocketServer.start(onJarChangeListeners, handler.createRpcRequestHandler())).start();
+		new Thread(() -> { WebSocketServer.start(onJarChangeListeners, reqHandler); }).start();
 
 		new FileMonitor(new File(jarPath)) {
 			public void onChange() {

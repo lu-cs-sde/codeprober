@@ -108,6 +108,22 @@ public class WebSocketServer {
 		}
 	}
 
+	static JSONObject getInitMsg() {
+		final JSONObject initMsg = new JSONObject();
+		initMsg.put("type", "init");
+
+		final JSONObject versionMsg = new JSONObject();
+		final VersionInfo vinfo = VersionInfo.getInstance();
+		versionMsg.put("hash", vinfo.revision);
+		versionMsg.put("clean", vinfo.clean);
+		final Integer buildTimeSeconds = vinfo.buildTimeSeconds;
+		if (buildTimeSeconds != null) {
+			versionMsg.put("buildTimeSeconds", buildTimeSeconds.intValue());
+		}
+		initMsg.put("version", versionMsg);
+		return initMsg;
+	}
+
 	private static void handleRequest(Socket socket, List<Runnable> onJarChangeListeners,
 			Function<JSONObject, String> onQuery) throws IOException, NoSuchAlgorithmException {
 		InputStream in = socket.getInputStream();
@@ -142,21 +158,7 @@ public class WebSocketServer {
 				onJarChangeListeners.add(onJarChange);
 				Runnable cleanup = () -> onJarChangeListeners.remove(onJarChange);
 
-//				136
-				final JSONObject initMsg = new JSONObject();
-				initMsg.put("type", "init");
-
-				final JSONObject versionMsg = new JSONObject();
-				final VersionInfo vinfo = VersionInfo.getInstance();
-				versionMsg.put("hash", vinfo.revision);
-				versionMsg.put("clean", vinfo.clean);
-				final Integer buildTimeSeconds = vinfo.buildTimeSeconds;
-				if (buildTimeSeconds != null) {
-					versionMsg.put("buildTimeSeconds", buildTimeSeconds.intValue());
-				}
-				initMsg.put("version", versionMsg);
-
-				writeWsMessage(out, initMsg.toString());
+				writeWsMessage(out, getInitMsg().toString());
 				while (true) {
 
 					int first = in.read();
