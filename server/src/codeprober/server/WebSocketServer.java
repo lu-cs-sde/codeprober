@@ -13,7 +13,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Base64;
-import java.util.List;
 import java.util.Scanner;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -124,7 +123,7 @@ public class WebSocketServer {
 		return initMsg;
 	}
 
-	private static void handleRequest(Socket socket, List<Runnable> onJarChangeListeners,
+	private static void handleRequest(Socket socket, ServerToClientMessagePusher msgPusher,
 			Function<JSONObject, String> onQuery) throws IOException, NoSuchAlgorithmException {
 		InputStream in = socket.getInputStream();
 		OutputStream out = socket.getOutputStream();
@@ -155,8 +154,8 @@ public class WebSocketServer {
 					}
 
 				};
-				onJarChangeListeners.add(onJarChange);
-				Runnable cleanup = () -> onJarChangeListeners.remove(onJarChange);
+				msgPusher.addJarChangeListener(onJarChange);
+				Runnable cleanup = () -> msgPusher.removeJarChangeListener(onJarChange);
 
 				writeWsMessage(out, getInitMsg().toString());
 				while (true) {
@@ -281,7 +280,7 @@ public class WebSocketServer {
 		return 8080;
 	}
 
-	public static void start(List<Runnable> onJarChangeListeners, Function<JSONObject, String> onQuery) {
+	public static void start(ServerToClientMessagePusher msgPusher, Function<JSONObject, String> onQuery) {
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, createServerFilter())) {
 			System.out.println("Started WebSocket server on port " + port);
@@ -290,7 +289,7 @@ public class WebSocketServer {
 				System.out.println("New WS connection from " + s.getRemoteSocketAddress());
 				new Thread(() -> {
 					try {
-						handleRequest(s, onJarChangeListeners, onQuery);
+						handleRequest(s, msgPusher, onQuery);
 					} catch (IOException | NoSuchAlgorithmException e) {
 						System.out.println("Error while handling request");
 						e.printStackTrace();

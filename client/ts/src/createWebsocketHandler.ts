@@ -70,6 +70,7 @@ const createWebsocketHandler = (
 };
 
 const createWebsocketOverHttpHandler = (
+  onClose: (didReceiveAtLeastOneMessage: boolean) => void,
 ): WebsocketHandler => {
   const pendingCallbacks: { [id: string]: HandlerFn } = {};
   const messageHandlers: { [opName: string]: HandlerFn } = {
@@ -109,8 +110,11 @@ const createWebsocketOverHttpHandler = (
 
       try {
         const fetchResult = await (await fetch('/wsput', { method: 'PUT', body: JSON.stringify(body) })).json();
+        didReceiveAtLeastOneMessage = true;
         if (messageHandlers[fetchResult.type]) {
           messageHandlers[fetchResult.type](fetchResult);
+          cleanup();
+          res(true);
         } else {
           console.log('No handler for message', fetchResult, ', got handlers for', Object.keys(messageHandlers));
           cleanup();
@@ -121,16 +125,32 @@ const createWebsocketOverHttpHandler = (
         cleanup();
         rej('Unknown error');
       }
-
-      // socket.send(JSON.stringify({
-      //   ...msg,
-      //   id,
-      // }));
-
-
     }),
   };
   wsHandler.sendRpc({ type: 'init' });
+
+  let prevEtagValue = -1;
+  let longPoller = async () => {
+    try {
+      const { etag } = await (await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
+        id: -1, type: 'longpoll', etag: prevEtagValue
+      }) })).json();
+      if (prevEtagValue !== etag) {
+        if (prevEtagValue !== -1) {
+          if (messageHandlers.refresh) {
+            messageHandlers.refresh({});
+          }
+        }
+        prevEtagValue = etag;
+      }
+    } catch (e) {
+      console.warn('Error during longPoll');
+      onClose(didReceiveAtLeastOneMessage);
+      return;
+    }
+    setTimeout(() => longPoller(), 1);
+  };
+  longPoller();
   return wsHandler;
 };
 export { WebsocketHandler, createWebsocketOverHttpHandler }

@@ -86,7 +86,7 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
             }),
         };
     };
-    const createWebsocketOverHttpHandler = () => {
+    const createWebsocketOverHttpHandler = (onClose) => {
         const pendingCallbacks = {};
         const messageHandlers = {
             rpc: ({ id, ...res }) => {
@@ -123,8 +123,11 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
                 }, 30000);
                 try {
                     const fetchResult = await (await fetch('/wsput', { method: 'PUT', body: JSON.stringify(body) })).json();
+                    didReceiveAtLeastOneMessage = true;
                     if (messageHandlers[fetchResult.type]) {
                         messageHandlers[fetchResult.type](fetchResult);
+                        cleanup();
+                        res(true);
                     }
                     else {
                         console.log('No handler for message', fetchResult, ', got handlers for', Object.keys(messageHandlers));
@@ -137,13 +140,32 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
                     cleanup();
                     rej('Unknown error');
                 }
-                // socket.send(JSON.stringify({
-                //   ...msg,
-                //   id,
-                // }));
             }),
         };
         wsHandler.sendRpc({ type: 'init' });
+        let prevEtagValue = -1;
+        let longPoller = async () => {
+            try {
+                const { etag } = await (await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
+                        id: -1, type: 'longpoll', etag: prevEtagValue
+                    }) })).json();
+                if (prevEtagValue !== etag) {
+                    if (prevEtagValue !== -1) {
+                        if (messageHandlers.refresh) {
+                            messageHandlers.refresh({});
+                        }
+                    }
+                    prevEtagValue = etag;
+                }
+            }
+            catch (e) {
+                console.warn('Error during longPoll');
+                onClose(didReceiveAtLeastOneMessage);
+                return;
+            }
+            setTimeout(() => longPoller(), 1);
+        };
+        longPoller();
         return wsHandler;
     };
     exports.createWebsocketOverHttpHandler = createWebsocketOverHttpHandler;
@@ -3489,8 +3511,8 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             }
             document.body.setAttribute('data-theme-light', `${settings_4.default.isLightTheme()}`);
             const wsHandler = (() => {
-                if (location.search.includes('wsOverHttp=true')) {
-                    return (0, createWebsocketHandler_1.createWebsocketOverHttpHandler)();
+                if (wsPort == 'ws-over-http') {
+                    return (0, createWebsocketHandler_1.createWebsocketOverHttpHandler)(addConnectionCloseNotice_1.default);
                 }
                 return (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:${wsPort}`), addConnectionCloseNotice_1.default);
             })();
@@ -3694,6 +3716,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     };
     window.initCodeProber = () => {
         (async () => {
+            if (location.search.includes('wsOverHttp=true')) {
+                return doMain('ws-over-http');
+            }
             const socketRes = await fetch('/WS_PORT');
             if (socketRes.status !== 200) {
                 throw new Error(`Unexpected status code when fetch websocket port ${socketRes.status}`);

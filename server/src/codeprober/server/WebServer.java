@@ -114,8 +114,8 @@ public class WebServer {
 		stream.close();
 	}
 
-	private static void handlePutRequest(Socket socket, String data, Function<JSONObject, String> onQuery)
-			throws IOException {
+	private static void handlePutRequest(Socket socket, String data, ServerToClientMessagePusher msgPusher,
+			Function<JSONObject, String> onQuery) throws IOException {
 		final String[] parts = data.split("\r\n");
 		String putPath = null;
 		int contentLen = -1;
@@ -169,6 +169,14 @@ public class WebServer {
 				response = onQuery.apply(body).getBytes(StandardCharsets.UTF_8);
 				break;
 			}
+			case "longpoll": {
+				final int etag = body.getInt("etag");
+				final int newEtag = msgPusher.pollEvent(etag);
+				response = new JSONObject() //
+						.put("etag", newEtag).toString() //
+						.getBytes(StandardCharsets.UTF_8);
+				break;
+			}
 
 			default: {
 				throw new RuntimeException("Unknown wsput type: " + body);
@@ -188,8 +196,8 @@ public class WebServer {
 		}
 	}
 
-	private static void handleRequest(Socket socket, Function<JSONObject, String> onQuery)
-			throws IOException, NoSuchAlgorithmException {
+	private static void handleRequest(Socket socket, ServerToClientMessagePusher msgPusher,
+			Function<JSONObject, String> onQuery) throws IOException, NoSuchAlgorithmException {
 		System.out.println("Incoming HTTP request from: " + socket.getRemoteSocketAddress());
 
 		final InputStream in = socket.getInputStream();
@@ -252,13 +260,13 @@ public class WebServer {
 		}
 		final Matcher put = Pattern.compile("^PUT").matcher(headers);
 		if (put.find()) {
-			handlePutRequest(socket, headers, onQuery);
+			handlePutRequest(socket, headers, msgPusher, onQuery);
 			return;
 		}
 		System.out.println("Not sure how to handle request " + headers);
 	}
 
-	public static void start(Function<JSONObject, String> onQuery) {
+	public static void start(ServerToClientMessagePusher msgPusher, Function<JSONObject, String> onQuery) {
 		int port = 8000;
 		final String portOverride = System.getenv("WEB_SERVER_PORT");
 		if (portOverride != null) {
@@ -276,7 +284,7 @@ public class WebServer {
 				Socket s = server.accept();
 				new Thread(() -> {
 					try {
-						handleRequest(s, onQuery);
+						handleRequest(s, msgPusher, onQuery);
 					} catch (IOException | NoSuchAlgorithmException e) {
 						System.out.println("Error while handling request");
 						e.printStackTrace();

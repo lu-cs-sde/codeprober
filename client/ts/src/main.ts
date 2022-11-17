@@ -22,7 +22,7 @@ window.clearUserSettings = () => {
 
 const uiElements = new UIElements();
 
-const doMain = (wsPort: number) => {
+const doMain = (wsPort: number | 'ws-over-http') => {
   let getLocalState = () => settings.getEditorContents() ?? '';
   let basicHighlight: Span | null = null;
   const stickyHighlights: { [probeId: string]: StickyHighlight } = {};
@@ -63,8 +63,8 @@ const doMain = (wsPort: number) => {
       document.body.setAttribute('data-theme-light', `${settings.isLightTheme()}`);
 
     const wsHandler = ((): WebsocketHandler => {
-      if (location.search.includes('wsOverHttp=true')) {
-        return createWebsocketOverHttpHandler();
+      if (wsPort == 'ws-over-http') {
+        return createWebsocketOverHttpHandler(addConnectionCloseNotice);
       }
       return createWebsocketHandler(
         new WebSocket(`ws://${location.hostname}:${wsPort}`),
@@ -307,6 +307,9 @@ const doMain = (wsPort: number) => {
 
 window.initCodeProber = () => {
   (async () => {
+    if (location.search.includes('wsOverHttp=true')) {
+      return doMain('ws-over-http');
+    }
     const socketRes = await fetch('/WS_PORT');
     if (socketRes.status !== 200) {
       throw new Error(`Unexpected status code when fetch websocket port ${socketRes.status}`);
