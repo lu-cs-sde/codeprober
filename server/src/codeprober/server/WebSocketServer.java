@@ -17,6 +17,7 @@ import java.util.Scanner;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.Locale;
 
 import org.json.JSONObject;
 
@@ -265,6 +266,11 @@ public class WebSocketServer {
 			e.printStackTrace();
 			return null;
 		}
+	}
+
+	public static boolean shouldDelegateWebsocketToHttp() {
+		final String portOverride = System.getenv("WEBSOCKET_SERVER_PORT");
+		return portOverride != null && portOverride.toLowerCase(Locale.ENGLISH).equals("http");
 	}
 
 	public static int getPort() {

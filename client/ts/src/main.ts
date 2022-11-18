@@ -22,7 +22,7 @@ window.clearUserSettings = () => {
 
 const uiElements = new UIElements();
 
-const doMain = (wsPort: number | 'ws-over-http') => {
+const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', 'from': number, to: number }) => {
   let getLocalState = () => settings.getEditorContents() ?? '';
   let basicHighlight: Span | null = null;
   const stickyHighlights: { [probeId: string]: StickyHighlight } = {};
@@ -65,6 +65,13 @@ const doMain = (wsPort: number | 'ws-over-http') => {
     const wsHandler = ((): WebsocketHandler => {
       if (wsPort == 'ws-over-http') {
         return createWebsocketOverHttpHandler(addConnectionCloseNotice);
+      }
+      if (typeof wsPort == 'object') {
+        // Codespaces-compat
+        return createWebsocketHandler(
+          new WebSocket(`wss://${location.hostname.replace(`-${wsPort.from}.`, `-${wsPort.to}.`)}`),
+          addConnectionCloseNotice
+        );
       }
       return createWebsocketHandler(
         new WebSocket(`ws://${location.hostname}:${wsPort}`),
@@ -307,14 +314,27 @@ const doMain = (wsPort: number | 'ws-over-http') => {
 
 window.initCodeProber = () => {
   (async () => {
-    if (location.search.includes('wsOverHttp=true')) {
-      return doMain('ws-over-http');
-    }
     const socketRes = await fetch('/WS_PORT');
     if (socketRes.status !== 200) {
       throw new Error(`Unexpected status code when fetch websocket port ${socketRes.status}`);
     }
     const txt = await socketRes.text();
+    if (txt === 'http') {
+      return doMain('ws-over-http');
+    }
+    if (txt.startsWith('codespaces-compat:')) {
+      const parts = txt.slice('codespaces-compat:'.length).split(':');
+      if (parts.length === 2) {
+        const from = Number.parseInt(parts[0], 10);
+        const to = Number.parseInt(parts[1], 10);
+        if (Number.isNaN(from) || Number.isNaN(to)) {
+          throw new Error(`Bad codespaces compat values: [${from},${to}]`);
+        }
+        return doMain({ type: 'codespaces-compat', from, to });
+      } else {
+        throw new Error(`Bad codespaces compat values: ${parts.join(", ")}`);
+      }
+    }
     const port = Number.parseInt(txt, 10);
     if (Number.isNaN(port)) {
       throw new Error(`Bad websocket response text ${txt}`);

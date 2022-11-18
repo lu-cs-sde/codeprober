@@ -67,7 +67,14 @@ public class WebServer {
 			out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
 			out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
 			out.write(("\r\n").getBytes("UTF-8"));
-			out.write(("" + WebSocketServer.getPort()).getBytes("UTF-8"));
+
+			if (WebSocketServer.shouldDelegateWebsocketToHttp()) {
+				out.write("http".getBytes("UTF-8"));
+			} else if (CodespacesCompat.shouldApplyCompatHacks()) {
+				out.write(("codespaces-compat:" + getPort() + ":" + WebSocketServer.getPort()).getBytes("UTF-8"));
+			} else {
+				out.write(("" + WebSocketServer.getPort()).getBytes("UTF-8"));
+			}
 			out.flush();
 			return;
 		}
@@ -266,17 +273,21 @@ public class WebServer {
 		System.out.println("Not sure how to handle request " + headers);
 	}
 
-	public static void start(ServerToClientMessagePusher msgPusher, Function<JSONObject, String> onQuery) {
-		int port = 8000;
+	static int getPort() {
 		final String portOverride = System.getenv("WEB_SERVER_PORT");
 		if (portOverride != null) {
 			try {
-				port = Integer.parseInt(portOverride);
+				return Integer.parseInt(portOverride);
 			} catch (NumberFormatException e) {
 				System.out.println("Invalid web port override '" + portOverride + "', ignoring");
 				e.printStackTrace();
 			}
 		}
+		return 8000;
+	}
+
+	public static void start(ServerToClientMessagePusher msgPusher, Function<JSONObject, String> onQuery) {
+		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, WebSocketServer.createServerFilter())) {
 			System.out.println(
 					"Started web server on port " + port + ", visit http://localhost:" + port + "/ in your browser");

@@ -3514,6 +3514,10 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 if (wsPort == 'ws-over-http') {
                     return (0, createWebsocketHandler_1.createWebsocketOverHttpHandler)(addConnectionCloseNotice_1.default);
                 }
+                if (typeof wsPort == 'object') {
+                    // Codespaces-compat
+                    return (0, createWebsocketHandler_1.default)(new WebSocket(`wss://${location.hostname.replace(`-${wsPort.from}.`, `-${wsPort.to}.`)}`), addConnectionCloseNotice_1.default);
+                }
                 return (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:${wsPort}`), addConnectionCloseNotice_1.default);
             })();
             const rootElem = document.getElementById('root');
@@ -3716,14 +3720,28 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     };
     window.initCodeProber = () => {
         (async () => {
-            if (location.search.includes('wsOverHttp=true')) {
-                return doMain('ws-over-http');
-            }
             const socketRes = await fetch('/WS_PORT');
             if (socketRes.status !== 200) {
                 throw new Error(`Unexpected status code when fetch websocket port ${socketRes.status}`);
             }
             const txt = await socketRes.text();
+            if (txt === 'http') {
+                return doMain('ws-over-http');
+            }
+            if (txt.startsWith('codespaces-compat:')) {
+                const parts = txt.slice('codespaces-compat:'.length).split(':');
+                if (parts.length === 2) {
+                    const from = Number.parseInt(parts[0], 10);
+                    const to = Number.parseInt(parts[1], 10);
+                    if (Number.isNaN(from) || Number.isNaN(to)) {
+                        throw new Error(`Bad codespaces compat values: [${from},${to}]`);
+                    }
+                    return doMain({ type: 'codespaces-compat', from, to });
+                }
+                else {
+                    throw new Error(`Bad codespaces compat values: ${parts.join(", ")}`);
+                }
+            }
             const port = Number.parseInt(txt, 10);
             if (Number.isNaN(port)) {
                 throw new Error(`Bad websocket response text ${txt}`);

@@ -7,6 +7,7 @@ import java.util.function.Function;
 import org.json.JSONObject;
 
 import codeprober.rpc.JsonRequestHandler;
+import codeprober.server.CodespacesCompat;
 import codeprober.server.ServerToClientMessagePusher;
 import codeprober.server.WebServer;
 import codeprober.server.WebSocketServer;
@@ -26,6 +27,9 @@ public class CodeProber {
 			printUsage();
 			System.exit(1);
 		}
+
+		CodespacesCompat.shouldApplyCompatHacks(); // First access causes info messages to appear in the terminal. Do it early to inform user.
+
 		final String jarPath = mainArgs[0];
 		final JsonRequestHandler handler = new DefaultRequestHandler(jarPath,
 				Arrays.copyOfRange(mainArgs, 1, mainArgs.length));
@@ -33,7 +37,11 @@ public class CodeProber {
 		final ServerToClientMessagePusher msgPusher = new ServerToClientMessagePusher();
 		final Function<JSONObject, String> reqHandler = handler.createRpcRequestHandler();
 		new Thread(() -> WebServer.start(msgPusher, reqHandler)).start();
-		new Thread(() -> WebSocketServer.start(msgPusher, reqHandler)).start();
+		if (!WebSocketServer.shouldDelegateWebsocketToHttp()) {
+			new Thread(() -> WebSocketServer.start(msgPusher, reqHandler)).start();
+		} else {
+			System.out.println("Not starting websocket server, running requests over normal HTTP requests instead.");
+		}
 
 		new FileMonitor(new File(jarPath)) {
 			public void onChange() {
