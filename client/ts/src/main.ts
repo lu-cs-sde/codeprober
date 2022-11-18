@@ -68,10 +68,17 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       }
       if (typeof wsPort == 'object') {
         // Codespaces-compat
-        return createWebsocketHandler(
-          new WebSocket(`wss://${location.hostname.replace(`-${wsPort.from}.`, `-${wsPort.to}.`)}`),
-          addConnectionCloseNotice
-        );
+        const needle = `-${wsPort.from}.`;
+        if (location.hostname.includes(needle) && !location.port) {
+          return createWebsocketHandler(
+            new WebSocket(`wss://${location.hostname.replace(needle, `-${wsPort.to}.`)}`),
+            addConnectionCloseNotice
+          );
+        } else {
+          // Else, we are running Codespaces locally from a 'native' (non-web) editor.
+          // We only need to do the compat layer if running Codespaces from the web.
+          // Fall down to default impl below.
+        }
       }
       return createWebsocketHandler(
         new WebSocket(`ws://${location.hostname}:${wsPort}`),

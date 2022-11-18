@@ -3516,7 +3516,15 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 }
                 if (typeof wsPort == 'object') {
                     // Codespaces-compat
-                    return (0, createWebsocketHandler_1.default)(new WebSocket(`wss://${location.hostname.replace(`-${wsPort.from}.`, `-${wsPort.to}.`)}`), addConnectionCloseNotice_1.default);
+                    const needle = `-${wsPort.from}.`;
+                    if (location.hostname.includes(needle) && !location.port) {
+                        return (0, createWebsocketHandler_1.default)(new WebSocket(`wss://${location.hostname.replace(needle, `-${wsPort.to}.`)}`), addConnectionCloseNotice_1.default);
+                    }
+                    else {
+                        // Else, we are running Codespaces locally from a 'native' (non-web) editor.
+                        // We only need to do the compat layer if running Codespaces from the web.
+                        // Fall down to default impl below.
+                    }
                 }
                 return (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:${wsPort}`), addConnectionCloseNotice_1.default);
             })();
