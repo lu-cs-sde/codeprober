@@ -172,10 +172,6 @@ public class WebServer {
 				response = WebSocketServer.getInitMsg().toString().getBytes(StandardCharsets.UTF_8);
 				break;
 			}
-			case "query": {
-				response = onQuery.apply(body).getBytes(StandardCharsets.UTF_8);
-				break;
-			}
 			case "longpoll": {
 				final int etag = body.getInt("etag");
 				final int newEtag = msgPusher.pollEvent(etag);
@@ -184,9 +180,9 @@ public class WebServer {
 						.getBytes(StandardCharsets.UTF_8);
 				break;
 			}
-
 			default: {
-				throw new RuntimeException("Unknown wsput type: " + body);
+				response = onQuery.apply(body).getBytes(StandardCharsets.UTF_8);
+				break;
 			}
 			}
 			final OutputStream out = socket.getOutputStream();
