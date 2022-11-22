@@ -188,7 +188,7 @@ public class WebServer {
 			final OutputStream out = socket.getOutputStream();
 			out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
 			out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
-			out.write(("Content-Length: " + response + "\r\n").getBytes("UTF-8"));
+			out.write(("Content-Length: " + response.length + "\r\n").getBytes("UTF-8"));
 			out.write(("\r\n").getBytes("UTF-8"));
 			out.write(response);
 			break;
