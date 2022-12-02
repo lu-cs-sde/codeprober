@@ -14,6 +14,7 @@ import UIElements from "./ui/UIElements";
 import showVersionInfo from "./ui/showVersionInfo";
 import { TextSpanStyle } from "./ui/create/createTextSpanIndicator";
 import runBgProbe from "./model/runBgProbe";
+import createCullingTaskSubmitterFactory from "./model/cullingTaskSubmitterFactory";
 
 window.clearUserSettings = () => {
   settings.set({});
@@ -48,11 +49,8 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
     };
 
     const notifyLocalChangeListeners = (adjusters?: LocationAdjuster[]) => {
-      // Short timeout to easier see changes happening. Remove in prod
-      // setTimeout(() => {
-        Object.values(onChangeListeners).forEach(l => l(adjusters));
-        triggerWindowSave();
-      // }, 500);
+      Object.values(onChangeListeners).forEach(l => l(adjusters));
+      triggerWindowSave();
     }
 
     function initEditor(editorType: string) {
@@ -87,7 +85,8 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
     })();
 
     const rootElem = document.getElementById('root') as HTMLElement;
-    wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds } }) => {
+    wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds }, changeBufferTime }) => {
+      console.log('onInit, buffer:', changeBufferTime);
       rootElem.style.display = "grid";
 
       const onChange = (newValue: string, adjusters?: LocationAdjuster[]) => {
@@ -266,6 +265,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         triggerWindowSave,
         statisticsCollector: statCollectorImpl,
         currentlyLoadingModals: new Set<string>(),
+        createCullingTaskSubmitter: createCullingTaskSubmitterFactory(changeBufferTime),
        };
 
        showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);

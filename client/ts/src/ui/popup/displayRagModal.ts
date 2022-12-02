@@ -124,6 +124,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
     }
   });
 
+  const refresher = env.createCullingTaskSubmitter();
   env.onChangeListeners[queryId] = (adjusters) => {
     if (adjusters) {
       adjusters.forEach((adj) => {
@@ -132,7 +133,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
         col = c;
       });
     }
-    popup.refresh();
+    refresher.submit(() => popup.refresh());
   }
 };
 

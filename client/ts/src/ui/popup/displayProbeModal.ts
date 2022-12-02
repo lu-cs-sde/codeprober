@@ -341,6 +341,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
         })
     },
   });
+  const refresher = env.createCullingTaskSubmitter();
   env.onChangeListeners[queryId] = (adjusters) => {
     if (adjusters) {
 
@@ -355,7 +356,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
     if (loading) {
       refreshOnDone = true;
     } else {
-      queryWindow.refresh();
+      refresher.submit(() => queryWindow.refresh());
     }
   }
 

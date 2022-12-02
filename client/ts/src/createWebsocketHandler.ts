@@ -86,6 +86,7 @@ const createWebsocketOverHttpHandler = (
   };
 
   let didReceiveAtLeastOneMessage = false;
+  const defaultRetryBudget = 3;
 
   const wsHandler: WebsocketHandler = {
     on: (id, cb) => messageHandlers[id] = cb,
@@ -103,38 +104,54 @@ const createWebsocketOverHttpHandler = (
         }
       };
       const cleanup = () => delete pendingCallbacks[id];
-      setTimeout(() => {
-        cleanup();
-        rej('Timeout');
-      }, 30000);
 
-      try {
-        const fetchResult = await (await fetch('/wsput', { method: 'PUT', body: JSON.stringify(body) })).json();
-        didReceiveAtLeastOneMessage = true;
-        if (messageHandlers[fetchResult.type]) {
-          messageHandlers[fetchResult.type](fetchResult);
+      const attemptFetch = async (remainingTries: number) => {
+        const cleanupTimer = setTimeout(() => {
           cleanup();
-          res(true);
-        } else {
-          console.log('No handler for message', fetchResult, ', got handlers for', Object.keys(messageHandlers));
+          rej('Timeout');
+        }, 30000);
+        try {
+          const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify(body) })
+          if (!rawFetchResult.ok) {
+            if (remainingTries > 0) {
+              console.warn('wsput request failed, trying again in 1 second..');
+              clearTimeout(cleanupTimer);
+              setTimeout(() => attemptFetch(remainingTries - 1), 1000);
+              return;
+            }
+          }
+          const fetchResult = await rawFetchResult.json();
+          didReceiveAtLeastOneMessage = true;
+          if (messageHandlers[fetchResult.type]) {
+            messageHandlers[fetchResult.type](fetchResult);
+            cleanup();
+            res(true);
+          } else {
+            console.log('No handler for message', fetchResult, ', got handlers for', Object.keys(messageHandlers));
+            cleanup();
+            rej('Bad response');
+          }
+        } catch (e) {
+          console.warn('Error when performing ws-over-http request', e);
           cleanup();
-          rej('Bad response');
+          rej('Unknown error');
         }
-      } catch (e) {
-        console.warn('Error when performing ws-over-http request', e);
-        cleanup();
-        rej('Unknown error');
-      }
+      };
+      attemptFetch(defaultRetryBudget);
     }),
   };
   wsHandler.sendRpc({ type: 'init' });
 
   let prevEtagValue = -1;
-  let longPoller = async () => {
+  let longPoller = async (retryBudget: number) => {
     try {
-      const { etag } = await (await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
+      const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
         id: -1, type: 'longpoll', etag: prevEtagValue
-      }) })).json();
+      }) });
+      if (!rawFetchResult.ok) {
+        throw new Error(`Fetch result: ${rawFetchResult.status}`);
+      }
+      const { etag } = await rawFetchResult.json();
       if (prevEtagValue !== etag) {
         if (prevEtagValue !== -1) {
           if (messageHandlers.refresh) {
@@ -144,13 +161,20 @@ const createWebsocketOverHttpHandler = (
         prevEtagValue = etag;
       }
     } catch (e) {
-      console.warn('Error during longPoll');
-      onClose(didReceiveAtLeastOneMessage);
+      console.warn('Error during longPoll', e);
+      if (retryBudget > 0) {
+        console.log('Retrying longpoll in 1 second');
+        setTimeout(() => {
+          longPoller(retryBudget - 1);
+        }, 1000);
+      } else {
+        onClose(didReceiveAtLeastOneMessage);
+      }
       return;
     }
-    setTimeout(() => longPoller(), 1);
+    setTimeout(() => longPoller(defaultRetryBudget), 1);
   };
-  longPoller();
+  longPoller(defaultRetryBudget);
   return wsHandler;
 };
 export { WebsocketHandler, createWebsocketOverHttpHandler }

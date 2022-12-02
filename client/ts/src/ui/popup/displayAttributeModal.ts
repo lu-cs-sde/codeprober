@@ -244,12 +244,15 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
       }
     },
   });
+  const refresher = env.createCullingTaskSubmitter();
   env.onChangeListeners[queryId] = (adjusters) => {
     if (adjusters) {
       adjusters.forEach(adj => adjustLocator(adj, locator));
     }
-    fetchAttrs();
-    popup.refresh();
+    refresher.submit(() => {
+      fetchAttrs();
+      popup.refresh();
+    });
   };
 
  const fetchAttrs = () => {
@@ -299,7 +302,7 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
         deudplicator.add(uniqId);
         uniq.push(attr);
       });
-      state = { type: 'attrs', attrs: uniq };
+      state = { type: 'attrs', attrs: uniq };
       popup.refresh();
 
     })

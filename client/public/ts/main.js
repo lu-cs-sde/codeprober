@@ -101,6 +101,7 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
             },
         };
         let didReceiveAtLeastOneMessage = false;
+        const defaultRetryBudget = 3;
         const wsHandler = {
             on: (id, cb) => messageHandlers[id] = cb,
             sendRpc: (msg) => new Promise(async (res, rej) => {
@@ -117,38 +118,54 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
                     }
                 };
                 const cleanup = () => delete pendingCallbacks[id];
-                setTimeout(() => {
-                    cleanup();
-                    rej('Timeout');
-                }, 30000);
-                try {
-                    const fetchResult = await (await fetch('/wsput', { method: 'PUT', body: JSON.stringify(body) })).json();
-                    didReceiveAtLeastOneMessage = true;
-                    if (messageHandlers[fetchResult.type]) {
-                        messageHandlers[fetchResult.type](fetchResult);
+                const attemptFetch = async (remainingTries) => {
+                    const cleanupTimer = setTimeout(() => {
                         cleanup();
-                        res(true);
+                        rej('Timeout');
+                    }, 30000);
+                    try {
+                        const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify(body) });
+                        if (!rawFetchResult.ok) {
+                            if (remainingTries > 0) {
+                                console.warn('wsput request failed, trying again in 1 second..');
+                                clearTimeout(cleanupTimer);
+                                setTimeout(() => attemptFetch(remainingTries - 1), 1000);
+                                return;
+                            }
+                        }
+                        const fetchResult = await rawFetchResult.json();
+                        didReceiveAtLeastOneMessage = true;
+                        if (messageHandlers[fetchResult.type]) {
+                            messageHandlers[fetchResult.type](fetchResult);
+                            cleanup();
+                            res(true);
+                        }
+                        else {
+                            console.log('No handler for message', fetchResult, ', got handlers for', Object.keys(messageHandlers));
+                            cleanup();
+                            rej('Bad response');
+                        }
                     }
-                    else {
-                        console.log('No handler for message', fetchResult, ', got handlers for', Object.keys(messageHandlers));
+                    catch (e) {
+                        console.warn('Error when performing ws-over-http request', e);
                         cleanup();
-                        rej('Bad response');
+                        rej('Unknown error');
                     }
-                }
-                catch (e) {
-                    console.warn('Error when performing ws-over-http request', e);
-                    cleanup();
-                    rej('Unknown error');
-                }
+                };
+                attemptFetch(defaultRetryBudget);
             }),
         };
         wsHandler.sendRpc({ type: 'init' });
         let prevEtagValue = -1;
-        let longPoller = async () => {
+        let longPoller = async (retryBudget) => {
             try {
-                const { etag } = await (await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
+                const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
                         id: -1, type: 'longpoll', etag: prevEtagValue
-                    }) })).json();
+                    }) });
+                if (!rawFetchResult.ok) {
+                    throw new Error(`Fetch result: ${rawFetchResult.status}`);
+                }
+                const { etag } = await rawFetchResult.json();
                 if (prevEtagValue !== etag) {
                     if (prevEtagValue !== -1) {
                         if (messageHandlers.refresh) {
@@ -159,13 +176,21 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
                 }
             }
             catch (e) {
-                console.warn('Error during longPoll');
-                onClose(didReceiveAtLeastOneMessage);
+                console.warn('Error during longPoll', e);
+                if (retryBudget > 0) {
+                    console.log('Retrying longpoll in 1 second');
+                    setTimeout(() => {
+                        longPoller(retryBudget - 1);
+                    }, 1000);
+                }
+                else {
+                    onClose(didReceiveAtLeastOneMessage);
+                }
                 return;
             }
-            setTimeout(() => longPoller(), 1);
+            setTimeout(() => longPoller(defaultRetryBudget), 1);
         };
-        longPoller();
+        longPoller(defaultRetryBudget);
         return wsHandler;
     };
     exports.createWebsocketOverHttpHandler = createWebsocketOverHttpHandler;
@@ -2095,12 +2120,15 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                 }
             },
         });
+        const refresher = env.createCullingTaskSubmitter();
         env.onChangeListeners[queryId] = (adjusters) => {
             if (adjusters) {
                 adjusters.forEach(adj => (0, adjustLocator_2.default)(adj, locator));
             }
-            fetchAttrs();
-            popup.refresh();
+            refresher.submit(() => {
+                fetchAttrs();
+                popup.refresh();
+            });
         };
         const fetchAttrs = () => {
             switch (fetchState) {
@@ -2505,6 +2533,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 });
             },
         });
+        const refresher = env.createCullingTaskSubmitter();
         env.onChangeListeners[queryId] = (adjusters) => {
             var _a;
             if (adjusters) {
@@ -2520,7 +2549,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 refreshOnDone = true;
             }
             else {
-                queryWindow.refresh();
+                refresher.submit(() => queryWindow.refresh());
             }
         };
         env.probeWindowStateSavers[queryId] = (target) => target.push({ locator, attr, modalPos: queryWindow.getPos() });
@@ -2650,6 +2679,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                 });
             }
         });
+        const refresher = env.createCullingTaskSubmitter();
         env.onChangeListeners[queryId] = (adjusters) => {
             if (adjusters) {
                 adjusters.forEach((adj) => {
@@ -2658,7 +2688,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                     col = c;
                 });
             }
-            popup.refresh();
+            refresher.submit(() => popup.refresh());
         };
     };
     exports.default = displayRagModal;
@@ -3453,7 +3483,27 @@ define("model/runBgProbe", ["require", "exports"], function (require, exports) {
     };
     exports.default = runInvisibleProbe;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_3, displayAttributeModal_5, settings_4, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1, runBgProbe_1) {
+define("model/cullingTaskSubmitterFactory", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const createCullingTaskSubmitterFactory = (cullTime) => {
+        console.log('create taskSubmitter, cullTime: ', cullTime, typeof cullTime);
+        if (typeof cullTime !== 'number') {
+            return () => ({ submit: (cb) => cb(), });
+        }
+        return () => {
+            let localChangeDebounceTimer = -1;
+            return {
+                submit: (cb) => {
+                    clearTimeout(localChangeDebounceTimer);
+                    localChangeDebounceTimer = setTimeout(() => cb(), cullTime);
+                }
+            };
+        };
+    };
+    exports.default = createCullingTaskSubmitterFactory;
+});
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_3, displayAttributeModal_5, settings_4, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -3470,6 +3520,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     UIElements_1 = __importDefault(UIElements_1);
     showVersionInfo_1 = __importDefault(showVersionInfo_1);
     runBgProbe_1 = __importDefault(runBgProbe_1);
+    cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
     window.clearUserSettings = () => {
         settings_4.default.set({});
         location.reload();
@@ -3498,11 +3549,8 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             settings_4.default.setProbeWindowStates(states);
         };
         const notifyLocalChangeListeners = (adjusters) => {
-            // Short timeout to easier see changes happening. Remove in prod
-            // setTimeout(() => {
             Object.values(onChangeListeners).forEach(l => l(adjusters));
             triggerWindowSave();
-            // }, 500);
         };
         function initEditor(editorType) {
             if (!location.search) {
@@ -3529,7 +3577,8 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 return (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:${wsPort}`), addConnectionCloseNotice_1.default);
             })();
             const rootElem = document.getElementById('root');
-            wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds } }) => {
+            wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds }, changeBufferTime }) => {
+                console.log('onInit, buffer:', changeBufferTime);
                 rootElem.style.display = "grid";
                 const onChange = (newValue, adjusters) => {
                     settings_4.default.setEditorContents(newValue);
@@ -3681,6 +3730,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     triggerWindowSave,
                     statisticsCollector: statCollectorImpl,
                     currentlyLoadingModals: new Set(),
+                    createCullingTaskSubmitter: (0, cullingTaskSubmitterFactory_1.default)(changeBufferTime),
                 };
                 (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);
                 window.displayHelp = (type) => {

@@ -121,6 +121,12 @@ public class WebSocketServer {
 			versionMsg.put("buildTimeSeconds", buildTimeSeconds.intValue());
 		}
 		initMsg.put("version", versionMsg);
+
+    int bufferTime = CodespacesCompat.getChangeBufferTime();
+    if (bufferTime > 0) {
+      initMsg.put("changeBufferTime", bufferTime);
+    }
+
 		return initMsg;
 	}
 

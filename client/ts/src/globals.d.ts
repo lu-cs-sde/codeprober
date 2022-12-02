@@ -74,6 +74,9 @@ interface StickyHighlight {
   classNames: string[];
   span: Span;
 }
+interface CullingTaskSubmitter {
+  submit: (callback: () => void) => void;
+}
 interface ModalEnv {
   performRpcQuery: (args: {
     attr: AstAttrWithValue;
@@ -93,6 +96,7 @@ interface ModalEnv {
   duplicateOnAttr: () => boolean;
   statisticsCollector: ProbeStatisticsCollector;
   currentlyLoadingModals: Set<string>;
+  createCullingTaskSubmitter: () => CullingTaskSubmitter;
 }
 
 type RpcBodyLine = string

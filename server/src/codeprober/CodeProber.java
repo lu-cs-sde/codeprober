@@ -29,6 +29,7 @@ public class CodeProber {
 		}
 
 		CodespacesCompat.shouldApplyCompatHacks(); // First access causes info messages to appear in the terminal. Do it early to inform user.
+		CodespacesCompat.getChangeBufferTime(); // -||-
 
 		final String jarPath = mainArgs[0];
 		final JsonRequestHandler handler = new DefaultRequestHandler(jarPath,
