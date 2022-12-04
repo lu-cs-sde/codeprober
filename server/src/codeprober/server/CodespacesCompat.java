@@ -29,16 +29,15 @@ public class CodespacesCompat {
         final String debounceSetting = System.getenv("CHANGE_BUFFER_TIME");
         if (debounceSetting == null) {
           if (shouldApplyCompatHacks()) {
-            System.out.println("Asking client to buffer changes for 1 second since we are running in codespaces");
+            System.out.println("Asking client to buffer changes for 1/2 second since we are running in codespaces");
             System.out.println("Set CHANGE_BUFFER_TIME to 0 to avoid this");
-            changeBufferTime = 1000;
+            changeBufferTime = 500;
           } else {
             // Default, no need to print anything
             changeBufferTime = 0;
           }
           return changeBufferTime;
         }
-
         int debounceNumber;
         try {
           debounceNumber = Integer.parseInt(debounceSetting);
