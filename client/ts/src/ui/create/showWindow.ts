@@ -10,6 +10,8 @@ interface ShowWindowArgs {
   pos?: ModalPosition | null;
   rootStyle?: string;
   onFinishedMove?: () => void;
+  onOngoingResize?: () => void;
+  onFinishedResize?: () => void;
   resizable?: boolean;
 }
 
@@ -86,7 +88,9 @@ const showWindow = (args: ShowWindowArgs) => {
         root.style.height = `${newH}px`;
         root.style.maxWidth = 'fit-content';
         root.style.maxHeight = 'fit-content';
-      }).cleanup;
+        args.onOngoingResize?.();
+      },
+      args.onFinishedResize).cleanup;
   }
 
   document.body.appendChild(root);

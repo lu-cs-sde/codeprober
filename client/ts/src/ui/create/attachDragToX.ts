@@ -24,7 +24,7 @@ const modalZIndexGenerator = (() => {
 })();
 const attachDragToX = (
   element: HTMLElement,
-  onBegin: () => void,
+  onBegin: (e: MouseEvent) => void,
   onUpdate: (deltaX: number, deltaY: number) => void,
   onFinishedMove?: () => void
 ) => {
@@ -42,7 +42,7 @@ const attachDragToX = (
     element.style.zIndex = `${modalZIndexGenerator()}`;
     mouse.x = e.pageX;
     mouse.y = e.pageY;
-    onBegin();
+    onBegin(e);
   };
   const onMouseMove = (e: MouseEvent) => {
     if (mouse.down) {

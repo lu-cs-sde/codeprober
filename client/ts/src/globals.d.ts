@@ -51,10 +51,22 @@ interface StickyMarker {
   remove: () => void;
 }
 
-interface ProbeWindowState {
-  modalPos: ModalPosition;
+interface WindowStateDataProbe {
+  type: 'probe';
   locator: NodeLocator;
-  attr: AstAttrWithValue
+  attr: AstAttrWithValue;
+}
+interface WindowStateDataAst {
+  type: 'ast';
+  locator: NodeLocator;
+}
+type WindowStateData = WindowStateDataProbe | WindowStateDataAst;
+
+interface WindowState {
+  modalPos: ModalPosition;
+  data: WindowStateData;
+  // locator: NodeLocator;
+  // attr: AstAttrWithValue
 }
 
 interface ProbeMeasurement {
@@ -88,7 +100,7 @@ interface ModalEnv {
   clearStickyHighlight: (probeId: string) => void;
   probeMarkers: { [probeId: string]: ProbeMarker[] };
   onChangeListeners: { [key: string]: (adjusters?: LocationAdjuster[]) => void };
-  probeWindowStateSavers: { [key: string]: (target: ProbeWindowState[]) => void };
+  probeWindowStateSavers: { [key: string]: (target: WindowState[]) => void };
   triggerWindowSave: () => void;
   registerStickyMarker: (initialSpan: Span) => StickyMarker;
   updateMarkers: () => void;

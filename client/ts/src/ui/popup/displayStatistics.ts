@@ -252,7 +252,7 @@ const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButt
             // let expectMeasurements = 0;
 
             const triggerChange = () => {
-              setEditorContentsAndUpdateProbes(tests.find(({ title }) => title === activeTest)!.contents());
+              setEditorContentsAndUpdateProbes(tests.find(({ title }) => title === activeTest)!.contents());
             };
             let prevChangeCounter = collector.getNumberOfMeasurements();
             triggerChange();

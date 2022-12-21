@@ -10,6 +10,7 @@ import adjustLocator from "../../model/adjustLocator";
 import settings from "../../settings";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import trimTypeName from "../trimTypeName";
+import displayAstModal from "./displayAstModal";
 
 const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -60,6 +61,13 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
             title: 'Help',
             invoke: () => {
               displayHelp('property-list-usage', () => {});
+            }
+          },
+          {
+            title: 'Render AST',
+            invoke: () => {
+              cleanup();
+              displayAstModal(env, popup.getPos(), locator);
             }
           },
         ],
@@ -290,7 +298,6 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
         }
         throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
       }
-
 
       const uniq: AstAttr[] = [];
       const deudplicator = new Set();

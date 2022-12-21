@@ -74,7 +74,7 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[]): HTMLElement => 
           break;
         }
         case "node": {
-          const { start, end, type, label } = line.value.result;
+          const { start, end, type, label } = line.value.result;
 
           const container = document.createElement('div');
           const span: Span = {

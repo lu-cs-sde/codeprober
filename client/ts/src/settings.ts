@@ -10,7 +10,7 @@ interface Settings {
   showAllProperties?: boolean;
   positionRecoveryStrategy?: string;
   astCacheStrategy?: string;
-  probeWindowStates?: ProbeWindowState[];
+  probeWindowStates?: WindowState[];
   syntaxHighlighting?: SyntaxHighlightingLanguageId;
   mainArgsOverride?: string[] | null;
   customFileSuffix?: string | null;
@@ -54,8 +54,25 @@ const settings = {
   getAstCacheStrategy: () => settings.get().astCacheStrategy ?? 'PARTIAL',
   setAstCacheStrategy: (astCacheStrategy: string) => settings.set({ ...settings.get(), astCacheStrategy }),
 
-  getProbeWindowStates: () => settings.get().probeWindowStates ?? [],
-  setProbeWindowStates: (probeWindowStates: ProbeWindowState[]) => settings.set({ ...settings.get(), probeWindowStates }),
+  getProbeWindowStates: () => {
+    const ret = settings.get().probeWindowStates ?? [];
+
+    return ret.map((item) => {
+      if (typeof item.data === 'undefined') {
+        // Older variant of this data, upgrade it
+        return {
+          modalPos: item.modalPos,
+          data: {
+            type: 'probe',
+            locator: (item as any).locator, // as any to access previously typed data
+            attr: (item as any).attr, // as any to access previously typed data
+          }
+        };
+      }
+      return item;
+    });
+  },
+  setProbeWindowStates: (probeWindowStates: WindowState[]) => settings.set({ ...settings.get(), probeWindowStates }),
 
   getSyntaxHighlighting: () => settings.get().syntaxHighlighting ?? 'java',
   setSyntaxHighlighting: (syntaxHighlighting: SyntaxHighlightingLanguageId) => settings.set({ ...settings.get(), syntaxHighlighting }),

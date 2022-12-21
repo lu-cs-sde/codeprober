@@ -277,7 +277,7 @@ define("ui/create/attachDragToX", ["require", "exports"], function (require, exp
             element.style.zIndex = `${modalZIndexGenerator()}`;
             mouse.x = e.pageX;
             mouse.y = e.pageY;
-            onBegin();
+            onBegin(e);
         };
         const onMouseMove = (e) => {
             if (mouse.down) {
@@ -404,6 +404,7 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
                 size.w = root.clientWidth;
                 size.h = root.clientHeight;
             }, (dx, dy) => {
+                var _a;
                 const newW = Math.max(32, size.w + dx);
                 const newH = Math.max(32, size.h + dy);
                 // console.log('setting ', `${root.clientWidth + dx}px`);
@@ -411,7 +412,8 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
                 root.style.height = `${newH}px`;
                 root.style.maxWidth = 'fit-content';
                 root.style.maxHeight = 'fit-content';
-            }).cleanup;
+                (_a = args.onOngoingResize) === null || _a === void 0 ? void 0 : _a.call(args);
+            }, args.onFinishedResize).cleanup;
         }
         document.body.appendChild(root);
         const dragToMove = (0, attachDragToMove_1.default)(root, initialPos, args.onFinishedMove);
@@ -636,7 +638,24 @@ define("settings", ["require", "exports", "model/syntaxHighlighting"], function 
         setPositionRecoveryStrategy: (positionRecoveryStrategy) => settings.set({ ...settings.get(), positionRecoveryStrategy }),
         getAstCacheStrategy: () => { var _a; return (_a = settings.get().astCacheStrategy) !== null && _a !== void 0 ? _a : 'PARTIAL'; },
         setAstCacheStrategy: (astCacheStrategy) => settings.set({ ...settings.get(), astCacheStrategy }),
-        getProbeWindowStates: () => { var _a; return (_a = settings.get().probeWindowStates) !== null && _a !== void 0 ? _a : []; },
+        getProbeWindowStates: () => {
+            var _a;
+            const ret = (_a = settings.get().probeWindowStates) !== null && _a !== void 0 ? _a : [];
+            return ret.map((item) => {
+                if (typeof item.data === 'undefined') {
+                    // Older variant of this data, upgrade it
+                    return {
+                        modalPos: item.modalPos,
+                        data: {
+                            type: 'probe',
+                            locator: item.locator,
+                            attr: item.attr, // as any to access previously typed data
+                        }
+                    };
+                }
+                return item;
+            });
+        },
         setProbeWindowStates: (probeWindowStates) => settings.set({ ...settings.get(), probeWindowStates }),
         getSyntaxHighlighting: () => { var _a; return (_a = settings.get().syntaxHighlighting) !== null && _a !== void 0 ? _a : 'java'; },
         setSyntaxHighlighting: (syntaxHighlighting) => settings.set({ ...settings.get(), syntaxHighlighting }),
@@ -1879,59 +1898,57 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
     };
     exports.default = encodeRpcBodyLines;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "model/adjustLocator", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayProbeModal_2, showWindow_4, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_1, adjustLocator_2, settings_2, encodeRpcBodyLines_1, trimTypeName_3) {
+define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/popup/displayHelp", "model/adjustLocator", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, showWindow_4, displayHelp_1, adjustLocator_2, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
     createModalTitle_3 = __importDefault(createModalTitle_3);
-    displayProbeModal_2 = __importDefault(displayProbeModal_2);
     showWindow_4 = __importDefault(showWindow_4);
-    displayArgModal_1 = __importDefault(displayArgModal_1);
-    formatAttr_2 = __importDefault(formatAttr_2);
-    createTextSpanIndicator_4 = __importDefault(createTextSpanIndicator_4);
     displayHelp_1 = __importDefault(displayHelp_1);
     adjustLocator_2 = __importDefault(adjustLocator_2);
-    settings_2 = __importDefault(settings_2);
     encodeRpcBodyLines_1 = __importDefault(encodeRpcBodyLines_1);
-    trimTypeName_3 = __importDefault(trimTypeName_3);
-    const displayAttributeModal = (env, modalPos, locator) => {
+    attachDragToX_3 = __importDefault(attachDragToX_3);
+    displayAttributeModal_3 = __importDefault(displayAttributeModal_3);
+    const displayAstModal = (env, modalPos, locator) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-        let filter = '';
         let state = null;
         let fetchState = 'idle';
         const cleanup = () => {
             delete env.onChangeListeners[queryId];
+            delete env.probeWindowStateSavers[queryId];
             popup.remove();
+            env.triggerWindowSave();
         };
-        let isFirstRender = true;
+        const onResizePtr = {
+            callback: () => { },
+        };
+        const trn = { x: 1920 / 2, y: 0, scale: 1, };
+        let resetTranslationOnRender = true;
         const popup = (0, showWindow_4.default)({
             pos: modalPos,
             rootStyle: `
-      min-width: 16rem;
-      min-height: 8rem;
+      min-width: 24rem;
+      min-height: 12rem;
       80vh;
     `,
+            onFinishedMove: () => env.triggerWindowSave(),
+            onOngoingResize: () => onResizePtr.callback(),
+            onFinishedResize: () => onResizePtr.callback(),
+            resizable: true,
             render: (root) => {
                 while (root.firstChild)
                     root.firstChild.remove();
                 // root.innerText = 'Loading..';
                 root.appendChild((0, createModalTitle_3.default)({
                     renderLeft: (container) => {
-                        var _a;
                         const headType = document.createElement('span');
-                        headType.classList.add('syntax-type');
-                        headType.innerText = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_3.default)(locator.result.type)}`;
-                        const headAttr = document.createElement('span');
-                        headAttr.classList.add('syntax-attr');
-                        headAttr.innerText = `.?`;
-                        // headAttr.style.fontStyle= 'italic';
+                        headType.innerText = `AST`;
                         container.appendChild(headType);
-                        container.appendChild(headAttr);
-                        container.appendChild((0, createTextSpanIndicator_4.default)({
-                            span: startEndToSpan(locator.result.start, locator.result.end),
-                            marginLeft: true,
-                            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
-                        }));
+                        // container.appendChild(createTextSpanIndicator({
+                        //   span: startEndToSpan(locator.result.start, locator.result.end),
+                        //   marginLeft: true,
+                        //   onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
+                        // }));
                     },
                     onClose: () => {
                         cleanup();
@@ -1963,12 +1980,424 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                     if (state.body.length === 0) {
                         const text = document.createElement('span');
                         text.classList.add('captured-stderr');
+                        text.innerText = `Failed listing tree`;
+                        root.appendChild(text);
+                        return;
+                    }
+                    root.appendChild((0, encodeRpcBodyLines_1.default)(env, state.body));
+                }
+                else {
+                    // Build UI
+                    root.style.display = 'flex';
+                    root.style.flexDirection = 'column';
+                    root.style.flexGrow = '1';
+                    root.style.overflow = 'hidden';
+                    const cv = document.createElement('canvas');
+                    cv.width = 1920;
+                    cv.height = 1080;
+                    const wrapper = document.createElement('div');
+                    wrapper.appendChild(cv);
+                    wrapper.style.flexGrow = '1';
+                    wrapper.style.minWidth = '4rem';
+                    wrapper.style.minHeight = '4rem';
+                    // wrapper.style.width = '100vw';
+                    // wrapper.style.height = '100vh';
+                    root.appendChild(wrapper);
+                    const ctx = cv.getContext('2d');
+                    if (!ctx) {
+                        root.appendChild(document.createTextNode(`You browser doesn't seem to support HTML canvas 2D rendering mode.`));
+                        return;
+                    }
+                    cv.style.width = '100%';
+                    cv.style.height = '100%';
+                    // cv.width  = cv.offsetWidth;
+                    // cv.height = cv.offsetHeight;
+                    cv.onmousedown = (e) => {
+                        e.stopPropagation();
+                    };
+                    cv.style.cursor = 'default';
+                    // const trn = Array(9).fill(0);
+                    const lastClick = { x: 0, y: 0 };
+                    const getScaleY = () => trn.scale * (cv.clientWidth / 1920) / (cv.clientHeight / 1080);
+                    const clientToWorld = (pt, trnx = trn.x, trny = trn.y, scaleX = trn.scale, scaleY = getScaleY()) => {
+                        const csx = 1920 / cv.clientWidth;
+                        const x = (pt.x * csx - trnx) / scaleX;
+                        const csy = 1080 / cv.clientHeight;
+                        const y = (pt.y * csy - trny) / scaleY;
+                        // ((pt.x * 1920 / (cv.clientWidth)) - (trnx)) / scaleX == REF
+                        //
+                        return { x, y };
+                    };
+                    const dragInfo = { x: trn.x, y: trn.y }; // , sx: 1, sy: 1 };
+                    let hoverClick = 'no';
+                    (0, attachDragToX_3.default)(cv, (e) => {
+                        dragInfo.x = trn.x;
+                        dragInfo.y = trn.y;
+                        const w = clientToWorld({ x: e.offsetX, y: e.offsetY });
+                        lastClick.x = w.x;
+                        lastClick.y = w.y;
+                        hoverClick = 'maybe';
+                        // dragInfo.sx = 1920 / cv.clientWidth;
+                        // dragInfo.sy = 1080 / cv.clientHeight;
+                    }, (dx, dy) => {
+                        hoverClick = 'no';
+                        const w = clientToWorld({
+                            x: dx,
+                            y: dy,
+                        }, 0, 0, 1, 1);
+                        trn.x = dragInfo.x + w.x;
+                        trn.y = dragInfo.y + w.y;
+                        // trn.x = dragInfo.x + dx * dragInfo.sx;
+                        // trn.y = dragInfo.y + dy * dragInfo.sy;
+                        renderFrame();
+                    }, () => {
+                        if (hoverClick == 'maybe') {
+                            hoverClick = 'yes';
+                            renderFrame();
+                        }
+                    });
+                    cv.addEventListener('wheel', (e) => {
+                        const ptx = e.offsetX;
+                        const csx = 1920 / cv.clientWidth;
+                        const trx1 = trn.x;
+                        const z1 = trn.scale;
+                        const z2 = Math.max(0.1, Math.min(10, trn.scale + e.deltaY / 100.0));
+                        /*
+                          -- We want to modify trn.x so that transforming {e.offsetX, e.offsetY} gets the same result before and after zooming.
+                          -- For trn.x we want this relation to hold:
+                          (ptx*csx - trx1) / z1 = (ptx*csx - trx2) / z2
+                          -- All variables are known but trx2. rewrite a bit and we get:
+                          trx2 = ptx*csx - (z2/z1)*(ptx*csx - trx1)
+                        */
+                        trn.x = (ptx * csx - (z2 / z1) * (ptx * csx - trx1));
+                        // Same idea for trn.y
+                        const csy = 1080 / cv.clientHeight;
+                        trn.y = (e.offsetY * csy - (z2 / z1) * (e.offsetY * csy - trn.y));
+                        // const w = clientToWorld({ x: e.offsetX, y: e.offsetY });
+                        // trn.x += (w.x / trn.scale) * e.deltaX / 1000;
+                        trn.scale = z2;
+                        renderFrame();
+                    });
+                    let hover = null;
+                    let hasActiveSpanHighlight = false;
+                    cv.addEventListener('mousemove', e => {
+                        hover = clientToWorld({ x: e.offsetX, y: e.offsetY });
+                        hoverClick = 'no';
+                        renderFrame();
+                    });
+                    cv.addEventListener('mouseleave', () => {
+                        hover = null;
+                        if (hasActiveSpanHighlight) {
+                            hasActiveSpanHighlight = false;
+                            env.updateSpanHighlight(null);
+                        }
+                        renderFrame();
+                    });
+                    const rootNode = state.data;
+                    const nodew = 256 + 128;
+                    const nodeh = 64;
+                    const nodepadx = nodew * 0.1;
+                    const nodepady = nodeh * 1.0;
+                    const measureBoundingBox = (node) => {
+                        if (node.boundingBox) {
+                            return;
+                        }
+                        let bb = { x: nodew, y: nodeh };
+                        if (Array.isArray(node.children)) {
+                            let childW = 0;
+                            node.children.forEach((child, childIdx) => {
+                                measureBoundingBox(child);
+                                if (childIdx >= 1) {
+                                    childW += nodepadx;
+                                }
+                                childW += child.boundingBox.x;
+                                bb.y = Math.max(bb.y, nodeh + nodepady + child.boundingBox.y);
+                            });
+                            bb.x = Math.max(bb.x, childW);
+                        }
+                        node.boundingBox = bb;
+                    };
+                    measureBoundingBox(rootNode);
+                    if (resetTranslationOnRender) {
+                        resetTranslationOnRender = false;
+                        trn.scale = 1;
+                        trn.x = (1920 - rootNode.boundingBox.x) / 2;
+                        trn.y = 0;
+                    }
+                    const renderFrame = () => {
+                        const w = cv.width;
+                        const h = cv.height;
+                        ctx.resetTransform();
+                        ctx.fillStyle = '#FFF';
+                        ctx.fillRect(0, 0, w, h);
+                        // console.log('render', trn.x, ' + ', w,  '|', trn.x * 1920 / w, cv.clientWidth, cv);
+                        // ctx.translate(trn.x * 1920 / cv.clientWidth, trn.y * 1080 / cv.clientHeight);
+                        ctx.translate(trn.x, trn.y);
+                        ctx.scale(trn.scale, getScaleY());
+                        ctx.fillStyle = '#FFF';
+                        // const side = 400;
+                        // const c = 100 + (side / 2);
+                        // ctx.translate(c, c);
+                        // ctx.rotate(Math.sin(Date.now() / 200.0));
+                        // ctx.translate(-c, -c);
+                        // ctx.fillRect(100, 100, side, side);
+                        cv.style.cursor = 'default';
+                        let didHighlightSomething = false;
+                        const renderNode = (node, ox, oy) => {
+                            const renderx = ox + (node.boundingBox.x - nodew) / 2;
+                            const rendery = oy;
+                            if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
+                                ctx.fillStyle = '#0DD';
+                                cv.style.cursor = 'pointer';
+                                const { start, end } = node.locator.result;
+                                if (start && end) {
+                                    didHighlightSomething = true;
+                                    hasActiveSpanHighlight = true;
+                                    env.updateSpanHighlight({
+                                        lineStart: (start >>> 12), colStart: (start & 0xFFF),
+                                        lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
+                                    });
+                                }
+                                if (hoverClick === 'yes') {
+                                    hoverClick = 'no';
+                                    (0, displayAttributeModal_3.default)(env, null, node.locator);
+                                }
+                            }
+                            else {
+                                ctx.fillStyle = '#DDD';
+                            }
+                            ctx.fillRect(renderx, rendery, nodew, nodeh);
+                            ctx.strokeStyle = '4px black';
+                            ctx.strokeRect(renderx, rendery, nodew, nodeh);
+                            // ctx.strokeStyle = 'orange';
+                            // ctx.strokeRect(ox, oy, node.boundingBox.x, node.boundingBox.y);
+                            ctx.fillStyle = `black`;
+                            const fonth = (nodeh * 0.5) | 0;
+                            ctx.font = `bold ${fonth}px sans`;
+                            const lbl = node.locator.result.type.split('\.').slice(-1)[0];
+                            const lblMeasure = ctx.measureText(lbl);
+                            ctx.fillText(lbl, renderx + (nodew - lblMeasure.width) / 2, rendery + (nodeh - (nodeh - fonth) * 0.5)); //  - lblMeasure.actualBoundingBoxDescent));
+                            if (!Array.isArray(node.children)) {
+                                return;
+                            }
+                            // const numCh = node.children.length;
+                            // const off = (numCh - 1) * (nodew + nodepad) / 2;
+                            let childOffX = 0;
+                            const childOffY = nodeh + nodepady;
+                            node.children.forEach((child, childIdx) => {
+                                const chbb = child.boundingBox;
+                                if (childIdx >= 1) {
+                                    childOffX += nodepadx;
+                                }
+                                renderNode(child, ox + childOffX, oy + childOffY);
+                                ctx.strokeStyle = 'black';
+                                ctx.lineWidth = 2;
+                                ctx.beginPath(); // Start a new path
+                                ctx.moveTo(renderx + nodew / 2, rendery + nodeh);
+                                const paddedBottomY = rendery + nodeh * 1.25;
+                                ctx.lineTo(renderx + nodew / 2, paddedBottomY);
+                                // ctx.lineTo(ox + childOffX + chbb.x / 2, oy + childOffY); // Draw a line to (150, 100)
+                                const chx = ox + childOffX + chbb.x / 2;
+                                // ctx.bezierCurveTo()
+                                ctx.arcTo(chx, paddedBottomY, chx, oy + childOffY, nodeh / 2);
+                                ctx.lineTo(chx, oy + childOffY);
+                                ctx.stroke(); // Render the path
+                                ctx.lineWidth = 1;
+                                childOffX += chbb.x;
+                            });
+                        };
+                        renderNode(rootNode, 0, 32);
+                        if (!didHighlightSomething) {
+                            if (hasActiveSpanHighlight) {
+                                hasActiveSpanHighlight = false;
+                                env.updateSpanHighlight(null);
+                            }
+                        }
+                        // ctx.fillStyle = '#FF0';
+                        // ctx.fillRect(lastClick.x - 32, lastClick.y - 32, 64, 64);
+                    };
+                    renderFrame();
+                    onResizePtr.callback = () => {
+                        renderFrame();
+                        // console.log('finished:', wrapper.clientWidth, wrapper.clientHeight, wrapper.offsetWidth);
+                    };
+                    // root.appendChild(document.createTextNode(JSON.stringify(state.data, null, 2)));
+                }
+                if (fetchState !== 'idle') {
+                    const spinner = (0, createLoadingSpinner_1.default)();
+                    spinner.classList.add('absoluteCenter');
+                    root.appendChild(spinner);
+                }
+            },
+        });
+        const refresher = env.createCullingTaskSubmitter();
+        env.onChangeListeners[queryId] = (adjusters) => {
+            if (adjusters) {
+                adjusters.forEach(adj => (0, adjustLocator_2.default)(adj, locator));
+            }
+            refresher.submit(() => {
+                fetchAttrs();
+                popup.refresh();
+            });
+        };
+        const fetchAttrs = () => {
+            // switch (fetchState) {
+            //   case 'idle': {
+            //     fetchState = 'fetching'
+            //     break;
+            //   }
+            //   case 'fetching': {
+            //     fetchState = 'queued';
+            //     return;
+            //   }
+            //   case 'queued': return;
+            // }
+            env.performRpcQuery({
+                attr: {
+                    name: 'meta:listTree'
+                },
+                locator,
+            })
+                .then((result) => {
+                var _a;
+                const refetch = fetchState == 'queued';
+                fetchState = 'idle';
+                if (refetch)
+                    fetchAttrs();
+                const parsed = result.nodes;
+                if (!parsed) {
+                    // root.appendChild(createTitle('err'));
+                    if ((_a = result.body) === null || _a === void 0 ? void 0 : _a.length) {
+                        state = { type: 'err', body: result.body };
+                        popup.refresh();
+                        // root.appendChild(encodeRpcBodyLines(env, parsed.body));
+                        return;
+                    }
+                    throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
+                }
+                // Handle resp
+                state = { type: 'ok', data: parsed };
+                // resetTranslationOnRender = true;
+                popup.refresh();
+            })
+                .catch(err => {
+                console.warn('Error when loading attributes', err);
+                state = { type: 'err', body: [] };
+                popup.refresh();
+            });
+        };
+        fetchAttrs();
+        env.probeWindowStateSavers[queryId] = (target) => {
+            target.push({
+                modalPos: popup.getPos(),
+                data: {
+                    type: 'ast',
+                    locator,
+                },
+            });
+        };
+        env.triggerWindowSave();
+    };
+    exports.default = displayAstModal;
+});
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "model/adjustLocator", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_2, showWindow_5, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, adjustLocator_3, settings_2, encodeRpcBodyLines_2, trimTypeName_3, displayAstModal_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
+    createModalTitle_4 = __importDefault(createModalTitle_4);
+    displayProbeModal_2 = __importDefault(displayProbeModal_2);
+    showWindow_5 = __importDefault(showWindow_5);
+    displayArgModal_1 = __importDefault(displayArgModal_1);
+    formatAttr_2 = __importDefault(formatAttr_2);
+    createTextSpanIndicator_4 = __importDefault(createTextSpanIndicator_4);
+    displayHelp_2 = __importDefault(displayHelp_2);
+    adjustLocator_3 = __importDefault(adjustLocator_3);
+    settings_2 = __importDefault(settings_2);
+    encodeRpcBodyLines_2 = __importDefault(encodeRpcBodyLines_2);
+    trimTypeName_3 = __importDefault(trimTypeName_3);
+    displayAstModal_1 = __importDefault(displayAstModal_1);
+    const displayAttributeModal = (env, modalPos, locator) => {
+        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        let filter = '';
+        let state = null;
+        let fetchState = 'idle';
+        const cleanup = () => {
+            delete env.onChangeListeners[queryId];
+            popup.remove();
+        };
+        let isFirstRender = true;
+        const popup = (0, showWindow_5.default)({
+            pos: modalPos,
+            rootStyle: `
+      min-width: 16rem;
+      min-height: 8rem;
+      80vh;
+    `,
+            render: (root) => {
+                while (root.firstChild)
+                    root.firstChild.remove();
+                // root.innerText = 'Loading..';
+                root.appendChild((0, createModalTitle_4.default)({
+                    renderLeft: (container) => {
+                        var _a;
+                        const headType = document.createElement('span');
+                        headType.classList.add('syntax-type');
+                        headType.innerText = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_3.default)(locator.result.type)}`;
+                        const headAttr = document.createElement('span');
+                        headAttr.classList.add('syntax-attr');
+                        headAttr.innerText = `.?`;
+                        // headAttr.style.fontStyle= 'italic';
+                        container.appendChild(headType);
+                        container.appendChild(headAttr);
+                        container.appendChild((0, createTextSpanIndicator_4.default)({
+                            span: startEndToSpan(locator.result.start, locator.result.end),
+                            marginLeft: true,
+                            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
+                        }));
+                    },
+                    onClose: () => {
+                        cleanup();
+                    },
+                    extraActions: [
+                        {
+                            title: 'Help',
+                            invoke: () => {
+                                (0, displayHelp_2.default)('property-list-usage', () => { });
+                            }
+                        },
+                        {
+                            title: 'Render AST',
+                            invoke: () => {
+                                cleanup();
+                                (0, displayAstModal_1.default)(env, popup.getPos(), locator);
+                            }
+                        },
+                    ],
+                }).element);
+                const addSpinner = () => {
+                    const spinner = (0, createLoadingSpinner_2.default)();
+                    spinner.classList.add('absoluteCenter');
+                    const spinnerWrapper = document.createElement('div');
+                    spinnerWrapper.style.height = '7rem';
+                    spinnerWrapper.style.display = 'block';
+                    spinnerWrapper.style.position = 'relative';
+                    spinnerWrapper.appendChild(spinner);
+                    root.appendChild(spinnerWrapper);
+                };
+                if (state === null) {
+                    addSpinner();
+                    return;
+                }
+                if (state.type === 'err') {
+                    if (state.body.length === 0) {
+                        const text = document.createElement('span');
+                        text.classList.add('captured-stderr');
                         // text.style.color = '#F88';
                         text.innerText = `Failed listing properties`;
                         root.appendChild(text);
                         return;
                     }
-                    root.appendChild((0, encodeRpcBodyLines_1.default)(env, state.body));
+                    root.appendChild((0, encodeRpcBodyLines_2.default)(env, state.body));
                 }
                 else {
                     const attrs = state.attrs;
@@ -2114,7 +2543,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                     root.appendChild(sortedAttrs);
                 }
                 if (fetchState !== 'idle') {
-                    const spinner = (0, createLoadingSpinner_1.default)();
+                    const spinner = (0, createLoadingSpinner_2.default)();
                     spinner.classList.add('absoluteCenter');
                     root.appendChild(spinner);
                 }
@@ -2123,7 +2552,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
         const refresher = env.createCullingTaskSubmitter();
         env.onChangeListeners[queryId] = (adjusters) => {
             if (adjusters) {
-                adjusters.forEach(adj => (0, adjustLocator_2.default)(adj, locator));
+                adjusters.forEach(adj => (0, adjustLocator_3.default)(adj, locator));
             }
             refresher.submit(() => {
                 fetchAttrs();
@@ -2189,20 +2618,20 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     };
     exports.default = displayAttributeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, createTextSpanIndicator_5, displayAttributeModal_3, showWindow_5, formatAttr_3, displayArgModal_2, registerNodeSelector_3, adjustLocator_3, displayHelp_2, encodeRpcBodyLines_2, trimTypeName_4) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName"], function (require, exports, createLoadingSpinner_3, createModalTitle_5, createTextSpanIndicator_5, displayAttributeModal_4, showWindow_6, formatAttr_3, displayArgModal_2, registerNodeSelector_3, adjustLocator_4, displayHelp_3, encodeRpcBodyLines_3, trimTypeName_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
-    createModalTitle_4 = __importDefault(createModalTitle_4);
+    createLoadingSpinner_3 = __importDefault(createLoadingSpinner_3);
+    createModalTitle_5 = __importDefault(createModalTitle_5);
     createTextSpanIndicator_5 = __importDefault(createTextSpanIndicator_5);
-    displayAttributeModal_3 = __importDefault(displayAttributeModal_3);
-    showWindow_5 = __importDefault(showWindow_5);
+    displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
+    showWindow_6 = __importDefault(showWindow_6);
     formatAttr_3 = __importDefault(formatAttr_3);
     displayArgModal_2 = __importDefault(displayArgModal_2);
     registerNodeSelector_3 = __importDefault(registerNodeSelector_3);
-    adjustLocator_3 = __importDefault(adjustLocator_3);
-    displayHelp_2 = __importDefault(displayHelp_2);
-    encodeRpcBodyLines_2 = __importDefault(encodeRpcBodyLines_2);
+    adjustLocator_4 = __importDefault(adjustLocator_4);
+    displayHelp_3 = __importDefault(displayHelp_3);
+    encodeRpcBodyLines_3 = __importDefault(encodeRpcBodyLines_3);
     trimTypeName_4 = __importDefault(trimTypeName_4);
     const displayProbeModal = (env, modalPos, locator, attr) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -2225,7 +2654,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         };
         let copyBody = [];
         const createTitle = () => {
-            return (0, createModalTitle_4.default)({
+            return (0, createModalTitle_5.default)({
                 extraActions: [
                     {
                         title: 'Duplicate window',
@@ -2249,13 +2678,13 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     {
                         title: 'General probe help',
                         invoke: () => {
-                            (0, displayHelp_2.default)('probe-window', () => { });
+                            (0, displayHelp_3.default)('probe-window', () => { });
                         }
                     },
                     {
                         title: 'Magic output messages help',
                         invoke: () => {
-                            (0, displayHelp_2.default)('magic-stdout-messages', () => { });
+                            (0, displayHelp_3.default)('magic-stdout-messages', () => { });
                         }
                     },
                 ],
@@ -2338,12 +2767,12 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     headAttr.onmousedown = (e) => { e.stopPropagation(); };
                     headAttr.onclick = (e) => {
                         if (env.duplicateOnAttr() != e.shiftKey) {
-                            (0, displayAttributeModal_3.default)(env, null, JSON.parse(JSON.stringify(locator)));
+                            (0, displayAttributeModal_4.default)(env, null, JSON.parse(JSON.stringify(locator)));
                         }
                         else {
                             queryWindow.remove();
                             cleanup();
-                            (0, displayAttributeModal_3.default)(env, queryWindow.getPos(), locator);
+                            (0, displayAttributeModal_4.default)(env, queryWindow.getPos(), locator);
                         }
                         e.stopPropagation();
                     };
@@ -2412,7 +2841,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         let isFirstRender = true;
         let loading = false;
         let refreshOnDone = false;
-        const queryWindow = (0, showWindow_5.default)({
+        const queryWindow = (0, showWindow_6.default)({
             pos: modalPos,
             rootStyle: `
       min-width: 16rem;
@@ -2430,7 +2859,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     while (root.firstChild)
                         root.removeChild(root.firstChild);
                     root.appendChild(createTitle().element);
-                    const spinner = (0, createLoadingSpinner_2.default)();
+                    const spinner = (0, createLoadingSpinner_3.default)();
                     spinner.classList.add('absoluteCenter');
                     const spinnerWrapper = document.createElement('div');
                     spinnerWrapper.style.height = '7rem';
@@ -2504,8 +2933,8 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     }
                     const titleRow = createTitle();
                     root.append(titleRow.element);
-                    root.appendChild((0, encodeRpcBodyLines_2.default)(env, body));
-                    const spinner = (0, createLoadingSpinner_2.default)();
+                    root.appendChild((0, encodeRpcBodyLines_3.default)(env, body));
+                    const spinner = (0, createLoadingSpinner_3.default)();
                     spinner.style.display = 'none';
                     spinner.classList.add('absoluteCenter');
                     lastSpinner = spinner;
@@ -2537,10 +2966,10 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         env.onChangeListeners[queryId] = (adjusters) => {
             var _a;
             if (adjusters) {
-                adjusters.forEach(adj => (0, adjustLocator_3.default)(adj, locator));
+                adjusters.forEach(adj => (0, adjustLocator_4.default)(adj, locator));
                 (_a = attr.args) === null || _a === void 0 ? void 0 : _a.forEach(({ value }) => {
                     if (value && typeof value === 'object') {
-                        adjusters.forEach(adj => (0, adjustLocator_3.default)(adj, value));
+                        adjusters.forEach(adj => (0, adjustLocator_4.default)(adj, value));
                     }
                 });
                 // console.log('Adjusted span to:', span);
@@ -2552,21 +2981,30 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 refresher.submit(() => queryWindow.refresh());
             }
         };
-        env.probeWindowStateSavers[queryId] = (target) => target.push({ locator, attr, modalPos: queryWindow.getPos() });
+        env.probeWindowStateSavers[queryId] = (target) => {
+            target.push({
+                modalPos: queryWindow.getPos(),
+                data: {
+                    type: 'probe',
+                    locator,
+                    attr,
+                },
+            });
+        };
         env.triggerWindowSave();
     };
     exports.default = displayProbeModal;
 });
-define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName"], function (require, exports, createLoadingSpinner_3, createModalTitle_5, displayAttributeModal_4, registerOnHover_4, showWindow_6, registerNodeSelector_4, encodeRpcBodyLines_3, trimTypeName_5) {
+define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, displayAttributeModal_5, registerOnHover_4, showWindow_7, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    createLoadingSpinner_3 = __importDefault(createLoadingSpinner_3);
-    createModalTitle_5 = __importDefault(createModalTitle_5);
-    displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
+    createLoadingSpinner_4 = __importDefault(createLoadingSpinner_4);
+    createModalTitle_6 = __importDefault(createModalTitle_6);
+    displayAttributeModal_5 = __importDefault(displayAttributeModal_5);
     registerOnHover_4 = __importDefault(registerOnHover_4);
-    showWindow_6 = __importDefault(showWindow_6);
+    showWindow_7 = __importDefault(showWindow_7);
     registerNodeSelector_4 = __importDefault(registerNodeSelector_4);
-    encodeRpcBodyLines_3 = __importDefault(encodeRpcBodyLines_3);
+    encodeRpcBodyLines_4 = __importDefault(encodeRpcBodyLines_4);
     trimTypeName_5 = __importDefault(trimTypeName_5);
     const displayRagModal = (env, line, col) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -2574,7 +3012,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
             delete env.onChangeListeners[queryId];
             popup.remove();
         };
-        const popup = (0, showWindow_6.default)({
+        const popup = (0, showWindow_7.default)({
             rootStyle: `
         min-width: 12rem;
         min-height: 4rem;
@@ -2585,10 +3023,10 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                 // }
                 // root.innerText = 'Loading..';
                 root.style.display = 'contents';
-                const spinner = (0, createLoadingSpinner_3.default)();
+                const spinner = (0, createLoadingSpinner_4.default)();
                 spinner.classList.add('absoluteCenter');
                 root.appendChild(spinner);
-                const createTitle = (status) => (0, createModalTitle_5.default)({
+                const createTitle = (status) => (0, createModalTitle_6.default)({
                     renderLeft: (container) => {
                         const headType = document.createElement('span');
                         headType.classList.add('syntax-stype');
@@ -2626,7 +3064,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                     if (!parsed.nodes) {
                         root.appendChild(createTitle('err'));
                         if ((_a = parsed.body) === null || _a === void 0 ? void 0 : _a.length) {
-                            root.appendChild((0, encodeRpcBodyLines_3.default)(env, parsed.body));
+                            root.appendChild((0, encodeRpcBodyLines_4.default)(env, parsed.body));
                             return;
                         }
                         throw new Error(`Couldn't find expected line or body in output '${JSON.stringify(parsed)}'`);
@@ -2651,7 +3089,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         node.onclick = () => {
                             cleanup();
                             env.updateSpanHighlight(null);
-                            (0, displayAttributeModal_4.default)(env, popup.getPos(), locator);
+                            (0, displayAttributeModal_5.default)(env, popup.getPos(), locator);
                         };
                         rowsContainer.appendChild(node);
                     });
@@ -2732,11 +3170,11 @@ define("model/StatisticsCollectorImpl", ["require", "exports"], function (requir
     }
     exports.default = StatisticsCollectorImpl;
 });
-define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, createModalTitle_6, showWindow_7) {
+define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, createModalTitle_7, showWindow_8) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    createModalTitle_6 = __importDefault(createModalTitle_6);
-    showWindow_7 = __importDefault(showWindow_7);
+    createModalTitle_7 = __importDefault(createModalTitle_7);
+    showWindow_8 = __importDefault(showWindow_8);
     ;
     const displayStatistics = (collector, setStatisticsButtonDisabled, setEditorContentsAndUpdateProbes, anyModalIsLoading) => {
         let simulateTimer = -1;
@@ -2813,7 +3251,7 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
             },
         ];
         let activeTest = tests[0].title;
-        const helpWindow = (0, showWindow_7.default)({
+        const helpWindow = (0, showWindow_8.default)({
             rootStyle: `
       width: 32rem;
       min-height: 12rem;
@@ -2848,7 +3286,7 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
                     statLabels = null;
                     while (root.firstChild)
                         root.firstChild.remove();
-                    root.appendChild((0, createModalTitle_6.default)({
+                    root.appendChild((0, createModalTitle_7.default)({
                         renderLeft: (container) => {
                             const header = document.createElement('span');
                             header.innerText = 'Statistics';
@@ -3018,12 +3456,12 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
     };
     exports.default = displayStatistics;
 });
-define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_3, createModalTitle_7, showWindow_8) {
+define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_3, createModalTitle_8, showWindow_9) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     settings_3 = __importDefault(settings_3);
-    createModalTitle_7 = __importDefault(createModalTitle_7);
-    showWindow_8 = __importDefault(showWindow_8);
+    createModalTitle_8 = __importDefault(createModalTitle_8);
+    showWindow_9 = __importDefault(showWindow_9);
     const getArgs = () => {
         const re = settings_3.default.getMainArgsOverride();
         if (!re) {
@@ -3171,12 +3609,12 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
         settings_3.default.setMainArgsOverride(args);
     };
     const displayMainArgsOverrideModal = (onClose, onChange) => {
-        const windowInstance = (0, showWindow_8.default)({
+        const windowInstance = (0, showWindow_9.default)({
             render: (root) => {
                 while (root.firstChild) {
                     root.firstChild.remove();
                 }
-                root.appendChild((0, createModalTitle_7.default)({
+                root.appendChild((0, createModalTitle_8.default)({
                     renderLeft: (container) => {
                         const headType = document.createElement('span');
                         headType.classList.add('syntax-stype');
@@ -3503,14 +3941,14 @@ define("model/cullingTaskSubmitterFactory", ["require", "exports"], function (re
     };
     exports.default = createCullingTaskSubmitterFactory;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_3, displayAttributeModal_5, settings_4, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_1) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_4, displayAttributeModal_6, settings_4, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_1, displayAstModal_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
     displayProbeModal_3 = __importDefault(displayProbeModal_3);
     displayRagModal_1 = __importDefault(displayRagModal_1);
-    displayHelp_3 = __importDefault(displayHelp_3);
-    displayAttributeModal_5 = __importDefault(displayAttributeModal_5);
+    displayHelp_4 = __importDefault(displayHelp_4);
+    displayAttributeModal_6 = __importDefault(displayAttributeModal_6);
     settings_4 = __importDefault(settings_4);
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
     displayStatistics_1 = __importDefault(displayStatistics_1);
@@ -3521,6 +3959,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     showVersionInfo_1 = __importDefault(showVersionInfo_1);
     runBgProbe_1 = __importDefault(runBgProbe_1);
     cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
+    displayAstModal_2 = __importDefault(displayAstModal_2);
     window.clearUserSettings = () => {
         settings_4.default.set({});
         location.reload();
@@ -3732,9 +4171,17 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     currentlyLoadingModals: new Set(),
                     createCullingTaskSubmitter: (0, cullingTaskSubmitterFactory_1.default)(changeBufferTime),
                 };
+                window.foo = () => {
+                    performRpcQuery(wsHandler, {
+                        attr: {
+                            name: 'meta:listTree'
+                        },
+                        locator: window.lastNode,
+                    });
+                };
                 (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);
                 window.displayHelp = (type) => {
-                    const common = (type, button) => (0, displayHelp_3.default)(type, disabled => button.disabled = disabled);
+                    const common = (type, button) => (0, displayHelp_4.default)(type, disabled => button.disabled = disabled);
                     switch (type) {
                         case "general": return common('general', uiElements.generalHelpButton);
                         case 'recovery-strategy': return common('recovery-strategy', uiElements.positionRecoveryHelpButton);
@@ -3753,7 +4200,19 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 setTimeout(() => {
                     try {
                         settings_4.default.getProbeWindowStates().forEach((state) => {
-                            (0, displayProbeModal_3.default)(modalEnv, state.modalPos, state.locator, state.attr);
+                            switch (state.data.type) {
+                                case 'probe': {
+                                    (0, displayProbeModal_3.default)(modalEnv, state.modalPos, state.data.locator, state.data.attr);
+                                    break;
+                                }
+                                case 'ast': {
+                                    (0, displayAstModal_2.default)(modalEnv, state.modalPos, state.data.locator);
+                                    break;
+                                }
+                                default: {
+                                    console.warn('Unexpected probe window state type:', state.data.type);
+                                }
+                            }
                         });
                     }
                     catch (e) {
@@ -3763,7 +4222,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 window.RagQuery = (line, col, autoSelectRoot) => {
                     if (autoSelectRoot) {
                         const node = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1, depth: 0 };
-                        (0, displayAttributeModal_5.default)(modalEnv, null, { result: node, steps: [] });
+                        (0, displayAttributeModal_6.default)(modalEnv, null, { result: node, steps: [] });
                     }
                     else {
                         (0, displayRagModal_1.default)(modalEnv, line, col);

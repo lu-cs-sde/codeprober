@@ -25,6 +25,7 @@ import codeprober.locator.ApplyLocator;
 import codeprober.locator.ApplyLocator.ResolvedNode;
 import codeprober.locator.AttrsInNode;
 import codeprober.locator.CreateLocator;
+import codeprober.locator.ListTree;
 import codeprober.locator.NodesAtPosition;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.AstNodeApiStyle;
@@ -138,6 +139,15 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			} finally {
 				CreateLocator.setBuildFastButFragileLocator(false);
 				BenchmarkTimer.LIST_NODES.exit();
+			}
+			return;
+		}
+		case "meta:listTree": {
+			CreateLocator.setBuildFastButFragileLocator(true);
+			try {
+				retBuilder.put("nodes", ListTree.list(info, match.node, 16));
+			} finally {
+				CreateLocator.setBuildFastButFragileLocator(false);
 			}
 			return;
 		}

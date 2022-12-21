@@ -360,7 +360,16 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
     }
   }
 
-  env.probeWindowStateSavers[queryId] = (target) => target.push({ locator, attr, modalPos: queryWindow.getPos() });
+  env.probeWindowStateSavers[queryId] = (target) => {
+    target.push({
+      modalPos: queryWindow.getPos(),
+      data: {
+        type: 'probe',
+        locator,
+        attr,
+      },
+    });
+  };
   env.triggerWindowSave();
 }
 

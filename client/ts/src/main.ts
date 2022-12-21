@@ -15,6 +15,7 @@ import showVersionInfo from "./ui/showVersionInfo";
 import { TextSpanStyle } from "./ui/create/createTextSpanIndicator";
 import runBgProbe from "./model/runBgProbe";
 import createCullingTaskSubmitterFactory from "./model/cullingTaskSubmitterFactory";
+import displayAstModal from "./ui/popup/displayAstModal";
 
 window.clearUserSettings = () => {
   settings.set({});
@@ -41,9 +42,9 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
 
     const onChangeListeners: ModalEnv['onChangeListeners'] = {};
 
-    const probeWindowStateSavers: { [key: string]: (target: ProbeWindowState[]) => void } = {};
+    const probeWindowStateSavers: { [key: string]: (target: WindowState[]) => void } = {};
     const triggerWindowSave = () => {
-      const states: ProbeWindowState[] = [];
+      const states: WindowState[] = [];
       Object.values(probeWindowStateSavers).forEach(v => v(states));
       settings.setProbeWindowStates(states);
     };
@@ -268,6 +269,15 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         createCullingTaskSubmitter: createCullingTaskSubmitterFactory(changeBufferTime),
        };
 
+       (window as any).foo = () => {
+        performRpcQuery(wsHandler, {
+          attr: {
+            name: 'meta:listTree'
+          },
+          locator: (window as any).lastNode,
+        })
+       }
+
        showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);
 
       window.displayHelp = (type) => {
@@ -295,7 +305,19 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       setTimeout(() => {
         try {
           settings.getProbeWindowStates().forEach((state) => {
-            displayProbeModal(modalEnv, state.modalPos, state.locator, state.attr);
+            switch (state.data.type) {
+              case 'probe': {
+                displayProbeModal(modalEnv, state.modalPos, state.data.locator, state.data.attr);
+                break;
+              }
+              case 'ast': {
+                displayAstModal(modalEnv, state.modalPos, state.data.locator);
+                break;
+              }
+              default: {
+                console.warn('Unexpected probe window state type:', state.data.type);
+              }
+            }
           });
         }  catch (e) {
           console.warn('Invalid probe window state?', e);
