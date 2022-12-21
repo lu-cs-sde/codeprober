@@ -145,7 +145,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		case "meta:listTree": {
 			CreateLocator.setBuildFastButFragileLocator(true);
 			try {
-				retBuilder.put("nodes", ListTree.list(info, match.node, 16));
+				retBuilder.put("nodes", ListTree.list(info, match.node, 8));
 			} finally {
 				CreateLocator.setBuildFastButFragileLocator(false);
 			}

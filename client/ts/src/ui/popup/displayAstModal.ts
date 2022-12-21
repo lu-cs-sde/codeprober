@@ -221,15 +221,16 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           interface Node {
             type: 'node'
             locator: NodeLocator;
-            children: (Node[]) | { foo: 'bar' };
+            name?: string;
+            children: (Node[]) | { type: 'placeholder', num: number };
             boundingBox: Point;
           }
           const rootNode = state.data as Node;
 
           const nodew = 256 + 128;
           const nodeh = 64;
-          const nodepadx = nodew * 0.1;
-          const nodepady = nodeh * 1.0;
+          const nodepadx = nodew * 0.05;
+          const nodepady = nodeh * 0.75;
           const measureBoundingBox = (node: Node) => {
             if (node.boundingBox) { return ; }
             let bb: Point = { x: nodew, y: nodeh};
@@ -260,7 +261,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           const h = cv.height;
 
           ctx.resetTransform();
-          ctx.fillStyle = '#FFF';
+          ctx.fillStyle = '#F4F4F4';
           ctx.fillRect(0, 0, w, h);
           // console.log('render', trn.x, ' + ', w,  '|', trn.x * 1920 / w, cv.clientWidth, cv);
           // ctx.translate(trn.x * 1920 / cv.clientWidth, trn.y * 1080 / cv.clientHeight);
@@ -281,7 +282,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             const renderx = ox + (node.boundingBox.x - nodew) / 2;
             const rendery = oy;
             if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
-              ctx.fillStyle = '#0DD';
+              ctx.fillStyle = '#AAA';
               cv.style.cursor = 'pointer';
               const { start, end } = node.locator.result;
               if (start && end) {
@@ -304,17 +305,78 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             ctx.strokeStyle = '4px black';
             ctx.strokeRect(renderx, rendery, nodew, nodeh);
 
-            // ctx.strokeStyle = 'orange';
-            // ctx.strokeRect(ox, oy, node.boundingBox.x, node.boundingBox.y);
 
             ctx.fillStyle = `black`;
-            const fonth = (nodeh * 0.5)|0;
-            ctx.font = `bold ${fonth}px sans`;
-            const lbl = node.locator.result.type.split('\.').slice(-1)[0];
-            const lblMeasure = ctx.measureText(lbl)
-            ctx.fillText(lbl, renderx + (nodew - lblMeasure.width) / 2, rendery + (nodeh - (nodeh-fonth)*0.5)); //  - lblMeasure.actualBoundingBoxDescent));
+            let fonth = (nodeh * 0.5)|0;
+            renderText: while (true) {
+              ctx.font = `${fonth}px sans`;
+              const typeTail = node.locator.result.type.split('\.').slice(-1)[0];
 
-            if (!Array.isArray(node.children)) {return;}
+              const txty = rendery + (nodeh - (nodeh-fonth)*0.5);
+              if (node.name) {
+                const typeTailMeasure = ctx.measureText(`: ${typeTail}`);
+                const nameMeasure = ctx.measureText(node.name);
+                const totalW = nameMeasure.width + typeTailMeasure.width;
+                if (totalW > nodew && fonth > 16) {
+                  fonth = Math.max(16, fonth * 0.9 | 0);
+                  continue renderText;
+                }
+                const txtx = renderx + (nodew - totalW)/2;
+                // TODO need good system for re-rendering on theme changes, rather than hard-coding one theme.
+                // Probably a callback-map you can register in the ModalEnv
+                ctx.fillStyle = `#001080`;
+                // dark: 9CDCFE
+                ctx.fillText(node.name, txtx, txty);
+                ctx.fillStyle = `#267F99`;
+                // dark: 4EC9B0
+                ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
+              } else {
+                ctx.fillStyle = `#267F99`;
+                const typeTailMeasure = ctx.measureText(typeTail);
+                if (typeTailMeasure.width > nodew && fonth > 16) {
+                  fonth = Math.max(16, fonth * 0.9 | 0);
+                  continue renderText;
+                }
+                ctx.fillText(typeTail, renderx + (nodew - typeTailMeasure.width) / 2, txty);
+              }
+              break;
+            }
+
+            if (!Array.isArray(node.children)) {
+              if (node.children?.type == 'placeholder') {
+                // More children available
+                console.log('placeholder:', node.children);
+                const msg = `᠁`;
+                const fonth = (nodeh * 0.5)|0;
+                ctx.font = `${fonth}px sans`;
+                ctx.fillStyle = 'black';
+                const cx = renderx + nodew/2;
+                const cy = rendery + nodeh + nodepady  + fonth;
+
+                ctx.strokeStyle = 'black';
+                ctx.beginPath();
+                ctx.moveTo(cx, rendery + nodeh);
+                ctx.lineTo(cx, cy - fonth);
+                ctx.stroke();
+
+                if (hover && Math.hypot(cx - hover.x, cy - hover.y) < fonth) {
+                  ctx.strokeStyle = 'cyan';
+                  cv.style.cursor = 'pointer';
+                  if (hoverClick == 'yes') {
+                    hoverClick = 'no';
+                    displayAstModal(env, null, node.locator);
+                  }
+                }
+                const msgMeasure = ctx.measureText(msg);
+                ctx.fillText(msg, renderx + (nodew - msgMeasure.width) / 2, cy + fonth * 0.5);
+                ctx.beginPath();
+                ctx.arc(cx, cy, fonth , 0, Math.PI * 2);
+                ctx.stroke();
+
+
+              }
+              return;
+            }
 
             // const numCh = node.children.length;
             // const off = (numCh - 1) * (nodew + nodepad) / 2;
@@ -334,13 +396,13 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               ctx.beginPath(); // Start a new path
               ctx.moveTo(renderx + nodew/2, rendery + nodeh);
 
-              const paddedBottomY = rendery + nodeh * 1.25;
+              const paddedBottomY = rendery + nodeh + nodepady * 0.25;
               ctx.lineTo(renderx + nodew/2, paddedBottomY);
               // ctx.lineTo(ox + childOffX + chbb.x / 2, oy + childOffY); // Draw a line to (150, 100)
 
               const chx = ox + childOffX + chbb.x / 2;
               // ctx.bezierCurveTo()
-              ctx.arcTo(chx, paddedBottomY, chx, oy + childOffY, nodeh / 2);
+              ctx.arcTo(chx, paddedBottomY, chx, oy + childOffY, nodepady / 2);
               ctx.lineTo(chx, oy + childOffY);
               ctx.stroke(); // Render the path
               ctx.lineWidth = 1;
@@ -388,17 +450,17 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
   };
 
  const fetchAttrs = () => {
-  // switch (fetchState) {
-  //   case 'idle': {
-  //     fetchState = 'fetching'
-  //     break;
-  //   }
-  //   case 'fetching': {
-  //     fetchState = 'queued';
-  //     return;
-  //   }
-  //   case 'queued': return;
-  // }
+  switch (fetchState) {
+    case 'idle': {
+      fetchState = 'fetching'
+      break;
+    }
+    case 'fetching': {
+      fetchState = 'queued';
+      return;
+    }
+    case 'queued': return;
+  }
 
   env.performRpcQuery({
     attr: {
@@ -424,6 +486,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
       }
 
       // Handle resp
+      locator = result.locator;
       state = { type: 'ok', data: parsed };
       // resetTranslationOnRender = true;
       popup.refresh();

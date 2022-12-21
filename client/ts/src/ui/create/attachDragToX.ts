@@ -66,5 +66,5 @@ const attachDragToX = (
   };
 };
 
-export { modalZIndexGenerator, lastKnownMousePos };
+export { modalZIndexGenerator, lastKnownMousePos };
 export default attachDragToX;
