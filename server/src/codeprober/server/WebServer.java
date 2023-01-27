@@ -287,23 +287,30 @@ public class WebServer {
 		try (ServerSocket server = new ServerSocket(port, 0, WebSocketServer.createServerFilter())) {
 			System.out.println(
 					"Started web server on port " + port + ", visit http://localhost:" + port + "/ in your browser");
-			while (true) {
-				Socket s = server.accept();
-				new Thread(() -> {
-					try {
-						handleRequest(s, msgPusher, onQuery);
-					} catch (IOException | NoSuchAlgorithmException e) {
-						System.out.println("Error while handling request");
-						e.printStackTrace();
-					} finally {
+			try {
+
+				while (true) {
+					Socket s = server.accept();
+					System.out.println("got socket");
+					new Thread(() -> {
 						try {
-							s.close();
-						} catch (IOException e) {
-							// TODO Auto-generated catch block
+							handleRequest(s, msgPusher, onQuery);
+						} catch (IOException | NoSuchAlgorithmException e) {
+							System.out.println("Error while handling request");
 							e.printStackTrace();
+						} finally {
+							try {
+								s.close();
+							} catch (IOException e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
+							}
 						}
-					}
-				}).start();
+					}).start();
+				}
+			} catch (Throwable t) {
+				t.printStackTrace();
+				throw t;
 			}
 		} catch (IOException e) {
 			e.printStackTrace();

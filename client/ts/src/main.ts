@@ -311,11 +311,11 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
                 break;
               }
               case 'ast': {
-                displayAstModal(modalEnv, state.modalPos, state.data.locator);
+                displayAstModal(modalEnv, state.modalPos, state.data.locator, state.data.direction);
                 break;
               }
               default: {
-                console.warn('Unexpected probe window state type:', state.data.type);
+                console.warn('Unexpected probe window state type:', state.data);
               }
             }
           });

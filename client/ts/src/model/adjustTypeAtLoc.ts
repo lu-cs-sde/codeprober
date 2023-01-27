@@ -1,6 +1,11 @@
 
 
 const adjustTypeAtLoc = (adjuster: LocationAdjuster, tal: TypeAtLoc) => {
+  if (tal.external) {
+    // Refuse to adjust things in external files.
+    // CodeProber is only expected to get change events for our own "internal" file.
+    return;
+  }
   const span = startEndToSpan(tal.start, tal.end);
 
   let [ls, cs] = adjuster(span.lineStart, span.colStart);

@@ -58,4 +58,8 @@ public class Span {
 		}
 		return true;
 	}
+
+	public boolean covers(int startPos, int endPos) {
+		return !isMeaningful() || (this.start <= startPos && this.end >= endPos);
+	}
 }

@@ -354,7 +354,10 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
         root.tabIndex = 0;
         root.classList.add('modalWindow');
         root.style = `${rootStyle || ''}`;
-        root.style.zIndex = `${(0, attachDragToX_2.modalZIndexGenerator)()}`;
+        const bringToFront = () => {
+            root.style.zIndex = `${(0, attachDragToX_2.modalZIndexGenerator)()}`;
+        };
+        bringToFront();
         root.style.maxWidth = '40vw';
         root.onkeydown = (e) => {
             var _a;
@@ -377,7 +380,7 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
         // contentRoot.style.minHeight = '4rem';
         // contentRoot.style.overflow = 'inherit';
         // contentRoot.style.display = 'contents';
-        render(contentRoot, lastCancelToken);
+        render(contentRoot, { cancelToken: lastCancelToken, bringToFront });
         root.appendChild(contentRoot);
         let reiszeCleanup = null;
         if (resizable) {
@@ -427,7 +430,7 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
                 lastCancelToken.cancelled = true;
                 lastCancelToken = {};
                 // root.innerHTML = '';
-                render(contentRoot, lastCancelToken);
+                render(contentRoot, { cancelToken: lastCancelToken, bringToFront });
             },
             getPos: dragToMove.getPos,
         };
@@ -695,39 +698,42 @@ define("ui/create/createTextSpanIndicator", ["require", "exports", "settings", "
             indicator.style.marginLeft = '0.25rem';
         }
         indicator.style.marginRight = '0.25rem';
+        const ext = args.external ? '↰' : '';
         const warn = span.lineStart === 0 && span.colStart === 0 && span.lineEnd === 0 && span.colEnd === 0 ? '⚠️' : '';
         switch ((_a = args.styleOverride) !== null && _a !== void 0 ? _a : settings_1.default.getLocationStyle()) {
             case 'full-compact':
                 if (span.lineStart === span.lineEnd) {
-                    indicator.innerText = `[${span.lineStart}:${span.colStart}-${span.colEnd}]${warn}`;
+                    indicator.innerText = `${ext}[${span.lineStart}:${span.colStart}-${span.colEnd}]${warn}`;
                     break;
                 }
             // Else, fall through
             case 'full':
-                indicator.innerText = `[${span.lineStart}:${span.colStart}→${span.lineEnd}:${span.colEnd}]${warn}`;
+                indicator.innerText = `${ext}[${span.lineStart}:${span.colStart}→${span.lineEnd}:${span.colEnd}]${warn}`;
                 break;
             case 'lines-compact':
                 if (span.lineStart === span.lineEnd) {
-                    indicator.innerText = `[${span.lineStart}]${warn}`;
+                    indicator.innerText = `${ext}[${span.lineStart}]${warn}`;
                     break;
                 }
             // Else, fall through
             case 'lines':
-                indicator.innerText = `[${span.lineStart}→${span.lineEnd}]${warn}`;
+                indicator.innerText = `${ext}[${span.lineStart}→${span.lineEnd}]${warn}`;
                 break;
             case 'start':
-                indicator.innerText = `[${span.lineStart}:${span.colStart}]${warn}`;
+                indicator.innerText = `${ext}[${span.lineStart}:${span.colStart}]${warn}`;
                 break;
             case 'start-line':
-                indicator.innerText = `[${span.lineStart}]${warn}`;
+                indicator.innerText = `${ext}[${span.lineStart}]${warn}`;
                 break;
         }
-        if (onHover) {
-            indicator.classList.add('highlightOnHover');
-            (0, registerOnHover_1.default)(indicator, onHover);
-        }
-        if (onClick) {
-            indicator.onclick = () => onClick();
+        if (!args.external) {
+            if (onHover) {
+                indicator.classList.add('highlightOnHover');
+                (0, registerOnHover_1.default)(indicator, onHover);
+            }
+            if (onClick) {
+                indicator.onclick = () => onClick();
+            }
         }
         return indicator;
     };
@@ -737,6 +743,11 @@ define("model/adjustTypeAtLoc", ["require", "exports"], function (require, expor
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     const adjustTypeAtLoc = (adjuster, tal) => {
+        if (tal.external) {
+            // Refuse to adjust things in external files.
+            // CodeProber is only expected to get change events for our own "internal" file.
+            return;
+        }
         const span = startEndToSpan(tal.start, tal.end);
         let [ls, cs] = adjuster(span.lineStart, span.colStart);
         let [le, ce] = adjuster(span.lineEnd, span.colEnd);
@@ -1909,7 +1920,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     encodeRpcBodyLines_1 = __importDefault(encodeRpcBodyLines_1);
     attachDragToX_3 = __importDefault(attachDragToX_3);
     displayAttributeModal_3 = __importDefault(displayAttributeModal_3);
-    const displayAstModal = (env, modalPos, locator) => {
+    const displayAstModal = (env, modalPos, locator, listDirection) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let state = null;
         let fetchState = 'idle';
@@ -1935,7 +1946,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
             onOngoingResize: () => onResizePtr.callback(),
             onFinishedResize: () => onResizePtr.callback(),
             resizable: true,
-            render: (root) => {
+            render: (root, { bringToFront }) => {
                 while (root.firstChild)
                     root.firstChild.remove();
                 // root.innerText = 'Loading..';
@@ -2031,6 +2042,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     const dragInfo = { x: trn.x, y: trn.y }; // , sx: 1, sy: 1 };
                     let hoverClick = 'no';
                     (0, attachDragToX_3.default)(cv, (e) => {
+                        bringToFront();
                         dragInfo.x = trn.x;
                         dragInfo.y = trn.y;
                         const w = clientToWorld({ x: e.offsetX, y: e.offsetY });
@@ -2150,8 +2162,8 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                             if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
                                 ctx.fillStyle = '#AAA';
                                 cv.style.cursor = 'pointer';
-                                const { start, end } = node.locator.result;
-                                if (start && end) {
+                                const { start, end, external } = node.locator.result;
+                                if (start && end && !external) {
                                     didHighlightSomething = true;
                                     hasActiveSpanHighlight = true;
                                     env.updateSpanHighlight({
@@ -2168,8 +2180,15 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 ctx.fillStyle = '#DDD';
                             }
                             ctx.fillRect(renderx, rendery, nodew, nodeh);
-                            ctx.strokeStyle = '4px black';
-                            ctx.strokeRect(renderx, rendery, nodew, nodeh);
+                            ctx.strokeStyle = '4px black dashed';
+                            if (node.locator.steps.length > 0 && node.locator.steps[node.locator.steps.length - 1].type === 'nta') {
+                                ctx.setLineDash([5, 5]);
+                                ctx.strokeRect(renderx, rendery, nodew, nodeh);
+                                ctx.setLineDash([]);
+                            }
+                            else {
+                                ctx.strokeRect(renderx, rendery, nodew, nodeh);
+                            }
                             ctx.fillStyle = `black`;
                             let fonth = (nodeh * 0.5) | 0;
                             renderText: while (true) {
@@ -2208,7 +2227,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                             if (!Array.isArray(node.children)) {
                                 if (((_a = node.children) === null || _a === void 0 ? void 0 : _a.type) == 'placeholder') {
                                     // More children available
-                                    console.log('placeholder:', node.children);
+                                    // console.log('placeholder:', node.children);
                                     const msg = `᠁`;
                                     const fonth = (nodeh * 0.5) | 0;
                                     ctx.font = `${fonth}px sans`;
@@ -2225,7 +2244,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                         cv.style.cursor = 'pointer';
                                         if (hoverClick == 'yes') {
                                             hoverClick = 'no';
-                                            displayAstModal(env, null, node.locator);
+                                            displayAstModal(env, null, node.locator, 'downwards');
                                         }
                                     }
                                     const msgMeasure = ctx.measureText(msg);
@@ -2250,7 +2269,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 ctx.lineWidth = 2;
                                 ctx.beginPath(); // Start a new path
                                 ctx.moveTo(renderx + nodew / 2, rendery + nodeh);
-                                const paddedBottomY = rendery + nodeh + nodepady * 0.25;
+                                const paddedBottomY = rendery + nodeh + nodepady * 0.5;
                                 ctx.lineTo(renderx + nodew / 2, paddedBottomY);
                                 // ctx.lineTo(ox + childOffX + chbb.x / 2, oy + childOffY); // Draw a line to (150, 100)
                                 const chx = ox + childOffX + chbb.x / 2;
@@ -2310,7 +2329,10 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
             }
             env.performRpcQuery({
                 attr: {
-                    name: 'meta:listTree'
+                    name: ({
+                        'upwards': 'meta:listTreeUpwards',
+                        'downwards': 'meta:listTreeDownwards'
+                    }[listDirection] || 'meta:listTreeDownwards'),
                 },
                 locator,
             })
@@ -2350,6 +2372,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                 data: {
                     type: 'ast',
                     locator,
+                    direction: listDirection,
                 },
             });
         };
@@ -2423,10 +2446,17 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                             }
                         },
                         {
-                            title: 'Render AST',
+                            title: 'Render AST downwards',
                             invoke: () => {
                                 cleanup();
-                                (0, displayAstModal_1.default)(env, popup.getPos(), locator);
+                                (0, displayAstModal_1.default)(env, popup.getPos(), locator, 'downwards');
+                            }
+                        },
+                        {
+                            title: 'Render AST upwards',
+                            invoke: () => {
+                                cleanup();
+                                (0, displayAstModal_1.default)(env, popup.getPos(), locator, 'upwards');
                             }
                         },
                     ],
@@ -2878,6 +2908,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                 }
                             }
                         },
+                        external: locator.result.external,
                     });
                     if (activeStickyColorClass) {
                         applySticky();
@@ -2906,7 +2937,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     `,
             resizable: true,
             onFinishedMove: () => env.triggerWindowSave(),
-            render: (root, cancelToken) => {
+            render: (root, { cancelToken }) => {
                 if (lastSpinner != null) {
                     lastSpinner.style.display = 'inline-block';
                     lastSpinner = null;
@@ -3029,7 +3060,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         adjusters.forEach(adj => (0, adjustLocator_4.default)(adj, value));
                     }
                 });
-                // console.log('Adjusted span to:', span);
             }
             if (loading) {
                 refreshOnDone = true;
@@ -3074,7 +3104,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
         min-width: 12rem;
         min-height: 4rem;
       `,
-            render: (root, cancelToken) => {
+            render: (root, { cancelToken }) => {
                 // while (root.firstChild) {
                 //   root.firstChild.remove();
                 // }
@@ -4263,11 +4293,11 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                                     break;
                                 }
                                 case 'ast': {
-                                    (0, displayAstModal_2.default)(modalEnv, state.modalPos, state.data.locator);
+                                    (0, displayAstModal_2.default)(modalEnv, state.modalPos, state.data.locator, state.data.direction);
                                     break;
                                 }
                                 default: {
-                                    console.warn('Unexpected probe window state type:', state.data.type);
+                                    console.warn('Unexpected probe window state type:', state.data);
                                 }
                             }
                         });

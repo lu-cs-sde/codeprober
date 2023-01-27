@@ -49,7 +49,7 @@ public class TestData {
 		public Object getParent() {
 			return parent;
 		}
-		
+
 		public void mthWithPrintStreamArg(PrintStream ps) {
 			ps.println("First msg with linebreak");
 			ps.print("Second msg without linebreak");
@@ -69,7 +69,7 @@ public class TestData {
 		}
 
 		private Map<Object, Object> parameterizedNTA_int_Node_values = new HashMap<>();
-		
+
 		@SuppressWarnings("unused")
 		private final Object parameterizedNTA_int_Node_proxy = new Object();
 
@@ -125,13 +125,23 @@ public class TestData {
 		}
 	}
 
+	public static class Qux extends Node {
+		public Qux(int start, int end) {
+			super(start, end);
+		}
+
+		public boolean cpr_isInsideExternalFile() {
+			return true;
+		}
+	}
+
 	private static int lc(int line, int col) {
 		return (line << 12) + col;
 	}
 
 	/**
 	 * Get an AST looking like this:
-	 * 
+	 *
 	 * <pre>
 	 * 0 Program {
 	 * 1   Foo {
@@ -151,7 +161,7 @@ public class TestData {
 
 	/**
 	 * Get an AST looking like this:
-	 * 
+	 *
 	 * <pre>
 	 * 0 Program {
 	 * 1   Foo {
@@ -171,7 +181,7 @@ public class TestData {
 
 	/**
 	 * Get an AST looking like this:
-	 * 
+	 *
 	 * <pre>
 	 * 0 Program {
 	 * 1   Bar {}
@@ -191,7 +201,89 @@ public class TestData {
 
 	/**
 	 * Get an AST looking like this:
-	 * 
+	 *
+	 * <pre>
+	 * 0 Program {
+	 * 1   Foo {
+	 * 1     Bar {
+	 * 1       Baz
+	 * 1	 }
+	 * 1     Bar {   }
+	 * 1   }
+	 * 1   Foo { }
+	 * 3 }
+	 * </pre>
+	 */
+	public static Object getMultipleAmbiguousLevels() {
+		return new Program(lc(0, 0), lc(3, 0)) //
+				.add(new Foo(lc(1, 2), lc(1, 8)) //
+						.add(new Bar(lc(1, 3), lc(1, 7)) //
+								.add(new Baz(lc(1, 4), lc(1, 6)))) //
+						.add(new Bar(lc(1, 3), lc(1, 7))) //
+				) //
+				.add(new Foo(lc(1, 2), lc(1, 8))) //
+		;
+	}
+
+	/**
+	 * Get an AST looking like this:
+	 *
+	 * <pre>
+	 * 0 Program {
+	 * 1   Foo {
+	 * 1     Bar { }
+	 * 1   }
+	 * 1   Baz {
+	 * 1     Bar { }
+	 * 1   }
+	 * 3 }
+	 * </pre>
+	 */
+	public static Object getIdenticalBarsWithDifferentParents() {
+		return new Program(lc(0, 0), lc(3, 0)) //
+				.add(new Foo(lc(1, 2), lc(1, 8)) //
+						.add(new Bar(lc(1, 3), lc(1, 7))) //
+				) //
+				.add(new Baz(lc(1, 2), lc(1, 8)) //
+						.add(new Bar(lc(1, 3), lc(1, 7)))) //
+
+		;
+	}
+
+	/**
+	 * Get an AST looking like this:
+	 *
+	 * <pre>
+	 * 0 Program {
+	 * 1   Baz {
+	 * 1     Foo {
+	 * 1       Bar { }
+	 * 1     }
+	 * 1   }
+	 * 1   Qux {
+	 * 1     Foo {
+	 * 1       Bar { }
+	 * 1     }
+	 * 1   }
+	 * 3 }
+	 * </pre>
+	 */
+	public static Object getIdenticalBarsWithDifferentGrandParents() {
+		return new Program(lc(0, 0), lc(3, 0)) //
+				.add(new Baz(lc(1, 2), lc(1, 8)) //
+						.add(new Foo(lc(1, 3), lc(1, 7)) //
+								.add(new Bar(lc(1, 3), lc(1, 7))))) //
+				.add(new Qux(lc(1, 2), lc(1, 8)) //
+						.add(new Foo(lc(1, 3), lc(1, 7)) //
+								.add(new Bar(lc(1, 3), lc(1, 7)))) //
+				) //
+
+		;
+	}
+
+	/**
+	 * Get an AST looking like this:
+	 *
 	 * <pre>
 	 * 0 Program {
 	 * 1   nta :: (
@@ -212,7 +304,7 @@ public class TestData {
 
 	/**
 	 * Get an AST looking like this:
-	 * 
+	 *
 	 * <pre>
 	 * 0 Program {
 	 * 1   Foo { }
@@ -237,7 +329,7 @@ public class TestData {
 
 	/**
 	 * Get an AST looking like this:
-	 * 
+	 *
 	 * <pre>
 	 * 1 Program {
 	 * 0   Foo { }

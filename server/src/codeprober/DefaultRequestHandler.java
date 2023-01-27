@@ -23,6 +23,7 @@ import org.json.JSONObject;
 import codeprober.ast.AstNode;
 import codeprober.locator.ApplyLocator;
 import codeprober.locator.ApplyLocator.ResolvedNode;
+import codeprober.locator.CreateLocator.LocatorMergeMethod;
 import codeprober.locator.AttrsInNode;
 import codeprober.locator.CreateLocator;
 import codeprober.locator.ListTree;
@@ -131,26 +132,46 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			final int rootStart = locator.getJSONObject("result").getInt("start");
 			final int rootEnd = locator.getJSONObject("result").getInt("end");
 			BenchmarkTimer.LIST_NODES.enter();
-			CreateLocator.setBuildFastButFragileLocator(true);
+			CreateLocator.setMergeMethod(LocatorMergeMethod.SKIP);
 			try {
 				retBuilder.put("nodes", new JSONArray(NodesAtPosition.get( //
 						info, match.node, rootStart + (rootEnd - rootStart) / 2 //
 				)));
 			} finally {
-				CreateLocator.setBuildFastButFragileLocator(false);
+				CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
 				BenchmarkTimer.LIST_NODES.exit();
 			}
 			return;
 		}
-		case "meta:listTree": {
-			CreateLocator.setBuildFastButFragileLocator(true);
+		case "meta:listTreeDownwards": {
+			CreateLocator.setMergeMethod(LocatorMergeMethod.SKIP);
 			try {
-				retBuilder.put("nodes", ListTree.list(info, match.node, 8));
+				final JSONObject listing = ListTree.listDownwards(info, match.node, 32);
+				if (listing == null) {
+					bodyBuilder.put("Failed listing tree, see console for more information.");
+					return;
+				}
+				retBuilder.put("nodes", listing);
 			} finally {
-				CreateLocator.setBuildFastButFragileLocator(false);
+				CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
 			}
 			return;
 		}
+		case "meta:listTreeUpwards": {
+			CreateLocator.setMergeMethod(LocatorMergeMethod.SKIP);
+			try {
+				final JSONObject listing = ListTree.listUpwards(info, match.node);
+				if (listing == null) {
+					bodyBuilder.put("Failed listing tree, see console for more information.");
+					return;
+				}
+				retBuilder.put("nodes", listing);
+			} finally {
+				CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+			}
+			return;
+		}
+
 		case "meta:listAllProperties": // Fall through
 		case "meta:listProperties": {
 			BenchmarkTimer.LIST_PROPERTIES.enter();
@@ -223,11 +244,11 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				}
 
 				if (value != Reflect.VOID_RETURN_VALUE) {
-					CreateLocator.setBuildFastButFragileLocator(true);
+					CreateLocator.setMergeMethod(LocatorMergeMethod.SKIP);
 					try {
 						EncodeResponseValue.encode(info, bodyBuilder, value, new HashSet<>());
 					} finally {
-						CreateLocator.setBuildFastButFragileLocator(false);
+						CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
 					}
 				}
 				retBuilder.put("args", updatedArgs);

@@ -9,7 +9,8 @@ import trimTypeName from "../trimTypeName";
 import attachDragToX from "../create/attachDragToX";
 import displayAttributeModal from "./displayAttributeModal";
 
-const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator) => {
+type AstListDirection = 'downwards' | 'upwards';
+const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator, listDirection: AstListDirection) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   let state: { type: 'ok', data: any } | { type: 'err', body: RpcBodyLine[] } | null = null;
 
@@ -36,7 +37,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     onOngoingResize: () => onResizePtr.callback(),
     onFinishedResize: () => onResizePtr.callback(),
     resizable: true,
-    render: (root) => {
+    render: (root, { bringToFront }) => {
       while (root.firstChild) root.firstChild.remove();
       // root.innerText = 'Loading..';
 
@@ -124,7 +125,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
 
         cv.onmousedown = (e) => {
           e.stopPropagation();
-        }
+        };
         cv.style.cursor = 'default';
 
 
@@ -149,6 +150,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
         let hoverClick: 'no' | 'maybe' | 'yes' = 'no';
         attachDragToX(cv,
           (e) => {
+            bringToFront();
             dragInfo.x = trn.x;
             dragInfo.y = trn.y;
             const w = clientToWorld({ x: e.offsetX, y: e.offsetY});
@@ -219,7 +221,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           })
 
           interface Node {
-            type: 'node'
+            type: 'node';
             locator: NodeLocator;
             name?: string;
             children: (Node[]) | { type: 'placeholder', num: number };
@@ -284,8 +286,8 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
               ctx.fillStyle = '#AAA';
               cv.style.cursor = 'pointer';
-              const { start, end } = node.locator.result;
-              if (start && end) {
+              const { start, end, external } = node.locator.result;
+              if (start && end && !external) {
                 didHighlightSomething = true;
                 hasActiveSpanHighlight = true;
                 env.updateSpanHighlight({
@@ -302,8 +304,14 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             }
             ctx.fillRect(renderx, rendery, nodew, nodeh);
 
-            ctx.strokeStyle = '4px black';
-            ctx.strokeRect(renderx, rendery, nodew, nodeh);
+            ctx.strokeStyle = '4px black dashed';
+            if (node.locator.steps.length > 0 && node.locator.steps[node.locator.steps.length - 1].type === 'nta') {
+              ctx.setLineDash([5, 5])
+              ctx.strokeRect(renderx, rendery, nodew, nodeh);
+              ctx.setLineDash([])
+            } else {
+              ctx.strokeRect(renderx, rendery, nodew, nodeh);
+            }
 
 
             ctx.fillStyle = `black`;
@@ -345,7 +353,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             if (!Array.isArray(node.children)) {
               if (node.children?.type == 'placeholder') {
                 // More children available
-                console.log('placeholder:', node.children);
+                // console.log('placeholder:', node.children);
                 const msg = `᠁`;
                 const fonth = (nodeh * 0.5)|0;
                 ctx.font = `${fonth}px sans`;
@@ -364,7 +372,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                   cv.style.cursor = 'pointer';
                   if (hoverClick == 'yes') {
                     hoverClick = 'no';
-                    displayAstModal(env, null, node.locator);
+                    displayAstModal(env, null, node.locator, 'downwards');
                   }
                 }
                 const msgMeasure = ctx.measureText(msg);
@@ -396,7 +404,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               ctx.beginPath(); // Start a new path
               ctx.moveTo(renderx + nodew/2, rendery + nodeh);
 
-              const paddedBottomY = rendery + nodeh + nodepady * 0.25;
+              const paddedBottomY = rendery + nodeh + nodepady * 0.5;
               ctx.lineTo(renderx + nodew/2, paddedBottomY);
               // ctx.lineTo(ox + childOffX + chbb.x / 2, oy + childOffY); // Draw a line to (150, 100)
 
@@ -464,7 +472,10 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
 
   env.performRpcQuery({
     attr: {
-      name: 'meta:listTree'
+      name: ({
+        'upwards': 'meta:listTreeUpwards',
+        'downwards': 'meta:listTreeDownwards'
+      }[listDirection] || 'meta:listTreeDownwards'),
     },
     locator,
   })
@@ -506,6 +517,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     data: {
       type: 'ast',
       locator,
+      direction: listDirection,
     },
   });
 };

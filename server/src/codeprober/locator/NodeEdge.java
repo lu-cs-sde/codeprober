@@ -10,7 +10,7 @@ import codeprober.ast.AstNode;
 abstract class NodeEdge {
 
 	public static enum NodeEdgeType {
-		ChildIndex("child"), NTA("nta"), TypeAtLoc("tal");
+		ChildIndex("child"), FN("nta"), TypeAtLoc("tal");
 
 		private String jsonRepresentation;
 
@@ -48,9 +48,9 @@ abstract class NodeEdge {
 		obj.put("value", value);
 		return obj;
 	}
-	
+
 	@Override
 	public String toString() {
-		return type + "<" + targetNode +">";
+		return type + "<" + targetNode + ">";
 	}
 }

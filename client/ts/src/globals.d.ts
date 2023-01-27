@@ -59,7 +59,9 @@ interface WindowStateDataProbe {
 interface WindowStateDataAst {
   type: 'ast';
   locator: NodeLocator;
+  direction: 'upwards' | 'downwards';
 }
+
 type WindowStateData = WindowStateDataProbe | WindowStateDataAst;
 
 interface WindowState {
@@ -147,6 +149,7 @@ interface TypeAtLoc {
   label?: string;
   start: number;
   end: number;
+  external?: boolean;
 }
 
 interface TypeAtLocStep extends TypeAtLoc {

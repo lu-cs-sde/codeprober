@@ -6,7 +6,7 @@ interface CancelToken {
 }
 
 interface ShowWindowArgs {
-  render: (container: HTMLElement, cancelToken: CancelToken) => void;
+  render: (container: HTMLElement, info: { cancelToken: CancelToken; bringToFront: () => void; }) => void;
   pos?: ModalPosition | null;
   rootStyle?: string;
   onFinishedMove?: () => void;
@@ -21,7 +21,11 @@ const showWindow = (args: ShowWindowArgs) => {
   root.tabIndex = 0;
   root.classList.add('modalWindow');
   (root.style as any) = `${rootStyle || ''}`;
-  root.style.zIndex = `${modalZIndexGenerator()}`;
+
+  const bringToFront = () => {
+    root.style.zIndex = `${modalZIndexGenerator()}`;
+  };
+  bringToFront();
   root.style.maxWidth = '40vw';
 
   root.onkeydown = (e) => {
@@ -47,7 +51,7 @@ const showWindow = (args: ShowWindowArgs) => {
   // contentRoot.style.minHeight = '4rem';
   // contentRoot.style.overflow = 'inherit';
   // contentRoot.style.display = 'contents';
-  render(contentRoot, lastCancelToken);
+  render(contentRoot, { cancelToken: lastCancelToken, bringToFront });
   root.appendChild(contentRoot);
 
 
@@ -105,7 +109,7 @@ const showWindow = (args: ShowWindowArgs) => {
       lastCancelToken.cancelled = true;
       lastCancelToken = {};
       // root.innerHTML = '';
-      render(contentRoot, lastCancelToken);
+      render(contentRoot, { cancelToken: lastCancelToken, bringToFront });
     },
     getPos: dragToMove.getPos,
   };

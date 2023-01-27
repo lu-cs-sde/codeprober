@@ -53,7 +53,8 @@ public class TestApplyLocator extends TestCase {
 		final AstNode shallowBar = info.ast.getNthChild(info, 0);
 		final AstNode deepBar = info.ast.getNthChild(info, 1).getNthChild(info, 0);
 		final JSONObject locator = new JSONObject().put("steps", new JSONArray().put(//
-				new TypeAtLocEdge(info.ast, TypeAtLoc.from(info, info.ast), shallowBar, TypeAtLoc.from(info, shallowBar), 1).toJson()));
+				new TypeAtLocEdge(info.ast, TypeAtLoc.from(info, info.ast), shallowBar,
+						TypeAtLoc.from(info, shallowBar), 1, false).toJson()));
 
 		final JSONObject talStep = locator.getJSONArray("steps").getJSONObject(0);
 		assertEquals("tal", talStep.getString("type"));
@@ -73,10 +74,26 @@ public class TestApplyLocator extends TestCase {
 		assertSame(deepBar, result.node);
 	}
 
-//	.add(new Bar(lc(1, 2), lc(1, 4))) //
 	public void testMirrorAmbiguousBar() {
 		assertMirror(TestData.getFlatAmbiguous(), info -> info.ast.getNthChild(info, 0).getNthChild(info, 0));
 		assertMirror(TestData.getFlatAmbiguous(), info -> info.ast.getNthChild(info, 0).getNthChild(info, 1));
+	}
+
+	public void testMirrorIdenticalBarsWithDifferentParents() {
+		assertMirror(TestData.getIdenticalBarsWithDifferentParents(), info -> info.ast.getNthChild(info, 0).getNthChild(info, 0));
+		assertMirror(TestData.getIdenticalBarsWithDifferentParents(), info -> info.ast.getNthChild(info, 1).getNthChild(info, 0));
+	}
+	public void testMirrorIdenticalBarsWithDifferentGrandParents() {
+		// TODO turn this into more controlled test cases. This is where "shortHop"/"startNewTAL" is needed
+		assertMirror(TestData.getIdenticalBarsWithDifferentGrandParents(), info -> info.ast.getNthChild(info, 0).getNthChild(info, 0).getNthChild(info, 0));
+		assertMirror(TestData.getIdenticalBarsWithDifferentGrandParents(), info -> info.ast.getNthChild(info, 1).getNthChild(info, 0).getNthChild(info, 0));
+	}
+
+	public void testMirrorMultipleAmbiguousLevels() {
+		assertMirror(TestData.getMultipleAmbiguousLevels(), info -> info.ast //
+				.getNthChild(info, 0)   // Foo
+				.getNthChild(info, 0)   // Bar
+				.getNthChild(info, 0)); // Baz
 	}
 
 	public void testSlightlyIncorrectLocator() {

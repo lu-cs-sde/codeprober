@@ -29,6 +29,8 @@ public class AstNode {
 
 	private Boolean isNonOverlappingSibling = null;
 
+	private Boolean shouldBeVisibleInAstView;
+
 	public AstNode(Object underlyingAstNode) {
 		if (underlyingAstNode == null) {
 			throw new NullPointerException("Missing underlying node");
@@ -74,7 +76,7 @@ public class AstNode {
 			return isNonOverlappingSibling;
 		}
 
-		if (parent == null) {
+		if (parent() == null) {
 			isNonOverlappingSibling = false;
 		} else {
 			Span our = getRecoveredSpan(info);
@@ -237,10 +239,48 @@ public class AstNode {
 				}
 				this.parent = new AstNode(parent);
 				this.parent.visitedNodes.addAll(this.visitedNodes);
+//				this.parent.registerChild(info, this);
 			}
 			expandedParent = true;
 		}
 		return parent;
+	}
+
+//	private void registerChild(AstInfo info, AstNode potentialChild) {
+//		final int num = getNumChildren(info);
+//		for (int i = 0; i < num; ++i) {
+//			getNthChild(info, i);
+//		}
+//	}
+
+	public boolean hasSomeChildVisibleInAstView(AstInfo info) {
+		final int num = getNumChildren(info);
+		for (int i = 0; i < num; i++) {
+			if (getNthChild(info, i).shouldBeVisibleInAstView()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public boolean shouldBeVisibleInAstView() {
+		if (shouldBeVisibleInAstView == null) {
+			shouldBeVisibleInAstView = true;
+			try {
+				Boolean vis = (Boolean) Reflect.invoke0(underlyingAstNode, "cpr_astVisible");
+				if (vis != null) {
+					shouldBeVisibleInAstView = vis;
+				} else {
+					System.err.println("Got null value from cpr_astVisible");
+				}
+			} catch (ClassCastException e) {
+				System.err.println("Got non-boolean value from cpr_astVisible");
+				e.printStackTrace();
+			} catch (InvokeProblem e) {
+				// OK, this is an optional attribute after all
+			}
+		}
+		return shouldBeVisibleInAstView;
 	}
 
 	public int getNumChildren(AstInfo info) {
@@ -266,19 +306,29 @@ public class AstNode {
 	}
 
 	public AstNode getNthChild(AstInfo info, int n) {
+		return getNthChild(info, n, null);
+	}
+
+	private AstNode getNthChild(AstInfo info, int n, AstNode potentialOverride) {
 		final int len = getNumChildren(info);
 		if (n < 0 || n >= len) {
 			throw new ArrayIndexOutOfBoundsException(
 					"This node has " + len + " " + (len == 1 ? "child" : "children") + ", index " + n + " is invalid");
 		}
 		if (children[n] == null) {
-			children[n] = new AstNode(Reflect.invokeN(underlyingAstNode, "getChild", new Class<?>[] { Integer.TYPE },
-					new Object[] { n }));
+			final Object rawChild = Reflect.invokeN(underlyingAstNode, "getChild", new Class<?>[] { Integer.TYPE },
+					new Object[] { n });
+			if (potentialOverride != null && potentialOverride.underlyingAstNode == rawChild) {
+				children[n] = potentialOverride;
+			} else {
+				children[n] = new AstNode(rawChild);
+			}
 			children[n].parent = this;
 			children[n].expandedParent = true;
 			children[n].visitedNodes.addAll(this.visitedNodes);
 		}
 		return children[n];
+
 	}
 
 	public Iterable<AstNode> getChildren(AstInfo info) {
@@ -320,5 +370,17 @@ public class AstNode {
 
 	public boolean sharesUnderlyingNode(AstNode other) {
 		return underlyingAstNode == other.underlyingAstNode;
+	}
+
+	public boolean isInsideExternalFile(AstInfo info) {
+		if (info.hasOverride0(underlyingAstNode.getClass(), "cpr_isInsideExternalFile")) {
+			final Object res = Reflect.invoke0(underlyingAstNode, "cpr_isInsideExternalFile");
+			if (res instanceof Boolean) {
+				return ((Boolean)res).booleanValue();
+			}
+			System.out.println("Got non-boolean from cpr_isInsideExternalFile: " + res);
+			return false;
+		}
+		return false;
 	}
 }

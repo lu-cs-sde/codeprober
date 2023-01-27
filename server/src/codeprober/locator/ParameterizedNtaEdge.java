@@ -11,7 +11,7 @@ import codeprober.protocol.ParameterValue;
 public class ParameterizedNtaEdge extends NodeEdge {
 	public ParameterizedNtaEdge(AstNode sourceNode, TypeAtLoc sourceLoc, AstNode targetNode, TypeAtLoc targetLoc,
 			String ntaName, List<ParameterValue> arguments) {
-		super(sourceNode, sourceLoc, targetNode, targetLoc, NodeEdgeType.NTA, buildMthObj(ntaName, arguments));
+		super(sourceNode, sourceLoc, targetNode, targetLoc, NodeEdgeType.FN, buildMthObj(ntaName, arguments));
 	}
 
 	private static JSONObject buildMthObj(String ntaName, List<ParameterValue> arguments) {

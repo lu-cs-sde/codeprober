@@ -12,7 +12,7 @@ const adjustLocator = (adj: LocationAdjuster, loc: NodeLocator) => {
       case 'nta': {
         step.value.args.forEach(({ args }) => {
           if (args) {
-            args.forEach(({ value }) => {
+            args.forEach(({ value }) => {
               if (value && typeof value === 'object') {
                 adjustLocator(adj, value);
               }

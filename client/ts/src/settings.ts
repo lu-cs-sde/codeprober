@@ -54,7 +54,7 @@ const settings = {
   getAstCacheStrategy: () => settings.get().astCacheStrategy ?? 'PARTIAL',
   setAstCacheStrategy: (astCacheStrategy: string) => settings.set({ ...settings.get(), astCacheStrategy }),
 
-  getProbeWindowStates: () => {
+  getProbeWindowStates: (): WindowState[] => {
     const ret = settings.get().probeWindowStates ?? [];
 
     return ret.map((item) => {

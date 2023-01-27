@@ -64,10 +64,17 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
             }
           },
           {
-            title: 'Render AST',
+            title: 'Render AST downwards',
             invoke: () => {
               cleanup();
-              displayAstModal(env, popup.getPos(), locator);
+              displayAstModal(env, popup.getPos(), locator, 'downwards');
+            }
+          },
+          {
+            title: 'Render AST upwards',
+            invoke: () => {
+              cleanup();
+              displayAstModal(env, popup.getPos(), locator, 'upwards');
             }
           },
         ],

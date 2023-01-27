@@ -8,6 +8,7 @@ import org.json.JSONObject;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
+import codeprober.locator.CreateLocator.LocatorMergeMethod;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.ParameterValue;
@@ -50,15 +51,61 @@ public class ApplyLocator {
 	private static class AmbiguousTal extends RuntimeException {
 	}
 
+	public static boolean isFirstPerfectMatchExpected(AstInfo info, AstNode src, TypeAtLoc tal, int depth,
+			AstNode expected) {
+		return getFirstPerfectMatch(info, src, info.loadAstClass.apply(tal.type), tal.loc.start, tal.loc.end, depth,
+				expected) == expected;
+	}
+
+	private static AstNode getFirstPerfectMatch(AstInfo info, AstNode src, Class<?> nodeType, int startPos, int endPos,
+			int depth, AstNode expected) {
+
+		if (depth < 0) {
+			return null;
+		}
+		if (src.underlyingAstNode == expected.underlyingAstNode) {
+			return expected;
+		}
+
+		final Span nodePos;
+		try {
+			nodePos = src.getRecoveredSpan(info);
+		} catch (InvokeProblem e) {
+			System.out.println("Error while extracting node position for " + src);
+			e.printStackTrace();
+			return null;
+		}
+
+		if (!nodePos.covers(startPos, endPos)) {
+			return null;
+		}
+
+		if (depth == 0 && startPos == nodePos.start && endPos == nodePos.end) {
+			if (nodeType.isInstance(src.underlyingAstNode)) {
+				return src;
+			}
+		}
+		for (AstNode child : src.getChildren(info)) {
+			if (child.underlyingAstNode == expected.underlyingAstNode) {
+				return expected;
+			}
+			AstNode match = getFirstPerfectMatch(info, child, nodeType, startPos, endPos, depth - 1, expected);
+			if (match != null) {
+				return match;
+			}
+		}
+		return null;
+	}
+
+
 	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, Class<?> nodeType, int startPos,
 			int endPos, int depth, PositionRecoveryStrategy recoveryStrategy, boolean failOnAmbiguity) {
-		return bestMatchingNode(info, astNode, nodeType, startPos, endPos, depth, recoveryStrategy, failOnAmbiguity,
-				null, Integer.MIN_VALUE);
+		return bestMatchingNode(info, astNode, nodeType, startPos, endPos, depth, failOnAmbiguity, null,
+				Integer.MIN_VALUE);
 	}
 
 	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, Class<?> nodeType, int startPos,
-			int endPos, int depth, PositionRecoveryStrategy recoveryStrategy, boolean failOnAmbiguity,
-			AstNode ignoreTraversalOn, int failOnDepthBelowLevel) {
+			int endPos, int depth, boolean failOnAmbiguity, AstNode ignoreTraversalOn, int failOnDepthBelowLevel) {
 		if (depth < failOnDepthBelowLevel) {
 			return null;
 		}
@@ -101,8 +148,8 @@ public class ApplyLocator {
 			if (ignoreTraversalOn != null && ignoreTraversalOn.underlyingAstNode == child.underlyingAstNode) {
 				continue;
 			}
-			MatchedNode recurse = bestMatchingNode(info, child, nodeType, startPos, endPos, depth - 1, recoveryStrategy,
-					failOnAmbiguity, ignoreTraversalOn, failOnDepthBelowLevel);
+			MatchedNode recurse = bestMatchingNode(info, child, nodeType, startPos, endPos, depth - 1, failOnAmbiguity,
+					ignoreTraversalOn, failOnDepthBelowLevel);
 			if (recurse != null) {
 				final boolean isBetterMatch = //
 						// Better depth has highest priority
@@ -135,12 +182,12 @@ public class ApplyLocator {
 //		case "tal": {
 //			final JSONObject tal = step.getJSONObject("value");
 		try {
-			final MatchedNode match = bestMatchingNode(info, sourceNode,
-					info.loadAstClass.apply(tal.type), tal.loc.start, tal.loc.end, depth,
-					info.recoveryStrategy, true, ignoreTraversalOn, Integer.MIN_VALUE);
+			final MatchedNode match = bestMatchingNode(info, sourceNode, info.loadAstClass.apply(tal.type),
+					tal.loc.start, tal.loc.end, depth, true, ignoreTraversalOn, Integer.MIN_VALUE);
 			if (ignoreTraversalOn != null) {
-				// Matching anything means that there are >=two matches -> ambiguous
-				return match != null;
+				// Matching anything on the same depth means that there are >=two matches ->
+				// ambiguous
+				return match != null; // && match.depthDiff == 0;
 			}
 			// Two matches would throw, only need to check for zero matches here
 			return match == null;
@@ -175,7 +222,8 @@ public class ApplyLocator {
 						final Class<?>[] argsTypes = new Class<?>[args.length()];
 						final String ntaName = mth.getString("name");
 						for (int j = 0; j < args.length(); ++j) {
-							final ParameterValue param = DecodeValue.decode(info, args.getJSONObject(j), new JSONArray());
+							final ParameterValue param = DecodeValue.decode(info, args.getJSONObject(j),
+									new JSONArray());
 							if (param == null) {
 								System.out.println("Failed decoding parameter " + i + " for NTA '" + ntaName + "'");
 								return null;
@@ -245,6 +293,40 @@ public class ApplyLocator {
 		}
 		if (matchedNode == null || matchPos == null || matchedNodeLocator == null) {
 			return null;
+		}
+		if (System.getProperty("DEBUG_MERGE_METHODS") != null) {
+			final JSONObject cmp;
+			CreateLocator.setMergeMethod(LocatorMergeMethod.PAPER_VERSION);
+			try {
+				cmp = CreateLocator.fromNode(info, matchedNode);
+			} finally {
+				CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+			}
+			System.out.println("new: " + cmp.toString(2));
+			if (!matchedNodeLocator.toString().equals(cmp.toString())) {
+				Thread.dumpStack();
+				System.err.println("Diff locator!!");
+				System.err.println("#   opt: " + matchedNodeLocator.toString(2));
+				System.err.println("# paper: " + cmp.toString(2));
+
+				CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+				try {
+					CreateLocator.fromNode(info, matchedNode);
+				} finally {
+					CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+				}
+
+				CreateLocator.setMergeMethod(LocatorMergeMethod.PAPER_VERSION);
+				try {
+					CreateLocator.fromNode(info, matchedNode);
+				} finally {
+					CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+				}
+
+//			System.exit(1);
+			} else {
+//			System.out.println("Same locator");
+			}
 		}
 		return new ResolvedNode(matchedNode, matchPos, matchedNodeLocator);
 	}

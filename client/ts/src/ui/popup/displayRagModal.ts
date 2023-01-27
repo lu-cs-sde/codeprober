@@ -20,7 +20,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
         min-width: 12rem;
         min-height: 4rem;
       `,
-    render: (root, cancelToken) => {
+    render: (root, { cancelToken }) => {
       // while (root.firstChild) {
       //   root.firstChild.remove();
       // }

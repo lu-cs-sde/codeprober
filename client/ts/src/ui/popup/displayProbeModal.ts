@@ -41,7 +41,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
           title: 'Duplicate window',
           invoke: () => {
             const pos = queryWindow.getPos();
-            displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, JSON.parse(JSON.stringify(locator)), attr);
+            displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, JSON.parse(JSON.stringify(locator)), attr);
           },
         },
         {
@@ -203,6 +203,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
               }
             }
           },
+          external: locator.result.external,
         });
         if (activeStickyColorClass) {
           applySticky();
@@ -230,7 +231,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
     `,
     resizable: true,
     onFinishedMove: () => env.triggerWindowSave(),
-    render: (root, cancelToken) => {
+    render: (root, { cancelToken }) => {
       if (lastSpinner != null) {
         lastSpinner.style.display = 'inline-block';
         lastSpinner = null;
@@ -346,12 +347,11 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
     if (adjusters) {
 
       adjusters.forEach(adj => adjustLocator(adj, locator));
-      attr.args?.forEach(({ value }) => {
+      attr.args?.forEach(({ value }) => {
         if (value && typeof value === 'object') {
           adjusters.forEach(adj => adjustLocator(adj, value));
         }
       })
-      // console.log('Adjusted span to:', span);
     }
     if (loading) {
       refreshOnDone = true;
