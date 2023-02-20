@@ -21,7 +21,7 @@ public class TestCreateLocator extends TestCase {
 	}
 
 	private JSONObject createLocator(AstInfo info, AstNode node) {
-		CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+		CreateLocator.setMergeMethod(LocatorMergeMethod.PAPER_VERSION);
 		return CreateLocator.fromNode(info, node);
 	}
 

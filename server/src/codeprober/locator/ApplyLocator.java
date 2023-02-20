@@ -12,7 +12,6 @@ import codeprober.locator.CreateLocator.LocatorMergeMethod;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.ParameterValue;
-import codeprober.protocol.PositionRecoveryStrategy;
 import codeprober.protocol.decode.DecodeValue;
 import codeprober.util.BenchmarkTimer;
 
@@ -97,9 +96,8 @@ public class ApplyLocator {
 		return null;
 	}
 
-
 	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, Class<?> nodeType, int startPos,
-			int endPos, int depth, PositionRecoveryStrategy recoveryStrategy, boolean failOnAmbiguity) {
+			int endPos, int depth, boolean failOnAmbiguity) {
 		return bestMatchingNode(info, astNode, nodeType, startPos, endPos, depth, failOnAmbiguity, null,
 				Integer.MIN_VALUE);
 	}
@@ -137,12 +135,14 @@ public class ApplyLocator {
 			bestError = Math.abs(start - startPos) + Math.abs(end - endPos);
 			bestDepthDiff = Math.abs(depth);
 
-			if (bestDepthDiff <= 0 && !failOnAmbiguity) {
-				// Child nodes cannot be better than this, and we don't care about ambiguity
-				// Return early
-				return new MatchedNode(bestNode, bestError, bestDepthDiff);
+			if (bestError == 0) {
+				if (bestDepthDiff <= 0 && !failOnAmbiguity) {
+					// Child nodes cannot be better than this, and we don't care about ambiguity
+					// Return early
+					return new MatchedNode(bestNode, bestError, bestDepthDiff);
+				}
+				failOnDepthBelowLevel = Math.max(failOnDepthBelowLevel, -bestDepthDiff);
 			}
-			failOnDepthBelowLevel = Math.max(failOnDepthBelowLevel, -bestDepthDiff);
 		}
 		for (AstNode child : astNode.getChildren(info)) {
 			if (ignoreTraversalOn != null && ignoreTraversalOn.underlyingAstNode == child.underlyingAstNode) {
@@ -151,16 +151,25 @@ public class ApplyLocator {
 			MatchedNode recurse = bestMatchingNode(info, child, nodeType, startPos, endPos, depth - 1, failOnAmbiguity,
 					ignoreTraversalOn, failOnDepthBelowLevel);
 			if (recurse != null) {
-				final boolean isBetterMatch = //
-						// Better depth has highest priority
-						recurse.depthDiff < bestDepthDiff
-								// Otherwise, same depth and closer offset -> better
-								|| (recurse.depthDiff == bestDepthDiff && recurse.matchError < bestError);
+				final boolean isBetterMatch;
+				// Checking for better matches has three levels of precedence
+				if ((bestError == 0) != (recurse.matchError == 0)) {
+					// 1) Perfect position match
+					isBetterMatch = recurse.matchError == 0;
+				} else if (recurse.depthDiff != bestDepthDiff) {
+					// 2) Better depth match
+					isBetterMatch = recurse.depthDiff < bestDepthDiff;
+				} else {
+					// 3) Better position match
+					isBetterMatch = recurse.matchError < bestError;
+				}
 				if (isBetterMatch) {
 					bestNode = recurse.matchedNode;
 					bestError = recurse.matchError;
 					bestDepthDiff = recurse.depthDiff;
-					failOnDepthBelowLevel = Math.max(failOnDepthBelowLevel, -bestDepthDiff);
+					if (bestError == 0) {
+						failOnDepthBelowLevel = Math.max(failOnDepthBelowLevel, -bestDepthDiff);
+					}
 				} else if (recurse.depthDiff == bestDepthDiff && recurse.matchError == bestError && failOnAmbiguity) {
 					throw new AmbiguousTal();
 				}
@@ -174,13 +183,6 @@ public class ApplyLocator {
 
 	public static boolean isAmbiguousTal(AstInfo info, AstNode sourceNode, TypeAtLoc tal, int depth,
 			AstNode ignoreTraversalOn) {
-//		switch (step.getString("type")) {
-//		case "nta":
-//		case "child": {
-//			return false;
-//		}
-//		case "tal": {
-//			final JSONObject tal = step.getJSONObject("value");
 		try {
 			final MatchedNode match = bestMatchingNode(info, sourceNode, info.loadAstClass.apply(tal.type),
 					tal.loc.start, tal.loc.end, depth, true, ignoreTraversalOn, Integer.MIN_VALUE);
@@ -194,12 +196,6 @@ public class ApplyLocator {
 		} catch (AmbiguousTal a) {
 			return true;
 		}
-//		}
-//		default: {
-//			System.err.println("Unknown edge type '" + step.getString("type"));
-//			return true;
-//		}
-//		}
 	}
 
 	public static ResolvedNode toNode(AstInfo info, JSONObject locator) {
@@ -242,15 +238,13 @@ public class ApplyLocator {
 						final int depth = tal.getInt("depth");
 						final Class<?> clazz = info.loadAstClass.apply(tal.getString("type"));
 						final AstNode parent = matchedNode;
-						MatchedNode result = bestMatchingNode(info, parent, clazz, start, end, depth,
-								info.recoveryStrategy, false);
+						MatchedNode result = bestMatchingNode(info, parent, clazz, start, end, depth, false);
 
 						if (result == null) {
 							// Sometimes the locator can shift 1 or 2 characters off,
 							// especially if the document enters an invalid state while typing.
 							// We can permit a tiny bit of error and try again
-							result = bestMatchingNode(info, parent, clazz, start - 2, end + 2, depth,
-									info.recoveryStrategy, false);
+							result = bestMatchingNode(info, parent, clazz, start - 2, end + 2, depth, false);
 						}
 						matchedNode = result != null ? result.matchedNode : null;
 						break;
@@ -300,7 +294,7 @@ public class ApplyLocator {
 			try {
 				cmp = CreateLocator.fromNode(info, matchedNode);
 			} finally {
-				CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+				CreateLocator.setMergeMethod(LocatorMergeMethod.OLD_VERSION);
 			}
 			System.out.println("new: " + cmp.toString(2));
 			if (!matchedNodeLocator.toString().equals(cmp.toString())) {
@@ -309,18 +303,18 @@ public class ApplyLocator {
 				System.err.println("#   opt: " + matchedNodeLocator.toString(2));
 				System.err.println("# paper: " + cmp.toString(2));
 
-				CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+				CreateLocator.setMergeMethod(LocatorMergeMethod.OLD_VERSION);
 				try {
 					CreateLocator.fromNode(info, matchedNode);
 				} finally {
-					CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+					CreateLocator.setMergeMethod(LocatorMergeMethod.OLD_VERSION);
 				}
 
 				CreateLocator.setMergeMethod(LocatorMergeMethod.PAPER_VERSION);
 				try {
 					CreateLocator.fromNode(info, matchedNode);
 				} finally {
-					CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+					CreateLocator.setMergeMethod(LocatorMergeMethod.OLD_VERSION);
 				}
 
 //			System.exit(1);

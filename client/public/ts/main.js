@@ -2156,7 +2156,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         cv.style.cursor = 'default';
                         let didHighlightSomething = false;
                         const renderNode = (node, ox, oy) => {
-                            var _a;
+                            var _a, _b;
                             const renderx = ox + (node.boundingBox.x - nodew) / 2;
                             const rendery = oy;
                             if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
@@ -2193,7 +2193,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                             let fonth = (nodeh * 0.5) | 0;
                             renderText: while (true) {
                                 ctx.font = `${fonth}px sans`;
-                                const typeTail = node.locator.result.type.split('\.').slice(-1)[0];
+                                const typeTail = ((_a = node.locator.result.label) !== null && _a !== void 0 ? _a : node.locator.result.type).split('\.').slice(-1)[0];
                                 const txty = rendery + (nodeh - (nodeh - fonth) * 0.5);
                                 if (node.name) {
                                     const typeTailMeasure = ctx.measureText(`: ${typeTail}`);
@@ -2225,7 +2225,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 break;
                             }
                             if (!Array.isArray(node.children)) {
-                                if (((_a = node.children) === null || _a === void 0 ? void 0 : _a.type) == 'placeholder') {
+                                if (((_b = node.children) === null || _b === void 0 ? void 0 : _b.type) == 'placeholder') {
                                     // More children available
                                     // console.log('placeholder:', node.children);
                                     const msg = `᠁`;

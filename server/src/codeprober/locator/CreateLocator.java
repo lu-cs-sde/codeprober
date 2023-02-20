@@ -32,10 +32,12 @@ public class CreateLocator {
 //	private static final boolean useFastTrimAlgorithm = true;
 
 	public static enum LocatorMergeMethod {
-		SKIP, PAPER_VERSION, OPTIMIZED
+		SKIP, PAPER_VERSION, OLD_VERSION;
+
+		public static LocatorMergeMethod DEFAULT_METHOD = PAPER_VERSION;
 	}
 
-	private static LocatorMergeMethod mergeMethod = LocatorMergeMethod.OPTIMIZED;
+	private static LocatorMergeMethod mergeMethod = LocatorMergeMethod.DEFAULT_METHOD;
 
 	public static void setMergeMethod(LocatorMergeMethod mth) {
 		mergeMethod = mth;
@@ -182,8 +184,7 @@ public class CreateLocator {
 				return depth;
 			};
 			final BiFunction<AstNode, AstNode, TypeAtLocEdge> createTAL = (src, dst) -> {
-				return new TypeAtLocEdge(info, src,
-						dst, distance.apply(src, dst), dst.isInsideExternalFile(info));
+				return new TypeAtLocEdge(info, src, dst, distance.apply(src, dst), dst.isInsideExternalFile(info));
 
 			};
 
@@ -206,22 +207,16 @@ public class CreateLocator {
 					foundTALRoot = src.isLocatorTALRoot(info);
 				}
 
-				boolean merge = step.type == NodeEdgeType.FN || foundTALRoot;
-				boolean full = true;
-				if (!merge) {
-					merge = !canUseTal.test(src, dst);
-					full = !canUseTal.test(src, src);
+				if (src != dst && (step.type == NodeEdgeType.FN || foundTALRoot || !canUseTal.test(src, dst))) {
+					ret.add(createTAL.apply(src, dst));
+					dst = src;
 				}
-				if (merge) {
-					if (src != dst) {
-						ret.add(createTAL.apply(src, dst));
-					}
-					if (full) {
-						ret.add(step);
-						dst = src.parent();
-					} else {
-						dst = src;
-					}
+
+				if (step.type == NodeEdgeType.FN || foundTALRoot || !canUseTal.test(src, dst)) {
+					ret.add(step);
+					dst = src.parent();
+				} else {
+					// Let it grow
 				}
 				src = src.parent();
 			}
@@ -232,7 +227,7 @@ public class CreateLocator {
 			return ret;
 		}
 
-		case OPTIMIZED: {
+		case OLD_VERSION: {
 
 			int trimPos = naive.size() - 1;
 			boolean foundTopSubstitutableNode = false;

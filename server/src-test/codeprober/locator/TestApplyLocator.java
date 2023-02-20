@@ -1,5 +1,6 @@
 package codeprober.locator;
 
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 import org.json.JSONArray;
@@ -48,8 +49,12 @@ public class TestApplyLocator extends TestCase {
 		assertMirror(TestData.getFlatAmbiguous(), info -> info.ast.getNthChild(info, 0));
 	}
 
-	public void testMirrorHillyAmbiguousBar() {
-		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
+	private enum ExpectedShiftedMatch {
+		SHALLOW, DEEP
+	}
+
+	private void testMatchAmbiguousBarWithShifter(AstInfo info, ExpectedShiftedMatch expect,
+			BiConsumer<JSONObject, AstNode> adjuster) {
 		final AstNode shallowBar = info.ast.getNthChild(info, 0);
 		final AstNode deepBar = info.ast.getNthChild(info, 1).getNthChild(info, 0);
 		final JSONObject locator = new JSONObject().put("steps", new JSONArray().put(//
@@ -61,17 +66,55 @@ public class TestApplyLocator extends TestCase {
 
 		final JSONObject talPos = talStep.getJSONObject("value");
 		assertEquals(1, talPos.getInt("depth"));
+		assertEquals(shallowBar.getRecoveredSpan(info).start, talPos.getInt("start"));
+		assertEquals(shallowBar.getRecoveredSpan(info).end, talPos.getInt("end"));
 		assertSame(shallowBar, ApplyLocator.toNode(info, locator).node);
-		// Increase depth
-		// Start/end perfectly matches the shallowBar, but depth is now a bad match.
-		// Start/end and depth both mismatch the deepBar, but depth matches "better"
-		// than the shallow, so it should win.
-		talPos.put("depth", 4);
+
+		adjuster.accept(talPos, deepBar);
 
 		final ResolvedNode result = ApplyLocator.toNode(info, locator);
-
 		assertNotNull(result);
-		assertSame(deepBar, result.node);
+		assertSame(expect == ExpectedShiftedMatch.SHALLOW ? shallowBar : deepBar, result.node);
+	}
+
+	public void testMatchAmbiguousBarWithShiftedDepth() {
+		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
+		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.SHALLOW, (talPos, deepBar) -> {
+			// Increase depth so it no longer matches the shallow bar.
+			// Since start/end still matches perfectly, we should still match shallow in the
+			// end.
+			talPos.put("depth", 4);
+		});
+	}
+
+	public void testMatchAmbiguousBarWithShiftedStartEnd() {
+		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
+		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.DEEP, (talPos, deepBar) -> {
+			// Change start/end to perfectly match deepBar
+			// The depth value is wrong, but perfect start/end match should take precedence.
+			talPos.put("start", deepBar.getRecoveredSpan(info).start);
+			talPos.put("end", deepBar.getRecoveredSpan(info).end);
+		});
+	}
+
+	public void testMatchAmbiguousBarWithShiftedStartEndSlightlyOff() {
+		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
+		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.SHALLOW, (talPos, deepBar) -> {
+			// Change start/end to _almost_ match deepBar
+			// Non-perfect matches matter less than depth, so we should match shallow
+			talPos.put("start", deepBar.getRecoveredSpan(info).start);
+			talPos.put("end", deepBar.getRecoveredSpan(info).end + 1);
+		});
+	}
+
+	public void testMatchAmbiguousBarWithShiftedStartDepth() {
+		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
+		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.DEEP, (talPos, deepBar) -> {
+			// Change start to no longer match shallowBar.
+			talPos.put("start", talPos.getInt("start") - 1);
+			// Also change depth to better match deepBar
+			talPos.put("depth", 3);
+		});
 	}
 
 	public void testMirrorAmbiguousBar() {
@@ -80,19 +123,25 @@ public class TestApplyLocator extends TestCase {
 	}
 
 	public void testMirrorIdenticalBarsWithDifferentParents() {
-		assertMirror(TestData.getIdenticalBarsWithDifferentParents(), info -> info.ast.getNthChild(info, 0).getNthChild(info, 0));
-		assertMirror(TestData.getIdenticalBarsWithDifferentParents(), info -> info.ast.getNthChild(info, 1).getNthChild(info, 0));
+		assertMirror(TestData.getIdenticalBarsWithDifferentParents(),
+				info -> info.ast.getNthChild(info, 0).getNthChild(info, 0));
+		assertMirror(TestData.getIdenticalBarsWithDifferentParents(),
+				info -> info.ast.getNthChild(info, 1).getNthChild(info, 0));
 	}
+
 	public void testMirrorIdenticalBarsWithDifferentGrandParents() {
-		// TODO turn this into more controlled test cases. This is where "shortHop"/"startNewTAL" is needed
-		assertMirror(TestData.getIdenticalBarsWithDifferentGrandParents(), info -> info.ast.getNthChild(info, 0).getNthChild(info, 0).getNthChild(info, 0));
-		assertMirror(TestData.getIdenticalBarsWithDifferentGrandParents(), info -> info.ast.getNthChild(info, 1).getNthChild(info, 0).getNthChild(info, 0));
+		// TODO turn this into more controlled test cases. This is where
+		// "shortHop"/"startNewTAL" is needed
+		assertMirror(TestData.getIdenticalBarsWithDifferentGrandParents(),
+				info -> info.ast.getNthChild(info, 0).getNthChild(info, 0).getNthChild(info, 0));
+		assertMirror(TestData.getIdenticalBarsWithDifferentGrandParents(),
+				info -> info.ast.getNthChild(info, 1).getNthChild(info, 0).getNthChild(info, 0));
 	}
 
 	public void testMirrorMultipleAmbiguousLevels() {
 		assertMirror(TestData.getMultipleAmbiguousLevels(), info -> info.ast //
-				.getNthChild(info, 0)   // Foo
-				.getNthChild(info, 0)   // Bar
+				.getNthChild(info, 0) // Foo
+				.getNthChild(info, 0) // Bar
 				.getNthChild(info, 0)); // Baz
 	}
 

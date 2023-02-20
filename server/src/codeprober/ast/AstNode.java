@@ -43,7 +43,26 @@ public class AstNode {
 	}
 
 	public boolean isLocatorTALRoot(AstInfo info) {
-		return underlyingAstNode.getClass() == info.getLocatorTALRoot();
+
+		if (info.hasOverride0(underlyingAstNode.getClass(), "cpr_isTALRoot")) {
+			final Object res = Reflect.invoke0(underlyingAstNode, "cpr_isTALRoot");
+			if (res instanceof Boolean) {
+				return ((Boolean)res).booleanValue();
+			}
+			System.out.println("Got non-boolean from cpr_isInsideExternalFile: " + res);
+			return false;
+		}
+
+		// TODO remove support for this after some time
+		if (underlyingAstNode.getClass() == info.getLocatorTALRoot()) {
+			System.out.println("WARN: Using deprecated property 'cpr_locatorTALRoot' on root node");
+			System.out.println("    | Please implement 'boolean cpr_isTALRoot' on the node of interest instead.");
+			System.out.println("    | For example, if you have 'String Program.cpr_locatorTALRoot() = \"CompilationUnit\";'");
+			System.out.println("    |         ..then change to 'boolean CompilationUnit.cpr_isTALRoot() = true;'");
+			return true;
+		}
+
+		return false;
 	}
 
 	public Boolean showInNodeList(AstInfo info) {

@@ -318,7 +318,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             let fonth = (nodeh * 0.5)|0;
             renderText: while (true) {
               ctx.font = `${fonth}px sans`;
-              const typeTail = node.locator.result.type.split('\.').slice(-1)[0];
+              const typeTail = (node.locator.result.label ?? node.locator.result.type).split('\.').slice(-1)[0];
 
               const txty = rendery + (nodeh - (nodeh-fonth)*0.5);
               if (node.name) {

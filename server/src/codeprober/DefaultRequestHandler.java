@@ -138,7 +138,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 						info, match.node, rootStart + (rootEnd - rootStart) / 2 //
 				)));
 			} finally {
-				CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+				CreateLocator.setMergeMethod(LocatorMergeMethod.DEFAULT_METHOD);
 				BenchmarkTimer.LIST_NODES.exit();
 			}
 			return;
@@ -153,7 +153,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				}
 				retBuilder.put("nodes", listing);
 			} finally {
-				CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+				CreateLocator.setMergeMethod(LocatorMergeMethod.DEFAULT_METHOD);
 			}
 			return;
 		}
@@ -167,7 +167,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				}
 				retBuilder.put("nodes", listing);
 			} finally {
-				CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+				CreateLocator.setMergeMethod(LocatorMergeMethod.DEFAULT_METHOD);
 			}
 			return;
 		}
@@ -248,7 +248,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					try {
 						EncodeResponseValue.encode(info, bodyBuilder, value, new HashSet<>());
 					} finally {
-						CreateLocator.setMergeMethod(LocatorMergeMethod.OPTIMIZED);
+						CreateLocator.setMergeMethod(LocatorMergeMethod.DEFAULT_METHOD);
 					}
 				}
 				retBuilder.put("args", updatedArgs);
