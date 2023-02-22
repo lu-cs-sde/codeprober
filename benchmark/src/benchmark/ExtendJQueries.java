@@ -5,7 +5,7 @@ import org.json.JSONObject;
 
 public class ExtendJQueries {
 
-	private static JSONObject createLookupTypeStep(String pkg, String name) {
+	public static JSONObject createLookupTypeStep(String pkg, String name) {
 		return new JSONObject() //
 				.put("type", "nta") //
 				.put("value", new JSONObject() //
@@ -66,13 +66,7 @@ public class ExtendJQueries {
 		return msgObj;
 	}
 
-	public static JSONObject createStdJavaLibQuery(int rpcId, String sourceFile) {
-
-		JSONArray locatorSteps = new JSONArray();
-//		for (int i = 0; i < 10; i++) {
-//			generateBusyLocatorStep(locatorSteps);
-//		}
-		locatorSteps.put(createLookupTypeStep("java.lang", "Object"));
+	public static JSONObject createStdJavaLibQuery(int rpcId, String sourceFile, JSONArray locatorSteps) {
 
 		final JSONObject msgObj = createBaseMessageObject(rpcId, sourceFile);
 		msgObj.put("query", new JSONObject() //

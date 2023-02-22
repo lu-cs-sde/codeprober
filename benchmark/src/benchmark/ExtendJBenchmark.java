@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 import org.json.JSONArray;
@@ -14,7 +15,7 @@ public class ExtendJBenchmark extends BaseBenchmark {
 
 	private static enum ActionType {
 		CREATE_PROBE, EVALUATE_PROBE, FULL_PARSE_HOT, FULL_PARSE_COLD;
-		
+
 		public boolean requiresWarmup() {
 			return this != FULL_PARSE_COLD;
 		}
@@ -28,6 +29,8 @@ public class ExtendJBenchmark extends BaseBenchmark {
 	private static final int COV_WARMUP_IMPLIED_STEADY_STATE_TIMEOUT;
 	private static final int WARMUP_CYCLE_ITERATION_COUNT;
 
+	private static final boolean USE_PRECISE_LOCATORS_IN_EVAL_TESTS;
+
 	static {
 		NUM_ITERATIONS = Integer.parseInt(System.getProperty("benchmark.iterations", "1000"));
 		NUM_PROBES = Integer.parseInt(System.getProperty("benchmark.probes", "1"));
@@ -38,6 +41,8 @@ public class ExtendJBenchmark extends BaseBenchmark {
 				.parseInt(System.getProperty("benchmark.warmupImpliedSteadyStateTimeout", "10"));
 		WARMUP_CYCLE_ITERATION_COUNT = Integer
 				.parseInt(System.getProperty("benchmark.warmupCycleIterationCount", "100"));
+		USE_PRECISE_LOCATORS_IN_EVAL_TESTS = Boolean
+				.parseBoolean(System.getProperty("benchmark.usePreciseLocatorsInEvalTests", "true"));
 	}
 
 	private static class Measurement {
@@ -96,13 +101,90 @@ public class ExtendJBenchmark extends BaseBenchmark {
 		}
 	}
 
+	private class EvalTestCase {
+
+		private final BiFunction<JSONArray, String, JSONObject> createQuery;
+		private JSONArray impreciseLocator;
+		private JSONArray preciseLocator;
+
+		public EvalTestCase(BiFunction<JSONArray, String, JSONObject> createQuery, JSONArray impreciseLocator) {
+			this.createQuery = createQuery;
+			this.impreciseLocator = impreciseLocator;
+			this.preciseLocator = null;
+		}
+
+		public void prepare() {
+			if (preciseLocator != null || !USE_PRECISE_LOCATORS_IN_EVAL_TESTS) {
+				return;
+			}
+			synchronized (this) {
+				expectedId = (int) (Math.random() * Integer.MAX_VALUE);
+				addIncomingMessageToMeasurements = false;
+			}
+			try {
+				sendMessageAndWaitForResponse(createQuery.apply(impreciseLocator, generateSourceFile()));
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+				throw new RuntimeException();
+			}
+			synchronized (this) {
+				addIncomingMessageToMeasurements = true;
+			}
+			preciseLocator = lastResult.getJSONObject("result").getJSONObject("locator").getJSONArray("steps");
+		}
+
+		public JSONObject getQuery(String sourceFile) {
+			if (!USE_PRECISE_LOCATORS_IN_EVAL_TESTS) {
+				return createQuery.apply(impreciseLocator, sourceFile);
+			}
+			if (preciseLocator == null) {
+				throw new IllegalStateException("Must prepare() first");
+			}
+			return createQuery.apply(preciseLocator, sourceFile);
+		}
+	}
+
 	private int expectedId = -1;
+	private boolean addIncomingMessageToMeasurements = true;
 	private long requestStartNanos;
 	private Measurement measurements = new Measurement();
 	private JSONObject lastResult = new JSONObject();
+	private EvalTestCase[] evalCases;
 
 	public ExtendJBenchmark(Consumer<String> postMessage) {
 		super(postMessage);
+
+		evalCases = new EvalTestCase[] { //
+
+				// Lookup Object.hashCode
+				new EvalTestCase(
+						(locator, sourceFile) -> ExtendJQueries.createStdJavaLibQuery(expectedId, sourceFile, locator),
+						new JSONArray().put(ExtendJQueries.createLookupTypeStep("java.lang", "Object"))), //
+
+				// compilationUnitList.get(..25%..).isEnumDecl()
+				new EvalTestCase(
+						(locator, sourceFile) -> ExtendJQueries.createIsEnumDecl(expectedId, sourceFile, locator),
+						new JSONArray().put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(25))), //
+
+				// "theMonacoFile".tal(StringLiteral).getNumChild()
+				new EvalTestCase(
+						(locator, sourceFile) -> ExtendJQueries.createGetNumChild(expectedId, sourceFile, locator),
+						new JSONArray() //
+								// Our file ("theMonacoFile") is always last (=100)
+								.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(100)) //
+								.put(ExtendJQueries.createTALStep("org.extendj.ast.StringLiteral", (4 << 12),
+										(5 << 12)))), //
+
+				// compilationUnitList.get(..75%..).tal(Modifiers).getNumChild()
+				new EvalTestCase(
+						(locator, sourceFile) -> ExtendJQueries.createGetNumChild(expectedId, sourceFile, locator),
+						new JSONArray() //
+								.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(75)) //
+								.put(ExtendJQueries.createTALStep("org.extendj.ast.Modifiers", (1 << 12), (1024 << 12)))
+
+				), //
+
+		};
 		// TODO Auto-generated constructor stub
 	}
 
@@ -139,16 +221,18 @@ public class ExtendJBenchmark extends BaseBenchmark {
 //				System.out.println("UNIQ resp: " + msgStr +"  | from " + lastSentMessage);
 //			}
 
-			measurements.numSamples++;
-			measurements.endToEndTime += System.nanoTime() - requestStartNanos;
+			if (addIncomingMessageToMeasurements) {
+				measurements.numSamples++;
+				measurements.endToEndTime += System.nanoTime() - requestStartNanos;
 
-			measurements.totalTime += res.getLong("totalTime");
-			measurements.parseTime += res.getLong("parseTime");
-			measurements.createLocatorTime += res.getLong("createLocatorTime");
-			measurements.applyLocatorTime += res.getLong("applyLocatorTime");
-			measurements.attrEvalTime += res.getLong("attrEvalTime");
-			measurements.nodesAtPositionTime += res.getLong("nodesAtPositionTime");
-			measurements.pastaAttrsTime += res.getLong("pastaAttrsTime");
+				measurements.totalTime += res.getLong("totalTime");
+				measurements.parseTime += res.getLong("parseTime");
+				measurements.createLocatorTime += res.getLong("createLocatorTime");
+				measurements.applyLocatorTime += res.getLong("applyLocatorTime");
+				measurements.attrEvalTime += res.getLong("attrEvalTime");
+				measurements.nodesAtPositionTime += res.getLong("nodesAtPositionTime");
+				measurements.pastaAttrsTime += res.getLong("pastaAttrsTime");
+			}
 
 			expectedId = -1;
 //				try {
@@ -187,6 +271,7 @@ public class ExtendJBenchmark extends BaseBenchmark {
 	}
 
 	private void sendMessageAndWaitForResponse(int numProbes) throws InterruptedException {
+
 		final String sourceFile = generateSourceFile();
 
 		final int probeOffset = (int) (Math.random() * numProbes);
@@ -227,34 +312,7 @@ public class ExtendJBenchmark extends BaseBenchmark {
 			default: {
 
 				// Perform random lightweight query
-				switch ((probe + probeOffset) % 4) {
-				case 0:
-					// Lookup Object.hashCode
-					msgObj = ExtendJQueries.createStdJavaLibQuery(expectedId, sourceFile);
-					break;
-				case 1:
-					// compilationUnitList.get(..25%..).isEnumDecl()
-					msgObj = ExtendJQueries.createIsEnumDecl(expectedId, sourceFile, new JSONArray() //
-							.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(25)) //
-					);
-					break;
-				case 2:
-					// "theMonacoFile".tal(StringLiteral).getNumChild()
-					msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
-							.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(100)) // = Our file, it is always
-							// last
-							// (=100)
-							.put(ExtendJQueries.createTALStep("org.extendj.ast.StringLiteral", (4 << 12), (5 << 12))) //
-					);
-					break;
-				case 3:
-				default:
-					// compilationUnitList.get(..75%..).tal(Modifiers).getNumChild()
-					msgObj = ExtendJQueries.createGetNumChild(expectedId, sourceFile, new JSONArray() //
-							.put(ExtendJQueries.createLookupTypeDeclForBenchmarkStep(75)) //
-							.put(ExtendJQueries.createTALStep("org.extendj.ast.Modifiers", (1 << 12), (1024 << 12))) //
-					);
-				}
+				msgObj = evalCases[(probe + probeOffset) % evalCases.length].getQuery(sourceFile);
 				break;
 			}
 			}
@@ -282,6 +340,12 @@ public class ExtendJBenchmark extends BaseBenchmark {
 
 	@Override
 	public void run() throws InterruptedException {
+		if (ACTION_TYPE == ActionType.EVALUATE_PROBE) {
+			for (EvalTestCase etc : evalCases) {
+				etc.prepare();
+			}
+		}
+
 		if (ACTION_TYPE.requiresWarmup()) {
 			warmup();
 		} else {
