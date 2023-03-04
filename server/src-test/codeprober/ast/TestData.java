@@ -9,6 +9,7 @@ import java.util.Map;
 import codeprober.AstInfo;
 import codeprober.ast.ASTNodeAnnotation.Attribute;
 import codeprober.metaprogramming.AstNodeApiStyle;
+import codeprober.metaprogramming.TypeIdentificationStyle;
 import codeprober.protocol.PositionRecoveryStrategy;
 
 public class TestData {
@@ -133,6 +134,20 @@ public class TestData {
 		public boolean cpr_isInsideExternalFile() {
 			return true;
 		}
+	}
+
+	public static class Labeled extends Node {
+		private String label;
+
+		public Labeled(int start, int end, String label) {
+			super(start, end);
+			this.label = label;
+		}
+
+		public String cpr_nodeLabel() {
+			return label;
+		}
+
 	}
 
 	private static int lc(int line, int col) {
@@ -344,10 +359,29 @@ public class TestData {
 				.add(new Foo(0, 0)) //
 				.add(new Foo(lc(3, 2), lc(5, 2)) //
 						.add(new Bar(lc(4, 4), lc(4, 5))));
+	}
 
+	/**
+	 * Get an AST looking like this:
+	 *
+	 * <pre>
+	 * 1 Program {
+	 * 1   Labeled[Lbl1] { }
+	 * 1   Labeled[Lbl2] { }
+	 * 1 }
+	 * </pre>
+	 */
+	public static Object getWithLabels() {
+		return new Program(lc(1, 1), lc(1, 1)) //
+				.add(new Labeled(lc(1, 1), lc(1, 1), "Lbl1")) //
+				.add(new Labeled(lc(1, 1), lc(1, 1), "Lbl2")); //
 	}
 
 	public static AstInfo getInfo(AstNode root) {
+		return getInfo(root, TypeIdentificationStyle.REFLECTION);
+	}
+
+	public static AstInfo getInfo(AstNode root, TypeIdentificationStyle typeIdStyle) {
 		return new AstInfo(root, PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD, AstNodeApiStyle.BEAVER_PACKED_BITS,
 				cn -> {
 					try {
@@ -356,6 +390,6 @@ public class TestData {
 						e.printStackTrace();
 						throw new RuntimeException(e);
 					}
-				});
+				}, typeIdStyle);
 	}
 }

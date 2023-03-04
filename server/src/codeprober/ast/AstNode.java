@@ -6,8 +6,8 @@ import java.util.Set;
 
 import codeprober.AstInfo;
 import codeprober.locator.Span;
-import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.AstNodeApiStyle;
+import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.PositionRecoveryStrategy;
 
@@ -47,7 +47,7 @@ public class AstNode {
 		if (info.hasOverride0(underlyingAstNode.getClass(), "cpr_isTALRoot")) {
 			final Object res = Reflect.invoke0(underlyingAstNode, "cpr_isTALRoot");
 			if (res instanceof Boolean) {
-				return ((Boolean)res).booleanValue();
+				return ((Boolean) res).booleanValue();
 			}
 			System.out.println("Got non-boolean from cpr_isInsideExternalFile: " + res);
 			return false;
@@ -395,11 +395,20 @@ public class AstNode {
 		if (info.hasOverride0(underlyingAstNode.getClass(), "cpr_isInsideExternalFile")) {
 			final Object res = Reflect.invoke0(underlyingAstNode, "cpr_isInsideExternalFile");
 			if (res instanceof Boolean) {
-				return ((Boolean)res).booleanValue();
+				return ((Boolean) res).booleanValue();
 			}
 			System.out.println("Got non-boolean from cpr_isInsideExternalFile: " + res);
 			return false;
 		}
 		return false;
+	}
+
+	public String getNodeLabel() {
+		try {
+			return (String)Reflect.invoke0(underlyingAstNode, "cpr_nodeLabel");
+		} catch (InvokeProblem | ClassCastException ip) {
+			// OK, nodeLabel is optional
+			return null;
+		}
 	}
 }

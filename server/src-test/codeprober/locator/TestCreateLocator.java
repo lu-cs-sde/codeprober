@@ -1,5 +1,7 @@
 package codeprober.locator;
 
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 import org.json.JSONArray;
@@ -10,6 +12,7 @@ import codeprober.ast.AstNode;
 import codeprober.ast.TestData;
 import codeprober.locator.CreateLocator.LocatorMergeMethod;
 import codeprober.metaprogramming.Reflect;
+import codeprober.metaprogramming.TypeIdentificationStyle;
 import codeprober.protocol.ParameterTypeDetail;
 import junit.framework.TestCase;
 
@@ -259,6 +262,32 @@ public class TestCreateLocator extends TestCase {
 		assertSpan(qux.getRawSpan(info), tal.getInt("start"), tal.getInt("end"));
 		assertEquals(TestData.Qux.class.getName(), tal.getString("type"));
 		assertEquals(true, tal.getBoolean("external"));
+	}
 
+	public void testCreateLabeled() {
+		final AstNode root = new AstNode(TestData.getWithLabels());
+
+		final BiFunction<JSONObject, String, JSONObject> assertLocator = (locator, expectedSingleStepType) -> {
+			final JSONArray steps = locator.getJSONArray("steps");
+			assertEquals(1, steps.length());
+
+			final JSONObject step = steps.getJSONObject(0);
+			assertEquals(expectedSingleStepType, step.getString("type"));
+
+			return locator;
+		};
+		
+		final BiConsumer<TypeIdentificationStyle, String> testIdentifications = (style, expectedLbl2Type) -> {
+			final AstInfo info = TestData.getInfo(root, style);
+			
+			final AstNode lbl1 = root.getNthChild(info, 0);
+			assertSame(lbl1, ApplyLocator.toNode(info, assertLocator.apply(createLocator(info, lbl1), "tal")).node);
+			
+			final AstNode lbl2 = root.getNthChild(info, 1);
+			assertSame(lbl2, ApplyLocator.toNode(info, assertLocator.apply(createLocator(info, lbl2), expectedLbl2Type)).node);
+		};
+
+		testIdentifications.accept(TypeIdentificationStyle.REFLECTION, "child");
+		testIdentifications.accept(TypeIdentificationStyle.NODE_LABEL, "tal");
 	}
 }

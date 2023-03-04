@@ -10,21 +10,27 @@ public class TypeAtLoc {
 
 	public final String type;
 	public final Span loc;
-//	public final int depth;
+	public final String label;
 
-	public TypeAtLoc(String type, Span position) {
+	public TypeAtLoc(String type, Span position, String label) {
 		this.type = type;
 		this.loc = position;
-//		this.depth = depth;
+		this.label = label;
 	}
 
 	@Override
 	public String toString() {
-		return type + "@[" + loc.start + ".." + loc.end + "]";
+		String labelInsert;
+		if (label != null) {
+			labelInsert = "[" + label + "]";
+		} else {
+			labelInsert = "";
+		}
+		return type + labelInsert + "@[" + loc.start + ".." + loc.end + "]";
 	}
 
 	public static TypeAtLoc from(AstInfo info, AstNode astNode) throws InvokeProblem {
-		return new TypeAtLoc(astNode.underlyingAstNode.getClass().getName(), astNode.getRecoveredSpan(info));
+		return new TypeAtLoc(astNode.underlyingAstNode.getClass().getName(), astNode.getRecoveredSpan(info), astNode.getNodeLabel());
 	}
 
 	@Override
@@ -41,6 +47,6 @@ public class TypeAtLoc {
 		if (getClass() != obj.getClass())
 			return false;
 		final TypeAtLoc other = (TypeAtLoc) obj;
-		return Objects.equals(loc, other.loc) && Objects.equals(type, other.type); // && Objects.equals(depth, other.depth);
+		return Objects.equals(loc, other.loc) && Objects.equals(type, other.type) && Objects.equals(label, other.label);
 	}
 }

@@ -11,6 +11,7 @@ import codeprober.ast.AstNode;
 import codeprober.locator.CreateLocator.LocatorMergeMethod;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
+import codeprober.metaprogramming.TypeIdentifier;
 import codeprober.protocol.ParameterValue;
 import codeprober.protocol.decode.DecodeValue;
 import codeprober.util.BenchmarkTimer;
@@ -52,12 +53,13 @@ public class ApplyLocator {
 
 	public static boolean isFirstPerfectMatchExpected(AstInfo info, AstNode src, TypeAtLoc tal, int depth,
 			AstNode expected) {
-		return getFirstPerfectMatch(info, src, info.loadAstClass.apply(tal.type), tal.loc.start, tal.loc.end, depth,
-				expected) == expected;
+		return getFirstPerfectMatch(info, src,
+				info.typeIdentificationStyle.createIdentifier(info.loadAstClass, tal.type, tal.label), tal.loc.start, tal.loc.end,
+				depth, expected) == expected;
 	}
 
-	private static AstNode getFirstPerfectMatch(AstInfo info, AstNode src, Class<?> nodeType, int startPos, int endPos,
-			int depth, AstNode expected) {
+	private static AstNode getFirstPerfectMatch(AstInfo info, AstNode src, TypeIdentifier typeIdentifier, int startPos,
+			int endPos, int depth, AstNode expected) {
 
 		if (depth < 0) {
 			return null;
@@ -80,7 +82,7 @@ public class ApplyLocator {
 		}
 
 		if (depth == 0 && startPos == nodePos.start && endPos == nodePos.end) {
-			if (nodeType.isInstance(src.underlyingAstNode)) {
+			if (typeIdentifier.matchesDesiredType(src)) {
 				return src;
 			}
 		}
@@ -88,7 +90,7 @@ public class ApplyLocator {
 			if (child.underlyingAstNode == expected.underlyingAstNode) {
 				return expected;
 			}
-			AstNode match = getFirstPerfectMatch(info, child, nodeType, startPos, endPos, depth - 1, expected);
+			AstNode match = getFirstPerfectMatch(info, child, typeIdentifier, startPos, endPos, depth - 1, expected);
 			if (match != null) {
 				return match;
 			}
@@ -96,13 +98,13 @@ public class ApplyLocator {
 		return null;
 	}
 
-	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, Class<?> nodeType, int startPos,
+	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, TypeIdentifier typeIdentifier, int startPos,
 			int endPos, int depth, boolean failOnAmbiguity) {
-		return bestMatchingNode(info, astNode, nodeType, startPos, endPos, depth, failOnAmbiguity, null,
+		return bestMatchingNode(info, astNode, typeIdentifier, startPos, endPos, depth, failOnAmbiguity, null,
 				Integer.MIN_VALUE);
 	}
 
-	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, Class<?> nodeType, int startPos,
+	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, TypeIdentifier typeIdentifier, int startPos,
 			int endPos, int depth, boolean failOnAmbiguity, AstNode ignoreTraversalOn, int failOnDepthBelowLevel) {
 		if (depth < failOnDepthBelowLevel) {
 			return null;
@@ -124,7 +126,7 @@ public class ApplyLocator {
 			return null;
 		}
 
-		AstNode bestNode = nodeType.isInstance(astNode.underlyingAstNode) ? astNode : null;
+		AstNode bestNode = typeIdentifier.matchesDesiredType(astNode) ? astNode : null;
 		int bestError;
 		int bestDepthDiff;
 		if (bestNode == null) {
@@ -148,7 +150,7 @@ public class ApplyLocator {
 			if (ignoreTraversalOn != null && ignoreTraversalOn.underlyingAstNode == child.underlyingAstNode) {
 				continue;
 			}
-			MatchedNode recurse = bestMatchingNode(info, child, nodeType, startPos, endPos, depth - 1, failOnAmbiguity,
+			MatchedNode recurse = bestMatchingNode(info, child, typeIdentifier, startPos, endPos, depth - 1, failOnAmbiguity,
 					ignoreTraversalOn, failOnDepthBelowLevel);
 			if (recurse != null) {
 				final boolean isBetterMatch;
@@ -184,7 +186,7 @@ public class ApplyLocator {
 	public static boolean isAmbiguousTal(AstInfo info, AstNode sourceNode, TypeAtLoc tal, int depth,
 			AstNode ignoreTraversalOn) {
 		try {
-			final MatchedNode match = bestMatchingNode(info, sourceNode, info.loadAstClass.apply(tal.type),
+			final MatchedNode match = bestMatchingNode(info, sourceNode, info.typeIdentificationStyle.createIdentifier(info.loadAstClass, tal.type, tal.label),
 					tal.loc.start, tal.loc.end, depth, true, ignoreTraversalOn, Integer.MIN_VALUE);
 			if (ignoreTraversalOn != null) {
 				// Matching anything on the same depth means that there are >=two matches ->
@@ -236,15 +238,15 @@ public class ApplyLocator {
 						final int start = tal.getInt("start");
 						final int end = tal.getInt("end");
 						final int depth = tal.getInt("depth");
-						final Class<?> clazz = info.loadAstClass.apply(tal.getString("type"));
+						TypeIdentifier typeIdentifier = info.typeIdentificationStyle.createIdentifier(info.loadAstClass, tal.getString("type"), tal.optString("label"));
 						final AstNode parent = matchedNode;
-						MatchedNode result = bestMatchingNode(info, parent, clazz, start, end, depth, false);
+						MatchedNode result = bestMatchingNode(info, parent, typeIdentifier, start, end, depth, false);
 
 						if (result == null) {
 							// Sometimes the locator can shift 1 or 2 characters off,
 							// especially if the document enters an invalid state while typing.
 							// We can permit a tiny bit of error and try again
-							result = bestMatchingNode(info, parent, clazz, start - 2, end + 2, depth, false);
+							result = bestMatchingNode(info, parent, typeIdentifier, start - 2, end + 2, depth, false);
 						}
 						matchedNode = result != null ? result.matchedNode : null;
 						break;

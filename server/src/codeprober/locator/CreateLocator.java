@@ -21,7 +21,6 @@ import org.json.JSONObject;
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.locator.NodeEdge.NodeEdgeType;
-import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.ParameterValue;
 import codeprober.protocol.create.CreateValue;
@@ -43,21 +42,11 @@ public class CreateLocator {
 		mergeMethod = mth;
 	}
 
-//	private static class Locator {
-//		public final List<NodeEdge> steps;
-//
-//		public Locator(List<NodeEdge> steps) {
-//			this.steps = steps;
-//		}
-//	}
-
-	public static void putNodeTypeName(JSONObject dst, Object node) {
-		dst.put("type", node.getClass().getName());
-		try {
-			final String lbl = (String) Reflect.invoke0(node, "cpr_nodeLabel");
+	public static void putNodeTypeValues(AstNode node, JSONObject dst) {
+		dst.put("type", node.underlyingAstNode.getClass().getName());
+		String lbl = node.getNodeLabel();
+		if (lbl != null) {
 			dst.put("label", lbl);
-		} catch (InvokeProblem | ClassCastException e) {
-			// Ignore
 		}
 	}
 
@@ -76,7 +65,7 @@ public class CreateLocator {
 		if (astNode.isInsideExternalFile(info)) {
 			robustResult.put("external", true);
 		}
-		putNodeTypeName(robustResult, astNode.underlyingAstNode);
+		putNodeTypeValues(astNode, robustResult);
 
 		final JSONArray steps = new JSONArray();
 		for (NodeEdge step : edges) {
@@ -265,8 +254,8 @@ public class CreateLocator {
 				final NodeEdge top = naive.get(trimPos + 1 - numPotentialRemovals);
 				final NodeEdge edge = naive.get(trimPos);
 
-				naive.set(trimPos, new TypeAtLocEdge(top.sourceNode, top.sourceLoc, edge.targetNode, edge.targetLoc,
-						numPotentialRemovals, edge.targetNode.isInsideExternalFile(info)));
+				naive.set(trimPos, new TypeAtLocEdge(top.sourceNode, top.sourceLoc, edge.targetNode,
+						edge.targetLoc, numPotentialRemovals, edge.targetNode.isInsideExternalFile(info)));
 				for (int i = 1; i < numPotentialRemovals; i++) {
 					naive.remove(trimPos - i);
 				}

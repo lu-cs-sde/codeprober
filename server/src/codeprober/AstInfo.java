@@ -8,6 +8,7 @@ import codeprober.ast.AstNode;
 import codeprober.metaprogramming.AstNodeApiStyle;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
+import codeprober.metaprogramming.TypeIdentificationStyle;
 import codeprober.protocol.PositionRecoveryStrategy;
 
 public class AstInfo {
@@ -17,6 +18,7 @@ public class AstInfo {
 	public final AstNodeApiStyle astApiStyle;
 	public final Function<String, Class<?>> loadAstClass;
 	public final Class<?> baseAstClazz;
+	public final TypeIdentificationStyle typeIdentificationStyle;
 
 	private Class<?> locatorTALRoot;
 	private boolean loadedLocatorTALRoot;
@@ -24,11 +26,12 @@ public class AstInfo {
 	private final Map<Class<?>, Map<String, Boolean>> hasOverrides = new HashMap<>();
 
 	public AstInfo(AstNode ast, PositionRecoveryStrategy recoveryStrategy,
-			AstNodeApiStyle astApiStyle, Function<String, Class<?>> loadAstClass) {
+			AstNodeApiStyle astApiStyle, Function<String, Class<?>> loadAstClass, TypeIdentificationStyle typeIdentificationStyle) {
 		this.ast = ast;
 		this.recoveryStrategy = recoveryStrategy;
 		this.astApiStyle = astApiStyle;
 		this.loadAstClass = loadAstClass;
+		this.typeIdentificationStyle = typeIdentificationStyle;
 
 		Class<?> baseAstType = ast.underlyingAstNode.getClass();
 		while (true) {
