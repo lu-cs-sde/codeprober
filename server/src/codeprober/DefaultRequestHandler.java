@@ -33,6 +33,7 @@ import codeprober.metaprogramming.AstNodeApiStyle;
 import codeprober.metaprogramming.Reflect;
 import codeprober.metaprogramming.StdIoInterceptor;
 import codeprober.metaprogramming.StreamInterceptor;
+import codeprober.metaprogramming.TypeIdentificationStyle;
 import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.ParameterValue;
 import codeprober.protocol.PositionRecoveryStrategy;
@@ -109,7 +110,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 		final AstInfo info = new AstInfo(astNode,
 				PositionRecoveryStrategy.fallbackParse(queryObj.getString("posRecovery")), positionRepresentation,
-				loadAstClass);
+				loadAstClass, TypeIdentificationStyle.parse(System.getProperty("CPR.TYPE_IDENTIFICATION_STYLE")));
 		lastInfo = info;
 
 		final JSONObject queryBody = queryObj.getJSONObject("query");

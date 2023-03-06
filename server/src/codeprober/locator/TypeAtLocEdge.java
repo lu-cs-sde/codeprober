@@ -24,7 +24,7 @@ public class TypeAtLocEdge extends NodeEdge {
 		if (isExternal) {
 			locatorObj.put("external", true);
 		}
-		CreateLocator.putNodeTypeName(locatorObj, targetNode.underlyingAstNode);
+		CreateLocator.putNodeTypeValues(targetNode, locatorObj);
 		return locatorObj;
 	}
 
