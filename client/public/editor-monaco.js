@@ -240,30 +240,9 @@ window.defineEditor(
       e.changes.forEach((chg) => {
         // Each change is pushing or pulling in some direction
         let { startLineNumber, startColumn, endLineNumber, endColumn } = chg.range;
-        let insertLines = 0;
-        let insertCols = 0;
-        if (chg.text) {
-          // Inserted (and possibly replaced) text
-          insertLines = chg.text.split('\n').length - 1;
-          insertCols = insertLines
-            ? (chg.text.slice(chg.text.lastIndexOf('\n')).length)
-            : chg.text.length;
-        }
-
-        // console.log('handle range change', startLineNumber, startColumn, endLineNumber, endColumn);
-        // console.log('tex:', chg.text);
 
         let lineDiff = startLineNumber - endLineNumber;
         let colDiff = startColumn - endColumn;
-        if ((lineDiff || colDiff) && (insertLines || insertCols)) {
-          // Both removal and insertion at the same time
-          // Calculate which is "bigger" and keep a subset of the changes
-
-
-
-          // lineDiff = startLineNumber - endLineNumber;
-          // colDiff = startColumn - endColumn;
-        }
 
         const applyDeletion = (line, col) => {
           if (!lineDiff && !colDiff) {
