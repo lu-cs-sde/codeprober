@@ -28,9 +28,10 @@ const getHelpTitle = (type: HelpType) => ({
   'duplicate-probe-on-attr': 'Duplicate probe',
   'capture-stdout': 'Capture stdout',
   'location-style': 'Location styles',
+  'ast': 'AST'
 })[type];
 
-const getHelpContents = (type: HelpType) => {
+const getHelpContents = (type: HelpType): (string|HTMLElement)[] => {
   const createHeader = (text: string) => {
     const header = document.createElement('span');
     header.classList.add('syntax-attr');
@@ -530,6 +531,16 @@ aspect MagicOutputDemo {
           ]),
           ``,
           `Note that this setting doesn't affect the hover highlighting. The exact line/column is highlighted, even if the indicator only shows the start line for example.`,
+        ];
+      }
+
+      case 'ast': {
+
+        return [
+          `This window displays the abstract syntax tree (AST) around a node in the tree.`,
+          `Nodes can be hovered and interacted with, just like when the output of a normal probe is an AST node.`,
+          `When you see '᠁', the AST has been truncated due to performance reasons.`,
+          `You can click the '᠁' to continue exploring the AST from that point`,
         ];
       }
   }

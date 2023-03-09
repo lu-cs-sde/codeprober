@@ -31,8 +31,8 @@ const darkColors: typeof lightColors = {
   'syntax-modifier': '#569CD6',
   'syntax-variable': '#9CDCFE',
   'separator': '#FFF',
-  'ast-node-bg': '#4A4A4A',
-  'ast-node-bg-hover': '#7D7D7D',
+  'ast-node-bg': '#1C1C1C',
+  'ast-node-bg-hover': '#666',
 };
 
 const getThemedColor = (lightTheme: boolean, type: ColorType): string => {

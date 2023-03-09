@@ -6,7 +6,6 @@ import adjustLocator from "../../model/adjustLocator";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import attachDragToX from "../create/attachDragToX";
 import displayAttributeModal from "./displayAttributeModal";
-import settings from "../../settings";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import createCullingTaskSubmitterFactory from '../../model/cullingTaskSubmitterFactory';
 import createStickyHighlightController from '../create/createStickyHighlightController';
@@ -37,6 +36,8 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     x: initialTransform?.x ?? 1920/2,
     y: initialTransform?.y ?? 0,
     scale: initialTransform?.scale ?? 1,
+    width: initialTransform?.width ?? 0,
+    height: initialTransform?.height ?? 0,
   };
   let resetTranslationOnRender = !initialTransform;
   const popup = showWindow({
@@ -55,7 +56,12 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
       env.triggerWindowSave()
     },
     onOngoingResize: () => onResizePtr.callback(),
-    onFinishedResize: () => onResizePtr.callback(),
+    onFinishedResize: () => {
+      onResizePtr.callback();
+      const size = popup.getSize();
+      trn.width = size.width;
+      trn.height = size.height;
+    },
     resizable: true,
     render: (root, { bringToFront }) => {
       while (root.firstChild) root.firstChild.remove();
@@ -83,7 +89,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           {
             title: 'Help',
             invoke: () => {
-              displayHelp('property-list-usage', () => {});
+              displayHelp('ast', () => {});
             }
           },
         ],
@@ -390,7 +396,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                   }
                 }
                 const msgMeasure = ctx.measureText(msg);
-                ctx.fillText(msg, renderx + (nodew - msgMeasure.width) / 2, cy + fonth * 0.5);
+                ctx.fillText(msg, renderx + (nodew - msgMeasure.width) / 2, cy + fonth * 0.33);
                 ctx.beginPath();
                 ctx.arc(cx, cy, fonth , 0, Math.PI * 2);
                 ctx.stroke();
@@ -531,17 +537,13 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
       type: 'ast',
       locator,
       direction: listDirection,
-      transform: {
-        ...trn,
-        ...popup.getSize(),
-      },
+      transform: { ...trn, },
     },
   });
 };
 env.themeChangeListeners[queryId] = (light) => {
   lightTheme = light;
   onResizePtr.callback();
-  // popup.refresh();
 };
 env.triggerWindowSave();
 }

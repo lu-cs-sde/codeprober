@@ -1226,6 +1226,7 @@ define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui
         'duplicate-probe-on-attr': 'Duplicate probe',
         'capture-stdout': 'Capture stdout',
         'location-style': 'Location styles',
+        'ast': 'AST'
     })[type];
     const getHelpContents = (type) => {
         const createHeader = (text) => {
@@ -1697,6 +1698,14 @@ aspect MagicOutputDemo {
                     `Note that this setting doesn't affect the hover highlighting. The exact line/column is highlighted, even if the indicator only shows the start line for example.`,
                 ];
             }
+            case 'ast': {
+                return [
+                    `This window displays the abstract syntax tree (AST) around a node in the tree.`,
+                    `Nodes can be hovered and interacted with, just like when the output of a normal probe is an AST node.`,
+                    `When you see '᠁', the AST has been truncated due to performance reasons.`,
+                    `You can click the '᠁' to continue exploring the AST from that point`,
+                ];
+            }
         }
     };
     const displayHelp = (type, setHelpButtonDisabled) => {
@@ -2023,7 +2032,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
     createStickyHighlightController_1 = __importDefault(createStickyHighlightController_1);
     const displayAstModal = (env, modalPos, locator, listDirection, initialTransform) => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e;
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let state = null;
         let lightTheme = env.themeIsLight();
@@ -2047,6 +2056,8 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
             x: (_a = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.x) !== null && _a !== void 0 ? _a : 1920 / 2,
             y: (_b = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.y) !== null && _b !== void 0 ? _b : 0,
             scale: (_c = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.scale) !== null && _c !== void 0 ? _c : 1,
+            width: (_d = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.width) !== null && _d !== void 0 ? _d : 0,
+            height: (_e = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.height) !== null && _e !== void 0 ? _e : 0,
         };
         let resetTranslationOnRender = !initialTransform;
         const popup = (0, showWindow_4.default)({
@@ -2065,7 +2076,12 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                 env.triggerWindowSave();
             },
             onOngoingResize: () => onResizePtr.callback(),
-            onFinishedResize: () => onResizePtr.callback(),
+            onFinishedResize: () => {
+                onResizePtr.callback();
+                const size = popup.getSize();
+                trn.width = size.width;
+                trn.height = size.height;
+            },
             resizable: true,
             render: (root, { bringToFront }) => {
                 while (root.firstChild)
@@ -2092,7 +2108,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         {
                             title: 'Help',
                             invoke: () => {
-                                (0, displayHelp_1.default)('property-list-usage', () => { });
+                                (0, displayHelp_1.default)('ast', () => { });
                             }
                         },
                     ],
@@ -2364,7 +2380,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                         }
                                     }
                                     const msgMeasure = ctx.measureText(msg);
-                                    ctx.fillText(msg, renderx + (nodew - msgMeasure.width) / 2, cy + fonth * 0.5);
+                                    ctx.fillText(msg, renderx + (nodew - msgMeasure.width) / 2, cy + fonth * 0.33);
                                     ctx.beginPath();
                                     ctx.arc(cx, cy, fonth, 0, Math.PI * 2);
                                     ctx.stroke();
@@ -2488,17 +2504,13 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     type: 'ast',
                     locator,
                     direction: listDirection,
-                    transform: {
-                        ...trn,
-                        ...popup.getSize(),
-                    },
+                    transform: { ...trn, },
                 },
             });
         };
         env.themeChangeListeners[queryId] = (light) => {
             lightTheme = light;
             onResizePtr.callback();
-            // popup.refresh();
         };
         env.triggerWindowSave();
     };
@@ -4451,8 +4463,8 @@ const darkColors = {
     'syntax-modifier': '#569CD6',
     'syntax-variable': '#9CDCFE',
     'separator': '#FFF',
-    'ast-node-bg': '#4A4A4A',
-    'ast-node-bg-hover': '#7D7D7D',
+    'ast-node-bg': '#1C1C1C',
+    'ast-node-bg-hover': '#666',
 };
 const getThemedColor = (lightTheme, type) => {
     return (lightTheme ? lightColors : darkColors)[type];
