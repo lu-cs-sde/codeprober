@@ -79,6 +79,13 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 		AstNodeApiStyle positionRepresentation = null;
 		try {
+			if (Reflect.invoke0(ast, "cpr_getStartLine") instanceof Integer) {
+				positionRepresentation = AstNodeApiStyle.CPR_SEPARATE_LINE_COLUMN;
+			}
+		} catch (RuntimeException e) {
+			// Not cpr_getStartLine..
+		}
+		try {
 			if (Reflect.invoke0(ast, "getStartLine") instanceof Integer) {
 				positionRepresentation = AstNodeApiStyle.JASTADD_SEPARATE_LINE_COLUMN;
 			}

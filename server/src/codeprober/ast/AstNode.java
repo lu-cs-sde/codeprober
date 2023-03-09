@@ -57,7 +57,8 @@ public class AstNode {
 		if (underlyingAstNode.getClass() == info.getLocatorTALRoot()) {
 			System.out.println("WARN: Using deprecated property 'cpr_locatorTALRoot' on root node");
 			System.out.println("    | Please implement 'boolean cpr_isTALRoot' on the node of interest instead.");
-			System.out.println("    | For example, if you have 'String Program.cpr_locatorTALRoot() = \"CompilationUnit\";'");
+			System.out.println(
+					"    | For example, if you have 'String Program.cpr_locatorTALRoot() = \"CompilationUnit\";'");
 			System.out.println("    |         ..then change to 'boolean CompilationUnit.cpr_isTALRoot() = true;'");
 			return true;
 		}
@@ -127,6 +128,15 @@ public class AstNode {
 	public Span getRawSpan(AstNodeApiStyle positionRepresentation) throws InvokeProblem {
 		if (this.rawSpan == null) {
 			switch (positionRepresentation) {
+
+			case CPR_SEPARATE_LINE_COLUMN: {
+				this.rawSpan = new Span( //
+						((Integer) Reflect.invoke0(underlyingAstNode, "cpr_getStartLine") << 12)
+								+ ((Number) Reflect.invoke0(underlyingAstNode, "cpr_getStartColumn")).intValue(),
+						((Integer) Reflect.invoke0(underlyingAstNode, "cpr_getEndLine") << 12)
+								+ ((Number) Reflect.invoke0(underlyingAstNode, "cpr_getEndColumn")).intValue());
+				break;
+			}
 			case BEAVER_PACKED_BITS: {
 				this.rawSpan = new Span((Integer) Reflect.invoke0(underlyingAstNode, "getStart"),
 						(Integer) Reflect.invoke0(underlyingAstNode, "getEnd"));
@@ -306,6 +316,7 @@ public class AstNode {
 		if (children == null) {
 			int numCh;
 			switch (info.astApiStyle) {
+			case CPR_SEPARATE_LINE_COLUMN:
 			case BEAVER_PACKED_BITS: // Fall through
 			case JASTADD_SEPARATE_LINE_COLUMN:
 				numCh = (Integer) Reflect.invoke0(underlyingAstNode, "getNumChild");
@@ -405,7 +416,7 @@ public class AstNode {
 
 	public String getNodeLabel() {
 		try {
-			return (String)Reflect.invoke0(underlyingAstNode, "cpr_nodeLabel");
+			return (String) Reflect.invoke0(underlyingAstNode, "cpr_nodeLabel");
 		} catch (InvokeProblem | ClassCastException ip) {
 			// OK, nodeLabel is optional
 			return null;
