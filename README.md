@@ -15,18 +15,22 @@ Even if you built your tool with JastAdd, there are ~2 lines of code you need to
 In your main java file, add the following declaration:
 
 ```java
-public static Object DrAST_root_node;
+public static Object CodeProber_root_node;
 ```
 
 Then, immediately after parsing the input file(s), assign the root of your AST to this variable. E.g:
 
 ```java
 Program myAst = parse(...);
-DrAST_root_node = myAst;
+CodeProber_root_node = myAst;
 ```
 
-The `DrAST_root_node` variable will be used by CodeProber as an entry point for most of its functionality.
-For information about the name "DrAST", see https://bitbucket.org/jastadd/drast/src/master/.
+The `CodeProber_root_node` variable will be used by CodeProber as an entry point for most of its functionality.
+
+If you previously used `DrAST` (https://bitbucket.org/jastadd/drast/src/master/), then you likely have `DrAST_root_node` declared and assigned.
+CodeProber will use this as a fallback if `CodeProber_root_node` is not defined, so you don't have to do any changes.
+However, the help/warning messages inside `CodeProber` that reference the root node will all reference `CodeProber_root_node`, even if you don't have it.
+So for a more consistent experience, consider adding a specific declaration for CodeProber.
 
 ## Running
 
@@ -120,7 +124,7 @@ If you want to "deploy" a new version, i.e make the tiny "New version available"
 
 ## I didn't use JastAdd, what now?
 
-As mentioned above, the API that CodeProber demands of the ASTs found in `DrAST_root_node` hasn't been formalized yet.
+As mentioned above, the API that CodeProber demands of the ASTs found in `CodeProber_root_node` hasn't been formalized yet.
 However, if you are willing to explore a bit yourself then looking in [AstNodeApiStyle.java](server/src/codeprober/metaprogramming/AstNodeApiStyle.java) is a good start. It is an enum describing different styles of "AST APIs". CodeProber tries to detect which style is present by experimentally invoking some methods within each style.
 You can also look in [TestData.java->Node](server/src-test/codeprober/ast/TestData.java), which shows the non-JastAdd node implementation used for test cases.
 
@@ -134,7 +138,7 @@ def find_super(type)
     return type
 ```
 
-`find_super` is called with `DrAST_root_node`. In other words, it finds the top supertype that belongs to the same package as `DrAST_root_node`.
+`find_super` is called with `CodeProber_root_node`. In other words, it finds the top supertype that belongs to the same package as `CodeProber_root_node`.
 
 If you already have an AST structure and don't want/cannot modify it, you can create a wrapper class that fulfills the API above. Something like:
 

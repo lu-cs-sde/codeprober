@@ -19,7 +19,7 @@ import codeprober.metaprogramming.StdIoInterceptor;
  * Provides an AST by running a compiler and using reflection to fetch the
  * JastAdd AST from the compiler.
  * <p>
- * Created by gda10jth on 1/15/16.
+ * Originally by gda10jth on 1/15/16, modified for CodeProber use.
  */
 public class ASTProvider {
 	private static class LoadedJar {
@@ -55,7 +55,7 @@ public class ASTProvider {
 		}
 		lastJar = null;
 	}
-	
+
 	private static LoadedJar lastJar = null;
 
 	private static LoadedJar loadJar(String jarPath)
@@ -75,19 +75,30 @@ public class ASTProvider {
 		String mainClassName = jar.getManifest().getMainAttributes().getValue("Main-Class");
 		Class<?> klass = Class.forName(mainClassName, true, urlClassLoader);
 		Method mainMethod = klass.getMethod("main", String[].class);
-		Field rootField = klass.getField("DrAST_root_node");
+		Field rootField = null;
+
+		// Support two declarations: primarily 'CodeProber_root_node' but fall back to 'DrAST_root_node'.
+		try {
+			rootField = klass.getField("CodeProber_root_node");
+		} catch (NoSuchFieldException e) {
+			rootField = klass.getField("DrAST_root_node");
+		}
+		if (rootField == null) {
+			jar.close();
+			throw new NoSuchFieldException("Neither CodeProber_root_node nor DrAST_root_node defined");
+		}
 		rootField.setAccessible(true);
 
 		lastJar = new LoadedJar(jarPath, jarLastMod, urlClassLoader, klass, jar, mainMethod, rootField);
 		return lastJar;
 	}
-	
+
 	public static boolean hasUnchangedJar(String jarPath) {
 		File jarFile = new File(jarPath);
 		final long jarLastMod = jarFile.lastModified();
 		return lastJar != null && lastJar.jarPath.equals(jarPath) && lastJar.jarLastModified == jarLastMod;
 	}
-	
+
 	public static class ParseResult {
 		public final boolean success;
 		public final JSONArray captures;
@@ -126,7 +137,7 @@ public class ASTProvider {
 						});
 						return new ParseResult(false, captures);
 					}
-					
+
 					final AtomicReference<Exception> innerError = new AtomicReference<>();
 					captures = StdIoInterceptor.performDefaultCapture(() -> {
 						try {
@@ -155,9 +166,9 @@ public class ASTProvider {
 				Object root = ljar.drAstField.get(ljar.mainClazz);
 				if (root == prevRoot) {
 					// Parse ended without unexpected error (System.exit is expected), but nothing changed
-					System.out.println("DrAST_root_node didn't change after main invocation, treating this as a parse failure.");
-					System.out.println("If you perform semantic checks and call System.exit(..) if you get errors, then please do so *after* assigning DrAST_root_node");
-					System.out.println("I.e do 1: parse. 2: update DrAST_root_node. 3: perform semantic checks (optional)");
+					System.out.println("CodeProber_root_node didn't change after main invocation, treating this as a parse failure.");
+					System.out.println("If you perform semantic checks and call System.exit(..) if you get errors, then please do so *after* assigning CodeProber_root_node");
+					System.out.println("I.e do 1: parse. 2: update CodeProber_root_node. 3: perform semantic checks (optional)");
 					return new ParseResult(false, captures);
 				}
 				rootConsumer.accept(root, otherCls -> {

@@ -63,13 +63,13 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			JSONObject retBuilder, JSONArray bodyBuilder) {
 		if (ast == null) {
 			lastInfo = null;
-			bodyBuilder.put("Compiler exited, but no 'DrAST_root_node' found.");
+			bodyBuilder.put("Compiler exited, but no 'CodeProber_root_node' found.");
 			bodyBuilder
 					.put("If parsing failed, you can draw 'red squigglies' in the code to indicate where it failed.");
 			bodyBuilder.put("See overflow menu (⠇) -> \"Magic output messages help\".");
 			bodyBuilder.put(
 					"If parsing succeeded, make sure you declare and assign the following field in your main class:");
-			bodyBuilder.put("'public static Object DrAST_root_node'");
+			bodyBuilder.put("'public static Object CodeProber_root_node'");
 //			bodyBuilder
 //			bodyBuilder.put("If you call System.exit(<not zero>) when parsing fails then this message will disappear.");
 			return;
