@@ -6,6 +6,7 @@ import showWindow from "../create/showWindow";
 import registerNodeSelector from "../create/registerNodeSelector";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import trimTypeName from "../trimTypeName";
+import ModalEnv from '../../model/ModalEnv';
 
 const displayRagModal = (env: ModalEnv, line: number, col: number) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;

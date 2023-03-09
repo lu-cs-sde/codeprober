@@ -381,6 +381,18 @@ select {
   margin: auto 0 0 0;
 }
 
+#show-tests {
+  /* background: none; */
+  /* border: '5px solid red'; */
+  /* color: white; */
+  /* background: #555; */
+  border-radius: 0.25rem;
+  /* border: none; */
+}
+/* body[data-theme-light="true"] {
+
+} */
+
 #input-wrapper, #control-panel {
   margin-top: 0.125rem;
 }
@@ -469,16 +481,16 @@ body[data-theme-light="true"] .monaco-rag-highlight {
 }
 
 
-.settings-toggler:hover { background: #AAA; }
-.settings-toggler, .settings-toggler:active {
+.dim-button:hover { background: #AAA; }
+.dim-button, .dim-button:active {
   cursor: pointer;
   background: #555;
   border-radius: 50%;
   border: none;
 }
-body[data-theme-light="true"] .settings-toggler:hover { background: #AAA; }
-body[data-theme-light="true"] .settings-toggler,
-body[data-theme-light="true"] .settings-toggler:active {
+body[data-theme-light="true"] .dim-button:hover { background: #AAA; }
+body[data-theme-light="true"] .dim-button,
+body[data-theme-light="true"] .dim-button:active {
   background: #EEE;
 }
 .myLineDecoration {
@@ -649,4 +661,17 @@ body[data-theme-light="true"] .context-menu-row {
 } */
 .context-menu-row:hover {
   background: #7777;
+}
+
+.test-category {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  border: 1px solid green;
+  border-radius: 0.25rem;
+  padding: 0.5rem;
+}
+.test-category:hover {
+  cursor: pointer;
+  background: #555;
 }

@@ -809,6 +809,51 @@ define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], f
     };
     exports.default = adjustLocator;
 });
+define("model/TestCase", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
+define("model/TestManager", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createTestManager = void 0;
+    ;
+    const createTestManager = (performRpcQuery) => {
+        let categoryLister = performRpcQuery({ attr: { name: 'meta:listObservers' }, }).then(({ observers }) => {
+            if (!observers) {
+                return 'failed-listing';
+            }
+            return observers;
+        });
+        // let cateogoryLister = performRpcQuery({
+        //   attr: { name: 'meta:getObserver' },
+        //   observerId: 'T1.json',
+        // }).then(({ observer }) => {
+        //   if (!observer) {
+        //     console.warn('Failed reading observer data');
+        //     return;
+        //   }
+        //   try {
+        //     let parsed: BackgroundObserver[] = JSON.parse(observer);
+        //     console.log('obs data:', parsed);
+        //   } catch (e) {
+        //     console.warn('invalid observer data', e);
+        //   }
+        // });
+        // const listing = wsh.sendRpc
+        return {
+            addTest: (category, test) => {
+                console.log('todo add', category, '/', test.name);
+            },
+            listCategories: () => categoryLister,
+        };
+    };
+    exports.createTestManager = createTestManager;
+});
+define("model/ModalEnv", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
 define("ui/create/registerNodeSelector", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -1747,19 +1792,6 @@ aspect MagicOutputDemo {
                         return;
                     }
                     const node = document.createElement('p');
-                    // node.style.whiteSpace = 'pre';
-                    // node.style.maxWidth = '31rem';
-                    // const leadingWhitespace = p.length - p.trimStart().length;
-                    // if (leadingWhitespace) {
-                    //   let ws = '';
-                    //   for (let i = 0; i < leadingWhitespace; i++) {
-                    //     ws = ws + ' ';
-                    //   }
-                    //   const wsnode = document.createElement('span');
-                    //   wsnode.style.whiteSpace = 'pre';
-                    //   wsnode.innerText = ws;
-                    //   node.appendChild(wsnode);
-                    // }
                     node.appendChild(document.createTextNode(p));
                     node.style.marginTop = '0';
                     node.style.marginBottom = '0';
@@ -2845,14 +2877,211 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     };
     exports.default = displayAttributeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/create/createStickyHighlightController"], function (require, exports, createLoadingSpinner_3, createModalTitle_5, createTextSpanIndicator_6, displayAttributeModal_4, showWindow_6, formatAttr_3, displayArgModal_2, registerNodeSelector_3, adjustLocator_4, displayHelp_3, encodeRpcBodyLines_3, trimTypeName_4, createStickyHighlightController_2) {
+define("ui/popup/displayTestAdditionModal", ["require", "exports", "settings", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_3, createLoadingSpinner_3, createModalTitle_5, showWindow_6) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    settings_3 = __importDefault(settings_3);
     createLoadingSpinner_3 = __importDefault(createLoadingSpinner_3);
     createModalTitle_5 = __importDefault(createModalTitle_5);
+    showWindow_6 = __importDefault(showWindow_6);
+    const displayTestAdditionModal = (env, modalPos, locator, attribute, output) => {
+        var _a;
+        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        // Capture this immediately, in case the user modifies text while this dialog is open
+        const srcText = (_a = settings_3.default.getEditorContents()) !== null && _a !== void 0 ? _a : '';
+        let categories = 'loading';
+        const cleanup = () => {
+            popup.remove();
+        };
+        const popup = (0, showWindow_6.default)({
+            rootStyle: `
+      width: 32rem;
+      min-height: 8rem;
+    `,
+            resizable: true,
+            render: (root) => {
+                while (root.firstChild)
+                    root.removeChild(root.firstChild);
+                root.appendChild((0, createModalTitle_5.default)({
+                    renderLeft: (container) => {
+                        const header = document.createElement('span');
+                        header.innerText = `Add Test`;
+                        container.appendChild(header);
+                    },
+                    onClose: cleanup,
+                }).element);
+                if (typeof categories === 'string') {
+                    if (categories === 'loading') {
+                        root.style.display = 'contents';
+                        const spinner = (0, createLoadingSpinner_3.default)();
+                        spinner.classList.add('absoluteCenter');
+                        root.appendChild(spinner);
+                    }
+                    else {
+                        const textHolder = document.createElement('div');
+                        textHolder.style.padding = '0.5rem';
+                        textHolder.innerText = `Failed listing test categories, have you set '-Dcpr.testDir=<a valid directory>'?`;
+                    }
+                }
+                else {
+                    const addRow = (title, cb) => {
+                        const row = document.createElement('div');
+                        row.style.padding = '0.5rem';
+                        row.style.display = 'grid';
+                        row.style.gridTemplateColumns = '8rem 1fr';
+                        const titleNode = document.createElement('span');
+                        titleNode.innerText = title;
+                        titleNode.style.textAlign = 'end';
+                        titleNode.style.marginRight = '0.25rem';
+                        row.appendChild(titleNode);
+                        // row.style.flexDirection = 'row';
+                        // row.style.justifyContent= 'space-between';
+                        cb(row);
+                        root.appendChild(row);
+                    };
+                    const state = {
+                        category: '',
+                        name: '',
+                        assertionType: 'Exact Match'
+                    };
+                    let update = () => { };
+                    ((() => {
+                        const datalistId = `${queryId}-categories`;
+                        const row = document.createElement('div');
+                        row.innerHTML = `
+            <span style="text-align: end; margin-right: 0.25rem;">Category</span>
+            <input id="cat-${queryId}" list="${datalistId}"> </input>
+          `;
+                        row.style.padding = '0.5rem';
+                        row.style.display = 'grid';
+                        row.style.gridTemplateColumns = '8rem 1fr';
+                        const category = row.querySelector(`#cat-${queryId}`);
+                        // row.appendChild(category);
+                        // category.outerHTML = `<input list=${datalistId}></input>`;
+                        category.type = 'text';
+                        const datalist = document.createElement('datalist');
+                        datalist.id = datalistId;
+                        [...categories, 'foo', 'bar'].forEach(cat => {
+                            const opt = document.createElement('option');
+                            opt.value = cat.lastIndexOf('.') > 0 ? cat.slice(0, cat.lastIndexOf('.')) : cat;
+                            datalist.appendChild(opt);
+                        });
+                        row.appendChild(datalist);
+                        console.log('cat:', category);
+                        category.oninput = () => {
+                            console.log('change???');
+                            state.category = category.value;
+                            console.log('cat: ', state.category);
+                            update();
+                        };
+                        root.appendChild(row);
+                    })());
+                    addRow('Name', (row) => {
+                        const name = document.createElement('input');
+                        name.type = 'text';
+                        row.appendChild(name);
+                        name.oninput = () => {
+                            state.name = name.value;
+                            update();
+                        };
+                    });
+                    addRow('Assertion Type', (row) => {
+                        const opts = document.createElement('select');
+                        opts.value = state.assertionType[0];
+                        row.appendChild(opts);
+                        const assertionTypeList = ['Exact Match', 'Set Comparison', 'Smoke Test'];
+                        assertionTypeList.forEach((option) => {
+                            const val = document.createElement('option');
+                            val.value = option;
+                            val.innerText = option;
+                            opts.appendChild(val);
+                        });
+                        opts.oninput = () => {
+                            state.assertionType = opts.value;
+                            update();
+                        };
+                    });
+                    let commitButton = document.createElement('button');
+                    addRow('', (row) => {
+                        commitButton.innerText = 'Add';
+                        row.appendChild(commitButton);
+                        commitButton.onclick = () => {
+                            // typeof line === 'string' ? line : { naive: line, robust: line }
+                            const lineEncoder = (line) => {
+                                if (typeof line === 'string') {
+                                    return line;
+                                }
+                                if (Array.isArray(line)) {
+                                    return line.map(lineEncoder);
+                                }
+                                switch (line.type) {
+                                    case 'node': return { naive: line.value, robust: line.value };
+                                    default: return line.value;
+                                }
+                            };
+                            const lines = output.map(lineEncoder);
+                            env.testManager.addTest(state.category, {
+                                type: 'test',
+                                assert: state.assertionType === 'Exact Match' ?
+                                    {
+                                        type: 'identity',
+                                        lines,
+                                    } : state.assertionType === 'Set Comparison' ?
+                                    {
+                                        type: 'set',
+                                        lines,
+                                    } : {
+                                    type: 'smoke'
+                                },
+                                attribute,
+                                locator: { naive: locator, robust: locator },
+                                name: state.name,
+                                src: srcText,
+                            });
+                        };
+                    });
+                    addRow('', (row) => {
+                        const errMsg = document.createElement('p');
+                        errMsg.style.textAlign = 'center';
+                        errMsg.classList.add('captured-stderr');
+                        row.appendChild(errMsg);
+                        update = () => {
+                            commitButton.disabled = true;
+                            if (!state.category) {
+                                errMsg.innerText = `Missing category. The test will be saved in a file called '<category>.json'`;
+                            }
+                            else if (!/^[a-zA-Z0-9-]+$/.test(state.category)) {
+                                errMsg.innerText = `Invalid category, please only use '[a-zA-Z0-9-]' in the name, i.e A-Z, numbers and dash (-).'`;
+                            }
+                            else if (!state.name) {
+                                errMsg.innerText = `Missing test name`;
+                            }
+                            else {
+                                commitButton.disabled = false;
+                                errMsg.innerText = '';
+                            }
+                        };
+                    });
+                    update();
+                }
+            },
+        });
+        env.testManager.listCategories()
+            .then((result) => {
+            categories = result;
+            popup.refresh();
+        });
+    };
+    exports.default = displayTestAdditionModal;
+});
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, createTextSpanIndicator_6, displayAttributeModal_4, showWindow_7, formatAttr_3, displayArgModal_2, registerNodeSelector_3, adjustLocator_4, displayHelp_3, encodeRpcBodyLines_3, trimTypeName_4, createStickyHighlightController_2, displayTestAdditionModal_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    createLoadingSpinner_4 = __importDefault(createLoadingSpinner_4);
+    createModalTitle_6 = __importDefault(createModalTitle_6);
     createTextSpanIndicator_6 = __importDefault(createTextSpanIndicator_6);
     displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
-    showWindow_6 = __importDefault(showWindow_6);
+    showWindow_7 = __importDefault(showWindow_7);
     formatAttr_3 = __importDefault(formatAttr_3);
     displayArgModal_2 = __importDefault(displayArgModal_2);
     registerNodeSelector_3 = __importDefault(registerNodeSelector_3);
@@ -2861,12 +3090,17 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     encodeRpcBodyLines_3 = __importDefault(encodeRpcBodyLines_3);
     trimTypeName_4 = __importDefault(trimTypeName_4);
     createStickyHighlightController_2 = __importDefault(createStickyHighlightController_2);
+    displayTestAdditionModal_1 = __importDefault(displayTestAdditionModal_1);
     const displayProbeModal = (env, modalPos, locator, attr) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
         env.probeMarkers[queryId] = localErrors;
         const stickyController = (0, createStickyHighlightController_2.default)(env);
+        let lastOutput = [];
         // const stickyMarker = env.registerStickyMarker(span)
+        // if (attr.name == 'bytecodes') {
+        //   setTimeout(() => displayTestAdditionModal(env, queryWindow.getPos(), locator, attr, lastOutput), 500);
+        // }
         const cleanup = () => {
             delete env.onChangeListeners[queryId];
             delete env.probeMarkers[queryId];
@@ -2880,7 +3114,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         };
         let copyBody = [];
         const createTitle = () => {
-            return (0, createModalTitle_5.default)({
+            return (0, createModalTitle_6.default)({
                 extraActions: [
                     {
                         title: 'Duplicate window',
@@ -2912,6 +3146,12 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         invoke: () => {
                             (0, displayHelp_3.default)('magic-stdout-messages', () => { });
                         }
+                    },
+                    {
+                        title: 'Save as test',
+                        invoke: () => {
+                            (0, displayTestAdditionModal_1.default)(env, queryWindow.getPos(), locator, attr, lastOutput);
+                        },
                     },
                 ],
                 // onDuplicate: () => {
@@ -3039,7 +3279,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         let isFirstRender = true;
         let loading = false;
         let refreshOnDone = false;
-        const queryWindow = (0, showWindow_6.default)({
+        const queryWindow = (0, showWindow_7.default)({
             pos: modalPos,
             rootStyle: `
       min-width: 16rem;
@@ -3057,7 +3297,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     while (root.firstChild)
                         root.removeChild(root.firstChild);
                     root.appendChild(createTitle().element);
-                    const spinner = (0, createLoadingSpinner_3.default)();
+                    const spinner = (0, createLoadingSpinner_4.default)();
                     spinner.classList.add('absoluteCenter');
                     const spinnerWrapper = document.createElement('div');
                     spinnerWrapper.style.height = '7rem';
@@ -3131,8 +3371,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     }
                     const titleRow = createTitle();
                     root.append(titleRow.element);
+                    lastOutput = body;
                     root.appendChild((0, encodeRpcBodyLines_3.default)(env, body));
-                    const spinner = (0, createLoadingSpinner_3.default)();
+                    const spinner = (0, createLoadingSpinner_4.default)();
                     spinner.style.display = 'none';
                     spinner.classList.add('absoluteCenter');
                     lastSpinner = spinner;
@@ -3192,14 +3433,14 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     };
     exports.default = displayProbeModal;
 });
-define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, displayAttributeModal_5, registerOnHover_4, showWindow_7, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5) {
+define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName"], function (require, exports, createLoadingSpinner_5, createModalTitle_7, displayAttributeModal_5, registerOnHover_4, showWindow_8, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    createLoadingSpinner_4 = __importDefault(createLoadingSpinner_4);
-    createModalTitle_6 = __importDefault(createModalTitle_6);
+    createLoadingSpinner_5 = __importDefault(createLoadingSpinner_5);
+    createModalTitle_7 = __importDefault(createModalTitle_7);
     displayAttributeModal_5 = __importDefault(displayAttributeModal_5);
     registerOnHover_4 = __importDefault(registerOnHover_4);
-    showWindow_7 = __importDefault(showWindow_7);
+    showWindow_8 = __importDefault(showWindow_8);
     registerNodeSelector_4 = __importDefault(registerNodeSelector_4);
     encodeRpcBodyLines_4 = __importDefault(encodeRpcBodyLines_4);
     trimTypeName_5 = __importDefault(trimTypeName_5);
@@ -3209,7 +3450,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
             delete env.onChangeListeners[queryId];
             popup.remove();
         };
-        const popup = (0, showWindow_7.default)({
+        const popup = (0, showWindow_8.default)({
             rootStyle: `
         min-width: 12rem;
         min-height: 4rem;
@@ -3220,10 +3461,10 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                 // }
                 // root.innerText = 'Loading..';
                 root.style.display = 'contents';
-                const spinner = (0, createLoadingSpinner_4.default)();
+                const spinner = (0, createLoadingSpinner_5.default)();
                 spinner.classList.add('absoluteCenter');
                 root.appendChild(spinner);
-                const createTitle = (status) => (0, createModalTitle_6.default)({
+                const createTitle = (status) => (0, createModalTitle_7.default)({
                     renderLeft: (container) => {
                         const headType = document.createElement('span');
                         headType.classList.add('syntax-stype');
@@ -3367,11 +3608,11 @@ define("model/StatisticsCollectorImpl", ["require", "exports"], function (requir
     }
     exports.default = StatisticsCollectorImpl;
 });
-define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, createModalTitle_7, showWindow_8) {
+define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, createModalTitle_8, showWindow_9) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    createModalTitle_7 = __importDefault(createModalTitle_7);
-    showWindow_8 = __importDefault(showWindow_8);
+    createModalTitle_8 = __importDefault(createModalTitle_8);
+    showWindow_9 = __importDefault(showWindow_9);
     ;
     const displayStatistics = (collector, setStatisticsButtonDisabled, setEditorContentsAndUpdateProbes, anyModalIsLoading) => {
         let simulateTimer = -1;
@@ -3448,7 +3689,7 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
             },
         ];
         let activeTest = tests[0].title;
-        const helpWindow = (0, showWindow_8.default)({
+        const helpWindow = (0, showWindow_9.default)({
             rootStyle: `
       width: 32rem;
       min-height: 12rem;
@@ -3483,7 +3724,7 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
                     statLabels = null;
                     while (root.firstChild)
                         root.firstChild.remove();
-                    root.appendChild((0, createModalTitle_7.default)({
+                    root.appendChild((0, createModalTitle_8.default)({
                         renderLeft: (container) => {
                             const header = document.createElement('span');
                             header.innerText = 'Statistics';
@@ -3653,14 +3894,14 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
     };
     exports.default = displayStatistics;
 });
-define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_3, createModalTitle_8, showWindow_9) {
+define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_4, createModalTitle_9, showWindow_10) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    settings_3 = __importDefault(settings_3);
-    createModalTitle_8 = __importDefault(createModalTitle_8);
-    showWindow_9 = __importDefault(showWindow_9);
+    settings_4 = __importDefault(settings_4);
+    createModalTitle_9 = __importDefault(createModalTitle_9);
+    showWindow_10 = __importDefault(showWindow_10);
     const getArgs = () => {
-        const re = settings_3.default.getMainArgsOverride();
+        const re = settings_4.default.getMainArgsOverride();
         if (!re) {
             return re;
         }
@@ -3803,15 +4044,15 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
         parseOuter();
         commit();
         // console.log('done parsing @', parsePos)
-        settings_3.default.setMainArgsOverride(args);
+        settings_4.default.setMainArgsOverride(args);
     };
     const displayMainArgsOverrideModal = (onClose, onChange) => {
-        const windowInstance = (0, showWindow_9.default)({
+        const windowInstance = (0, showWindow_10.default)({
             render: (root) => {
                 while (root.firstChild) {
                     root.firstChild.remove();
                 }
-                root.appendChild((0, createModalTitle_8.default)({
+                root.appendChild((0, createModalTitle_9.default)({
                     renderLeft: (container) => {
                         const headType = document.createElement('span');
                         headType.classList.add('syntax-stype');
@@ -3846,7 +4087,7 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
                     };
                     // liveView.appendChild(document.createTextNode('tool.main(\n'));
                     addTn('yourtool.main(new String[]{');
-                    [...((_a = settings_3.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : []), '/path/to/file.tmp'].forEach((part, partIdx) => {
+                    [...((_a = settings_4.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : []), '/path/to/file.tmp'].forEach((part, partIdx) => {
                         if (partIdx > 0) {
                             liveView.appendChild(document.createTextNode(', '));
                         }
@@ -3993,6 +4234,9 @@ define("ui/UIElements", ["require", "exports"], function (require, exports) {
         get darkModeCheckbox() { return document.getElementById('control-dark-mode'); }
         get displayStatisticsButton() { return document.getElementById('display-statistics'); }
         get versionInfo() { return document.getElementById('version'); }
+        get settingsHider() { return document.getElementById('settings-hider'); }
+        get settingsRevealer() { return document.getElementById('settings-revealer'); }
+        get showTests() { return document.getElementById('show-tests'); }
     }
     exports.default = UIElements;
 });
@@ -4118,7 +4362,98 @@ define("model/runBgProbe", ["require", "exports"], function (require, exports) {
     };
     exports.default = runInvisibleProbe;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_4, displayAttributeModal_6, settings_4, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_2) {
+define("ui/popup/displayTestModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, createLoadingSpinner_6, createModalTitle_10, showWindow_11) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    createLoadingSpinner_6 = __importDefault(createLoadingSpinner_6);
+    createModalTitle_10 = __importDefault(createModalTitle_10);
+    showWindow_11 = __importDefault(showWindow_11);
+    const displayTestModal = (env, onClose) => {
+        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const cleanup = () => {
+            onClose();
+            popup.remove();
+        };
+        let categories = 'loading';
+        const popup = (0, showWindow_11.default)({
+            rootStyle: `
+      width: 32rem;
+      min-height: 8rem;
+    `,
+            resizable: true,
+            render: (root) => {
+                while (root.firstChild)
+                    root.removeChild(root.firstChild);
+                root.appendChild((0, createModalTitle_10.default)({
+                    renderLeft: (container) => {
+                        const header = document.createElement('span');
+                        header.innerText = `Test Suites`;
+                        container.appendChild(header);
+                    },
+                    onClose: cleanup,
+                }).element);
+                if (typeof categories === 'string') {
+                    if (categories === 'loading') {
+                        root.style.display = 'contents';
+                        const spinner = (0, createLoadingSpinner_6.default)();
+                        spinner.classList.add('absoluteCenter');
+                        root.appendChild(spinner);
+                    }
+                    else {
+                        const textHolder = document.createElement('div');
+                        textHolder.style.padding = '0.5rem';
+                        textHolder.innerText = `Failed listing test categories, have you set '-Dcpr.testDir=<a valid directory>'?`;
+                    }
+                }
+                else {
+                    // root.style.display = 'flex';
+                    const rowList = document.createElement('div');
+                    rowList.style.display = 'flex';
+                    rowList.style.flexDirection = 'column';
+                    rowList.style.margin = '0 0 auto';
+                    root.appendChild(rowList);
+                    categories.forEach(cat => {
+                        const row = document.createElement('div');
+                        row.classList.add('test-category');
+                        const title = document.createElement('span');
+                        title.innerText = cat.lastIndexOf('.') > 0 ? cat.substring(0, cat.lastIndexOf('.')) : cat;
+                        row.appendChild(title);
+                        const icons = document.createElement('div');
+                        row.appendChild(icons);
+                        const status = document.createElement('span');
+                        status.innerText = '5/5 ✅';
+                        icons.appendChild(status);
+                        rowList.appendChild(row);
+                    });
+                }
+                // const paragraphs = getHelpContents(type);
+                // paragraphs.forEach(p => {
+                //   if (!p) {
+                //     textHolder.appendChild(document.createElement('br'));
+                //     return;
+                //   }
+                //   if (typeof p !== 'string') {
+                //     textHolder.appendChild(p);
+                //     return;
+                //   }
+                //   const node = document.createElement('p');
+                //   node.appendChild(document.createTextNode(p));
+                //   node.style.marginTop = '0';
+                //   node.style.marginBottom = '0';
+                //   textHolder.appendChild(node);
+                // });
+                // root.appendChild(textHolder);
+            }
+        });
+        env.testManager.listCategories()
+            .then((result) => {
+            categories = result;
+            popup.refresh();
+        });
+    };
+    exports.default = displayTestModal;
+});
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/TestManager", "ui/popup/displayTestModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_4, displayAttributeModal_6, settings_5, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_2, TestManager_1, displayTestModal_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -4126,7 +4461,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_4 = __importDefault(displayHelp_4);
     displayAttributeModal_6 = __importDefault(displayAttributeModal_6);
-    settings_4 = __importDefault(settings_4);
+    settings_5 = __importDefault(settings_5);
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
     displayStatistics_1 = __importDefault(displayStatistics_1);
     displayMainArgsOverrideModal_1 = __importDefault(displayMainArgsOverrideModal_1);
@@ -4137,16 +4472,17 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     runBgProbe_1 = __importDefault(runBgProbe_1);
     cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
     displayAstModal_2 = __importDefault(displayAstModal_2);
+    displayTestModal_1 = __importDefault(displayTestModal_1);
     window.clearUserSettings = () => {
-        settings_4.default.set({});
+        settings_5.default.set({});
         location.reload();
     };
     const uiElements = new UIElements_1.default();
     const doMain = (wsPort) => {
-        if (settings_4.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
+        if (settings_5.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
             document.body.classList.add('hide-settings');
         }
-        let getLocalState = () => { var _a; return (_a = settings_4.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
+        let getLocalState = () => { var _a; return (_a = settings_5.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
         let basicHighlight = null;
         const stickyHighlights = {};
         let updateSpanHighlight = (span, stickies) => { };
@@ -4155,17 +4491,17 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             cache: uiElements.astCacheStrategySelector.value,
             type: 'query',
             text: getLocalState(),
-            stdout: settings_4.default.shouldCaptureStdio(),
+            stdout: settings_5.default.shouldCaptureStdio(),
             query: props,
-            mainArgs: settings_4.default.getMainArgsOverride(),
-            tmpSuffix: settings_4.default.getCurrentFileSuffix(),
+            mainArgs: settings_5.default.getMainArgsOverride(),
+            tmpSuffix: settings_5.default.getCurrentFileSuffix(),
         });
         const onChangeListeners = {};
         const probeWindowStateSavers = {};
         const triggerWindowSave = () => {
             const states = [];
             Object.values(probeWindowStateSavers).forEach(v => v(states));
-            settings_4.default.setProbeWindowStates(states);
+            settings_5.default.setProbeWindowStates(states);
         };
         const notifyLocalChangeListeners = (adjusters) => {
             Object.values(onChangeListeners).forEach(l => l(adjusters));
@@ -4176,7 +4512,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 location.search = "editor=" + editorType;
                 return;
             }
-            document.body.setAttribute('data-theme-light', `${settings_4.default.isLightTheme()}`);
+            document.body.setAttribute('data-theme-light', `${settings_5.default.isLightTheme()}`);
             const wsHandler = (() => {
                 if (wsPort == 'ws-over-http') {
                     return (0, createWebsocketHandler_1.createWebsocketOverHttpHandler)(addConnectionCloseNotice_1.default);
@@ -4200,7 +4536,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 console.log('onInit, buffer:', changeBufferTime);
                 rootElem.style.display = "grid";
                 const onChange = (newValue, adjusters) => {
-                    settings_4.default.setEditorContents(newValue);
+                    settings_5.default.setEditorContents(newValue);
                     notifyLocalChangeListeners(adjusters);
                 };
                 let setLocalState = (value) => { };
@@ -4210,11 +4546,11 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     remove: () => { },
                 });
                 const darkModeCheckbox = uiElements.darkModeCheckbox;
-                darkModeCheckbox.checked = !settings_4.default.isLightTheme();
+                darkModeCheckbox.checked = !settings_5.default.isLightTheme();
                 const themeChangeListeners = {};
                 darkModeCheckbox.oninput = (e) => {
                     let lightTheme = !darkModeCheckbox.checked;
-                    settings_4.default.setLightTheme(lightTheme);
+                    settings_5.default.setLightTheme(lightTheme);
                     document.body.setAttribute('data-theme-light', `${lightTheme}`);
                     Object.values(themeChangeListeners).forEach(cb => cb(lightTheme));
                 };
@@ -4223,7 +4559,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     const { preload, init, } = window.definedEditors[editorType];
                     window.loadPreload(preload, () => {
                         var _a;
-                        const res = init((_a = settings_4.default.getEditorContents()) !== null && _a !== void 0 ? _a : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_4.default.getSyntaxHighlighting());
+                        const res = init((_a = settings_5.default.getEditorContents()) !== null && _a !== void 0 ? _a : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_5.default.getSyntaxHighlighting());
                         setLocalState = res.setLocalState || setLocalState;
                         getLocalState = res.getLocalState || getLocalState;
                         updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
@@ -4231,7 +4567,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         markText = res.markText || markText;
                         if (res.themeToggler) {
                             themeChangeListeners['main-editor'] = (light) => res.themeToggler(light);
-                            res.themeToggler(settings_4.default.isLightTheme());
+                            res.themeToggler(settings_5.default.isLightTheme());
                             // defineThemeToggler(res.themeToggler);
                         }
                         syntaxHighlightingToggler = res.syntaxHighlightingToggler;
@@ -4272,23 +4608,23 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     input.checked = initial;
                     input.oninput = () => { update(input.checked); notifyLocalChangeListeners(); };
                 };
-                setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_4.default.shouldCaptureStdio(), cb => settings_4.default.setShouldCaptureStdio(cb));
-                setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_4.default.shouldDuplicateProbeOnAttrClick(), cb => settings_4.default.setShouldDuplicateProbeOnAttrClick(cb));
-                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_4.default.shouldShowAllProperties(), cb => settings_4.default.setShouldShowAllProperties(cb));
+                setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_5.default.shouldCaptureStdio(), cb => settings_5.default.setShouldCaptureStdio(cb));
+                setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_5.default.shouldDuplicateProbeOnAttrClick(), cb => settings_5.default.setShouldDuplicateProbeOnAttrClick(cb));
+                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_5.default.shouldShowAllProperties(), cb => settings_5.default.setShouldShowAllProperties(cb));
                 const setupSimpleSelector = (input, initial, update) => {
                     input.value = initial;
                     input.oninput = () => { update(input.value); notifyLocalChangeListeners(); };
                 };
-                setupSimpleSelector(uiElements.astCacheStrategySelector, settings_4.default.getAstCacheStrategy(), cb => settings_4.default.setAstCacheStrategy(cb));
-                setupSimpleSelector(uiElements.positionRecoverySelector, settings_4.default.getPositionRecoveryStrategy(), cb => settings_4.default.setPositionRecoveryStrategy(cb));
-                setupSimpleSelector(uiElements.locationStyleSelector, `${settings_4.default.getLocationStyle()}`, cb => settings_4.default.setLocationStyle(cb));
-                document.getElementById('settings-hider').onclick = () => {
+                setupSimpleSelector(uiElements.astCacheStrategySelector, settings_5.default.getAstCacheStrategy(), cb => settings_5.default.setAstCacheStrategy(cb));
+                setupSimpleSelector(uiElements.positionRecoverySelector, settings_5.default.getPositionRecoveryStrategy(), cb => settings_5.default.setPositionRecoveryStrategy(cb));
+                setupSimpleSelector(uiElements.locationStyleSelector, `${settings_5.default.getLocationStyle()}`, cb => settings_5.default.setLocationStyle(cb));
+                uiElements.settingsHider.onclick = () => {
                     document.body.classList.add('hide-settings');
-                    settings_4.default.setShouldHideSettingsPanel(true);
+                    settings_5.default.setShouldHideSettingsPanel(true);
                 };
-                document.getElementById('settings-revealer').onclick = () => {
+                uiElements.settingsRevealer.onclick = () => {
                     document.body.classList.remove('hide-settings');
-                    settings_4.default.setShouldHideSettingsPanel(false);
+                    settings_5.default.setShouldHideSettingsPanel(false);
                 };
                 const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
                 syntaxHighlightingSelector.innerHTML = '';
@@ -4298,46 +4634,47 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     option.innerText = alias;
                     syntaxHighlightingSelector.appendChild(option);
                 });
-                setupSimpleSelector(syntaxHighlightingSelector, settings_4.default.getSyntaxHighlighting(), cb => {
-                    settings_4.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
-                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_4.default.getSyntaxHighlighting());
+                setupSimpleSelector(syntaxHighlightingSelector, settings_5.default.getSyntaxHighlighting(), cb => {
+                    settings_5.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
+                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_5.default.getSyntaxHighlighting());
                 });
                 const overrideCfg = (0, configureCheckboxWithHiddenButton_1.default)(uiElements.shouldOverrideMainArgsCheckbox, uiElements.configureMainArgsOverrideButton, (checked) => {
-                    settings_4.default.setMainArgsOverride(checked ? [] : null);
+                    settings_5.default.setMainArgsOverride(checked ? [] : null);
                     overrideCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }, onClose => (0, displayMainArgsOverrideModal_1.default)(onClose, () => {
                     overrideCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }), () => {
-                    const overrides = settings_4.default.getMainArgsOverride();
+                    const overrides = settings_5.default.getMainArgsOverride();
                     return overrides === null ? null : `Edit (${overrides.length})`;
                 });
                 const suffixCfg = (0, configureCheckboxWithHiddenButton_1.default)(uiElements.shouldCustomizeFileSuffixCheckbox, uiElements.configureCustomFileSuffixButton, (checked) => {
-                    settings_4.default.setCustomFileSuffix(checked ? settings_4.default.getCurrentFileSuffix() : null);
+                    settings_5.default.setCustomFileSuffix(checked ? settings_5.default.getCurrentFileSuffix() : null);
                     suffixCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }, onClose => {
-                    const newVal = prompt('Enter new suffix', settings_4.default.getCurrentFileSuffix());
+                    const newVal = prompt('Enter new suffix', settings_5.default.getCurrentFileSuffix());
                     if (newVal !== null) {
-                        settings_4.default.setCustomFileSuffix(newVal);
+                        settings_5.default.setCustomFileSuffix(newVal);
                         suffixCfg.refreshButton();
                         notifyLocalChangeListeners();
                     }
                     onClose();
                     return { forceClose: () => { }, };
                 }, () => {
-                    const overrides = settings_4.default.getCustomFileSuffix();
-                    return overrides === null ? null : `Edit (${settings_4.default.getCurrentFileSuffix()})`;
+                    const overrides = settings_5.default.getCustomFileSuffix();
+                    return overrides === null ? null : `Edit (${settings_5.default.getCurrentFileSuffix()})`;
                 });
                 const statCollectorImpl = new StatisticsCollectorImpl_1.default();
                 if (location.search.includes('debug=true')) {
                     document.getElementById('secret-debug-panel').style.display = 'block';
                 }
+                const testManager = (0, TestManager_1.createTestManager)(req => performRpcQuery(wsHandler, req));
                 const modalEnv = {
                     performRpcQuery: (args) => performRpcQuery(wsHandler, args),
                     probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
-                    themeIsLight: () => settings_4.default.isLightTheme(),
+                    themeIsLight: () => settings_5.default.isLightTheme(),
                     getLocalState: () => getLocalState(),
                     captureStdout: () => uiElements.captureStdoutCheckbox.checked,
                     duplicateOnAttr: () => uiElements.duplicateProbeCheckbox.checked,
@@ -4359,15 +4696,15 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     statisticsCollector: statCollectorImpl,
                     currentlyLoadingModals: new Set(),
                     createCullingTaskSubmitter: (0, cullingTaskSubmitterFactory_2.default)(changeBufferTime),
+                    testManager,
                 };
-                window.foo = () => {
-                    performRpcQuery(wsHandler, {
-                        attr: {
-                            name: 'meta:listTree'
-                        },
-                        locator: window.lastNode,
-                    });
+                uiElements.showTests.onclick = () => {
+                    uiElements.showTests.disabled = true;
+                    (0, displayTestModal_1.default)(modalEnv, () => { uiElements.showTests.disabled = false; });
                 };
+                // setTimeout(() => {
+                //   uiElements.showTests.click();
+                // }, 500);
                 (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);
                 window.displayHelp = (type) => {
                     const common = (type, button) => (0, displayHelp_4.default)(type, disabled => button.disabled = disabled);
@@ -4388,7 +4725,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 setTimeout(() => {
                     try {
-                        settings_4.default.getProbeWindowStates().forEach((state) => {
+                        settings_5.default.getProbeWindowStates().forEach((state) => {
                             switch (state.data.type) {
                                 case 'probe': {
                                     (0, displayProbeModal_3.default)(modalEnv, state.modalPos, state.data.locator, state.data.attr);

@@ -18,6 +18,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import codeprober.ast.AstNode;
@@ -121,10 +122,52 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		lastInfo = info;
 
 		final JSONObject queryBody = queryObj.getJSONObject("query");
+		final JSONObject queryAttr = queryBody.getJSONObject("attr");
+		final String queryAttrName = queryAttr.getString("name");
+
+		// First check for pre-locator 'magic' methods
+		switch (queryAttrName) {
+		case "meta:listObservers": {
+			String observerDir = System.getProperty("cpr.testDir");
+			if (observerDir != null) {
+				File dir = new File(observerDir);
+				if (dir.isDirectory()) {
+					final File[] files = dir.listFiles();
+					if (files != null) {
+						JSONArray names = new JSONArray();
+						for (File f : files) {
+							names.put(f.getName());
+						}
+						retBuilder.put("observers", names);
+					} else {
+						System.err.println(
+								"Couldn't list contents of TestDir '" + observerDir + "', perhaps a permission issue");
+					}
+				} else {
+					System.err.println("TestDir '" + observerDir + "' is not a directory");
+				}
+			}
+			return;
+		}
+		case "meta:getObserver": {
+			String observerDir = System.getProperty("cpr.testDir");
+			if (observerDir != null) {
+				File f = new File(observerDir, queryBody.getString("observerId"));
+				try {
+					retBuilder.put("observer", new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));
+				} catch (JSONException | IOException e) {
+					e.printStackTrace();
+					System.err.println("Failed reading contents of " + f);
+				}
+			} else {
+				System.err.println("No TestDir set, cannot get contents");
+			}
+			return;
+		}
+		}
+
 		final JSONObject locator = queryBody.getJSONObject("locator");
 		ResolvedNode match = ApplyLocator.toNode(info, locator);
-
-//		System.out.println("MatchedNode: " + match);
 		if (match == null) {
 			bodyBuilder.put("No matching node found\n\nTry remaking the probe\nat a different line/column");
 			return;
@@ -132,8 +175,6 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 		retBuilder.put("locator", match.nodeLocator);
 
-		final JSONObject queryAttr = queryBody.getJSONObject("attr");
-		final String queryAttrName = queryAttr.getString("name");
 		// First check for 'magic' methods
 		switch (queryAttrName) {
 		case "meta:listNodes": {

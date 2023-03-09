@@ -9,6 +9,7 @@ import displayAttributeModal from "./displayAttributeModal";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import createCullingTaskSubmitterFactory from '../../model/cullingTaskSubmitterFactory';
 import createStickyHighlightController from '../create/createStickyHighlightController';
+import ModalEnv from '../../model/ModalEnv';
 
 type AstListDirection = 'downwards' | 'upwards';
 const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator, listDirection: AstListDirection, initialTransform?: { [id: string]: number }) => {

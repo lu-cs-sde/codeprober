@@ -1,3 +1,4 @@
+import ModalEnv from '../../model/ModalEnv';
 
 
 const createStickyHighlightController = (env: ModalEnv) => {

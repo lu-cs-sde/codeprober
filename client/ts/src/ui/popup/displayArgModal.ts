@@ -1,4 +1,5 @@
 import adjustLocator from "../../model/adjustLocator";
+import ModalEnv from '../../model/ModalEnv';
 import createModalTitle from "../create/createModalTitle";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import registerNodeSelector from "../create/registerNodeSelector";

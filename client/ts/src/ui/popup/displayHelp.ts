@@ -583,19 +583,6 @@ const displayHelp = (type: HelpType, setHelpButtonDisabled: (disabled: boolean) 
           return;
         }
         const node = document.createElement('p');
-        // node.style.whiteSpace = 'pre';
-        // node.style.maxWidth = '31rem';
-        // const leadingWhitespace = p.length - p.trimStart().length;
-        // if (leadingWhitespace) {
-        //   let ws = '';
-        //   for (let i = 0; i < leadingWhitespace; i++) {
-        //     ws = ws + ' ';
-        //   }
-        //   const wsnode = document.createElement('span');
-        //   wsnode.style.whiteSpace = 'pre';
-        //   wsnode.innerText = ws;
-        //   node.appendChild(wsnode);
-        // }
         node.appendChild(document.createTextNode(p));
         node.style.marginTop = '0';
         node.style.marginBottom = '0';

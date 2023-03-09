@@ -11,14 +11,20 @@ import displayHelp from "./displayHelp";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import trimTypeName from "../trimTypeName";
 import createStickyHighlightController from '../create/createStickyHighlightController';
+import ModalEnv from '../../model/ModalEnv';
+import displayTestAdditionModal from './displayTestAdditionModal';
 
 const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLocator, attr: AstAttrWithValue) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   const localErrors: ProbeMarker[] = [];
   env.probeMarkers[queryId] = localErrors;
   const stickyController = createStickyHighlightController(env);
+  let lastOutput: RpcBodyLine[] = [];
   // const stickyMarker = env.registerStickyMarker(span)
 
+  // if (attr.name == 'bytecodes') {
+  //   setTimeout(() => displayTestAdditionModal(env, queryWindow.getPos(), locator, attr, lastOutput), 500);
+  // }
   const cleanup = () => {
     delete env.onChangeListeners[queryId];
     delete env.probeMarkers[queryId];
@@ -66,6 +72,12 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
           invoke: () => {
             displayHelp('magic-stdout-messages', () => {});
           }
+        },
+        {
+          title: 'Save as test',
+          invoke: () => {
+            displayTestAdditionModal(env, queryWindow.getPos(), locator, attr, lastOutput);
+          },
         },
       ],
       // onDuplicate: () => {
@@ -286,6 +298,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
           const titleRow = createTitle();
           root.append(titleRow.element);
 
+          lastOutput = body;
           root.appendChild(encodeRpcBodyLines(env, body));
 
           const spinner = createLoadingSpinner();

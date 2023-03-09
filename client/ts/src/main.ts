@@ -16,6 +16,9 @@ import { TextSpanStyle } from "./ui/create/createTextSpanIndicator";
 import runBgProbe from "./model/runBgProbe";
 import createCullingTaskSubmitterFactory from "./model/cullingTaskSubmitterFactory";
 import displayAstModal from "./ui/popup/displayAstModal";
+import { createTestManager } from './model/TestManager';
+import displayTestModal from './ui/popup/displayTestModal';
+import ModalEnv from './model/ModalEnv';
 
 
 window.clearUserSettings = () => {
@@ -190,11 +193,11 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       setupSimpleSelector(uiElements.positionRecoverySelector, settings.getPositionRecoveryStrategy(), cb => settings.setPositionRecoveryStrategy(cb));
       setupSimpleSelector(uiElements.locationStyleSelector, `${settings.getLocationStyle()}`, cb => settings.setLocationStyle(cb as TextSpanStyle));
 
-      document.getElementById('settings-hider')!.onclick = () => {
+      uiElements.settingsHider.onclick = () => {
         document.body.classList.add('hide-settings');
         settings.setShouldHideSettingsPanel(true);
       };
-      document.getElementById('settings-revealer')!.onclick = () => {
+      uiElements.settingsRevealer.onclick = () => {
         document.body.classList.remove('hide-settings');
         settings.setShouldHideSettingsPanel(false);
       };
@@ -255,6 +258,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         document.getElementById('secret-debug-panel')!.style.display = 'block';
       }
 
+      const testManager = createTestManager(req => performRpcQuery(wsHandler, req));
       const modalEnv: ModalEnv = {
         performRpcQuery: (args) => performRpcQuery(wsHandler, args),
         probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
@@ -280,16 +284,20 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         statisticsCollector: statCollectorImpl,
         currentlyLoadingModals: new Set<string>(),
         createCullingTaskSubmitter: createCullingTaskSubmitterFactory(changeBufferTime),
+        testManager,
        };
 
-       (window as any).foo = () => {
-        performRpcQuery(wsHandler, {
-          attr: {
-            name: 'meta:listTree'
-          },
-          locator: (window as any).lastNode,
-        })
-       }
+      uiElements.showTests.onclick = () => {
+        uiElements.showTests.disabled = true;
+        displayTestModal(
+          modalEnv,
+          () => { uiElements.showTests.disabled = false; },
+        );
+      };
+
+      // setTimeout(() => {
+      //   uiElements.showTests.click();
+      // }, 500);
 
        showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);
 

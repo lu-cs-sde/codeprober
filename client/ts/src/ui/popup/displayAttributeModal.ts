@@ -11,6 +11,7 @@ import settings from "../../settings";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import trimTypeName from "../trimTypeName";
 import displayAstModal from "./displayAstModal";
+import ModalEnv from '../../model/ModalEnv';
 
 const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;

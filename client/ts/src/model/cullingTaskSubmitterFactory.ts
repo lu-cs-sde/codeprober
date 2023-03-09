@@ -1,3 +1,4 @@
+import ModalEnv from './ModalEnv';
 
 
 const createCullingTaskSubmitterFactory: (timeout: any | number) => ModalEnv['createCullingTaskSubmitter'] = (cullTime) => {
