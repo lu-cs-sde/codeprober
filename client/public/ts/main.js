@@ -509,7 +509,9 @@ define("ui/create/createModalTitle", ["require", "exports", "ui/create/showWindo
         }
         const closeButton = document.createElement('div');
         closeButton.classList.add('modalCloseButton');
-        closeButton.innerText = '𝖷';
+        const textHolder = document.createElement('span');
+        textHolder.innerText = '𝖷';
+        closeButton.appendChild(textHolder);
         closeButton.classList.add('clickHighlightOnHover');
         closeButton.onmousedown = (e) => { e.stopPropagation(); };
         closeButton.onclick = () => onClose();
@@ -678,6 +680,8 @@ define("settings", ["require", "exports", "model/syntaxHighlighting"], function 
         setShouldShowAllProperties: (showAllProperties) => settings.set({ ...settings.get(), showAllProperties }),
         getLocationStyle: () => { var _a; return (_a = settings.get().locationStyle) !== null && _a !== void 0 ? _a : 'full'; },
         setLocationStyle: (locationStyle) => settings.set({ ...settings.get(), locationStyle }),
+        shouldHideSettingsPanel: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.hideSettingsPanel) !== null && _b !== void 0 ? _b : false; },
+        setShouldHideSettingsPanel: (shouldHide) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),
     };
     exports.default = settings;
 });
@@ -4139,6 +4143,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     };
     const uiElements = new UIElements_1.default();
     const doMain = (wsPort) => {
+        if (settings_4.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
+            document.body.classList.add('hide-settings');
+        }
         let getLocalState = () => { var _a; return (_a = settings_4.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
         let basicHighlight = null;
         const stickyHighlights = {};
@@ -4275,6 +4282,14 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 setupSimpleSelector(uiElements.astCacheStrategySelector, settings_4.default.getAstCacheStrategy(), cb => settings_4.default.setAstCacheStrategy(cb));
                 setupSimpleSelector(uiElements.positionRecoverySelector, settings_4.default.getPositionRecoveryStrategy(), cb => settings_4.default.setPositionRecoveryStrategy(cb));
                 setupSimpleSelector(uiElements.locationStyleSelector, `${settings_4.default.getLocationStyle()}`, cb => settings_4.default.setLocationStyle(cb));
+                document.getElementById('settings-hider').onclick = () => {
+                    document.body.classList.add('hide-settings');
+                    settings_4.default.setShouldHideSettingsPanel(true);
+                };
+                document.getElementById('settings-revealer').onclick = () => {
+                    document.body.classList.remove('hide-settings');
+                    settings_4.default.setShouldHideSettingsPanel(false);
+                };
                 const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
                 syntaxHighlightingSelector.innerHTML = '';
                 (0, syntaxHighlighting_2.getAvailableLanguages)().forEach(({ id, alias }) => {

@@ -77,7 +77,11 @@ const createModalTitle = (args: CreateModalTitleArgs) => {
 
   const closeButton = document.createElement('div');
   closeButton.classList.add('modalCloseButton');
-  closeButton.innerText = '𝖷';
+
+  const textHolder = document.createElement('span');
+  textHolder.innerText = '𝖷';
+  closeButton.appendChild(textHolder);
+
   closeButton.classList.add('clickHighlightOnHover');
   closeButton.onmousedown = (e) => { e.stopPropagation(); }
   closeButton.onclick = () => onClose();

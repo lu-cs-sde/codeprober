@@ -17,6 +17,7 @@ import runBgProbe from "./model/runBgProbe";
 import createCullingTaskSubmitterFactory from "./model/cullingTaskSubmitterFactory";
 import displayAstModal from "./ui/popup/displayAstModal";
 
+
 window.clearUserSettings = () => {
   settings.set({});
   location.reload();
@@ -25,6 +26,9 @@ window.clearUserSettings = () => {
 const uiElements = new UIElements();
 
 const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', 'from': number, to: number }) => {
+  if (settings.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
+    document.body.classList.add('hide-settings');
+  }
   let getLocalState = () => settings.getEditorContents() ?? '';
   let basicHighlight: Span | null = null;
   const stickyHighlights: { [probeId: string]: StickyHighlight } = {};
@@ -185,6 +189,15 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       setupSimpleSelector(uiElements.astCacheStrategySelector, settings.getAstCacheStrategy(), cb => settings.setAstCacheStrategy(cb));
       setupSimpleSelector(uiElements.positionRecoverySelector, settings.getPositionRecoveryStrategy(), cb => settings.setPositionRecoveryStrategy(cb));
       setupSimpleSelector(uiElements.locationStyleSelector, `${settings.getLocationStyle()}`, cb => settings.setLocationStyle(cb as TextSpanStyle));
+
+      document.getElementById('settings-hider')!.onclick = () => {
+        document.body.classList.add('hide-settings');
+        settings.setShouldHideSettingsPanel(true);
+      };
+      document.getElementById('settings-revealer')!.onclick = () => {
+        document.body.classList.remove('hide-settings');
+        settings.setShouldHideSettingsPanel(false);
+      };
 
       const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
       syntaxHighlightingSelector.innerHTML = '';

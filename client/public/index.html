@@ -87,16 +87,18 @@
 </script>
 
 <body onload="initCodeProber()" data-theme-light="false">
-  <!-- <div id="connections">
-    <p>Pick an editor</p>
-    <button onclick="init('Monaco')">Monaco</button>
-  </div> -->
   <div id="root" style="display: none;">
     <span id="input-header">
       Input
     </span>
-    <span id="settings-header">
-      Settings
+    <span id="settings-header-wrapper">
+      <span id="settings-header-open">
+        Settings
+        <button class="settings-toggler" id="settings-hider" title="Hide settings panel">»</button>
+      </span>
+      <span id="settings-header-closed">
+        <button class="settings-toggler" id="settings-revealer" title="Reveal settings panel">⚙</button>
+      </span>
     </span>
     <div id="input-wrapper" style="width: 100%;">
       <textarea id="input" style="width: 48vw;"></textarea>

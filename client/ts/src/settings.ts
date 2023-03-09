@@ -15,6 +15,7 @@ interface Settings {
   mainArgsOverride?: string[] | null;
   customFileSuffix?: string | null;
   locationStyle?: TextSpanStyle | null;
+  hideSettingsPanel?: boolean;
 }
 
 let settingsObj: Settings | null = null;
@@ -89,6 +90,9 @@ const settings = {
 
   getLocationStyle: () => settings.get().locationStyle ?? 'full',
   setLocationStyle: (locationStyle: TextSpanStyle | null) => settings.set({ ...settings.get(), locationStyle }),
+
+  shouldHideSettingsPanel: () => settings.get()?.hideSettingsPanel ?? false,
+  setShouldHideSettingsPanel: (shouldHide: boolean) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),
 };
 
 export default settings;

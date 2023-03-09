@@ -7,9 +7,9 @@
 
 #root {
   display: grid;
-  min-height: 96vh;
-  height: 96vh;
-  max-height: 96vh;
+  min-height: 98vh;
+  height: 98vh;
+  max-height: 98vh;
   grid-template-columns: 3fr 1fr;
   grid-template-rows: 1.5rem 1fr;
 
@@ -18,30 +18,54 @@ html {overflow: hidden;}
 
 
 body.fullscreen #input-header,
-body.fullscreen #settings-header,
+body.fullscreen #settings-header-wrapper,
 body.fullscreen #control-panel,
 body.hideModals .modalWindow {
   display: none;
 }
 
-/* body.fullscreen .modalWindow {
-  display: none;
-} */
 
 
 body.fullscreen #root {
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
-  /* display: inline;
-  width: 99vw;
-  height: 99vh; */
-  /* width: fit-content; */
-  /* height: fit-content; */
 }
 
-/* body.fullscreen #control-panel {
-  min-width: 0rem;;
+#settings-header-closed { display: none ;}
+body.hide-settings #settings-header-closed {
+  display: block;
+  align-self: flex-start;
+  margin-left: auto;
+}
+body.hide-settings #root {
+  grid-template-columns: unset;
+  /* grid-template-rows: unset; */
+  grid-template-columns: 1fr 1.5rem;
+  grid-template-areas: "a b"
+                       "c c";
+  /* grid-template-rows: 1fr; */
+}
+body.hide-settings #input-header { grid-area: a; }
+body.hide-settings #settings-header-wrapper {
+  grid-area: b;
+}
+body.hide-settings #input-wrapper { grid-area: c; }
+
+/*
+#settings-hider:hover { background: #AAA; }
+#settings-hider, #settings-hider:active {
+  background: #777;
+  border-radius: 50%;
+  border: none;
+}
+body[data-theme-light="true"] #settings-hider:hover { background: #AAA; }
+body[data-theme-light="true"] #settings-hider,
+body[data-theme-light="true"] #settings-hider:active {
+  background: #EEE;
 } */
+
+body.hide-settings #settings-header-open { display: none; }
+body.hide-settings #control-panel { display: none}
 
 .input-Monaco {
   overflow: auto;
@@ -294,7 +318,13 @@ body[data-theme-light="true"] .modalTitle {
   text-align: center;
   border-radius: 0.75rem;
   color: white;
+  display: flex;
 }
+.modalCloseButton > span {
+  margin: auto;
+  height: 1.125rem;
+}
+
 body[data-theme-light="true"] .modalOverflowButton,
 body[data-theme-light="true"] .modalEditButton {
   filter: invert();
@@ -347,14 +377,27 @@ select {
 }
 
 #input-header,
-#settings-header {
-  margin: auto 0 0.125rem 0;
+#settings-header-wrapper {
+  margin: auto 0 0 0;
 }
 
-#settings-header {
+#input-wrapper, #control-panel {
+  margin-top: 0.125rem;
+}
+
+#settings-header-wrapper {
+  min-height: 1.5rem;
   max-height: 1.5rem;
-  max-width: 8rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: end;
+}
+#settings-header-open {
   padding-left: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  /* align-self: flex-end; */
+  vertical-align: bottom;
 }
 
 #display-help {
@@ -425,6 +468,19 @@ body[data-theme-light="true"] .monaco-rag-highlight {
   background: #8884;
 }
 
+
+.settings-toggler:hover { background: #AAA; }
+.settings-toggler, .settings-toggler:active {
+  cursor: pointer;
+  background: #555;
+  border-radius: 50%;
+  border: none;
+}
+body[data-theme-light="true"] .settings-toggler:hover { background: #AAA; }
+body[data-theme-light="true"] .settings-toggler,
+body[data-theme-light="true"] .settings-toggler:active {
+  background: #EEE;
+}
 .myLineDecoration {
 	background: lightblue;
 	width: 5px !important;
@@ -594,11 +650,3 @@ body[data-theme-light="true"] .context-menu-row {
 .context-menu-row:hover {
   background: #7777;
 }
-
-
-/* background: #7777;
-}
-body[data-theme-light="true"] .highlightOnHover:hover,
-body[data-theme-light="true"] .clickHighlightOnHover:hover {
-  background: #aaa7;
-} */
