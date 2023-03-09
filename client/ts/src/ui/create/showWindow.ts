@@ -8,6 +8,7 @@ interface CancelToken {
 interface ShowWindowArgs {
   render: (container: HTMLElement, info: { cancelToken: CancelToken; bringToFront: () => void; }) => void;
   pos?: ModalPosition | null;
+  size?: { width: number, height: number },
   rootStyle?: string;
   onFinishedMove?: () => void;
   onOngoingResize?: () => void;
@@ -16,7 +17,7 @@ interface ShowWindowArgs {
 }
 
 const showWindow = (args: ShowWindowArgs) => {
-  const { render, pos: initialPos, rootStyle, resizable } = args;
+  const { render, pos: initialPos, size: initialSize, rootStyle, resizable } = args;
   const root = document.createElement('div');
   root.tabIndex = 0;
   root.classList.add('modalWindow');
@@ -96,6 +97,12 @@ const showWindow = (args: ShowWindowArgs) => {
       },
       args.onFinishedResize).cleanup;
   }
+  if (initialSize) {
+    root.style.width = `${initialSize.width}px`;
+    root.style.height = `${initialSize.height}px`;
+    root.style.maxWidth = 'fit-content';
+    root.style.maxHeight = 'fit-content';
+  }
 
   document.body.appendChild(root);
   const dragToMove = attachDragToMove(root, initialPos, args.onFinishedMove);
@@ -112,6 +119,7 @@ const showWindow = (args: ShowWindowArgs) => {
       render(contentRoot, { cancelToken: lastCancelToken, bringToFront });
     },
     getPos: dragToMove.getPos,
+    getSize: () => ({ width: root.clientWidth, height: root.clientHeight }),
   };
 };
 

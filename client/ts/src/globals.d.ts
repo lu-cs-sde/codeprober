@@ -60,6 +60,7 @@ interface WindowStateDataAst {
   type: 'ast';
   locator: NodeLocator;
   direction: 'upwards' | 'downwards';
+  transform: { [id: string]: number },
 }
 
 type WindowStateData = WindowStateDataProbe | WindowStateDataAst;
@@ -90,6 +91,7 @@ interface StickyHighlight {
 }
 interface CullingTaskSubmitter {
   submit: (callback: () => void) => void;
+  cancel: () => void;
 }
 interface ModalEnv {
   performRpcQuery: (args: {
@@ -100,8 +102,10 @@ interface ModalEnv {
   updateSpanHighlight: (span: Span | null) => void;
   setStickyHighlight: (probeId: string, hl: StickyHighlight) => void;
   clearStickyHighlight: (probeId: string) => void;
-  probeMarkers: { [probeId: string]: ProbeMarker[] };
+  probeMarkers: { [probeId: string]: ProbeMarker[] };
   onChangeListeners: { [key: string]: (adjusters?: LocationAdjuster[]) => void };
+  themeChangeListeners: { [key: string]: (light: boolean) => void };
+  themeIsLight: () => boolean,
   probeWindowStateSavers: { [key: string]: (target: WindowState[]) => void };
   triggerWindowSave: () => void;
   registerStickyMarker: (initialSpan: Span) => StickyMarker;

@@ -1,9 +1,8 @@
 
 
 const createCullingTaskSubmitterFactory: (timeout: any | number) => ModalEnv['createCullingTaskSubmitter'] = (cullTime) => {
-  console.log('create taskSubmitter, cullTime: ', cullTime, typeof cullTime);
   if (typeof cullTime !== 'number') {
-    return () => ({ submit: (cb) => cb(), });
+    return () => ({ submit: (cb) => cb(), cancel: () => {}, });
   }
   return () => {
     let localChangeDebounceTimer: any = -1;
@@ -11,7 +10,10 @@ const createCullingTaskSubmitterFactory: (timeout: any | number) => ModalEnv['cr
       submit: (cb) => {
         clearTimeout(localChangeDebounceTimer);
         localChangeDebounceTimer = setTimeout(() => cb(), cullTime);
-      }
+      },
+      cancel: () => {
+        clearTimeout(localChangeDebounceTimer);
+      },
     };
   }
 };

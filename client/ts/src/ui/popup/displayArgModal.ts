@@ -37,6 +37,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
     if (window.ActiveLocatorRequest === lastLocatorRequest) {
       cancelLocatorRequest();
     }
+    delete env.onChangeListeners[queryId];
   };
   const args = attr.args;
   if (!args || !args.length) {

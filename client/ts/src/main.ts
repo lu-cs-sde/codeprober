@@ -104,16 +104,13 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
 
       const darkModeCheckbox  = uiElements.darkModeCheckbox;
       darkModeCheckbox.checked = !settings.isLightTheme();
-
-      const defineThemeToggler = (cb: (lightTheme: boolean) => void) => {
-        darkModeCheckbox.oninput = (e) => {
-          let lightTheme = !darkModeCheckbox.checked;
-          settings.setLightTheme(lightTheme);
-          document.body.setAttribute('data-theme-light', `${lightTheme}`);
-          cb(lightTheme);
-        }
-        cb(settings.isLightTheme());
-      };
+      const themeChangeListeners: { [id: string]: (lightTheme: boolean) => void } = {};
+      darkModeCheckbox.oninput = (e) => {
+        let lightTheme = !darkModeCheckbox.checked;
+        settings.setLightTheme(lightTheme);
+        document.body.setAttribute('data-theme-light', `${lightTheme}`);
+        Object.values(themeChangeListeners).forEach(cb => cb(lightTheme));
+      }
 
       let syntaxHighlightingToggler: ((langId: SyntaxHighlightingLanguageId) => void) | undefined;
 
@@ -127,7 +124,9 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
           registerStickyMarker = res.registerStickyMarker || registerStickyMarker;
           markText = res.markText || markText;
           if (res.themeToggler) {
-            defineThemeToggler(res.themeToggler);
+            themeChangeListeners['main-editor'] = (light) => res.themeToggler(light);
+            res.themeToggler(settings.isLightTheme());
+            // defineThemeToggler(res.themeToggler);
           }
           syntaxHighlightingToggler = res.syntaxHighlightingToggler;
 
@@ -245,7 +244,8 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
 
       const modalEnv: ModalEnv = {
         performRpcQuery: (args) => performRpcQuery(wsHandler, args),
-        probeMarkers, onChangeListeners, updateMarkers,
+        probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
+        themeIsLight: () => settings.isLightTheme(),
         getLocalState: () => getLocalState(),
         captureStdout: () => uiElements.captureStdoutCheckbox.checked,
         duplicateOnAttr: () => uiElements.duplicateProbeCheckbox.checked,
@@ -311,7 +311,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
                 break;
               }
               case 'ast': {
-                displayAstModal(modalEnv, state.modalPos, state.data.locator, state.data.direction);
+                displayAstModal(modalEnv, state.modalPos, state.data.locator, state.data.direction, state.data.transform);
                 break;
               }
               default: {

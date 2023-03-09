@@ -57,7 +57,6 @@ body.fullscreen #root {
   color: red;
   border-bottom: 1px solid red;
   border-radius: 4px;
-  /* border: 1px solid red; */
   outline: red;
 }
 

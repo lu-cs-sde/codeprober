@@ -1,39 +1,57 @@
 import createLoadingSpinner from "../create/createLoadingSpinner";
 import createModalTitle from "../create/createModalTitle";
 import showWindow from "../create/showWindow";
-import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import displayHelp from "./displayHelp";
 import adjustLocator from "../../model/adjustLocator";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
-import trimTypeName from "../trimTypeName";
 import attachDragToX from "../create/attachDragToX";
 import displayAttributeModal from "./displayAttributeModal";
+import settings from "../../settings";
+import createTextSpanIndicator from "../create/createTextSpanIndicator";
+import createCullingTaskSubmitterFactory from '../../model/cullingTaskSubmitterFactory';
 
 type AstListDirection = 'downwards' | 'upwards';
-const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator, listDirection: AstListDirection) => {
+const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator, listDirection: AstListDirection, initialTransform?: { [id: string]: number }) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   let state: { type: 'ok', data: any } | { type: 'err', body: RpcBodyLine[] } | null = null;
+  let lightTheme = env.themeIsLight();
 
  let fetchState: 'idle' | 'fetching' | 'queued' = 'idle';
   const cleanup = () => {
     delete env.onChangeListeners[queryId];
     delete env.probeWindowStateSavers[queryId];
+    delete env.themeChangeListeners[queryId];
     popup.remove();
     env.triggerWindowSave();
   };
   const onResizePtr = {
     callback: () => {},
   };
-  const trn = { x: 1920/2, y: 0, scale: 1, };
-  let resetTranslationOnRender = true;
+  const bufferingSaver = createCullingTaskSubmitterFactory(100)();
+  const saveAfterTransformChange = () => {
+    bufferingSaver.submit(() => { env.triggerWindowSave() });
+  };
+  const trn = {
+    x: initialTransform?.x ?? 1920/2,
+    y: initialTransform?.y ?? 0,
+    scale: initialTransform?.scale ?? 1,
+  };
+  let resetTranslationOnRender = !initialTransform;
   const popup = showWindow({
     pos: modalPos,
+    size: initialTransform?.width && initialTransform?.height ? {
+      width: initialTransform.width,
+      height: initialTransform.height,
+    } : undefined,
     rootStyle: `
       min-width: 24rem;
       min-height: 12rem;
       80vh;
     `,
-    onFinishedMove: () => env.triggerWindowSave(),
+    onFinishedMove: () => {
+      bufferingSaver.cancel();
+      env.triggerWindowSave()
+    },
     onOngoingResize: () => onResizePtr.callback(),
     onFinishedResize: () => onResizePtr.callback(),
     resizable: true,
@@ -47,11 +65,11 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           headType.innerText = `AST`;
 
           container.appendChild(headType);
-          // container.appendChild(createTextSpanIndicator({
-          //   span: startEndToSpan(locator.result.start, locator.result.end),
-          //   marginLeft: true,
-          //   onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
-          // }));
+          container.appendChild(createTextSpanIndicator({
+            span: startEndToSpan(locator.result.start, locator.result.end),
+            marginLeft: true,
+            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
+          }));
         },
         onClose: () => {
           cleanup();
@@ -171,6 +189,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             // trn.x = dragInfo.x + dx * dragInfo.sx;
             // trn.y = dragInfo.y + dy * dragInfo.sy;
             renderFrame();
+            saveAfterTransformChange();
           },
           () => {
             if (hoverClick == 'maybe') {
@@ -202,6 +221,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             // trn.x += (w.x / trn.scale) * e.deltaX / 1000;
             trn.scale = z2;
             renderFrame();
+            saveAfterTransformChange();
           });
 
           let hover: Point|null = null;
@@ -258,25 +278,18 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             trn.x = (1920 -rootNode.boundingBox.x) / 2;
             trn.y = 0;
           }
-        const renderFrame = () => {
+
+          const renderFrame = () => {
           const w = cv.width;
           const h = cv.height;
 
           ctx.resetTransform();
-          ctx.fillStyle = '#F4F4F4';
+          ctx.fillStyle = getThemedColor(lightTheme, 'probe-result-area');
           ctx.fillRect(0, 0, w, h);
           // console.log('render', trn.x, ' + ', w,  '|', trn.x * 1920 / w, cv.clientWidth, cv);
           // ctx.translate(trn.x * 1920 / cv.clientWidth, trn.y * 1080 / cv.clientHeight);
           ctx.translate(trn.x, trn.y);
           ctx.scale(trn.scale, getScaleY());
-
-          ctx.fillStyle = '#FFF';
-          // const side = 400;
-          // const c = 100 + (side / 2);
-          // ctx.translate(c, c);
-          // ctx.rotate(Math.sin(Date.now() / 200.0));
-          // ctx.translate(-c, -c);
-          // ctx.fillRect(100, 100, side, side);
 
           cv.style.cursor = 'default';
           let didHighlightSomething = false;
@@ -284,7 +297,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             const renderx = ox + (node.boundingBox.x - nodew) / 2;
             const rendery = oy;
             if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
-              ctx.fillStyle = '#AAA';
+              ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
               cv.style.cursor = 'pointer';
               const { start, end, external } = node.locator.result;
               if (start && end && !external) {
@@ -300,11 +313,11 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                 displayAttributeModal(env, null, node.locator);
               }
             } else {
-              ctx.fillStyle = '#DDD';
+              ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
             }
             ctx.fillRect(renderx, rendery, nodew, nodeh);
 
-            ctx.strokeStyle = '4px black dashed';
+            ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
             if (node.locator.steps.length > 0 && node.locator.steps[node.locator.steps.length - 1].type === 'nta') {
               ctx.setLineDash([5, 5])
               ctx.strokeRect(renderx, rendery, nodew, nodeh);
@@ -313,8 +326,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               ctx.strokeRect(renderx, rendery, nodew, nodeh);
             }
 
-
-            ctx.fillStyle = `black`;
+            // ctx.fillStyle = `black`;
             let fonth = (nodeh * 0.5)|0;
             renderText: while (true) {
               ctx.font = `${fonth}px sans`;
@@ -330,16 +342,13 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                   continue renderText;
                 }
                 const txtx = renderx + (nodew - totalW)/2;
-                // TODO need good system for re-rendering on theme changes, rather than hard-coding one theme.
-                // Probably a callback-map you can register in the ModalEnv
-                ctx.fillStyle = `#001080`;
-                // dark: 9CDCFE
+                ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable');
                 ctx.fillText(node.name, txtx, txty);
-                ctx.fillStyle = `#267F99`;
+                ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
                 // dark: 4EC9B0
                 ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
               } else {
-                ctx.fillStyle = `#267F99`;
+                ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
                 const typeTailMeasure = ctx.measureText(typeTail);
                 if (typeTailMeasure.width > nodew && fonth > 16) {
                   fonth = Math.max(16, fonth * 0.9 | 0);
@@ -357,11 +366,11 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                 const msg = `᠁`;
                 const fonth = (nodeh * 0.5)|0;
                 ctx.font = `${fonth}px sans`;
-                ctx.fillStyle = 'black';
+                ctx.fillStyle = getThemedColor(lightTheme, 'separator');
                 const cx = renderx + nodew/2;
                 const cy = rendery + nodeh + nodepady  + fonth;
 
-                ctx.strokeStyle = 'black';
+                ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
                 ctx.beginPath();
                 ctx.moveTo(cx, rendery + nodeh);
                 ctx.lineTo(cx, cy - fonth);
@@ -399,7 +408,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               }
               renderNode(child, ox + childOffX, oy + childOffY);
 
-              ctx.strokeStyle = 'black';
+              ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
               ctx.lineWidth = 2;
               ctx.beginPath(); // Start a new path
               ctx.moveTo(renderx + nodew/2, rendery + nodeh);
@@ -499,7 +508,6 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
       // Handle resp
       locator = result.locator;
       state = { type: 'ok', data: parsed };
-      // resetTranslationOnRender = true;
       popup.refresh();
 
     })
@@ -518,8 +526,17 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
       type: 'ast',
       locator,
       direction: listDirection,
+      transform: {
+        ...trn,
+        ...popup.getSize(),
+      },
     },
   });
+};
+env.themeChangeListeners[queryId] = (light) => {
+  lightTheme = light;
+  onResizePtr.callback();
+  // popup.refresh();
 };
 env.triggerWindowSave();
 }
