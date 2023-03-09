@@ -1939,7 +1939,76 @@ define("model/cullingTaskSubmitterFactory", ["require", "exports"], function (re
     };
     exports.default = createCullingTaskSubmitterFactory;
 });
-define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/popup/displayHelp", "model/adjustLocator", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, showWindow_4, displayHelp_1, adjustLocator_2, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_3, createTextSpanIndicator_4, cullingTaskSubmitterFactory_1) {
+define("ui/create/createStickyHighlightController", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const createStickyHighlightController = (env) => {
+        const stickyId = `sticky-highlight-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        let activeStickyColorClass = '';
+        let currentTarget = null;
+        let currentLocator = null;
+        const applySticky = () => {
+            if (!currentTarget || !currentLocator)
+                return;
+            env.setStickyHighlight(stickyId, {
+                classNames: [
+                    `monaco-rag-highlight-sticky`,
+                    activeStickyColorClass,
+                ],
+                span: startEndToSpan(currentLocator.result.start, currentLocator.result.end),
+            });
+            currentTarget.classList.add(`monaco-rag-highlight-sticky`);
+            currentTarget.classList.add(activeStickyColorClass);
+        };
+        return {
+            onClick: () => {
+                var _a, _b;
+                if (!activeStickyColorClass) {
+                    for (let i = 0; i < 10; ++i) {
+                        document.querySelector;
+                        activeStickyColorClass = `monaco-rag-highlight-sticky-${i}`;
+                        if (!!document.querySelector(`.${activeStickyColorClass}`)) {
+                            activeStickyColorClass = '';
+                        }
+                        else {
+                            break;
+                        }
+                    }
+                    if (!activeStickyColorClass) {
+                        // More than 10 colors active, pick one pseudorandomly instead
+                        activeStickyColorClass = `monaco-rag-highlight-sticky-${(Math.random() * 10) | 0}`;
+                    }
+                    applySticky();
+                }
+                else {
+                    env.clearStickyHighlight(stickyId);
+                    if (activeStickyColorClass) {
+                        (_a = currentTarget === null || currentTarget === void 0 ? void 0 : currentTarget.classList) === null || _a === void 0 ? void 0 : _a.remove(`monaco-rag-highlight-sticky`);
+                        (_b = currentTarget === null || currentTarget === void 0 ? void 0 : currentTarget.classList) === null || _b === void 0 ? void 0 : _b.remove(activeStickyColorClass);
+                        activeStickyColorClass = '';
+                    }
+                }
+            },
+            cleanup: () => {
+                if (activeStickyColorClass) {
+                    env.clearStickyHighlight(stickyId);
+                }
+            },
+            configure: (target, locator) => {
+                currentTarget = target;
+                currentLocator = locator;
+                if (activeStickyColorClass) {
+                    applySticky();
+                }
+                else {
+                    env.clearStickyHighlight(stickyId);
+                }
+            }
+        };
+    };
+    exports.default = createStickyHighlightController;
+});
+define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/popup/displayHelp", "model/adjustLocator", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, showWindow_4, displayHelp_1, adjustLocator_2, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_3, createTextSpanIndicator_4, cullingTaskSubmitterFactory_1, createStickyHighlightController_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
@@ -1952,11 +2021,13 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     displayAttributeModal_3 = __importDefault(displayAttributeModal_3);
     createTextSpanIndicator_4 = __importDefault(createTextSpanIndicator_4);
     cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
+    createStickyHighlightController_1 = __importDefault(createStickyHighlightController_1);
     const displayAstModal = (env, modalPos, locator, listDirection, initialTransform) => {
         var _a, _b, _c;
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let state = null;
         let lightTheme = env.themeIsLight();
+        const stickyController = (0, createStickyHighlightController_1.default)(env);
         let fetchState = 'idle';
         const cleanup = () => {
             delete env.onChangeListeners[queryId];
@@ -2005,11 +2076,14 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         const headType = document.createElement('span');
                         headType.innerText = `AST`;
                         container.appendChild(headType);
-                        container.appendChild((0, createTextSpanIndicator_4.default)({
+                        const spanIndicator = (0, createTextSpanIndicator_4.default)({
                             span: startEndToSpan(locator.result.start, locator.result.end),
                             marginLeft: true,
                             onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
-                        }));
+                            onClick: stickyController.onClick,
+                        });
+                        stickyController.configure(spanIndicator, locator);
+                        container.appendChild(spanIndicator);
                     },
                     onClose: () => {
                         cleanup();
@@ -2755,7 +2829,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     };
     exports.default = displayAttributeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName"], function (require, exports, createLoadingSpinner_3, createModalTitle_5, createTextSpanIndicator_6, displayAttributeModal_4, showWindow_6, formatAttr_3, displayArgModal_2, registerNodeSelector_3, adjustLocator_4, displayHelp_3, encodeRpcBodyLines_3, trimTypeName_4) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/popup/displayAttributeModal", "ui/create/showWindow", "ui/popup/formatAttr", "ui/popup/displayArgModal", "ui/create/registerNodeSelector", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/create/createStickyHighlightController"], function (require, exports, createLoadingSpinner_3, createModalTitle_5, createTextSpanIndicator_6, displayAttributeModal_4, showWindow_6, formatAttr_3, displayArgModal_2, registerNodeSelector_3, adjustLocator_4, displayHelp_3, encodeRpcBodyLines_3, trimTypeName_4, createStickyHighlightController_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_3 = __importDefault(createLoadingSpinner_3);
@@ -2770,11 +2844,12 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     displayHelp_3 = __importDefault(displayHelp_3);
     encodeRpcBodyLines_3 = __importDefault(encodeRpcBodyLines_3);
     trimTypeName_4 = __importDefault(trimTypeName_4);
+    createStickyHighlightController_2 = __importDefault(createStickyHighlightController_2);
     const displayProbeModal = (env, modalPos, locator, attr) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
         env.probeMarkers[queryId] = localErrors;
-        let activeStickyColorClass = '';
+        const stickyController = (0, createStickyHighlightController_2.default)(env);
         // const stickyMarker = env.registerStickyMarker(span)
         const cleanup = () => {
             delete env.onChangeListeners[queryId];
@@ -2785,9 +2860,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             if (localErrors.length > 0) {
                 env.updateMarkers();
             }
-            if (activeStickyColorClass) {
-                env.clearStickyHighlight(queryId);
-            }
+            stickyController.cleanup();
         };
         let copyBody = [];
         const createTitle = () => {
@@ -2929,43 +3002,14 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         };
                         container.appendChild(editButton);
                     }
-                    const applySticky = () => {
-                        env.setStickyHighlight(queryId, {
-                            classNames: [
-                                `monaco-rag-highlight-sticky`,
-                                activeStickyColorClass,
-                            ],
-                            span: startEndToSpan(locator.result.start, locator.result.end),
-                        });
-                        spanIndicator.classList.add(`monaco-rag-highlight-sticky`);
-                        spanIndicator.classList.add(activeStickyColorClass);
-                    };
                     const spanIndicator = (0, createTextSpanIndicator_6.default)({
                         span: startEndToSpan(locator.result.start, locator.result.end),
                         marginLeft: true,
                         onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
-                        onClick: () => {
-                            if (!activeStickyColorClass) {
-                                activeStickyColorClass = `monaco-rag-highlight-sticky-${Math.floor(Math.random() * 5)}`;
-                                applySticky();
-                            }
-                            else {
-                                env.clearStickyHighlight(queryId);
-                                if (activeStickyColorClass) {
-                                    spanIndicator.classList.remove(`monaco-rag-highlight-sticky`);
-                                    spanIndicator.classList.remove(activeStickyColorClass);
-                                    activeStickyColorClass = '';
-                                }
-                            }
-                        },
+                        onClick: stickyController.onClick,
                         external: locator.result.external,
                     });
-                    if (activeStickyColorClass) {
-                        applySticky();
-                    }
-                    else {
-                        env.clearStickyHighlight(queryId);
-                    }
+                    stickyController.configure(spanIndicator, locator);
                     (0, registerNodeSelector_3.default)(spanIndicator, () => locator);
                     container.appendChild(spanIndicator);
                 },

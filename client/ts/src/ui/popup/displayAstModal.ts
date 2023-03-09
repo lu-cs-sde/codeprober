@@ -9,12 +9,14 @@ import displayAttributeModal from "./displayAttributeModal";
 import settings from "../../settings";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import createCullingTaskSubmitterFactory from '../../model/cullingTaskSubmitterFactory';
+import createStickyHighlightController from '../create/createStickyHighlightController';
 
 type AstListDirection = 'downwards' | 'upwards';
 const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator, listDirection: AstListDirection, initialTransform?: { [id: string]: number }) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   let state: { type: 'ok', data: any } | { type: 'err', body: RpcBodyLine[] } | null = null;
   let lightTheme = env.themeIsLight();
+  const stickyController = createStickyHighlightController(env);
 
  let fetchState: 'idle' | 'fetching' | 'queued' = 'idle';
   const cleanup = () => {
@@ -65,11 +67,14 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           headType.innerText = `AST`;
 
           container.appendChild(headType);
-          container.appendChild(createTextSpanIndicator({
+          const spanIndicator = createTextSpanIndicator({
             span: startEndToSpan(locator.result.start, locator.result.end),
             marginLeft: true,
             onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
-          }));
+            onClick: stickyController.onClick,
+          });
+          stickyController.configure(spanIndicator, locator);
+          container.appendChild(spanIndicator);
         },
         onClose: () => {
           cleanup();

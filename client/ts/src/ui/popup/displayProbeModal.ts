@@ -10,12 +10,13 @@ import adjustLocator from "../../model/adjustLocator";
 import displayHelp from "./displayHelp";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import trimTypeName from "../trimTypeName";
+import createStickyHighlightController from '../create/createStickyHighlightController';
 
 const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLocator, attr: AstAttrWithValue) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   const localErrors: ProbeMarker[] = [];
   env.probeMarkers[queryId] = localErrors;
-  let activeStickyColorClass = '';
+  const stickyController = createStickyHighlightController(env);
   // const stickyMarker = env.registerStickyMarker(span)
 
   const cleanup = () => {
@@ -27,9 +28,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
     if (localErrors.length > 0) {
       env.updateMarkers();
     }
-    if (activeStickyColorClass) {
-      env.clearStickyHighlight(queryId);
-    }
+    stickyController.cleanup();
   };
 
   let copyBody: RpcBodyLine[] = [];
@@ -175,41 +174,14 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
           container.appendChild(editButton);
         }
 
-        const applySticky = () => {
-          env.setStickyHighlight(queryId, {
-            classNames: [
-              `monaco-rag-highlight-sticky`,
-              activeStickyColorClass,
-            ],
-            span: startEndToSpan(locator.result.start, locator.result.end),
-          });
-          spanIndicator.classList.add(`monaco-rag-highlight-sticky`);
-          spanIndicator.classList.add(activeStickyColorClass);
-        };
         const spanIndicator = createTextSpanIndicator({
           span: startEndToSpan(locator.result.start, locator.result.end),
           marginLeft: true,
           onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
-          onClick: () => {
-            if (!activeStickyColorClass) {
-              activeStickyColorClass = `monaco-rag-highlight-sticky-${Math.floor(Math.random() * 5)}`;
-              applySticky();
-            } else {
-              env.clearStickyHighlight(queryId);
-              if (activeStickyColorClass) {
-                spanIndicator.classList.remove(`monaco-rag-highlight-sticky`);
-                spanIndicator.classList.remove(activeStickyColorClass);
-                activeStickyColorClass = '';
-              }
-            }
-          },
+          onClick: stickyController.onClick,
           external: locator.result.external,
         });
-        if (activeStickyColorClass) {
-          applySticky();
-        } else {
-          env.clearStickyHighlight(queryId);
-        }
+        stickyController.configure(spanIndicator, locator);
         registerNodeSelector(spanIndicator, () => locator);
         container.appendChild(spanIndicator);
       },
