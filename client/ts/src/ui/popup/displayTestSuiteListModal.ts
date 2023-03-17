@@ -177,7 +177,7 @@ const displayTestSuiteListModal = (
 
   env.testManager.addListener(queryId, (change) => {
     ++changeCallbackCounter;
-    if (change === 'added-test') {
+    if (change === 'added-test' || change == 'removed-test') {
       localTestSuiteKnowledge = {};
     }
     reloadList();

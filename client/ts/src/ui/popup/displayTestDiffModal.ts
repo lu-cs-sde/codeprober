@@ -56,6 +56,16 @@ const displayTestDiffModal = (
             settings.setEditorContents(testCase.src);
             window.location.reload();
           }
+        },
+        {
+          title: 'Delete Test (cannot be undone)',
+          invoke: () => {
+            env.testManager.removeTest(testCategory, testCase.name)
+              .then(onClose)
+              .catch((err) => {
+                console.warn('Failed removing test', testCategory, '>', testCase.name, err);
+              });
+          }
         }
       ]
     });

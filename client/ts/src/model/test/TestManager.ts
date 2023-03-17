@@ -5,7 +5,7 @@ import { rpcLinesToAssertionLines } from './rpcBodyToAssertionLine';
 import TestCase from './TestCase';
 
 
-type ChangeType = 'added-test' | 'test-status-update';
+type ChangeType = 'added-test' | 'removed-test' | 'test-status-update';
 type ChangeListener = (type: ChangeType) => void;
 
 interface TestStatus {
@@ -17,6 +17,7 @@ interface TestManager {
   getTestSuite: (category: string) => Promise<TestCase[] | 'failed-fetching'>;
   getTestStatus: (category: string, name: string) => Promise<TestStatus | 'failed-fetching'>;
   addTest: (category: string, test: TestCase) => Promise<'ok' | 'already-exists-with-that-name' | 'failed-fetching'>,
+  removeTest: (category: string, name: string) => Promise<'ok' | 'no-such-test' | 'failed-fetching'>,
   addListener: (uid: string, callback: ChangeListener) => void,
   removeListener: (uid: string) => void,
   flushTestCaseData: () => void;
@@ -74,8 +75,7 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): T
     const categories = await listTestSuiteCategories();
     if (categories == 'failed-listing') { return 'failed-fetching'; }
 
-    console.log('todo add', category, '/', test.name);
-    ++categoryInvalidationCount;
+    // console.log('todo add', category, '/', test.name);
 
     const existing = await getTestSuite(category);
     if (existing == 'failed-fetching') {
@@ -84,8 +84,23 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): T
       return 'already-exists-with-that-name';
     }
     await saveCategoryState(category, [...(suiteListRepo[category] || []), test]);
+    ++categoryInvalidationCount;
     delete testStatusRepo[category];
     notifyListeners('added-test');
+    return 'ok';
+  };
+  const removeTest: TestManager['removeTest'] = async (category, name) => {
+    const existing = await getTestSuite(category);
+    if (existing == 'failed-fetching') { return 'failed-fetching'; }
+
+
+    if (!existing.some(cat => cat.name === name)) {
+      return 'no-such-test';
+    }
+    await saveCategoryState(category, existing.filter(cat => cat.name !== name));
+    ++categoryInvalidationCount;
+    delete testStatusRepo[category];
+    notifyListeners('removed-test');
     return 'ok';
   };
   const listTestSuiteCategories: TestManager['listTestSuiteCategories'] = (() => {
@@ -200,6 +215,7 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): T
 
   return {
     addTest,
+    removeTest,
     listTestSuiteCategories,
     getTestSuite,
     getTestStatus,

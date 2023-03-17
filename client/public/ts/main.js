@@ -1572,8 +1572,7 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
             if (categories == 'failed-listing') {
                 return 'failed-fetching';
             }
-            console.log('todo add', category, '/', test.name);
-            ++categoryInvalidationCount;
+            // console.log('todo add', category, '/', test.name);
             const existing = await getTestSuite(category);
             if (existing == 'failed-fetching') {
                 // Doesn't exist yet, this is OK
@@ -1582,8 +1581,23 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
                 return 'already-exists-with-that-name';
             }
             await saveCategoryState(category, [...(suiteListRepo[category] || []), test]);
+            ++categoryInvalidationCount;
             delete testStatusRepo[category];
             notifyListeners('added-test');
+            return 'ok';
+        };
+        const removeTest = async (category, name) => {
+            const existing = await getTestSuite(category);
+            if (existing == 'failed-fetching') {
+                return 'failed-fetching';
+            }
+            if (!existing.some(cat => cat.name === name)) {
+                return 'no-such-test';
+            }
+            await saveCategoryState(category, existing.filter(cat => cat.name !== name));
+            ++categoryInvalidationCount;
+            delete testStatusRepo[category];
+            notifyListeners('removed-test');
             return 'ok';
         };
         const listTestSuiteCategories = (() => {
@@ -1693,6 +1707,7 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
         };
         return {
             addTest,
+            removeTest,
             listTestSuiteCategories,
             getTestSuite,
             getTestStatus,
@@ -4722,6 +4737,16 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                             settings_6.default.setEditorContents(testCase.src);
                             window.location.reload();
                         }
+                    },
+                    {
+                        title: 'Delete Test (cannot be undone)',
+                        invoke: () => {
+                            env.testManager.removeTest(testCategory, testCase.name)
+                                .then(onClose)
+                                .catch((err) => {
+                                console.warn('Failed removing test', testCategory, '>', testCase.name, err);
+                            });
+                        }
                     }
                 ]
             });
@@ -5169,7 +5194,7 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
         reloadList();
         env.testManager.addListener(queryId, (change) => {
             ++changeCallbackCounter;
-            if (change === 'added-test') {
+            if (change === 'added-test' || change == 'removed-test') {
                 localTestSuiteKnowledge = {};
             }
             reloadList();
