@@ -4716,6 +4716,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
             // }
             // stickyController.cleanup();
         };
+        let saveSelfAsProbe = false;
         const createTitle = () => {
             const onClose = () => {
                 queryWindow.remove();
@@ -4735,6 +4736,8 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                 settings_6.default.setCustomFileSuffix(testCase.tmpSuffix);
                             }
                             settings_6.default.setEditorContents(testCase.src);
+                            saveSelfAsProbe = true;
+                            env.triggerWindowSave();
                             window.location.reload();
                         }
                     },
@@ -4898,6 +4901,18 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                 queryWindow.refresh();
             }
         });
+        env.probeWindowStateSavers[queryId] = (target) => {
+            if (saveSelfAsProbe) {
+                target.push({
+                    modalPos: queryWindow.getPos(),
+                    data: {
+                        type: 'probe',
+                        locator,
+                        attr,
+                    },
+                });
+            }
+        };
     };
     exports.default = displayTestDiffModal;
 });

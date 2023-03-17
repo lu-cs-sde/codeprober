@@ -29,6 +29,7 @@ const displayTestDiffModal = (
     // }
     // stickyController.cleanup();
   };
+  let saveSelfAsProbe = false;
 
   const createTitle = () => {
     const onClose = () => {
@@ -54,6 +55,8 @@ const displayTestDiffModal = (
               settings.setCustomFileSuffix(testCase.tmpSuffix);
             }
             settings.setEditorContents(testCase.src);
+            saveSelfAsProbe = true;
+            env.triggerWindowSave();
             window.location.reload();
           }
         },
@@ -224,6 +227,18 @@ const displayTestDiffModal = (
       queryWindow.refresh();
     }
   });
+  env.probeWindowStateSavers[queryId] = (target) => {
+    if (saveSelfAsProbe) {
+      target.push({
+        modalPos: queryWindow.getPos(),
+        data: {
+          type: 'probe',
+          locator,
+          attr,
+        },
+      });
+    }
+  }
 }
 
 export default displayTestDiffModal;
