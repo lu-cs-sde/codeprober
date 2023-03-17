@@ -20,7 +20,9 @@ const getCommonStreamArgWhitespacePrefix = (line: RpcBodyLine): number => {
   return Number.MAX_SAFE_INTEGER;
 }
 
-const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[]): HTMLElement => {
+type LineDecorator = (line: number) => 'default' | 'error' | 'unmatched';
+
+const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], decorator: LineDecorator | null): HTMLElement => {
   let needCapturedStreamArgExplanation = false;
 
   const streamArgPrefix = Math.min(...body.map(getCommonStreamArgWhitespacePrefix));
@@ -116,7 +118,7 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[]): HTMLElement => 
       }
     }
   }
-  const pre = document.createElement('pre');
+  const pre = document.createElement(decorator ? 'div' : 'pre');
   pre.style.margin = '0px';
   pre.style.padding = '0.5rem';
   pre.style.fontSize = '0.75rem';
@@ -128,8 +130,31 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[]): HTMLElement => 
       if (!line && !arr[lineIdx+1]) { return false; }
       return true;
     })
-    .forEach((line) => {
-      encodeLine(pre, line);
+    .forEach((line, lineIdx) => {
+
+      if (decorator) {
+        const holder = document.createElement('pre');
+        holder.style.margin = '0px';
+        holder.style.padding = '0';
+
+        switch (decorator(lineIdx)) {
+          case 'error': {
+            holder.classList.add('test-diff-error');
+            break;
+          }
+          case 'unmatched': {
+            holder.classList.add('test-diff-unmatched');
+            break;
+          }
+          default: break;
+        }
+        encodeLine(holder, line);
+        pre.appendChild(holder);
+
+      } else {
+
+        encodeLine(pre, line);
+      }
       // '\n'
     });
 

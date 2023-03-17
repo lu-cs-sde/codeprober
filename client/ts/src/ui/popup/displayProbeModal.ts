@@ -1,20 +1,16 @@
 import createLoadingSpinner from "../create/createLoadingSpinner";
 import createModalTitle from "../create/createModalTitle";
-import createTextSpanIndicator from "../create/createTextSpanIndicator";
-import displayAttributeModal from "./displayAttributeModal";
-import showModal from "../create/showWindow";
-import formatAttr from "./formatAttr";
-import displayArgModal from "./displayArgModal";
-import registerNodeSelector from "../create/registerNodeSelector";
+import showWindow from "../create/showWindow";
 import adjustLocator from "../../model/adjustLocator";
 import displayHelp from "./displayHelp";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
-import trimTypeName from "../trimTypeName";
 import createStickyHighlightController from '../create/createStickyHighlightController';
 import ModalEnv from '../../model/ModalEnv';
 import displayTestAdditionModal from './displayTestAdditionModal';
+import renderProbeModalTitleLeft from '../renderProbeModalTitleLeft';
+import settings from '../../settings';
 
-const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLocator, attr: AstAttrWithValue) => {
+const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator, attr: AstAttrWithValue) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   const localErrors: ProbeMarker[] = [];
   env.probeMarkers[queryId] = localErrors;
@@ -73,130 +69,29 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
             displayHelp('magic-stdout-messages', () => {});
           }
         },
-        {
-          title: 'Save as test',
-          invoke: () => {
-            displayTestAdditionModal(env, queryWindow.getPos(), locator, attr, lastOutput);
-          },
-        },
+        ...[
+          settings.shouldEnableTesting() && {
+            title: 'Save as test',
+            invoke: () => {
+              displayTestAdditionModal(env, queryWindow.getPos(), locator, attr, lastOutput);
+            },
+          }
+        ].filter(Boolean) as any
+        ,
       ],
       // onDuplicate: () => {
       //   const pos = queryWindow.getPos();
       //   displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, JSON.parse(JSON.stringify(locator)), attr);
       // },
-      renderLeft: (container) => {
-        const headType = document.createElement('span');
-        headType.classList.add('syntax-type');
-        headType.innerText = `${locator.result.label ?? trimTypeName(locator.result.type)}`;
-
-        const headAttr = document.createElement('span');
-        headAttr.classList.add('syntax-attr');
-        headAttr.classList.add('clickHighlightOnHover');
-        if (!attr.args || attr.args.length === 0) {
-          headAttr.innerText = `.${formatAttr(attr)}`;
-        } else {
-          headAttr.appendChild(document.createTextNode(`.${attr.name}(`));
-          attr.args.forEach((arg, argIdx) => {
-            if (argIdx > 0) {
-              headAttr.appendChild(document.createTextNode(`,`));
-            }
-            switch (arg.type) {
-              case 'java.lang.String': {
-                const node = document.createElement('span');
-                node.classList.add('syntax-string');
-                node.innerText = `"${arg.value}"`;
-                headAttr.appendChild(node);
-                break;
-              }
-              case 'int': {
-                const node = document.createElement('span');
-                node.classList.add('syntax-int');
-                node.innerText = `${arg.value}`;
-                headAttr.appendChild(node);
-                break;
-              }
-              case 'boolean': {
-                const node = document.createElement('span');
-                node.classList.add('syntax-modifier');
-                node.innerText = `${arg.value}`;
-                headAttr.appendChild(node);
-                break;
-              }
-              default: {
-                switch (arg.detail) {
-                  case 'AST_NODE': {
-                    const node = document.createElement('span');
-                    node.classList.add('syntax-type');
-                    if (!arg.value || (typeof arg.value !== 'object')) {
-                      // Probably null
-                      node.innerText = `${arg.value}`;
-                    } else {
-                      node.innerText = arg.value.result.type;
-                    }
-                    headAttr.appendChild(node);
-                    break;
-                  }
-                  case 'OUTPUTSTREAM': {
-                    const node = document.createElement('span');
-                    node.classList.add('stream-arg-msg');
-                    node.innerText = '<stream>';
-                    headAttr.appendChild(node);
-                    break;
-                  }
-                  default: {
-                    console.warn('Unsure of how to render', arg.type);
-                    headAttr.appendChild(document.createTextNode(`${arg.value}`));
-                  }
-                }
-                break;
-              }
-            }
-          });
-          headAttr.appendChild(document.createTextNode(`)`));
-        }
-        headAttr.onmousedown = (e) => { e.stopPropagation(); }
-        headAttr.onclick = (e) => {
-          if (env.duplicateOnAttr() != e.shiftKey) {
-            displayAttributeModal(env, null, JSON.parse(JSON.stringify(locator)));
-          } else {
-            queryWindow.remove();
-            cleanup();
-            displayAttributeModal(env, queryWindow.getPos(), locator);
-          }
-          e.stopPropagation();
-        }
-
-        container.appendChild(headType);
-        container.appendChild(headAttr);
-
-        // TODO add edit pen here?
-
-        if (attr.args?.length) {
-          const editButton = document.createElement('img');
-          editButton.src = '/icons/edit_white_24dp.svg';
-          editButton.classList.add('modalEditButton');
-          editButton.classList.add('clickHighlightOnHover');
-          editButton.onmousedown = (e) => { e.stopPropagation(); }
-          editButton.onclick = () => {
-            queryWindow.remove();
-            cleanup();
-            displayArgModal(env, queryWindow.getPos(), locator, attr);
-          };
-
-          container.appendChild(editButton);
-        }
-
-        const spanIndicator = createTextSpanIndicator({
-          span: startEndToSpan(locator.result.start, locator.result.end),
-          marginLeft: true,
-          onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
-          onClick: stickyController.onClick,
-          external: locator.result.external,
-        });
-        stickyController.configure(spanIndicator, locator);
-        registerNodeSelector(spanIndicator, () => locator);
-        container.appendChild(spanIndicator);
-      },
+      renderLeft: (container) => renderProbeModalTitleLeft(
+        env, container,
+        () => {
+          queryWindow.remove();
+          cleanup();
+        },
+        () => queryWindow.getPos(),
+        stickyController, locator, attr,
+      ),
       onClose: () => {
         queryWindow.remove();
         cleanup();
@@ -207,7 +102,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
   let isFirstRender = true;
   let loading = false;
   let refreshOnDone = false;
-  const queryWindow = showModal({
+  const queryWindow = showWindow({
     pos: modalPos,
     rootStyle: `
       min-width: 16rem;
@@ -299,7 +194,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition, locator: Node
           root.append(titleRow.element);
 
           lastOutput = body;
-          root.appendChild(encodeRpcBodyLines(env, body));
+          root.appendChild(encodeRpcBodyLines(env, body, null));
 
           const spinner = createLoadingSpinner();
           spinner.style.display = 'none';

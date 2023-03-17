@@ -16,9 +16,10 @@ import { TextSpanStyle } from "./ui/create/createTextSpanIndicator";
 import runBgProbe from "./model/runBgProbe";
 import createCullingTaskSubmitterFactory from "./model/cullingTaskSubmitterFactory";
 import displayAstModal from "./ui/popup/displayAstModal";
-import { createTestManager } from './model/TestManager';
-import displayTestModal from './ui/popup/displayTestModal';
+import { createTestManager } from './model/test/TestManager';
+import displayTestSuiteListModal from './ui/popup/displayTestSuiteListModal';
 import ModalEnv from './model/ModalEnv';
+import displayTestSuiteModal from './ui/popup/displayTestSuiteModal';
 
 
 window.clearUserSettings = () => {
@@ -31,6 +32,9 @@ const uiElements = new UIElements();
 const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', 'from': number, to: number }) => {
   if (settings.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
     document.body.classList.add('hide-settings');
+  }
+  if (!settings.shouldEnableTesting()) {
+    uiElements.showTests.style.display = 'none';
   }
   let getLocalState = () => settings.getEditorContents() ?? '';
   let basicHighlight: Span | null = null;
@@ -258,7 +262,8 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         document.getElementById('secret-debug-panel')!.style.display = 'block';
       }
 
-      const testManager = createTestManager(req => performRpcQuery(wsHandler, req));
+      // const testManager = createTestManager(req => performRpcQuery(wsHandler, req));
+      const testManager = createTestManager(req => wsHandler.sendRpc(req));
       const modalEnv: ModalEnv = {
         performRpcQuery: (args) => performRpcQuery(wsHandler, args),
         probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
@@ -287,17 +292,17 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         testManager,
        };
 
+       modalEnv.onChangeListeners['dummy-to-force-many-reevals'] = () => {
+        testManager.flushTestCaseData();
+       }
+
       uiElements.showTests.onclick = () => {
         uiElements.showTests.disabled = true;
-        displayTestModal(
+        displayTestSuiteListModal(
           modalEnv,
           () => { uiElements.showTests.disabled = false; },
         );
       };
-
-      // setTimeout(() => {
-      //   uiElements.showTests.click();
-      // }, 500);
 
        showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);
 

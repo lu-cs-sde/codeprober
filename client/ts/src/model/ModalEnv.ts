@@ -1,4 +1,4 @@
-import TestManager from './TestManager';
+import TestManager from './test/TestManager';
 
 interface ModalEnv {
   performRpcQuery: (args: {

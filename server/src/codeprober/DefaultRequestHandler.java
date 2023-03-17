@@ -126,8 +126,9 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		final String queryAttrName = queryAttr.getString("name");
 
 		// First check for pre-locator 'magic' methods
+		System.out.println("qan: " + queryAttrName);
 		switch (queryAttrName) {
-		case "meta:listObservers": {
+		case "meta:listTestSuites": {
 			String observerDir = System.getProperty("cpr.testDir");
 			if (observerDir != null) {
 				File dir = new File(observerDir);
@@ -138,7 +139,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 						for (File f : files) {
 							names.put(f.getName());
 						}
-						retBuilder.put("observers", names);
+						retBuilder.put("suites", names);
 					} else {
 						System.err.println(
 								"Couldn't list contents of TestDir '" + observerDir + "', perhaps a permission issue");
@@ -149,18 +150,43 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			}
 			return;
 		}
-		case "meta:getObserver": {
+		case "meta:getTestSuite": {
 			String observerDir = System.getProperty("cpr.testDir");
 			if (observerDir != null) {
-				File f = new File(observerDir, queryBody.getString("observerId"));
+				File f = new File(observerDir, queryBody.getString("category"));
+				if (new File(observerDir).toPath().startsWith(f.toPath())) {
+					System.err.println("Attempted read of file " + f + ", which is outside of testDir " + observerDir);
+					return;
+				}
 				try {
-					retBuilder.put("observer", new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));
+					retBuilder.put("suite", new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));
 				} catch (JSONException | IOException e) {
 					e.printStackTrace();
 					System.err.println("Failed reading contents of " + f);
 				}
 			} else {
 				System.err.println("No TestDir set, cannot get contents");
+			}
+			return;
+		}
+		case "meta:putTestSuite": {
+			String observerDir = System.getProperty("cpr.testDir");
+			if (observerDir != null) {
+				File f = new File(observerDir, queryBody.getString("category"));
+				if (new File(observerDir).toPath().startsWith(f.toPath())) {
+					System.err.println(
+							"Attempted insertion of file to " + f + ", which is outside of testDir " + observerDir);
+					return;
+				}
+				try {
+					Files.write(f.toPath(), queryBody.getString("suite").getBytes(StandardCharsets.UTF_8));
+					retBuilder.put("ok", true);
+				} catch (IOException e) {
+					e.printStackTrace();
+					System.err.println("Failed reading contents of " + f);
+				}
+			} else {
+				System.err.println("No TestDir set, cannot put contents");
 			}
 			return;
 		}

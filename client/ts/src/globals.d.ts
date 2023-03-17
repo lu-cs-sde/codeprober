@@ -94,11 +94,14 @@ interface CullingTaskSubmitter {
   cancel: () => void;
 }
 
-type RpcBodyLine = string
-  | { type: ('stdout' | 'stderr' | 'stream-arg'); value: string }
+type RpcBodyLine =
+    string
+  | { type: ('stdout' | 'stderr' | 'stream-arg'); value: string }
   | RpcBodyLine[]
   | { type: 'node'; value: NodeLocator }
   ;
+
+
 
 interface AstAttrArg {
   type: string;

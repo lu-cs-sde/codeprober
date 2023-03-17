@@ -1,7 +1,12 @@
 import ModalEnv from '../../model/ModalEnv';
 
+interface StickyHighlightController {
+  onClick: () => void;
+  cleanup: () => void;
+  configure: (target: HTMLElement, locator: NodeLocator) => void;
+}
 
-const createStickyHighlightController = (env: ModalEnv) => {
+const createStickyHighlightController = (env: ModalEnv): StickyHighlightController => {
   const stickyId = `sticky-highlight-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   let activeStickyColorClass = '';
 
@@ -65,4 +70,5 @@ const createStickyHighlightController = (env: ModalEnv) => {
   }
 }
 
+export { StickyHighlightController }
 export default createStickyHighlightController;

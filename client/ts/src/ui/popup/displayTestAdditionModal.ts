@@ -1,5 +1,6 @@
 import ModalEnv from '../../model/ModalEnv';
-import { AssertionLine } from '../../model/TestCase';
+import { rpcLinesToAssertionLines } from '../../model/test/rpcBodyToAssertionLine';
+import { AssertionLine } from '../../model/test/TestCase';
 import settings from '../../settings';
 import createLoadingSpinner from '../create/createLoadingSpinner';
 import createModalTitle from '../create/createModalTitle';
@@ -10,7 +11,13 @@ const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition, locato
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
 
   // Capture this immediately, in case the user modifies text while this dialog is open
-  const srcText = settings.getEditorContents() ?? '';
+  const baseProps = {
+    src: settings.getEditorContents() ?? '',
+    posRecovery: settings.getPositionRecoveryStrategy() as any,
+    cache: settings.getAstCacheStrategy() as any,
+    tmpSuffix: settings.getCurrentFileSuffix(),
+    mainArgs: settings.getMainArgsOverride(),
+  } ;
   let categories: string[] | 'loading' | 'failed-listing' = 'loading';
 
   const cleanup = () => {
@@ -88,7 +95,7 @@ const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition, locato
 
           const datalist = document.createElement('datalist');
           datalist.id = datalistId;
-          [...categories, 'foo', 'bar'].forEach(cat => {
+          categories.forEach(cat => {
             const opt = document.createElement('option');
             opt.value = cat.lastIndexOf('.') > 0 ? cat.slice(0, cat.lastIndexOf('.')) : cat;
             datalist.appendChild(opt);
@@ -142,39 +149,25 @@ const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition, locato
           row.appendChild(commitButton);
           commitButton.onclick = () => {
             // typeof line === 'string' ? line : { naive: line, robust: line }
-            const lineEncoder = (line: RpcBodyLine): AssertionLine => {
-              if (typeof line === 'string') {
-                return line;
-              }
-              if (Array.isArray(line)) {
-                return line.map(lineEncoder);
-              }
-
-              switch (line.type) {
-                case 'node': return { naive: line.value, robust: line.value };
-                default: return line.value;
-              }
-            };
-            const lines = output.map(lineEncoder);
             env.testManager.addTest(
               state.category,
               {
+                ...baseProps,
                 type: 'test',
                 assert: state.assertionType === 'Exact Match' ?
                 {
                   type: 'identity',
-                  lines,
+                  lines: output, // : rpcLinesToAssertionLines(output),
                 } : state.assertionType === 'Set Comparison' ?
                 {
                   type: 'set',
-                  lines,
+                  lines: output, // rpcLinesToAssertionLines(output),
                 } : {
                   type: 'smoke'
                 },
                 attribute,
                 locator: { naive: locator, robust: locator },
                 name: state.name,
-                src: srcText,
               }
             )
           }
@@ -206,7 +199,7 @@ const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition, locato
     },
   });
 
-  env.testManager.listCategories()
+  env.testManager.listTestSuiteCategories()
     .then((result) => {
       categories = result;
       popup.refresh();
