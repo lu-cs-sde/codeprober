@@ -19,7 +19,6 @@ import displayAstModal from "./ui/popup/displayAstModal";
 import { createTestManager } from './model/test/TestManager';
 import displayTestSuiteListModal from './ui/popup/displayTestSuiteListModal';
 import ModalEnv from './model/ModalEnv';
-import displayTestSuiteModal from './ui/popup/displayTestSuiteModal';
 
 
 window.clearUserSettings = () => {
@@ -60,8 +59,8 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       settings.setProbeWindowStates(states);
     };
 
-    const notifyLocalChangeListeners = (adjusters?: LocationAdjuster[]) => {
-      Object.values(onChangeListeners).forEach(l => l(adjusters));
+    const notifyLocalChangeListeners = (adjusters?: LocationAdjuster[], reason?: string) => {
+      Object.values(onChangeListeners).forEach(l => l(adjusters, reason));
       triggerWindowSave();
     }
 
@@ -292,9 +291,11 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         testManager,
        };
 
-       modalEnv.onChangeListeners['dummy-to-force-many-reevals'] = () => {
-        testManager.flushTestCaseData();
-       }
+       modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {
+        if (reason === 'refresh-from-server') {
+          testManager.flushTestCaseData();
+        }
+       };
 
       uiElements.showTests.onclick = () => {
         uiElements.showTests.disabled = true;
@@ -360,7 +361,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       }
     });
     wsHandler.on('refresh', () => {
-      notifyLocalChangeListeners();
+      notifyLocalChangeListeners(undefined, 'refresh-from-server');
     });
   }
 

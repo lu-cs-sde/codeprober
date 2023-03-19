@@ -10,7 +10,7 @@ interface ModalEnv {
   setStickyHighlight: (probeId: string, hl: StickyHighlight) => void;
   clearStickyHighlight: (probeId: string) => void;
   probeMarkers: { [probeId: string]: ProbeMarker[] };
-  onChangeListeners: { [key: string]: (adjusters?: LocationAdjuster[]) => void };
+  onChangeListeners: { [key: string]: (adjusters?: LocationAdjuster[], reason?: string) => void };
   themeChangeListeners: { [key: string]: (light: boolean) => void };
   themeIsLight: () => boolean,
   probeWindowStateSavers: { [key: string]: (target: WindowState[]) => void };

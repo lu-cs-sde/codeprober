@@ -396,8 +396,8 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
             resizeButton.style.position = 'absolute';
             resizeButton.style.right = '0px';
             resizeButton.style.bottom = '0px';
-            resizeButton.style.height = '0.25rem';
-            resizeButton.style.width = '0.25rem';
+            resizeButton.style.height = '0.5rem';
+            resizeButton.style.width = '0.5rem';
             resizeButton.style.borderRight = '4px solid gray';
             resizeButton.style.borderBottom = '4px solid gray';
             resizePositioner.appendChild(resizeButton);
@@ -1567,7 +1567,7 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
         const listeners = {};
         const notifyListeners = (type) => Object.values(listeners).forEach(cb => cb(type));
         let categoryInvalidationCount = 0;
-        const addTest = async (category, test) => {
+        const addTest = async (category, test, overwriteIfExisting) => {
             const categories = await listTestSuiteCategories();
             if (categories == 'failed-listing') {
                 return 'failed-fetching';
@@ -1577,10 +1577,10 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
             if (existing == 'failed-fetching') {
                 // Doesn't exist yet, this is OK
             }
-            else if (existing.some(tc => tc.name == test.name)) {
+            else if (existing.some(tc => tc.name == test.name) && !overwriteIfExisting) {
                 return 'already-exists-with-that-name';
             }
-            await saveCategoryState(category, [...(suiteListRepo[category] || []), test]);
+            await saveCategoryState(category, [...(suiteListRepo[category] || []).filter(tc => tc.name !== test.name), test]);
             ++categoryInvalidationCount;
             delete testStatusRepo[category];
             notifyListeners('added-test');
@@ -3414,7 +3414,7 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "settings", "
                                 attribute,
                                 locator: { naive: locator, robust: locator },
                                 name: state.name,
-                            });
+                            }, false);
                         };
                     });
                     addRow('', (row) => {
@@ -4818,6 +4818,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                         const hr = document.createElement('hr');
                         hr.style.marginTop = '0';
                         target.appendChild(hr);
+                        return row;
                     };
                     const splitPane = document.createElement('div');
                     splitPane.style.display = 'grid';
@@ -4855,13 +4856,35 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                     divider.classList.add('vertical-separator');
                     splitPane.appendChild(divider);
                     const rightPane = document.createElement('div');
-                    addSplitTitle(rightPane, 'Actual');
+                    const saver = addSplitTitle(rightPane, 'Actual 💾');
                     if (testStatus === 'failed-fetching') {
                         rightPane.appendChild(document.createElement(`
               Failed val
             `.trim()));
                     }
                     else {
+                        saver.classList.add('clickHighlightOnHover');
+                        saver.onmousedown = (e) => {
+                            e.stopImmediatePropagation();
+                            e.stopPropagation();
+                            e.preventDefault();
+                        };
+                        saver.onclick = () => {
+                            const patchedAssert = (() => {
+                                switch (testCase.assert.type) {
+                                    case 'identity':
+                                    case 'set':
+                                        return { ...testCase.assert, lines: testStatus.lines };
+                                    case 'smoke':
+                                    default:
+                                        return testCase.assert;
+                                }
+                            })();
+                            env.testManager.addTest(testCategory, {
+                                ...testCase,
+                                assert: patchedAssert,
+                            }, true);
+                        };
                         rightPane.appendChild((0, encodeRpcBodyLines_5.default)(env, testStatus.lines, (line) => {
                             if (typeof testReport === 'object') {
                                 if (testReport.invalid.includes(line)) {
@@ -4932,9 +4955,8 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
         let contents = 'loading';
         const popup = (0, showWindow_12.default)({
             rootStyle: `
-      width: 16rem;
-      min-width: 4rem;
-      min-height: 8rem;
+      min-width: 16rem;
+      min-height: fit-content;
     `,
             resizable: true,
             render: (root) => {
@@ -5270,8 +5292,8 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             Object.values(probeWindowStateSavers).forEach(v => v(states));
             settings_7.default.setProbeWindowStates(states);
         };
-        const notifyLocalChangeListeners = (adjusters) => {
-            Object.values(onChangeListeners).forEach(l => l(adjusters));
+        const notifyLocalChangeListeners = (adjusters, reason) => {
+            Object.values(onChangeListeners).forEach(l => l(adjusters, reason));
             triggerWindowSave();
         };
         function initEditor(editorType) {
@@ -5466,8 +5488,10 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     createCullingTaskSubmitter: (0, cullingTaskSubmitterFactory_2.default)(changeBufferTime),
                     testManager,
                 };
-                modalEnv.onChangeListeners['dummy-to-force-many-reevals'] = () => {
-                    testManager.flushTestCaseData();
+                modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {
+                    if (reason === 'refresh-from-server') {
+                        testManager.flushTestCaseData();
+                    }
                 };
                 uiElements.showTests.onclick = () => {
                     uiElements.showTests.disabled = true;
@@ -5524,7 +5548,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
             });
             wsHandler.on('refresh', () => {
-                notifyLocalChangeListeners();
+                notifyLocalChangeListeners(undefined, 'refresh-from-server');
             });
         }
         initEditor('Monaco');

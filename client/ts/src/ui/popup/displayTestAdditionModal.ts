@@ -168,7 +168,8 @@ const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition, locato
                 attribute,
                 locator: { naive: locator, robust: locator },
                 name: state.name,
-              }
+              },
+              false
             )
           }
         });

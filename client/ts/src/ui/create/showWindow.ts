@@ -71,8 +71,8 @@ const showWindow = (args: ShowWindowArgs) => {
     resizeButton.style.position = 'absolute';
     resizeButton.style.right = '0px';
     resizeButton.style.bottom = '0px';
-    resizeButton.style.height = '0.25rem';
-    resizeButton.style.width = '0.25rem';
+    resizeButton.style.height = '0.5rem';
+    resizeButton.style.width = '0.5rem';
     resizeButton.style.borderRight = '4px solid gray';
     resizeButton.style.borderBottom = '4px solid gray';
     resizePositioner.appendChild(resizeButton);

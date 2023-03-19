@@ -16,7 +16,7 @@ interface TestManager {
   listTestSuiteCategories: () => Promise<string[] | 'failed-listing'>,
   getTestSuite: (category: string) => Promise<TestCase[] | 'failed-fetching'>;
   getTestStatus: (category: string, name: string) => Promise<TestStatus | 'failed-fetching'>;
-  addTest: (category: string, test: TestCase) => Promise<'ok' | 'already-exists-with-that-name' | 'failed-fetching'>,
+  addTest: (category: string, test: TestCase, overwriteIfExisting: boolean) => Promise<'ok' | 'already-exists-with-that-name' | 'failed-fetching'>,
   removeTest: (category: string, name: string) => Promise<'ok' | 'no-such-test' | 'failed-fetching'>,
   addListener: (uid: string, callback: ChangeListener) => void,
   removeListener: (uid: string) => void,
@@ -71,7 +71,7 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): T
   const notifyListeners = (type: ChangeType) => Object.values(listeners).forEach(cb => cb(type));
 
   let categoryInvalidationCount = 0;
-  const addTest: TestManager['addTest'] = async (category, test) => {
+  const addTest: TestManager['addTest'] = async (category, test, overwriteIfExisting) => {
     const categories = await listTestSuiteCategories();
     if (categories == 'failed-listing') { return 'failed-fetching'; }
 
@@ -80,10 +80,10 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): T
     const existing = await getTestSuite(category);
     if (existing == 'failed-fetching') {
       // Doesn't exist yet, this is OK
-    } else if (existing.some(tc => tc.name == test.name)) {
+    } else if (existing.some(tc => tc.name == test.name) && !overwriteIfExisting) {
       return 'already-exists-with-that-name';
     }
-    await saveCategoryState(category, [...(suiteListRepo[category] || []), test]);
+    await saveCategoryState(category, [...(suiteListRepo[category] || []).filter(tc => tc.name !== test.name), test]);
     ++categoryInvalidationCount;
     delete testStatusRepo[category];
     notifyListeners('added-test');

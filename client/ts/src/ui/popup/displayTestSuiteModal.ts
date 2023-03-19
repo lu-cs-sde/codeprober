@@ -20,9 +20,8 @@ const displayTestSuiteModal = (
 
   const popup = showWindow({
     rootStyle: `
-      width: 16rem;
-      min-width: 4rem;
-      min-height: 8rem;
+      min-width: 16rem;
+      min-height: fit-content;
     `,
     resizable: true,
     render: (root) => {

@@ -140,6 +140,7 @@ const displayTestDiffModal = (
             const hr = document.createElement('hr');
             hr.style.marginTop = '0';
             target.appendChild(hr);
+            return row;
           };
           const splitPane = document.createElement('div');
           splitPane.style.display = 'grid';
@@ -181,12 +182,35 @@ const displayTestDiffModal = (
           splitPane.appendChild(divider);
 
           const rightPane = document.createElement('div');
-          addSplitTitle(rightPane, 'Actual');
+          const saver = addSplitTitle(rightPane, 'Actual 💾');
+
           if (testStatus === 'failed-fetching') {
             rightPane.appendChild(document.createElement(`
               Failed val
             `.trim()));
           } else {
+            saver.classList.add('clickHighlightOnHover');
+            saver.onmousedown = (e) => {
+              e.stopImmediatePropagation();
+              e.stopPropagation();
+              e.preventDefault();
+            }
+            saver.onclick = () => {
+              const patchedAssert = ((): TestCase['assert'] => {
+                switch (testCase.assert.type) {
+                  case 'identity':
+                  case 'set':
+                    return { ...testCase.assert, lines: testStatus.lines };
+                  case 'smoke':
+                    default:
+                      return testCase.assert;
+                }
+              })();
+              env.testManager.addTest(testCategory, {
+                ...testCase,
+                assert: patchedAssert,
+              }, true);
+            };
             rightPane.appendChild(encodeRpcBodyLines(env, testStatus.lines, (line) => {
               if (typeof testReport === 'object') {
                 if (testReport.invalid.includes(line)) {
