@@ -25,6 +25,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     delete env.themeChangeListeners[queryId];
     popup.remove();
     env.triggerWindowSave();
+    stickyController.cleanup();
   };
   const onResizePtr = {
     callback: () => {},

@@ -9,9 +9,11 @@ find src -name "*.java" > sources.txt
 
 echo "Building.."
 # "Our own" class files
-javac @sources.txt -cp libs/json.jar -d build_tmp -source 8 -target 8
+javac @sources.txt -cp libs/json.jar:libs/junit-4.13.2.jar:libs/hamcrest-2.2.jar -d build_tmp -source 8 -target 8
 # Third party class files
 unzip libs/json.jar '*.class' -x */* -d build_tmp
+unzip libs/junit-4.13.2.jar '*.class' -x */* -d build_tmp
+unzip libs/hamcrest-2.2.jar '*.class' -x */* -d build_tmp
 # Resources
 cp -r src/codeprober/resources build_tmp/codeprober/
 

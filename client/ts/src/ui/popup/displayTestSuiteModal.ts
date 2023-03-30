@@ -69,6 +69,7 @@ const displayTestSuiteModal = (
 
           const status = document.createElement('span');
           status.innerText = `⏳`;
+          row.style.order = '5';
           env.testManager.getTestStatus(category, tc.name).then(result => {
             console.log('tstatus for', category, '>', tc.name, ':', result);
             if (result == 'failed-fetching') {
@@ -78,23 +79,27 @@ const displayTestSuiteModal = (
               if (typeof report === 'string') {
                 switch (report) {
                   case 'pass': {
-                    status.innerText = `Pass ✅`;
+                    status.innerText = `✅`;
+                    row.style.order = '2';
                     break;
                   }
-                  case 'invalid-number-of-lines': {
-                    status.innerText = `Fail ❌`;
+                  case 'failed-eval': {
+                    status.innerText = `❌`;
+                  row.style.order = '1';
+                  }
+                  default: {
+                    console.warn('Unknown test report string value:', report);
                   }
                 }
               } else {
-                switch (report.type) {
-                  case 'error-at-lines': {
-                    status.innerText = `Fail ❌`;
-                    break;
-                  }
-                  default: {
-                    status.innerText = `Unknown status ${status}`;
-                    break;
-                  }
+                if (report.output === 'pass') {
+                  // "only" locator diff, should be less severe
+                  console.log('partial test failure?', JSON.stringify(report))
+                  status.innerText = `⚠️`;
+                } else {
+                  status.innerText = `❌`;
+                  row.style.order = '1';
+
                 }
               }
             }

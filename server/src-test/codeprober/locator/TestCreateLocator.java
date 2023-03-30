@@ -1,11 +1,15 @@
 package codeprober.locator;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.junit.Test;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
@@ -14,9 +18,8 @@ import codeprober.locator.CreateLocator.LocatorMergeMethod;
 import codeprober.metaprogramming.Reflect;
 import codeprober.metaprogramming.TypeIdentificationStyle;
 import codeprober.protocol.ParameterTypeDetail;
-import junit.framework.TestCase;
 
-public class TestCreateLocator extends TestCase {
+public class TestCreateLocator {
 
 	private void assertSpan(Span expected, int actualStart, int actualEnd) {
 		assertEquals(expected.start, actualStart);
@@ -28,6 +31,7 @@ public class TestCreateLocator extends TestCase {
 		return CreateLocator.fromNode(info, node);
 	}
 
+	@Test
 	public void testSimpleRoot() {
 		AstNode root = new AstNode(TestData.getSimple());
 		final AstInfo info = TestData.getInfo(root);
@@ -42,6 +46,7 @@ public class TestCreateLocator extends TestCase {
 		assertEquals(0, steps.length());
 	}
 
+	@Test
 	public void testSimpleFoo() {
 		final AstNode root = new AstNode(TestData.getSimple());
 		final AstInfo info = TestData.getInfo(root);
@@ -63,6 +68,7 @@ public class TestCreateLocator extends TestCase {
 		assertFooLoc.accept(step.getJSONObject("value"));
 	}
 
+	@Test
 	public void testSimpleBar() {
 		final AstNode root = new AstNode(TestData.getSimple());
 		final AstInfo info = TestData.getInfo(root);
@@ -86,6 +92,7 @@ public class TestCreateLocator extends TestCase {
 		assertBarLoc.accept(step.getJSONObject("value"));
 	}
 
+	@Test
 	public void testAmbiguousBar() {
 		final AstNode root = new AstNode(TestData.getFlatAmbiguous());
 		final AstInfo info = TestData.getInfo(root);
@@ -114,6 +121,7 @@ public class TestCreateLocator extends TestCase {
 		assertEquals(1, barStep.getInt("value"));
 	}
 
+	@Test
 	public void testSimpleNta() {
 		final AstNode root = new AstNode(TestData.getWithSimpleNta());
 		final AstInfo info = TestData.getInfo(root);
@@ -137,6 +145,7 @@ public class TestCreateLocator extends TestCase {
 
 	}
 
+	@Test
 	public void testParameterizedNtaFoo() {
 		final AstNode root = new AstNode(TestData.getWithParameterizedNta());
 		final AstInfo info = TestData.getInfo(root);
@@ -190,6 +199,7 @@ public class TestCreateLocator extends TestCase {
 		assertEquals(1, childStep.getInt("value"));
 	}
 
+	@Test
 	public void testAmbiguousUncle() {
 		AstNode root = new AstNode(TestData.getAmbiguousUncle());
 		final AstInfo info = TestData.getInfo(root);
@@ -212,6 +222,7 @@ public class TestCreateLocator extends TestCase {
 		assertEquals(TestData.Bar.class.getName(), tal.getString("type"));
 	}
 
+	@Test
 	public void testAmbigHierarchyRequiringTwoSequentialTal() {
 		AstNode root = new AstNode(TestData.getIdenticalBarsWithDifferentGrandParents());
 		final AstInfo info = TestData.getInfo(root);
@@ -243,6 +254,7 @@ public class TestCreateLocator extends TestCase {
 		assertEquals(TestData.Bar.class.getName(), barTal.getString("type"));
 	}
 
+	@Test
 	public void testExternalFileFlag() {
 		final AstNode root = new AstNode(TestData.getIdenticalBarsWithDifferentGrandParents());
 		final AstInfo info = TestData.getInfo(root);
@@ -264,6 +276,7 @@ public class TestCreateLocator extends TestCase {
 		assertEquals(true, tal.getBoolean("external"));
 	}
 
+	@Test
 	public void testCreateLabeled() {
 		final AstNode root = new AstNode(TestData.getWithLabels());
 
@@ -276,13 +289,13 @@ public class TestCreateLocator extends TestCase {
 
 			return locator;
 		};
-		
+
 		final BiConsumer<TypeIdentificationStyle, String> testIdentifications = (style, expectedLbl2Type) -> {
 			final AstInfo info = TestData.getInfo(root, style);
-			
+
 			final AstNode lbl1 = root.getNthChild(info, 0);
 			assertSame(lbl1, ApplyLocator.toNode(info, assertLocator.apply(createLocator(info, lbl1), "tal")).node);
-			
+
 			final AstNode lbl2 = root.getNthChild(info, 1);
 			assertSame(lbl2, ApplyLocator.toNode(info, assertLocator.apply(createLocator(info, lbl2), expectedLbl2Type)).node);
 		};

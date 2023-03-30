@@ -1,5 +1,4 @@
 import ModalEnv from '../../model/ModalEnv';
-import TestManager from '../../model/test/TestManager';
 import createLoadingSpinner from '../create/createLoadingSpinner';
 import createModalTitle from '../create/createModalTitle';
 import showWindow from '../create/showWindow';
@@ -56,7 +55,7 @@ const displayTestSuiteListModal = (
                 // Don't want to send a billion requests at once
                 for (let i = 0; i < suites.length; ++i) {
                   const suite = suites[i];
-                  const cases = await env.testManager.getTestSuite(suite);
+                  let cases = await env.testManager.getTestSuite(suite);
                   console.log('Running test', suite, ', list:', cases);
                   if (cases === 'failed-fetching') {
                     return;
@@ -64,6 +63,19 @@ const displayTestSuiteListModal = (
                   if (isClosed) {
                     return;
                   }
+                  cases = [...cases];
+                  // For caching purposes, sort so that all equal-text cases are evaluated next to each other
+                  cases.sort((a, b) => {
+                    if (a.src !== b.src) {
+                      return a.src < b.src ? -1 : 1;
+                    }
+                    if (a.cache != b.cache) {
+                      return a.cache < b.cache ? -1 : 1;
+                    }
+                    // Close enough to equal
+                    return 0;
+                  })
+
                   for (let j = 0; j < cases.length; ++j) {
                     const expectedChangeCallback = changeCallbackCounter + 1;
                     const status = await env.testManager.getTestStatus(suite, cases[j].name);
@@ -140,7 +152,7 @@ const displayTestSuiteListModal = (
                 const know = localTestSuiteKnowledge[cat];
                 if ((know.pass + know.fail) === res.length) {
                   if (know.fail === 0) {
-                    status.innerText = `Pass ✅`;
+                    status.innerText = `✅`;
                   } else {
                     status.innerText = `Fail ${know.fail}/${res.length} ❌`;
                   }

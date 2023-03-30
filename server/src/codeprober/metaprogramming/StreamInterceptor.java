@@ -19,8 +19,11 @@ public abstract class StreamInterceptor extends PrintStream {
 
 		Consumer<String> lineReader;
 
-		public StreamInterceptorImpl(PrintStream prev) {
+		private boolean autoPrintLinesToPrev;
+
+		public StreamInterceptorImpl(PrintStream prev, boolean autoPrintLinesToPrev) {
 			this.prev = prev;
+			this.autoPrintLinesToPrev = autoPrintLinesToPrev;
 		}
 
 		@Override
@@ -50,7 +53,9 @@ public abstract class StreamInterceptor extends PrintStream {
 			}
 			stdOut.reset();
 
-			prev.println(s);
+			if (autoPrintLinesToPrev) {
+				prev.println(s);
+			}
 			lineReader.accept(s);
 		}
 	}
@@ -58,7 +63,11 @@ public abstract class StreamInterceptor extends PrintStream {
 	private final StreamInterceptorImpl dst;
 
 	public StreamInterceptor(PrintStream prev) {
-		this(new StreamInterceptorImpl(prev));
+		this(prev, true);
+	}
+
+	public StreamInterceptor(PrintStream prev, boolean autoPrintLinesToPrev) {
+		this(new StreamInterceptorImpl(prev, autoPrintLinesToPrev));
 	}
 
 	private StreamInterceptor(StreamInterceptorImpl dst) {

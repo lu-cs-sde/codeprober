@@ -13,14 +13,18 @@ public abstract class StdIoInterceptor {
 	private StreamInterceptor err;
 
 	public StdIoInterceptor() {
-		out = new StreamInterceptor(System.out) {
+		this(true);
+	}
+
+	public StdIoInterceptor(boolean autoPrintLinesToPrev) {
+		out = new StreamInterceptor(System.out, autoPrintLinesToPrev) {
 
 			@Override
 			protected void onLine(String line) {
 				StdIoInterceptor.this.onLine(true, line);
 			}
 		};
-		err = new StreamInterceptor(System.err) {
+		err = new StreamInterceptor(System.err, autoPrintLinesToPrev) {
 
 			@Override
 			protected void onLine(String line) {

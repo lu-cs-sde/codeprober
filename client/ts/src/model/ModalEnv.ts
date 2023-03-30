@@ -6,6 +6,7 @@ interface ModalEnv {
     locator: NodeLocator;
   }) => Promise<any>;
   getLocalState: () => string;
+  setLocalState: (val: string) => void;
   updateSpanHighlight: (span: Span | null) => void;
   setStickyHighlight: (probeId: string, hl: StickyHighlight) => void;
   clearStickyHighlight: (probeId: string) => void;

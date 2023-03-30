@@ -2,7 +2,7 @@ package codeprober.util;
 
 import java.security.Permission;
 
-class SystemExitControl {
+public class SystemExitControl {
 
   @SuppressWarnings("serial")
 public static class ExitTrappedException extends SecurityException {

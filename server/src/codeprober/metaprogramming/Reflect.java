@@ -20,6 +20,7 @@ public class Reflect {
 	public static Object invokeN(Object astNode, String mth, Class<?>[] argTypes, Object[] argValues) {
 		try {
 			final Method m = astNode.getClass().getMethod(mth, argTypes);
+			m.setAccessible(true);
 			final Object val = m.invoke(astNode, argValues);
 			return m.getReturnType() == Void.TYPE ? VOID_RETURN_VALUE : val;
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException
@@ -38,6 +39,7 @@ public class Reflect {
 	public static Object invoke0(Object astNode, String mth) {
 		try {
 			final Method m = astNode.getClass().getMethod(mth);
+			m.setAccessible(true);
 			final Object val = m.invoke(astNode);
 			return m.getReturnType() == Void.TYPE ? VOID_RETURN_VALUE : val;
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException

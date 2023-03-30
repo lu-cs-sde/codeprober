@@ -23,28 +23,47 @@ interface TestManager {
   flushTestCaseData: () => void;
 };
 
-interface RpcArgs {
-  posRecovery: TestCase['posRecovery'];
-  cache: TestCase['cache'];
-  type: 'query',
-  text: string;
-  stdout: false;
-  query: { [k: string]: string | {} };
-  mainArgs: TestCase['mainArgs'];
-  tmpSuffix: TestCase['tmpSuffix'];
+type TestMetaQuery = {
+  type: 'meta:listTestSuites';
+} | {
+  type: 'meta:getTestSuite';
+  suite: string;
+} | {
+  type: 'meta:putTestSuite';
+  suite: string;
+  contents: string;
 }
+
+interface ListTestSuitesResponse { suites?: string[]; }
+interface GetTestSuiteResponse { contents?: string; }
+interface PutTestSuiteResponse { ok?: boolean; }
+
+type RpcArgs =
+  {
+    type: 'testMeta';
+    // query: { [k: string]: string | {} };
+    query: TestMetaQuery;
+  }
+  | {
+    posRecovery: TestCase['posRecovery'];
+    cache: TestCase['cache'];
+    type: 'query';
+    text: string;
+    stdout: false;
+    query: { [k: string]: string | {} };
+    mainArgs: TestCase['mainArgs'];
+    tmpSuffix: TestCase['tmpSuffix'];
+  }
 
 const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): TestManager =>{
 
-  const performMetaQuery = (props: RpcArgs['query']): Promise<any> => performRpcQuery({
-    posRecovery: 'FAIL',
-    cache: 'FULL',
-    type: 'query',
-    text: '',
-    stdout: false,
+  const performMetaQuery = <
+    T=ListTestSuitesResponse
+    | GetTestSuiteResponse
+    | PutTestSuiteResponse
+  >(props: TestMetaQuery): Promise<T> => performRpcQuery({
+    type: 'testMeta',
     query: props,
-    mainArgs: null,
-    tmpSuffix: '',
   });
 
   const suiteListRepo: { [categoryId: string]: TestCase[]} = {};
@@ -55,12 +74,10 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): T
     console.log('expected bytelen:', JSON.stringify(cases).length);
     // const newState = [...(repo[category] || {}),
     suiteListRepo[category] = cases;
-    const resp = await performMetaQuery({
-      attr: {
-        name: "meta:putTestSuite"
-      },
-      category: `${category}.json`,
-      suite: JSON.stringify(cases),
+    const resp = await performMetaQuery<PutTestSuiteResponse>({
+      type: "meta:putTestSuite",
+      suite: `${category}.json`,
+      contents: JSON.stringify(cases),
     });
     if (resp.ok) return true;
     console.warn(`Failed saving cases for ${category}`);
@@ -109,7 +126,7 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): T
     return () => {
       if (!categoryLister || categoryInvalidationCount !== categoryListingVersion) {
         categoryListingVersion = categoryInvalidationCount;
-        categoryLister = performMetaQuery({ attr: { name: 'meta:listTestSuites' }, })
+        categoryLister = performMetaQuery<ListTestSuitesResponse>({ type: 'meta:listTestSuites' })
           .then(({ suites }) => {
             if (!suites) {
               return 'failed-listing';
@@ -131,21 +148,19 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): T
 
   const getTestSuite: TestManager['getTestSuite'] = async (id) => {
     if (suiteListRepo[id]) { return suiteListRepo[id]; }
-    const { suite } = await performMetaQuery({
-      attr: {
-        name: 'meta:getTestSuite',
-      },
-      category: `${id}.json`,
+    const { contents } = await performMetaQuery<GetTestSuiteResponse>({
+      type: 'meta:getTestSuite',
+      suite: `${id}.json`,
     });
-    if (suite) {
+    if (contents) {
       try {
-        const ret = JSON.parse(suite.trim());
+        const ret = JSON.parse(contents.trim());
         suiteListRepo[id] = ret;
         return ret;
       } catch (e) {
         console.warn(e);
         console.warn(`Suite contents for ${id} is not a valid json string`);
-        console.warn('-->', suite);
+        console.warn('-->', contents);
         return 'failed-fetching';
       }
     }
@@ -175,9 +190,9 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): T
       }
 
       const res = await performRpcQuery({
+        type: 'query',
         posRecovery: tcase.posRecovery,
         cache: tcase.cache,
-        type: 'query',
         text: tcase.src,
         stdout: false,
         query: {
@@ -188,7 +203,12 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): T
         tmpSuffix: tcase.tmpSuffix,
       });
       console.log('tcase raw res:', res);
-      const report = compareTestResult(tcase, rpcLinesToAssertionLines(res.body))
+      let report: TestComparisonReport;
+      if (!res.locator) {
+        report = 'failed-eval';
+      } else {
+        report = compareTestResult(tcase, { locator: res.locator, lines: rpcLinesToAssertionLines(res.body) })
+      }
       notifyListeners('test-status-update');
       return {
         report,

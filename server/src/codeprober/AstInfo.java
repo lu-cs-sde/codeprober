@@ -26,11 +26,19 @@ public class AstInfo {
 	private final Map<Class<?>, Map<String, Boolean>> hasOverrides = new HashMap<>();
 
 	public AstInfo(AstNode ast, PositionRecoveryStrategy recoveryStrategy,
-			AstNodeApiStyle astApiStyle, Function<String, Class<?>> loadAstClass, TypeIdentificationStyle typeIdentificationStyle) {
+			AstNodeApiStyle astApiStyle, TypeIdentificationStyle typeIdentificationStyle) {
 		this.ast = ast;
 		this.recoveryStrategy = recoveryStrategy;
 		this.astApiStyle = astApiStyle;
-		this.loadAstClass = loadAstClass;
+		this.loadAstClass = cname -> {
+			try {
+				return Class.forName(cname, true, ast.underlyingAstNode.getClass().getClassLoader());
+			} catch (ClassNotFoundException e) {
+				System.err.println("Type '" + cname +"' cannot be instantiated by the AST's ClassLoader");
+				e.printStackTrace();
+				throw new RuntimeException(e);
+			}
+		};
 		this.typeIdentificationStyle = typeIdentificationStyle;
 
 		Class<?> baseAstType = ast.underlyingAstNode.getClass();

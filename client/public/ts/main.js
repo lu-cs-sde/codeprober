@@ -1421,6 +1421,79 @@ define("model/test/compareTestResult", ["require", "exports", "model/test/rpcBod
     Object.defineProperty(exports, "__esModule", { value: true });
     // TODO return type, append | 'same-output-but-different-locators'
     const compareTestResult = (tc, actual) => {
+        const argValueToNodeLocator = (val) => typeof val === 'object' ? val : null;
+        const forEachLocator = (locator, callback) => {
+            console.log('..foreachLocator: ', locator);
+            callback(locator);
+            locator.steps.forEach(step => {
+                if (step.type === 'nta') {
+                    step.value.args.forEach(arg => {
+                        var _a;
+                        (_a = arg.args) === null || _a === void 0 ? void 0 : _a.forEach(val => {
+                            const vv = argValueToNodeLocator(val.value);
+                            if (vv) {
+                                console.log('.. > recurse');
+                                forEachLocator(vv, callback);
+                            }
+                        });
+                    });
+                }
+            });
+        };
+        const flattenLocator = (locator) => {
+            const res = [];
+            forEachLocator(locator, loc => res.push(loc));
+            return res;
+        };
+        const createLocatorComparison = (expected, actual) => {
+            const flattenedExpected = expected.reduce((acc, add) => acc.concat(flattenLocator(add)), []);
+            const flattenedActual = actual.reduce((acc, add) => acc.concat(flattenLocator(add)), []);
+            if (flattenedExpected.length != flattenedActual.length) {
+                return 'different-number-of-locators';
+            }
+            const diffIndexes = {};
+            flattenedExpected.forEach((exp, idx) => {
+                if (JSON.stringify(exp) !== JSON.stringify(flattenedActual[idx])) {
+                    if (JSON.stringify(exp.result) === JSON.stringify(flattenedActual[idx].result)) {
+                        diffIndexes[idx] = 'same-result-but-different-steps';
+                    }
+                    else {
+                        diffIndexes[idx] = 'different-result';
+                    }
+                }
+            });
+            if (Object.keys(diffIndexes).length === 0) {
+                return 'pass';
+            }
+            return diffIndexes;
+        };
+        const getLocatorsFromAssertionLines = (lines) => {
+            const res = [];
+            lines.forEach(line => {
+                if (Array.isArray(line)) {
+                    res.push(...getLocatorsFromAssertionLines(line));
+                }
+                else if (typeof line === 'object') {
+                    res.push(line.robust);
+                }
+            });
+            return res;
+        };
+        const getFullReport = (output) => {
+            const report = ({
+                output,
+                sourceLocators: createLocatorComparison([tc.locator.robust], [actual.locator]),
+                attrArgLocators: 'pass',
+                outputLocators: tc.assert.type === 'smoke'
+                    ? 'pass'
+                    : createLocatorComparison(getLocatorsFromAssertionLines((0, rpcBodyToAssertionLine_1.rpcLinesToAssertionLines)(tc.assert.lines)), getLocatorsFromAssertionLines(actual.lines)),
+            });
+            if (Object.values(report).every(ent => ent === 'pass')) {
+                return 'pass';
+            }
+            return report;
+        };
+        const actualLines = actual.lines;
         switch (tc.assert.type) {
             case 'identity': {
                 const expected = (0, rpcBodyToAssertionLine_1.rpcLinesToAssertionLines)(tc.assert.lines);
@@ -1429,9 +1502,9 @@ define("model/test/compareTestResult", ["require", "exports", "model/test/rpcBod
                 let pushValidLines = true;
                 let expIdx = 0;
                 let actIdx = 0;
-                while (expIdx < expected.length && actIdx < actual.length) {
+                while (expIdx < expected.length && actIdx < actualLines.length) {
                     const e = JSON.stringify(expected[expIdx]);
-                    const a = JSON.stringify(actual[actIdx]);
+                    const a = JSON.stringify(actualLines[actIdx]);
                     if (e === a) {
                         ++expIdx;
                         ++actIdx;
@@ -1439,7 +1512,7 @@ define("model/test/compareTestResult", ["require", "exports", "model/test/rpcBod
                     else {
                         // invalidLines.push(actIdx);
                         const nextExp = (offset) => (expIdx + offset) < expected.length ? JSON.stringify(expected[expIdx + offset]) : null;
-                        const nextAct = (offset) => (actIdx + offset) < actual.length ? JSON.stringify(actual[actIdx + offset]) : null;
+                        const nextAct = (offset) => (actIdx + offset) < actualLines.length ? JSON.stringify(actualLines[actIdx + offset]) : null;
                         let foundMatch = false;
                         for (let offset = 1; offset <= 3; ++offset) {
                             if (e == nextAct(offset)) {
@@ -1479,7 +1552,7 @@ define("model/test/compareTestResult", ["require", "exports", "model/test/rpcBod
                     }
                 }
                 if (invalidLines.length !== 0) {
-                    while (actIdx < actual.length) {
+                    while (actIdx < actualLines.length) {
                         invalidLines.push(actIdx);
                         ++actIdx;
                     }
@@ -1487,18 +1560,22 @@ define("model/test/compareTestResult", ["require", "exports", "model/test/rpcBod
                         unmatchedValidLines.push(expIdx);
                         ++expIdx;
                     }
-                    return { type: 'error-at-lines', invalid: invalidLines, unmatchedValid: unmatchedValidLines };
+                    return getFullReport({
+                        type: 'difference-at-lines',
+                        invalid: invalidLines,
+                        unmatchedValid: unmatchedValidLines
+                    });
                 }
-                if (expected.length != actual.length) {
-                    console.log('diff length, exp:', expected.length, ', actual:', actual.length);
-                    return 'invalid-number-of-lines';
+                if (expected.length != actualLines.length) {
+                    console.log('diff length, exp:', expected.length, ', actualLines:', actualLines.length);
+                    return getFullReport('different-number-of-lines');
                 }
-                return 'pass';
+                return getFullReport('pass');
             }
             case 'set': {
                 const expected = (0, rpcBodyToAssertionLine_1.rpcLinesToAssertionLines)(tc.assert.lines);
-                if (expected.length != actual.length) {
-                    return 'invalid-number-of-lines';
+                if (expected.length != actualLines.length) {
+                    return getFullReport('different-number-of-lines');
                 }
                 const count = (lines) => {
                     const ret = {};
@@ -1509,18 +1586,19 @@ define("model/test/compareTestResult", ["require", "exports", "model/test/rpcBod
                     return ret;
                 };
                 const expCount = count(expected);
-                const actCount = count(actual);
+                const actCount = count(actualLines);
                 const invalidLines = [];
-                actual.forEach((line, lineIdx) => {
+                actualLines.forEach((line, lineIdx) => {
                     const key = JSON.stringify(line);
                     if (expCount[key] !== actCount[key]) {
                         invalidLines.push(lineIdx);
                     }
                 });
-                return invalidLines.length === 0 ? 'pass' : { type: 'error-at-lines', invalid: invalidLines, unmatchedValid: [] };
+                return getFullReport(invalidLines.length === 0 ? 'pass' : { type: 'difference-at-lines', invalid: invalidLines, unmatchedValid: [] });
             }
             case 'smoke':
             default: {
+                // TODO check if output contains error or not
                 return 'pass';
             }
         }
@@ -1536,14 +1614,8 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
     ;
     const createTestManager = (performRpcQuery) => {
         const performMetaQuery = (props) => performRpcQuery({
-            posRecovery: 'FAIL',
-            cache: 'FULL',
-            type: 'query',
-            text: '',
-            stdout: false,
+            type: 'testMeta',
             query: props,
-            mainArgs: null,
-            tmpSuffix: '',
         });
         const suiteListRepo = {};
         // const
@@ -1553,11 +1625,9 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
             // const newState = [...(repo[category] || {}),
             suiteListRepo[category] = cases;
             const resp = await performMetaQuery({
-                attr: {
-                    name: "meta:putTestSuite"
-                },
-                category: `${category}.json`,
-                suite: JSON.stringify(cases),
+                type: "meta:putTestSuite",
+                suite: `${category}.json`,
+                contents: JSON.stringify(cases),
             });
             if (resp.ok)
                 return true;
@@ -1606,7 +1676,7 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
             return () => {
                 if (!categoryLister || categoryInvalidationCount !== categoryListingVersion) {
                     categoryListingVersion = categoryInvalidationCount;
-                    categoryLister = performMetaQuery({ attr: { name: 'meta:listTestSuites' }, })
+                    categoryLister = performMetaQuery({ type: 'meta:listTestSuites' })
                         .then(({ suites }) => {
                         if (!suites) {
                             return 'failed-listing';
@@ -1629,22 +1699,20 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
             if (suiteListRepo[id]) {
                 return suiteListRepo[id];
             }
-            const { suite } = await performMetaQuery({
-                attr: {
-                    name: 'meta:getTestSuite',
-                },
-                category: `${id}.json`,
+            const { contents } = await performMetaQuery({
+                type: 'meta:getTestSuite',
+                suite: `${id}.json`,
             });
-            if (suite) {
+            if (contents) {
                 try {
-                    const ret = JSON.parse(suite.trim());
+                    const ret = JSON.parse(contents.trim());
                     suiteListRepo[id] = ret;
                     return ret;
                 }
                 catch (e) {
                     console.warn(e);
                     console.warn(`Suite contents for ${id} is not a valid json string`);
-                    console.warn('-->', suite);
+                    console.warn('-->', contents);
                     return 'failed-fetching';
                 }
             }
@@ -1670,9 +1738,9 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
                     return 'failed-fetching';
                 }
                 const res = await performRpcQuery({
+                    type: 'query',
                     posRecovery: tcase.posRecovery,
                     cache: tcase.cache,
-                    type: 'query',
                     text: tcase.src,
                     stdout: false,
                     query: {
@@ -1683,7 +1751,13 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
                     tmpSuffix: tcase.tmpSuffix,
                 });
                 console.log('tcase raw res:', res);
-                const report = (0, compareTestResult_1.default)(tcase, (0, rpcBodyToAssertionLine_2.rpcLinesToAssertionLines)(res.body));
+                let report;
+                if (!res.locator) {
+                    report = 'failed-eval';
+                }
+                else {
+                    report = (0, compareTestResult_1.default)(tcase, { locator: res.locator, lines: (0, rpcBodyToAssertionLine_2.rpcLinesToAssertionLines)(res.body) });
+                }
                 notifyListeners('test-status-update');
                 return {
                     report,
@@ -2285,6 +2359,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
             delete env.themeChangeListeners[queryId];
             popup.remove();
             env.triggerWindowSave();
+            stickyController.cleanup();
         };
         const onResizePtr = {
             callback: () => { },
@@ -4693,18 +4768,28 @@ define("model/runBgProbe", ["require", "exports"], function (require, exports) {
     };
     exports.default = runInvisibleProbe;
 });
-define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/popup/encodeRpcBodyLines"], function (require, exports, settings_6, createLoadingSpinner_6, createModalTitle_10, showWindow_11, renderProbeModalTitleLeft_2, encodeRpcBodyLines_5) {
+define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/UIElements", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, settings_6, createLoadingSpinner_6, createModalTitle_10, showWindow_11, UIElements_1, displayProbeModal_3, encodeRpcBodyLines_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     settings_6 = __importDefault(settings_6);
     createLoadingSpinner_6 = __importDefault(createLoadingSpinner_6);
     createModalTitle_10 = __importDefault(createModalTitle_10);
     showWindow_11 = __importDefault(showWindow_11);
-    renderProbeModalTitleLeft_2 = __importDefault(renderProbeModalTitleLeft_2);
+    UIElements_1 = __importDefault(UIElements_1);
+    displayProbeModal_3 = __importDefault(displayProbeModal_3);
     encodeRpcBodyLines_5 = __importDefault(encodeRpcBodyLines_5);
+    const preventDragOnClick = (elem) => {
+        elem.onmousedown = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+        };
+    };
     const displayTestDiffModal = (env, modalPos, locator, attr, testCategory, testCase) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        let activeTab = 'output';
+        let isCleanedUp = false;
         const cleanup = () => {
+            isCleanedUp = true;
             delete env.onChangeListeners[queryId];
             delete env.probeMarkers[queryId];
             delete env.probeWindowStateSavers[queryId];
@@ -4723,7 +4808,23 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                 cleanup();
             };
             return (0, createModalTitle_10.default)({
-                renderLeft: (container) => (0, renderProbeModalTitleLeft_2.default)(env, container, onClose, () => queryWindow.getPos(), null, locator, attr),
+                // renderLeft: (container) => renderProbeModalTitleLeft(
+                //   env, container,
+                //   onClose,
+                //   () => queryWindow.getPos(),
+                //   null, locator, attr,
+                // ),
+                renderLeft: (container) => {
+                    const head = document.createElement('span');
+                    head.classList.add('syntax-modifier');
+                    head.innerText = `Test:`;
+                    container.appendChild(head);
+                    head.style.marginRight = '0.5rem';
+                    const tail = document.createElement('span');
+                    tail.classList.add('stream-arg-msg');
+                    tail.innerText = testCase.name;
+                    container.appendChild(tail);
+                },
                 onClose,
                 extraActions: [
                     {
@@ -4793,9 +4894,9 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                     // }),
                     env.testManager.getTestStatus(testCategory, testCase.name)
                 ]).then((promiseResults) => {
-                    // const parsed: RpcResponse = promiseResults[0];
+                    if (isCleanedUp)
+                        return;
                     const testStatus = promiseResults[0];
-                    // const body = parsed.body;
                     loading = false;
                     if (refreshOnDone) {
                         refreshOnDone = false;
@@ -4808,94 +4909,329 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                         root.removeChild(root.firstChild);
                     const titleRow = createTitle();
                     root.append(titleRow.element);
-                    const addSplitTitle = (target, title) => {
-                        const row = document.createElement('div');
-                        row.style.margin = '0.125rem';
-                        row.style.textAlign = 'center';
-                        // root.style.background =
-                        row.innerText = title;
-                        target.appendChild(row);
-                        const hr = document.createElement('hr');
-                        hr.style.marginTop = '0';
-                        target.appendChild(hr);
-                        return row;
-                    };
-                    const splitPane = document.createElement('div');
-                    splitPane.style.display = 'grid';
-                    splitPane.style.gridTemplateColumns = '1fr 1px 1fr';
                     const testReport = typeof testStatus === 'object' ? testStatus.report : '';
-                    const leftPane = document.createElement('div');
-                    addSplitTitle(leftPane, 'Expected');
-                    console.log('tstatus:', testStatus);
-                    switch (testCase.assert.type) {
-                        case 'identity':
-                        case 'set': {
-                            leftPane.appendChild((0, encodeRpcBodyLines_5.default)(env, testCase.assert.lines, (line) => {
-                                if (typeof testReport === 'object') {
-                                    if (testReport.unmatchedValid.includes(line)) {
-                                        return 'unmatched';
+                    let contentUpdater = (tab) => { };
+                    const localRefreshListeners = [];
+                    env.onChangeListeners[queryId] = () => localRefreshListeners.forEach(lrl => lrl());
+                    (() => {
+                        const buttonRow = document.createElement('div');
+                        buttonRow.style.display = 'flex';
+                        buttonRow.style.flexDirection = 'row';
+                        buttonRow.style.justifyContent = 'space-between';
+                        root.append(buttonRow);
+                        const infoSelector = document.createElement('div');
+                        infoSelector.classList.add('test-diff-info-selector');
+                        buttonRow.append(infoSelector);
+                        const someOutputErr = testReport === 'failed-eval' || typeof testReport == 'object' && testReport.output !== 'pass';
+                        const someLocatorErr = testReport === 'failed-eval' || typeof testReport === 'object' && [
+                            testReport.sourceLocators, testReport.attrArgLocators, testReport.outputLocators
+                        ].some(loc => loc !== 'pass');
+                        const infos = [
+                            { name: `Output Diff ${someOutputErr ? '❌' : '✅'}`, type: 'output' },
+                            { name: `Node Diff ${someLocatorErr ? '❌' : '✅'}`, type: 'node' },
+                            { name: 'Source Code', type: 'source' },
+                            { name: 'Settings', type: 'settings' },
+                        ];
+                        infos.forEach((info, index) => {
+                            const btn = document.createElement('button');
+                            btn.classList.add(info.type === activeTab ? 'tab-button-active' : 'tab-button-inactive');
+                            btn.innerText = info.name;
+                            preventDragOnClick(btn);
+                            btn.onclick = () => {
+                                contentUpdater(info.type);
+                                btn.classList.remove('tab-button-inactive');
+                                btn.classList.add('tab-button-active');
+                                infos.forEach((other, otherIdx) => {
+                                    var _a, _b, _c, _d;
+                                    if (otherIdx !== index) {
+                                        (_b = (_a = other.btn) === null || _a === void 0 ? void 0 : _a.classList) === null || _b === void 0 ? void 0 : _b.remove('tab-button-active');
+                                        (_d = (_c = other.btn) === null || _c === void 0 ? void 0 : _c.classList) === null || _d === void 0 ? void 0 : _d.add('tab-button-inactive');
                                     }
+                                });
+                            };
+                            infoSelector.appendChild(btn);
+                            infos[index].btn = btn;
+                        });
+                        const refreshSourceButtonText = () => {
+                            var _a;
+                            const sourceBtn = (_a = infos.find(i => i.type === 'source')) === null || _a === void 0 ? void 0 : _a.btn;
+                            if (sourceBtn) {
+                                if (testCase.src === settings_6.default.getEditorContents()) {
+                                    sourceBtn.innerText = `Source Code ✅`;
                                 }
-                                return 'default';
-                            }));
-                            break;
-                        }
-                        case 'smoke': {
-                            leftPane.appendChild(document.createTextNode(`
-                  Smoke Test -> expected no error
-                `.trim()));
-                        }
-                        default: {
-                            leftPane.appendChild(document.createTextNode(`
-                  <Unknown Test Type>
-                `.trim()));
-                        }
-                    }
-                    splitPane.appendChild(leftPane);
-                    const divider = document.createElement('div');
-                    divider.classList.add('vertical-separator');
-                    splitPane.appendChild(divider);
-                    const rightPane = document.createElement('div');
-                    const saver = addSplitTitle(rightPane, 'Actual 💾');
-                    if (testStatus === 'failed-fetching') {
-                        rightPane.appendChild(document.createElement(`
-              Failed val
-            `.trim()));
-                    }
-                    else {
-                        saver.classList.add('clickHighlightOnHover');
-                        saver.onmousedown = (e) => {
-                            e.stopImmediatePropagation();
-                            e.stopPropagation();
-                            e.preventDefault();
-                        };
-                        saver.onclick = () => {
-                            const patchedAssert = (() => {
-                                switch (testCase.assert.type) {
-                                    case 'identity':
-                                    case 'set':
-                                        return { ...testCase.assert, lines: testStatus.lines };
-                                    case 'smoke':
-                                    default:
-                                        return testCase.assert;
-                                }
-                            })();
-                            env.testManager.addTest(testCategory, {
-                                ...testCase,
-                                assert: patchedAssert,
-                            }, true);
-                        };
-                        rightPane.appendChild((0, encodeRpcBodyLines_5.default)(env, testStatus.lines, (line) => {
-                            if (typeof testReport === 'object') {
-                                if (testReport.invalid.includes(line)) {
-                                    return 'error';
+                                else {
+                                    sourceBtn.innerText = `Source Code ⚠️`;
                                 }
                             }
-                            return 'default';
-                        }));
-                    }
-                    splitPane.appendChild(rightPane);
-                    root.appendChild(splitPane);
+                        };
+                        refreshSourceButtonText();
+                        localRefreshListeners.push(refreshSourceButtonText);
+                        // Add save button
+                        (() => {
+                            if (testReport === 'pass') {
+                                return;
+                            }
+                            const btn = document.createElement('button');
+                            btn.style.margin = 'auto 0';
+                            btn.classList.add('tab-button-inactive');
+                            btn.innerText = `Save 💾`;
+                            preventDragOnClick(btn);
+                            if (testStatus === 'failed-fetching') {
+                                btn.disabled = true;
+                            }
+                            else {
+                                btn.onclick = () => {
+                                    const patchedAssert = (() => {
+                                        switch (testCase.assert.type) {
+                                            case 'identity':
+                                            case 'set':
+                                                return { ...testCase.assert, lines: testStatus.lines };
+                                            case 'smoke':
+                                            default:
+                                                return testCase.assert;
+                                        }
+                                    })();
+                                    env.testManager.addTest(testCategory, {
+                                        ...testCase,
+                                        assert: patchedAssert,
+                                    }, true);
+                                };
+                            }
+                            buttonRow.appendChild(btn);
+                        })();
+                        const hr = document.createElement('hr');
+                        hr.style.marginTop = '0';
+                        hr.style.marginBottom = '0';
+                        root.appendChild(hr);
+                    })();
+                    const contentRoot = document.createElement('div');
+                    // let activeTab: TabType = 'settings'; // Different from actual first tab so as to detect first tab change
+                    contentUpdater = (tab) => {
+                        if (tab === activeTab) {
+                            return;
+                        }
+                        activeTab = tab;
+                        while (contentRoot.firstChild)
+                            contentRoot.removeChild(contentRoot.firstChild);
+                        switch (tab) {
+                            case 'output':
+                            default: {
+                                const addSplitTitle = (target, title) => {
+                                    const row = document.createElement('div');
+                                    row.style.margin = '0.125rem';
+                                    row.style.textAlign = 'center';
+                                    row.style.height = '1.5rem';
+                                    row.style.display = 'flex';
+                                    target.appendChild(row);
+                                    const lbl = document.createElement('span');
+                                    lbl.innerText = title;
+                                    lbl.style.margin = 'auto';
+                                    row.appendChild(lbl);
+                                    const hr = document.createElement('hr');
+                                    hr.style.marginTop = '0';
+                                    target.appendChild(hr);
+                                    return lbl;
+                                };
+                                const splitPane = document.createElement('div');
+                                splitPane.style.display = 'grid';
+                                splitPane.style.gridTemplateColumns = '1fr 1px 1fr';
+                                const leftPane = document.createElement('div');
+                                addSplitTitle(leftPane, 'Expected');
+                                console.log('tstatus:', testStatus);
+                                switch (testCase.assert.type) {
+                                    case 'identity':
+                                    case 'set': {
+                                        leftPane.appendChild((0, encodeRpcBodyLines_5.default)(env, testCase.assert.lines, (line) => {
+                                            if (typeof testReport === 'object' && typeof testReport.output === 'object') {
+                                                if (testReport.output.unmatchedValid.includes(line)) {
+                                                    return 'unmatched';
+                                                }
+                                            }
+                                            return 'default';
+                                        }));
+                                        break;
+                                    }
+                                    case 'smoke': {
+                                        leftPane.appendChild(document.createTextNode(`
+                        Smoke Test -> expected no error
+                      `.trim()));
+                                    }
+                                    default: {
+                                        leftPane.appendChild(document.createTextNode(`
+                        <Unknown Test Type>
+                      `.trim()));
+                                    }
+                                }
+                                splitPane.appendChild(leftPane);
+                                const divider = document.createElement('div');
+                                divider.classList.add('vertical-separator');
+                                splitPane.appendChild(divider);
+                                const rightPane = document.createElement('div');
+                                addSplitTitle(rightPane, 'Actual');
+                                if (testStatus === 'failed-fetching') {
+                                    rightPane.appendChild(document.createElement(`
+                    Failed val
+                  `.trim()));
+                                }
+                                else {
+                                    rightPane.appendChild((0, encodeRpcBodyLines_5.default)(env, testStatus.lines, (line) => {
+                                        if (typeof testReport === 'object' && typeof testReport.output === 'object') {
+                                            if (testReport.output.invalid.includes(line)) {
+                                                return 'error';
+                                            }
+                                        }
+                                        return 'default';
+                                    }));
+                                }
+                                splitPane.appendChild(rightPane);
+                                contentRoot.appendChild(splitPane);
+                                break;
+                            }
+                            case 'node': {
+                                contentRoot.appendChild(document.createTextNode('todo node tab'));
+                                break;
+                            }
+                            case 'source': {
+                                const wrapper = document.createElement('div');
+                                wrapper.style.padding = '0.25rem';
+                                contentRoot.appendChild(wrapper);
+                                const same = testCase.src === settings_6.default.getEditorContents();
+                                if (same) {
+                                    wrapper.appendChild(document.createTextNode(`Current text in CodeProber matches the source code used for this test case.`));
+                                    wrapper.appendChild(document.createElement('br'));
+                                    wrapper.appendChild(document.createTextNode(`Press`));
+                                    const btn = document.createElement('button');
+                                    preventDragOnClick(btn);
+                                    btn.style.margin = '0 0.125rem';
+                                    btn.innerText = `Open Probe`;
+                                    btn.onclick = () => {
+                                        (0, displayProbeModal_3.default)(env, null, locator, attr);
+                                    };
+                                    wrapper.appendChild(btn);
+                                    wrapper.appendChild(document.createTextNode(`to explore the probe that created this test.`));
+                                }
+                                else {
+                                    wrapper.appendChild(document.createTextNode(`Current text in CodeProber does not match the source code used for this test case.`));
+                                    wrapper.appendChild(document.createElement('br'));
+                                    wrapper.appendChild(document.createTextNode(`Press`));
+                                    const btn = document.createElement('button');
+                                    preventDragOnClick(btn);
+                                    btn.style.margin = '0 0.125rem';
+                                    btn.innerText = `Load Source`;
+                                    btn.onclick = () => {
+                                        env.setLocalState(testCase.src);
+                                    };
+                                    wrapper.appendChild(btn);
+                                    wrapper.appendChild(document.createTextNode(`to replace CodeProber text with the test source.`));
+                                }
+                                wrapper.appendChild(document.createElement('hr'));
+                                const addExplanationLine = (head, value, valueClass = '') => {
+                                    const line = document.createElement('div');
+                                    const headNode = document.createElement('span');
+                                    headNode.style.display = 'inline-block';
+                                    headNode.style.marginRight = '1rem';
+                                    headNode.style.textAlign = 'right';
+                                    headNode.style.minWidth = '6rem';
+                                    headNode.innerText = head;
+                                    line.appendChild(headNode);
+                                    const valueNode = document.createElement('span');
+                                    valueNode.innerText = value;
+                                    if (valueClass) {
+                                        valueNode.classList.add(valueClass);
+                                    }
+                                    line.appendChild(valueNode);
+                                    wrapper.appendChild(line);
+                                };
+                                addExplanationLine('Node type:', (locator.result.label || locator.result.type).split('.').slice(-1)[0], 'syntax-type');
+                                addExplanationLine('Property:', attr.name, 'syntax-attr');
+                                if (locator.result.external) {
+                                    addExplanationLine('AST Node:', `${locator.result.label || locator.result.type} in external file`);
+                                }
+                                else {
+                                    // const span = startEndToSpan(locator.result.start, locator.result.end);
+                                    // const linesTail = span.lineStart === span.lineEnd
+                                    //   ? ` $${span.lineStart}`
+                                    //   : `s ${span.lineStart}→${span.lineEnd}`;
+                                    // addExplanationLine('AST Node:', `${locator.result.label || locator.result.type} on line${linesTail}`);
+                                }
+                                addExplanationLine('Source Code', '⬇️');
+                                testCase.src.split('\n').forEach((line, lineIdx) => {
+                                    const lineContainer = document.createElement('div');
+                                    lineContainer.classList.add('test-case-source-code-line');
+                                    if (!locator.result.external) {
+                                        const startLineIdx = (locator.result.start >>> 12) - 1;
+                                        const endLineIdx = (locator.result.end >>> 12) - 1;
+                                        if (lineIdx >= startLineIdx && lineIdx <= endLineIdx) {
+                                            lineContainer.setAttribute('data-relevant', 'true');
+                                        }
+                                    }
+                                    lineContainer.appendChild((() => {
+                                        const pos = document.createElement('span');
+                                        pos.innerText = `${lineIdx + 1}: `.padStart(3);
+                                        return pos;
+                                    })());
+                                    lineContainer.appendChild((() => {
+                                        const pre = document.createElement('span');
+                                        pre.innerText = line;
+                                        return pre;
+                                    })());
+                                    wrapper.appendChild(lineContainer);
+                                });
+                                break;
+                            }
+                            case 'settings': {
+                                const wrapper = document.createElement('div');
+                                wrapper.style.padding = '0.25rem';
+                                contentRoot.appendChild(wrapper);
+                                const header = document.createElement('p');
+                                header.style.margin = '0.25rem 0';
+                                header.innerText = `Each saves the current CodeProber settings upon being created. This test contains:`;
+                                const translateSelectorValToHumanLabel = (val, selector) => {
+                                    if (!selector) {
+                                        console.warn('no selector for', val);
+                                        return val;
+                                    }
+                                    for (let i = 0; i < selector.childElementCount; ++i) {
+                                        const opt = selector.children[i];
+                                        if (opt.nodeName === 'OPTION') {
+                                            if (opt.value === val) {
+                                                return opt.innerHTML;
+                                            }
+                                        }
+                                    }
+                                    console.warn(`Not sure how to translate ${val} to human-readable value`);
+                                    return val;
+                                };
+                                const ul = document.createElement('ul');
+                                ul.style.margin = '0 0 0.25rem';
+                                const uiElements = new UIElements_1.default();
+                                [
+                                    ['Position Recovery', translateSelectorValToHumanLabel(testCase.posRecovery, uiElements.positionRecoverySelector)],
+                                    ['Cache Strategy', translateSelectorValToHumanLabel(testCase.cache, uiElements.astCacheStrategySelector)],
+                                    ['File suffix', testCase.tmpSuffix],
+                                    ['Main args', testCase.mainArgs ? `[${testCase.mainArgs.join(', ')}]` : 'none'],
+                                ].forEach(([name, val]) => {
+                                    const li = document.createElement('li');
+                                    li.innerText = `${name} : ${val}`;
+                                    ul.appendChild(li);
+                                });
+                                contentRoot.appendChild(ul);
+                                // contentRoot.appendChild(document.createTextNode('todo settings tab'));
+                                break;
+                            }
+                        }
+                    };
+                    root.appendChild(contentRoot);
+                    const initialTab = activeTab;
+                    // Set to anything different in order to force first update to go through
+                    activeTab = initialTab === 'output' ? 'node' : 'output';
+                    contentUpdater(initialTab);
+                    localRefreshListeners.push(() => {
+                        if (activeTab === 'source') {
+                            activeTab = 'node';
+                            contentUpdater('source');
+                        }
+                    });
                     const spinner = (0, createLoadingSpinner_6.default)();
                     spinner.style.display = 'none';
                     spinner.classList.add('absoluteCenter');
@@ -4914,8 +5250,12 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                     }
                     console.log('TestDiffModal RPC catch', err);
                     root.innerHTML = '';
-                    root.innerText = 'Failed refreshing probe..';
-                    console.warn('Failed refreshing probe w/ args:', JSON.stringify({ locator, attr }, null, 2));
+                    root.innerText = 'Failed refreshing test diff..';
+                    console.warn('Failed refreshing test w/ args:', JSON.stringify({ locator, attr }, null, 2));
+                    setTimeout(() => {
+                        queryWindow.remove();
+                        cleanup();
+                    }, 2000);
                 });
             },
         });
@@ -5002,6 +5342,7 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
                         row.appendChild(icons);
                         const status = document.createElement('span');
                         status.innerText = `⏳`;
+                        row.style.order = '5';
                         env.testManager.getTestStatus(category, tc.name).then(result => {
                             console.log('tstatus for', category, '>', tc.name, ':', result);
                             if (result == 'failed-fetching') {
@@ -5012,24 +5353,28 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
                                 if (typeof report === 'string') {
                                     switch (report) {
                                         case 'pass': {
-                                            status.innerText = `Pass ✅`;
+                                            status.innerText = `✅`;
+                                            row.style.order = '2';
                                             break;
                                         }
-                                        case 'invalid-number-of-lines': {
-                                            status.innerText = `Fail ❌`;
+                                        case 'failed-eval': {
+                                            status.innerText = `❌`;
+                                            row.style.order = '1';
+                                        }
+                                        default: {
+                                            console.warn('Unknown test report string value:', report);
                                         }
                                     }
                                 }
                                 else {
-                                    switch (report.type) {
-                                        case 'error-at-lines': {
-                                            status.innerText = `Fail ❌`;
-                                            break;
-                                        }
-                                        default: {
-                                            status.innerText = `Unknown status ${status}`;
-                                            break;
-                                        }
+                                    if (report.output === 'pass') {
+                                        // "only" locator diff, should be less severe
+                                        console.log('partial test failure?', JSON.stringify(report));
+                                        status.innerText = `⚠️`;
+                                    }
+                                    else {
+                                        status.innerText = `❌`;
+                                        row.style.order = '1';
                                     }
                                 }
                             }
@@ -5117,7 +5462,7 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
                                     // Don't want to send a billion requests at once
                                     for (let i = 0; i < suites.length; ++i) {
                                         const suite = suites[i];
-                                        const cases = await env.testManager.getTestSuite(suite);
+                                        let cases = await env.testManager.getTestSuite(suite);
                                         console.log('Running test', suite, ', list:', cases);
                                         if (cases === 'failed-fetching') {
                                             return;
@@ -5126,6 +5471,18 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
                                         if (isClosed) {
                                             return;
                                         }
+                                        cases = [...cases];
+                                        // For caching purposes, sort so that all equal-text cases are evaluated next to each other
+                                        cases.sort((a, b) => {
+                                            if (a.src !== b.src) {
+                                                return a.src < b.src ? -1 : 1;
+                                            }
+                                            if (a.cache != b.cache) {
+                                                return a.cache < b.cache ? -1 : 1;
+                                            }
+                                            // Close enough to equal
+                                            return 0;
+                                        });
                                         for (let j = 0; j < cases.length; ++j) {
                                             const expectedChangeCallback = changeCallbackCounter + 1;
                                             const status = await env.testManager.getTestStatus(suite, cases[j].name);
@@ -5196,7 +5553,7 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
                                     const know = localTestSuiteKnowledge[cat];
                                     if ((know.pass + know.fail) === res.length) {
                                         if (know.fail === 0) {
-                                            status.innerText = `Pass ✅`;
+                                            status.innerText = `✅`;
                                         }
                                         else {
                                             status.innerText = `Fail ${know.fail}/${res.length} ❌`;
@@ -5239,11 +5596,11 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
     };
     exports.default = displayTestSuiteListModal;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_3, displayRagModal_1, displayHelp_4, displayAttributeModal_6, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_1, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_2, TestManager_1, displayTestSuiteListModal_1) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_4, displayRagModal_1, displayHelp_4, displayAttributeModal_6, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_2, TestManager_1, displayTestSuiteListModal_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
-    displayProbeModal_3 = __importDefault(displayProbeModal_3);
+    displayProbeModal_4 = __importDefault(displayProbeModal_4);
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_4 = __importDefault(displayHelp_4);
     displayAttributeModal_6 = __importDefault(displayAttributeModal_6);
@@ -5253,7 +5610,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     displayMainArgsOverrideModal_1 = __importDefault(displayMainArgsOverrideModal_1);
     createWebsocketHandler_1 = __importStar(createWebsocketHandler_1);
     configureCheckboxWithHiddenButton_1 = __importDefault(configureCheckboxWithHiddenButton_1);
-    UIElements_1 = __importDefault(UIElements_1);
+    UIElements_2 = __importDefault(UIElements_2);
     showVersionInfo_1 = __importDefault(showVersionInfo_1);
     runBgProbe_1 = __importDefault(runBgProbe_1);
     cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
@@ -5263,7 +5620,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         settings_7.default.set({});
         location.reload();
     };
-    const uiElements = new UIElements_1.default();
+    const uiElements = new UIElements_2.default();
     const doMain = (wsPort) => {
         if (settings_7.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
             document.body.classList.add('hide-settings');
@@ -5466,6 +5823,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
                     themeIsLight: () => settings_7.default.isLightTheme(),
                     getLocalState: () => getLocalState(),
+                    setLocalState: (newVal) => setLocalState(newVal),
                     captureStdout: () => uiElements.captureStdoutCheckbox.checked,
                     duplicateOnAttr: () => uiElements.duplicateProbeCheckbox.checked,
                     registerStickyMarker: (...args) => registerStickyMarker(...args),
@@ -5520,7 +5878,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         settings_7.default.getProbeWindowStates().forEach((state) => {
                             switch (state.data.type) {
                                 case 'probe': {
-                                    (0, displayProbeModal_3.default)(modalEnv, state.modalPos, state.data.locator, state.data.attr);
+                                    (0, displayProbeModal_4.default)(modalEnv, state.modalPos, state.data.locator, state.data.attr);
                                     break;
                                 }
                                 case 'ast': {

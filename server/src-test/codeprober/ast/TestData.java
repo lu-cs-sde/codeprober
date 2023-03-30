@@ -383,13 +383,6 @@ public class TestData {
 
 	public static AstInfo getInfo(AstNode root, TypeIdentificationStyle typeIdStyle) {
 		return new AstInfo(root, PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD, AstNodeApiStyle.BEAVER_PACKED_BITS,
-				cn -> {
-					try {
-						return Class.forName(cn);
-					} catch (ClassNotFoundException e) {
-						e.printStackTrace();
-						throw new RuntimeException(e);
-					}
-				}, typeIdStyle);
+				typeIdStyle);
 	}
 }

@@ -11,6 +11,7 @@ import codeprober.server.CodespacesCompat;
 import codeprober.server.ServerToClientMessagePusher;
 import codeprober.server.WebServer;
 import codeprober.server.WebSocketServer;
+import codeprober.toolglue.UnderlyingTool;
 import codeprober.util.FileMonitor;
 import codeprober.util.VersionInfo;
 
@@ -18,7 +19,7 @@ public class CodeProber {
 
 	public static void printUsage() {
 		System.out.println(
-				"Usage: java -jar code-prober.jar path/to/your/analyzer-or-compiler.jar [args-to-forward-to-your-main]");
+				"Usage: java -jar code-prober.jar [--test] path/to/your/analyzer-or-compiler.jar [args-to-forward-to-your-main]");
 	}
 
 	public static void main(String[] mainArgs) {
@@ -27,13 +28,22 @@ public class CodeProber {
 			printUsage();
 			System.exit(1);
 		}
+		final boolean shouldTest = mainArgs[0].equals("--test");
 
-		CodespacesCompat.shouldApplyCompatHacks(); // First access causes info messages to appear in the terminal. Do it early to inform user.
+		final String jarPath = mainArgs[shouldTest ? 1 : 0];
+		final JsonRequestHandler handler = new DefaultRequestHandler( //
+				UnderlyingTool.fromJar(jarPath), //
+				Arrays.copyOfRange(mainArgs, shouldTest ? 2 : 1, mainArgs.length));
+
+		if (shouldTest) {
+			RunAllTests.run(new TestClient(handler));
+			return;
+		}
+
+		// First access to compat methods causes info messages to appear in the terminal.
+		// Do it early to inform user.
+		CodespacesCompat.shouldApplyCompatHacks();
 		CodespacesCompat.getChangeBufferTime(); // -||-
-
-		final String jarPath = mainArgs[0];
-		final JsonRequestHandler handler = new DefaultRequestHandler(jarPath,
-				Arrays.copyOfRange(mainArgs, 1, mainArgs.length));
 
 		final ServerToClientMessagePusher msgPusher = new ServerToClientMessagePusher();
 		final Function<JSONObject, String> reqHandler = handler.createRpcRequestHandler();

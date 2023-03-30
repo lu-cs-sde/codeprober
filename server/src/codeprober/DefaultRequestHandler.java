@@ -24,13 +24,13 @@ import org.json.JSONObject;
 import codeprober.ast.AstNode;
 import codeprober.locator.ApplyLocator;
 import codeprober.locator.ApplyLocator.ResolvedNode;
-import codeprober.locator.CreateLocator.LocatorMergeMethod;
 import codeprober.locator.AttrsInNode;
 import codeprober.locator.CreateLocator;
+import codeprober.locator.CreateLocator.LocatorMergeMethod;
 import codeprober.locator.ListTree;
 import codeprober.locator.NodesAtPosition;
-import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.AstNodeApiStyle;
+import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.metaprogramming.StdIoInterceptor;
 import codeprober.metaprogramming.StreamInterceptor;
@@ -38,30 +38,38 @@ import codeprober.metaprogramming.TypeIdentificationStyle;
 import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.ParameterValue;
 import codeprober.protocol.PositionRecoveryStrategy;
+import codeprober.protocol.ProbeProtocol;
+import codeprober.protocol.TestProtocol;
 import codeprober.protocol.create.EncodeResponseValue;
 import codeprober.protocol.decode.DecodeValue;
 import codeprober.rpc.JsonRequestHandler;
+import codeprober.toolglue.ParseResult;
+import codeprober.toolglue.UnderlyingTool;
 import codeprober.util.ASTProvider;
 import codeprober.util.BenchmarkTimer;
 import codeprober.util.MagicStdoutMessageParser;
 
 public class DefaultRequestHandler implements JsonRequestHandler {
 
-	private final String underlyingCompilerJar;
+	private final UnderlyingTool underlyingTool;
 	private final String[] defaultForwardArgs;
 
 	private AstInfo lastInfo = null;
 	private String lastParsedInput = null;
 	private String[] lastForwardArgs;
+	private Long lastToolVersionId;
 
-	public DefaultRequestHandler(String underlyingJarFile, String[] forwardArgs) {
-		this.underlyingCompilerJar = underlyingJarFile;
-		this.defaultForwardArgs = forwardArgs;
+	public DefaultRequestHandler(UnderlyingTool underlyingTool) {
+		this(underlyingTool, null);
+	}
+
+	public DefaultRequestHandler(UnderlyingTool underlyingTool, String[] forwardArgs) {
+		this.underlyingTool = underlyingTool;
+		this.defaultForwardArgs = forwardArgs != null ? forwardArgs : new String[0];
 		this.lastForwardArgs = this.defaultForwardArgs;
 	}
 
-	void handleParsedAst(Object ast, Function<String, Class<?>> loadAstClass, JSONObject queryObj,
-			JSONObject retBuilder, JSONArray bodyBuilder) {
+	void handleParsedAst(Object ast, JSONObject queryObj, JSONObject retBuilder, JSONArray bodyBuilder) {
 		if (ast == null) {
 			lastInfo = null;
 			bodyBuilder.put("Compiler exited, but no 'CodeProber_root_node' found.");
@@ -118,81 +126,14 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 		final AstInfo info = new AstInfo(astNode,
 				PositionRecoveryStrategy.fallbackParse(queryObj.getString("posRecovery")), positionRepresentation,
-				loadAstClass, TypeIdentificationStyle.parse(System.getProperty("CPR.TYPE_IDENTIFICATION_STYLE")));
+				TypeIdentificationStyle.parse(System.getProperty("CPR.TYPE_IDENTIFICATION_STYLE")));
 		lastInfo = info;
 
-		final JSONObject queryBody = queryObj.getJSONObject("query");
-		final JSONObject queryAttr = queryBody.getJSONObject("attr");
-		final String queryAttrName = queryAttr.getString("name");
+		final JSONObject queryBody = ProbeProtocol.query.get(queryObj);
+		final JSONObject queryAttr = ProbeProtocol.Query.attribute.get(queryBody);
+		final String queryAttrName = ProbeProtocol.Attribute.name.get(queryAttr);
 
-		// First check for pre-locator 'magic' methods
-		System.out.println("qan: " + queryAttrName);
-		switch (queryAttrName) {
-		case "meta:listTestSuites": {
-			String observerDir = System.getProperty("cpr.testDir");
-			if (observerDir != null) {
-				File dir = new File(observerDir);
-				if (dir.isDirectory()) {
-					final File[] files = dir.listFiles();
-					if (files != null) {
-						JSONArray names = new JSONArray();
-						for (File f : files) {
-							names.put(f.getName());
-						}
-						retBuilder.put("suites", names);
-					} else {
-						System.err.println(
-								"Couldn't list contents of TestDir '" + observerDir + "', perhaps a permission issue");
-					}
-				} else {
-					System.err.println("TestDir '" + observerDir + "' is not a directory");
-				}
-			}
-			return;
-		}
-		case "meta:getTestSuite": {
-			String observerDir = System.getProperty("cpr.testDir");
-			if (observerDir != null) {
-				File f = new File(observerDir, queryBody.getString("category"));
-				if (new File(observerDir).toPath().startsWith(f.toPath())) {
-					System.err.println("Attempted read of file " + f + ", which is outside of testDir " + observerDir);
-					return;
-				}
-				try {
-					retBuilder.put("suite", new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));
-				} catch (JSONException | IOException e) {
-					e.printStackTrace();
-					System.err.println("Failed reading contents of " + f);
-				}
-			} else {
-				System.err.println("No TestDir set, cannot get contents");
-			}
-			return;
-		}
-		case "meta:putTestSuite": {
-			String observerDir = System.getProperty("cpr.testDir");
-			if (observerDir != null) {
-				File f = new File(observerDir, queryBody.getString("category"));
-				if (new File(observerDir).toPath().startsWith(f.toPath())) {
-					System.err.println(
-							"Attempted insertion of file to " + f + ", which is outside of testDir " + observerDir);
-					return;
-				}
-				try {
-					Files.write(f.toPath(), queryBody.getString("suite").getBytes(StandardCharsets.UTF_8));
-					retBuilder.put("ok", true);
-				} catch (IOException e) {
-					e.printStackTrace();
-					System.err.println("Failed reading contents of " + f);
-				}
-			} else {
-				System.err.println("No TestDir set, cannot put contents");
-			}
-			return;
-		}
-		}
-
-		final JSONObject locator = queryBody.getJSONObject("locator");
+		final JSONObject locator = ProbeProtocol.Query.locator.get(queryBody);
 		ResolvedNode match = ApplyLocator.toNode(info, locator);
 		if (match == null) {
 			bodyBuilder.put("No matching node found\n\nTry remaking the probe\nat a different line/column");
@@ -260,11 +201,11 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		}
 		}
 
-		final boolean captureStdio = queryObj.optBoolean("stdout", false);
+		final boolean captureStdio = ProbeProtocol.captureStdout.get(queryObj, false);
 		final Runnable evaluateAttr = () -> {
 
 			try {
-				final JSONArray args = queryAttr.optJSONArray("args");
+				final JSONArray args = ProbeProtocol.Attribute.args.get(queryAttr, null);
 				final Object value;
 
 				// Respond with new args, just like we respond with a new locator
@@ -326,7 +267,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 						CreateLocator.setMergeMethod(LocatorMergeMethod.DEFAULT_METHOD);
 					}
 				}
-				retBuilder.put("args", updatedArgs);
+				ProbeProtocol.Attribute.args.put(retBuilder, updatedArgs);
 			} catch (InvokeProblem e) {
 				final Throwable cause = e.getCause();
 				if (cause instanceof NoSuchMethodException) {
@@ -357,42 +298,128 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		}
 	}
 
+	private JSONObject handleFetchRequest(JSONObject queryObj) {
+		// Client needs to bypass cors
+		try {
+			final URL url = new URL(queryObj.getString("url"));
+			final HttpURLConnection con = (HttpURLConnection) url.openConnection();
+			con.setRequestMethod("GET");
+			con.setConnectTimeout(5000);
+			con.setReadTimeout(5000);
+
+			int status = con.getResponseCode();
+			if (status != 200) {
+				throw new RuntimeException("Unexpected status code " + status);
+			}
+			BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+			String inputLine;
+			final StringBuffer content = new StringBuffer();
+			while ((inputLine = in.readLine()) != null) {
+				content.append(inputLine + "\n");
+			}
+			JSONObject res = new JSONObject();
+			res.put("result", content.toString());
+			con.disconnect();
+
+			return res;
+		} catch (IOException e) {
+			System.out.println("Error when performing fetch request " + queryObj);
+			e.printStackTrace();
+			throw new RuntimeException(e);
+		}
+	}
+
+	private JSONObject handleTestRequest(JSONObject queryObj) {
+		// Not test evaluation, but a request related to tests in some other way.
+		// E.g listing, creating, removing test cases, ..
+		final JSONObject retBuilder = new JSONObject();
+
+		final JSONObject queryBody = queryObj.getJSONObject("query");
+		final String testMetaType = queryBody.getString("type");
+
+		String testDir = System.getProperty("cpr.testDir");
+		switch (testMetaType) {
+		case TestProtocol.ListTestSuites.type: {
+			if (testDir != null) {
+				File dir = new File(testDir);
+				if (dir.isDirectory()) {
+					final File[] files = dir.listFiles();
+					if (files != null) {
+						JSONArray names = new JSONArray();
+						for (File f : files) {
+							names.put(f.getName());
+						}
+						TestProtocol.ListTestSuites.suites.put(retBuilder, names);
+					} else {
+						System.err.println(
+								"Couldn't list contents of TestDir '" + testDir + "', perhaps a permission issue");
+					}
+				} else {
+					System.err.println("TestDir '" + testDir + "' is not a directory");
+				}
+			}
+			break;
+		}
+		case TestProtocol.GetTestSuite.type: {
+			if (testDir != null) {
+				File f = new File(testDir, TestProtocol.GetTestSuite.suite.get(queryBody));
+				if (new File(testDir).toPath().startsWith(f.toPath())) {
+					System.err.println("Attempted read of file " + f + ", which is outside of testDir " + testDir);
+					return null;
+				}
+				try {
+					TestProtocol.GetTestSuite.contents.put(retBuilder,
+							new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));
+				} catch (JSONException | IOException e) {
+					e.printStackTrace();
+					System.err.println("Failed reading contents of " + f);
+				}
+			} else {
+				System.err.println("No TestDir set, cannot get contents");
+			}
+			break;
+		}
+		case "meta:putTestSuite": {
+			if (testDir != null) {
+				File f = new File(testDir, queryBody.getString("suite"));
+				if (new File(testDir).toPath().startsWith(f.toPath())) {
+					System.err.println(
+							"Attempted insertion of file to " + f + ", which is outside of testDir " + testDir);
+					return null;
+				}
+				try {
+					Files.write(f.toPath(), queryBody.getString("contents").getBytes(StandardCharsets.UTF_8));
+					retBuilder.put("ok", true);
+				} catch (IOException e) {
+					e.printStackTrace();
+					System.err.println("Failed reading contents of " + f);
+				}
+			} else {
+				System.err.println("No TestDir set, cannot put contents");
+			}
+			break;
+		}
+		default: {
+			System.err.println("Unknown testMeta request '" + testMetaType + "'");
+		}
+		}
+
+		return retBuilder;
+	}
+
 	@Override
 	public JSONObject handleRequest(JSONObject queryObj) {
-		switch (queryObj.getString("type")) {
-		case "query":
-			// Break & fall down to implementation below
+		final String queryType = queryObj.getString("type");
+		switch (queryType) {
+		case ProbeProtocol.type:
+			// Fall down to implementation below
 			break;
 
 		case "fetch":
-			// Client needs to bypass cors
-			try {
-				final URL url = new URL(queryObj.getString("url"));
-				final HttpURLConnection con = (HttpURLConnection) url.openConnection();
-				con.setRequestMethod("GET");
-				con.setConnectTimeout(5000);
-				con.setReadTimeout(5000);
+			return handleFetchRequest(queryObj);
 
-				int status = con.getResponseCode();
-				if (status != 200) {
-					throw new RuntimeException("Unexpected status code " + status);
-				}
-				BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-				String inputLine;
-				final StringBuffer content = new StringBuffer();
-				while ((inputLine = in.readLine()) != null) {
-					content.append(inputLine + "\n");
-				}
-				JSONObject res = new JSONObject();
-				res.put("result", content.toString());
-				con.disconnect();
-
-				return res;
-			} catch (IOException e) {
-				System.out.println("Error when performing fetch request " + queryObj);
-				e.printStackTrace();
-				throw new RuntimeException(e);
-			}
+		case TestProtocol.type:
+			return handleTestRequest(queryObj);
 
 		default:
 			throw new RuntimeException("Invalid request type on " + queryObj);
@@ -401,7 +428,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 //		System.out.println("Incoming query: " + queryObj.toString(2));
 		final long requestStart = System.nanoTime();
 
-		final AstCacheStrategy cacheStrategy = AstCacheStrategy.fallbackParse(queryObj.getString("cache"));
+		final AstCacheStrategy cacheStrategy = AstCacheStrategy.fallbackParse(ProbeProtocol.cache.get(queryObj));
 		if (cacheStrategy == AstCacheStrategy.PURGE) {
 			ASTProvider.purgeCache();
 			lastInfo = null;
@@ -424,7 +451,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				return existing;
 			}
 			try {
-				final File tmpFile = File.createTempFile("code-prober", queryObj.getString("tmpSuffix"));
+				final File tmpFile = File.createTempFile("code-prober", ProbeProtocol.tmpSuffix.get(queryObj));
 				try {
 					Files.write(tmpFile.toPath(), inputText.getBytes(StandardCharsets.UTF_8),
 							StandardOpenOption.CREATE);
@@ -442,7 +469,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		};
 		try {
 			errors = StdIoInterceptor.performCaptured(MagicStdoutMessageParser::parse, () -> {
-				final String inputText = queryObj.getString("text");
+				final String inputText = ProbeProtocol.text.get(queryObj);
 
 				final String[] fwdArgs;
 				final JSONArray argsOverride = queryObj.optJSONArray("mainArgs");
@@ -459,7 +486,8 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				boolean maybeCacheAST = cacheStrategy.canCacheAST() //
 						&& lastParsedInput != null //
 						&& lastInfo != null //
-						&& !newFwdArgs && ASTProvider.hasUnchangedJar(underlyingCompilerJar);
+						&& !newFwdArgs //
+						&& lastToolVersionId != null && lastToolVersionId == underlyingTool.getVersionId();
 
 				if (maybeCacheAST && !lastParsedInput.equals(inputText)) {
 					System.out.println("Can cache AST, but input is different..");
@@ -483,8 +511,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 							System.out.println("Tried optimized flush, result: " + replacedOk);
 							if (replacedOk) {
 								retBuilder.put("parseTime", (System.nanoTime() - flushStart));
-								handleParsedAst(lastInfo.ast.underlyingAstNode, lastInfo.loadAstClass, queryObj,
-										retBuilder, bodyBuilder);
+								handleParsedAst(lastInfo.ast.underlyingAstNode, queryObj, retBuilder, bodyBuilder);
 								lastParsedInput = inputText;
 								return;
 							}
@@ -504,8 +531,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 						retBuilder.put("parseTime", (System.nanoTime() - flushStart));
 //						final boolean parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs, (ast, loadCls) -> {
-						handleParsedAst(lastInfo.ast.underlyingAstNode, lastInfo.loadAstClass, queryObj, retBuilder,
-								bodyBuilder);
+						handleParsedAst(lastInfo.ast.underlyingAstNode, queryObj, retBuilder, bodyBuilder);
 						return;
 					} catch (InvokeProblem ip) {
 						System.out.println("Problem when flushing previous tree");
@@ -514,6 +540,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					}
 				}
 				lastParsedInput = inputText;
+				lastToolVersionId = underlyingTool.getVersionId();
 
 				final File tmpFile = createTmpFile.apply(inputText);
 				final String[] astArgs = new String[1 + fwdArgs.length];
@@ -522,13 +549,11 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				lastForwardArgs = fwdArgs;
 
 				final long parseStart = System.nanoTime();
-
-				final ASTProvider.ParseResult parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs,
-						(ast, loadCls) -> {
-							retBuilder.put("parseTime", (System.nanoTime() - parseStart));
-							handleParsedAst(ast, loadCls, queryObj, retBuilder, bodyBuilder);
-						});
-				if (!parsed.success) {
+				final ParseResult parsed = underlyingTool.parse(astArgs);
+				if (parsed.rootNode != null) {
+					retBuilder.put("parseTime", (System.nanoTime() - parseStart));
+					handleParsedAst(parsed.rootNode, queryObj, retBuilder, bodyBuilder);
+				} else {
 					if (bodyBuilder.length() == 0) {
 						bodyBuilder.put("Parsing failed");
 					}

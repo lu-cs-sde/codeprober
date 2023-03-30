@@ -6,14 +6,15 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiConsumer;
-import java.util.function.Function;
+import java.util.function.Consumer;
 import java.util.jar.JarFile;
 
 import org.json.JSONArray;
 
 import codeprober.metaprogramming.StdIoInterceptor;
+import codeprober.toolglue.ParseResult;
 
 /**
  * Provides an AST by running a compiler and using reflection to fetch the
@@ -99,21 +100,11 @@ public class ASTProvider {
 		return lastJar != null && lastJar.jarPath.equals(jarPath) && lastJar.jarLastModified == jarLastMod;
 	}
 
-	public static class ParseResult {
-		public final boolean success;
-		public final JSONArray captures;
-
-		public ParseResult(boolean success, JSONArray captures) {
-			this.success = success;
-			this.captures = captures;
-		}
-	}
-
 	/**
 	 * Runs the target compiler.
 	 */
-	public static ParseResult parseAst(String jarPath, String[] args,
-			BiConsumer<Object, Function<String, Class<?>>> rootConsumer) {
+	public static ParseResult parseAst(String jarPath, String[] args) {
+		System.out.println("parsing w/ args: " + Arrays.toString(args));
 		try {
 			LoadedJar ljar = loadJar(jarPath);
 
@@ -135,7 +126,7 @@ public class ASTProvider {
 							System.err.println("Example:");
 							System.err.println("   java -Djava.security.manager=allow -jar path/to/code-prober.jar path/to/your/analyzer-or-compiler.jar");
 						});
-						return new ParseResult(false, captures);
+						return new ParseResult(null, captures);
 					}
 
 					final AtomicReference<Exception> innerError = new AtomicReference<>();
@@ -157,7 +148,7 @@ public class ASTProvider {
 						e.printStackTrace();
 						System.err.println(
 								"compiler error : " + (e.getMessage() != null ? e.getMessage() : e.getCause()));
-						return new ParseResult(false, captures);
+						return new ParseResult(null, captures);
 					}
 				} finally {
 					SystemExitControl.enableSystemExit();
@@ -169,19 +160,10 @@ public class ASTProvider {
 					System.out.println("CodeProber_root_node didn't change after main invocation, treating this as a parse failure.");
 					System.out.println("If you perform semantic checks and call System.exit(..) if you get errors, then please do so *after* assigning CodeProber_root_node");
 					System.out.println("I.e do 1: parse. 2: update CodeProber_root_node. 3: perform semantic checks (optional)");
-					return new ParseResult(false, captures);
+					return new ParseResult(null, captures);
 				}
-				rootConsumer.accept(root, otherCls -> {
-//					System.out.println("Load underlying class: " + otherCls);
-					try {
-						return Class.forName(otherCls, true, ljar.classLoader);
-					} catch (ClassNotFoundException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-						throw new RuntimeException(e);
-					}
-				});
-				return new ParseResult(true, captures);
+//				rootConsumer.accept(root);
+				return new ParseResult(root, captures);
 			} catch (IllegalAccessException e) {
 				e.printStackTrace();
 			} finally {
@@ -198,6 +180,6 @@ public class ASTProvider {
 			e.printStackTrace();
 		}
 		SystemExitControl.enableSystemExit();
-		return new ParseResult(false, null);
+		return new ParseResult(null, null);
 	}
 }

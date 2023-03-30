@@ -1,18 +1,22 @@
 package codeprober.locator;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
+
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.junit.Test;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.ast.TestData;
 import codeprober.locator.ApplyLocator.ResolvedNode;
-import junit.framework.TestCase;
 
-public class TestApplyLocator extends TestCase {
+public class TestApplyLocator {
 
 	private void assertMirror(Object ast, Function<AstInfo, AstNode> pickTestNode) {
 		final AstInfo info = TestData.getInfo(new AstNode(ast));
@@ -25,26 +29,32 @@ public class TestApplyLocator extends TestCase {
 		assertSame(node, result.node);
 	}
 
+	@Test
 	public void testMirrorSimpleProgram() {
 		assertMirror(TestData.getSimple(), info -> info.ast);
 	}
 
+	@Test
 	public void testMirrorSimpleFoo() {
 		assertMirror(TestData.getSimple(), info -> info.ast.getNthChild(info, 0));
 	}
 
+	@Test
 	public void testMirrorSimpleBar() {
 		assertMirror(TestData.getSimple(), info -> info.ast.getNthChild(info, 0).getNthChild(info, 0));
 	}
 
+	@Test
 	public void testMirrorSimpleBaz() {
 		assertMirror(TestData.getSimple(), info -> info.ast.getNthChild(info, 1));
 	}
 
+	@Test
 	public void testMirrorAmbiguousProgram() {
 		assertMirror(TestData.getFlatAmbiguous(), info -> info.ast);
 	}
 
+	@Test
 	public void testMirrorAmbiguousFoo() {
 		assertMirror(TestData.getFlatAmbiguous(), info -> info.ast.getNthChild(info, 0));
 	}
@@ -77,6 +87,7 @@ public class TestApplyLocator extends TestCase {
 		assertSame(expect == ExpectedShiftedMatch.SHALLOW ? shallowBar : deepBar, result.node);
 	}
 
+	@Test
 	public void testMatchAmbiguousBarWithShiftedDepth() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
 		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.SHALLOW, (talPos, deepBar) -> {
@@ -87,6 +98,7 @@ public class TestApplyLocator extends TestCase {
 		});
 	}
 
+	@Test
 	public void testMatchAmbiguousBarWithShiftedStartEnd() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
 		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.DEEP, (talPos, deepBar) -> {
@@ -97,6 +109,7 @@ public class TestApplyLocator extends TestCase {
 		});
 	}
 
+	@Test
 	public void testMatchAmbiguousBarWithShiftedStartEndSlightlyOff() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
 		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.SHALLOW, (talPos, deepBar) -> {
@@ -107,6 +120,7 @@ public class TestApplyLocator extends TestCase {
 		});
 	}
 
+	@Test
 	public void testMatchAmbiguousBarWithShiftedStartDepth() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
 		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.DEEP, (talPos, deepBar) -> {
@@ -117,11 +131,13 @@ public class TestApplyLocator extends TestCase {
 		});
 	}
 
+	@Test
 	public void testMirrorAmbiguousBar() {
 		assertMirror(TestData.getFlatAmbiguous(), info -> info.ast.getNthChild(info, 0).getNthChild(info, 0));
 		assertMirror(TestData.getFlatAmbiguous(), info -> info.ast.getNthChild(info, 0).getNthChild(info, 1));
 	}
 
+	@Test
 	public void testMirrorIdenticalBarsWithDifferentParents() {
 		assertMirror(TestData.getIdenticalBarsWithDifferentParents(),
 				info -> info.ast.getNthChild(info, 0).getNthChild(info, 0));
@@ -129,6 +145,7 @@ public class TestApplyLocator extends TestCase {
 				info -> info.ast.getNthChild(info, 1).getNthChild(info, 0));
 	}
 
+	@Test
 	public void testMirrorIdenticalBarsWithDifferentGrandParents() {
 		// TODO turn this into more controlled test cases. This is where
 		// "shortHop"/"startNewTAL" is needed
@@ -138,6 +155,7 @@ public class TestApplyLocator extends TestCase {
 				info -> info.ast.getNthChild(info, 1).getNthChild(info, 0).getNthChild(info, 0));
 	}
 
+	@Test
 	public void testMirrorMultipleAmbiguousLevels() {
 		assertMirror(TestData.getMultipleAmbiguousLevels(), info -> info.ast //
 				.getNthChild(info, 0) // Foo
@@ -145,6 +163,7 @@ public class TestApplyLocator extends TestCase {
 				.getNthChild(info, 0)); // Baz
 	}
 
+	@Test
 	public void testSlightlyIncorrectLocator() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getSimple()));
 		final AstNode foo = info.ast.getNthChild(info, 0);

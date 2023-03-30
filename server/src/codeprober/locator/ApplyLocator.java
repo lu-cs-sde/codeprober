@@ -122,7 +122,7 @@ public class ApplyLocator {
 		final int end = nodePos.end;
 
 		if (start != 0 && end != 0 && startPos != 0 && endPos != 0 && (start > endPos || end < startPos)) {
-//			// Assume that a parent only contains children within its own bounds
+			// Assume that a parent only contains children within its own bounds
 			return null;
 		}
 
@@ -264,7 +264,7 @@ public class ApplyLocator {
 					}
 					}
 					if (matchedNode == null) {
-						System.out.println("Failed matching after step " + i);
+						System.out.println("Failed matching after step index " + i +", step = " + step);
 						break;
 					}
 				}

@@ -1,12 +1,16 @@
 package codeprober.ast;
 
+import static org.junit.Assert.assertEquals;
+
+import org.junit.Test;
+
 import codeprober.AstInfo;
 import codeprober.locator.Span;
 import codeprober.metaprogramming.AstNodeApiStyle;
-import junit.framework.TestCase;
 
-public class TestAstNode extends TestCase {
+public class TestAstNode {
 
+	@Test
 	public void testPositionAndChildAccessors() {
 		final AstNode an = new AstNode(TestData.getSimple());
 		final AstInfo info = TestData.getInfo(an);
@@ -22,12 +26,12 @@ public class TestAstNode extends TestCase {
 		assertEquals(1, fooPos.getStartLine());
 		assertEquals(3, fooPos.getEndLine());
 		assertEquals(1, fooChild.getNumChildren(info));
-		
+
 		int numIterator = 0;
 		for (@SuppressWarnings("unused") AstNode child : an.getChildren(info)) {
 			++numIterator;
 		}
 		assertEquals(2, numIterator);
 	}
-	
+
 }

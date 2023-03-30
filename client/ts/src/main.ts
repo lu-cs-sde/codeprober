@@ -19,6 +19,7 @@ import displayAstModal from "./ui/popup/displayAstModal";
 import { createTestManager } from './model/test/TestManager';
 import displayTestSuiteListModal from './ui/popup/displayTestSuiteListModal';
 import ModalEnv from './model/ModalEnv';
+import displayTestDiffModal from './ui/popup/displayTestDiffModal';
 
 
 window.clearUserSettings = () => {
@@ -268,6 +269,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
         themeIsLight: () => settings.isLightTheme(),
         getLocalState: () => getLocalState(),
+        setLocalState: (newVal) => setLocalState(newVal),
         captureStdout: () => uiElements.captureStdoutCheckbox.checked,
         duplicateOnAttr: () => uiElements.duplicateProbeCheckbox.checked,
         registerStickyMarker: (...args) => registerStickyMarker(...args),
