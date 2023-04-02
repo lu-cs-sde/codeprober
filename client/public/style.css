@@ -658,20 +658,20 @@ body[data-theme-light="true"] .context-menu-row {
   background: #7777;
 }
 
-.test-category {
+.test-suite {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
-  border: 1px solid green;
-  border-radius: 0.25rem;
+  border-bottom: 1px solid white;
+  /* border-radius: 0.25rem; */
   padding: 0.5rem;
 }
-.test-category:hover {
+.test-suite:hover {
   cursor: pointer;
   background: #555;
 }
 
-body[data-theme-light="true"] .test-category:hover {
+body[data-theme-light="true"] .test-suite:hover {
   background: #aaa7;
 }
 
@@ -686,7 +686,8 @@ body[data-theme-light="true"] .test-category:hover {
 .test-case:hover:not(:active) {
   background: #777;
 }
-body[data-theme-light="true"] .test-case {
+body[data-theme-light="true"] .test-case,
+body[data-theme-light="true"] .test-suite {
   border-bottom-color: black;
 }
 body[data-theme-light="true"] .test-case:hover:not(:active) {
@@ -699,7 +700,7 @@ body[data-theme-light="true"] .test-case:hover:not(:active) {
 .test-case > div {
   display: flex;
   flex-direction: row;
-  min-width: 20%;
+  /* min-width: 20%; */
   margin: auto 0;
 }
 

@@ -851,7 +851,8 @@ define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui
         'duplicate-probe-on-attr': 'Duplicate probe',
         'capture-stdout': 'Capture stdout',
         'location-style': 'Location styles',
-        'ast': 'AST'
+        'ast': 'AST',
+        'test-code-vs-codeprober-code': 'Test code vs CodeProber code',
     })[type];
     const getHelpContents = (type) => {
         const createHeader = (text) => {
@@ -1331,10 +1332,22 @@ aspect MagicOutputDemo {
                     `You can click the '᠁' to continue exploring the AST from that point`,
                 ];
             }
+            case 'test-code-vs-codeprober-code': {
+                return [
+                    `When a test is created it saves the current state of CodeProber. This includes the code in the main CodeProber text editor, as well as some of the settings (cache settings, main args, file suffix, etc.).`,
+                    ``,
+                    `When tests are executed, they do so with their saved state, *not* the current CodeProber state. This lets you have multiple tests at the same time, each with their on unique configuration.`,
+                    ``,
+                    `When a test fails, you may want to open probes to inspect why. The first step is to change the current CodeProber code to the test code. Open the test in question and click the 'Source Code' tab. There will be a button labeled 'Load Source' or 'Open Probe'.`,
+                    `• Clicking 'Load Source' will replace the code inside the main CodeProber editor with the saved code from the test.`,
+                    `• Clicking 'Open Probe' will open the probe corresponding to the test.`,
+                    `'Open Probe' is only available if the CodeProber code matches the test code.`,
+                ];
+            }
         }
     };
     const displayHelp = (type, setHelpButtonDisabled) => {
-        setHelpButtonDisabled(true);
+        setHelpButtonDisabled === null || setHelpButtonDisabled === void 0 ? void 0 : setHelpButtonDisabled(true);
         // TODO prevent this if help window already open
         // Maybe disable the help button, re-enable on close?
         const helpWindow = (0, showWindow_2.default)({
@@ -1351,7 +1364,7 @@ aspect MagicOutputDemo {
                         container.appendChild(header);
                     },
                     onClose: () => {
-                        setHelpButtonDisabled(false);
+                        setHelpButtonDisabled === null || setHelpButtonDisabled === void 0 ? void 0 : setHelpButtonDisabled(false);
                         helpWindow.remove();
                     },
                 }).element);
@@ -1423,7 +1436,6 @@ define("model/test/compareTestResult", ["require", "exports", "model/test/rpcBod
     const compareTestResult = (tc, actual) => {
         const argValueToNodeLocator = (val) => typeof val === 'object' ? val : null;
         const forEachLocator = (locator, callback) => {
-            console.log('..foreachLocator: ', locator);
             callback(locator);
             locator.steps.forEach(step => {
                 if (step.type === 'nta') {
@@ -1493,26 +1505,41 @@ define("model/test/compareTestResult", ["require", "exports", "model/test/rpcBod
             }
             return report;
         };
+        const stripStepsFromAssertionLine = (line) => {
+            if (typeof line === 'string') {
+                return line;
+            }
+            if (Array.isArray(line)) {
+                return line.map(stripStepsFromAssertionLine);
+            }
+            return {
+                robust: { result: line.robust.result, steps: [], },
+                naive: { result: line.naive.result, steps: [], }
+            };
+        };
         const actualLines = actual.lines;
         switch (tc.assert.type) {
             case 'identity': {
-                const expected = (0, rpcBodyToAssertionLine_1.rpcLinesToAssertionLines)(tc.assert.lines);
+                const expectedOutputStrings = (0, rpcBodyToAssertionLine_1.rpcLinesToAssertionLines)(tc.assert.lines).map(stripStepsFromAssertionLine).map(l => JSON.stringify(l));
+                const actualOutputStrings = actualLines.map(stripStepsFromAssertionLine).map(l => JSON.stringify(l));
                 const unmatchedValidLines = [];
                 const invalidLines = [];
                 let pushValidLines = true;
                 let expIdx = 0;
                 let actIdx = 0;
-                while (expIdx < expected.length && actIdx < actualLines.length) {
-                    const e = JSON.stringify(expected[expIdx]);
-                    const a = JSON.stringify(actualLines[actIdx]);
+                while (expIdx < expectedOutputStrings.length && actIdx < actualOutputStrings.length) {
+                    const e = expectedOutputStrings[expIdx];
+                    const a = actualOutputStrings[actIdx];
+                    // const e = JSON.stringify(expected[expIdx]);
+                    // const a = JSON.stringify(actualLines[actIdx]);
                     if (e === a) {
                         ++expIdx;
                         ++actIdx;
                     }
                     else {
                         // invalidLines.push(actIdx);
-                        const nextExp = (offset) => (expIdx + offset) < expected.length ? JSON.stringify(expected[expIdx + offset]) : null;
-                        const nextAct = (offset) => (actIdx + offset) < actualLines.length ? JSON.stringify(actualLines[actIdx + offset]) : null;
+                        const nextExp = (offset) => (expIdx + offset) < expectedOutputStrings.length ? expectedOutputStrings[expIdx + offset] : null;
+                        const nextAct = (offset) => (actIdx + offset) < actualOutputStrings.length ? actualOutputStrings[actIdx + offset] : null;
                         let foundMatch = false;
                         for (let offset = 1; offset <= 3; ++offset) {
                             if (e == nextAct(offset)) {
@@ -1556,7 +1583,7 @@ define("model/test/compareTestResult", ["require", "exports", "model/test/rpcBod
                         invalidLines.push(actIdx);
                         ++actIdx;
                     }
-                    while (expIdx < expected.length) {
+                    while (expIdx < expectedOutputStrings.length) {
                         unmatchedValidLines.push(expIdx);
                         ++expIdx;
                     }
@@ -1566,8 +1593,8 @@ define("model/test/compareTestResult", ["require", "exports", "model/test/rpcBod
                         unmatchedValid: unmatchedValidLines
                     });
                 }
-                if (expected.length != actualLines.length) {
-                    console.log('diff length, exp:', expected.length, ', actualLines:', actualLines.length);
+                if (expectedOutputStrings.length != actualOutputStrings.length) {
+                    console.log('diff length, exp:', expectedOutputStrings.length, ', actualLines:', actualLines.length);
                     return getFullReport('different-number-of-lines');
                 }
                 return getFullReport('pass');
@@ -1612,7 +1639,7 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
     compareTestResult_1 = __importDefault(compareTestResult_1);
     ;
     ;
-    const createTestManager = (performRpcQuery) => {
+    const createTestManager = (performRpcQuery, createJobId) => {
         const performMetaQuery = (props) => performRpcQuery({
             type: 'testMeta',
             query: props,
@@ -1652,7 +1679,9 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
             }
             await saveCategoryState(category, [...(suiteListRepo[category] || []).filter(tc => tc.name !== test.name), test]);
             ++categoryInvalidationCount;
-            delete testStatusRepo[category];
+            if (overwriteIfExisting && testStatusRepo[category]) {
+                delete testStatusRepo[category][test.name];
+            }
             notifyListeners('added-test');
             return 'ok';
         };
@@ -1737,20 +1766,37 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
                     console.warn(`No such test case '${name}' in ${category}`);
                     return 'failed-fetching';
                 }
-                const res = await performRpcQuery({
-                    type: 'query',
-                    posRecovery: tcase.posRecovery,
-                    cache: tcase.cache,
-                    text: tcase.src,
-                    stdout: false,
-                    query: {
-                        attr: tcase.attribute,
-                        locator: tcase.locator.robust,
-                    },
-                    mainArgs: null,
-                    tmpSuffix: tcase.tmpSuffix,
+                const res = await new Promise(async (resolve, reject) => {
+                    const handleUpdate = (data) => {
+                        // console.log('handle testMgr update for', category, '>', name, '::', data);
+                        if (data.job) {
+                            // Status update, ignore
+                            return;
+                        }
+                        resolve(data);
+                        // resolve(data);
+                    };
+                    const jobId = createJobId(handleUpdate);
+                    try {
+                        handleUpdate(await performRpcQuery({
+                            type: 'query',
+                            posRecovery: tcase.posRecovery,
+                            cache: tcase.cache,
+                            text: tcase.src,
+                            stdout: false,
+                            query: {
+                                attr: tcase.attribute,
+                                locator: tcase.locator.robust,
+                            },
+                            mainArgs: null,
+                            tmpSuffix: tcase.tmpSuffix,
+                            job: `${jobId}`,
+                        }));
+                    }
+                    catch (e) {
+                        reject(e);
+                    }
                 });
-                console.log('tcase raw res:', res);
                 let report;
                 if (!res.locator) {
                     report = 'failed-eval';
@@ -2451,7 +2497,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         root.appendChild(text);
                         return;
                     }
-                    root.appendChild((0, encodeRpcBodyLines_1.default)(env, state.body, null));
+                    root.appendChild((0, encodeRpcBodyLines_1.default)(env, state.body));
                 }
                 else {
                     // Build UI
@@ -2936,7 +2982,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                         root.appendChild(text);
                         return;
                     }
-                    root.appendChild((0, encodeRpcBodyLines_2.default)(env, state.body, null));
+                    root.appendChild((0, encodeRpcBodyLines_2.default)(env, state.body));
                 }
                 else {
                     const attrs = state.attrs;
@@ -3160,6 +3206,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
 define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal"], function (require, exports, createTextSpanIndicator_5, registerNodeSelector_2, registerOnHover_3, trimTypeName_3, displayAttributeModal_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.mapRpcBodyLineDepthFirst = void 0;
     createTextSpanIndicator_5 = __importDefault(createTextSpanIndicator_5);
     registerNodeSelector_2 = __importDefault(registerNodeSelector_2);
     registerOnHover_3 = __importDefault(registerOnHover_3);
@@ -3179,7 +3226,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
         }
         return Number.MAX_SAFE_INTEGER;
     };
-    const encodeRpcBodyLines = (env, body, decorator) => {
+    const encodeRpcBodyLines = (env, body, extras = {}) => {
         let needCapturedStreamArgExplanation = false;
         const streamArgPrefix = Math.min(...body.map(getCommonStreamArgWhitespacePrefix));
         const encodeLine = (target, line, respectIndent = false) => {
@@ -3254,14 +3301,26 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
                         container.style.width = 'fit-content';
                         container.style.display = 'inline';
                         (0, registerOnHover_3.default)(container, on => {
-                            env.updateSpanHighlight(on ? span : null);
+                            var _a, _b;
+                            if (!on || ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true)) {
+                                env.updateSpanHighlight(on ? span : null);
+                                container.style.cursor = 'default';
+                                container.classList.add('clickHighlightOnHover');
+                            }
+                            else {
+                                container.style.cursor = 'not-allowed';
+                                container.classList.remove('clickHighlightOnHover');
+                            }
                         });
                         container.onmousedown = (e) => {
                             e.stopPropagation();
                         };
                         (0, registerNodeSelector_2.default)(container, () => line.value);
                         container.addEventListener('click', () => {
-                            (0, displayAttributeModal_3.default)(env, null, line.value);
+                            var _a, _b;
+                            if ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true) {
+                                (0, displayAttributeModal_3.default)(env, null, line.value);
+                            }
                         });
                         target.appendChild(container);
                         break;
@@ -3273,7 +3332,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
                 }
             }
         };
-        const pre = document.createElement(decorator ? 'div' : 'pre');
+        const pre = document.createElement(extras.decorator ? 'div' : 'pre');
         pre.style.margin = '0px';
         pre.style.padding = '0.5rem';
         pre.style.fontSize = '0.75rem';
@@ -3288,11 +3347,11 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
             return true;
         })
             .forEach((line, lineIdx) => {
-            if (decorator) {
+            if (extras.decorator) {
                 const holder = document.createElement('pre');
                 holder.style.margin = '0px';
                 holder.style.padding = '0';
-                switch (decorator(lineIdx)) {
+                switch (extras.decorator(lineIdx)) {
                     case 'error': {
                         holder.classList.add('test-diff-error');
                         break;
@@ -3334,6 +3393,16 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
         }
         return pre;
     };
+    const mapRpcBodyLineDepthFirst = (line, mapper) => {
+        if (typeof line === 'string') {
+            return mapper(line);
+        }
+        if (Array.isArray(line)) {
+            return mapper(line.map(sub => mapRpcBodyLineDepthFirst(sub, mapper)));
+        }
+        return mapper(line);
+    };
+    exports.mapRpcBodyLineDepthFirst = mapRpcBodyLineDepthFirst;
     exports.default = encodeRpcBodyLines;
 });
 define("ui/popup/displayTestAdditionModal", ["require", "exports", "settings", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_3, createLoadingSpinner_3, createModalTitle_5, showWindow_6) {
@@ -3466,6 +3535,7 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "settings", "
                             update();
                         };
                     });
+                    let errMsg;
                     let commitButton = document.createElement('button');
                     addRow('', (row) => {
                         commitButton.innerText = 'Add';
@@ -3489,11 +3559,19 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "settings", "
                                 attribute,
                                 locator: { naive: locator, robust: locator },
                                 name: state.name,
-                            }, false);
+                            }, false).then((result) => {
+                                if (result === 'ok') {
+                                    cleanup();
+                                    return;
+                                }
+                                else {
+                                    errMsg.innerText = `Error when adding test. Please try again or check server log for more information.`;
+                                }
+                            });
                         };
                     });
                     addRow('', (row) => {
-                        const errMsg = document.createElement('p');
+                        errMsg = document.createElement('p');
                         errMsg.style.textAlign = 'center';
                         errMsg.classList.add('captured-stderr');
                         row.appendChild(errMsg);
@@ -3502,8 +3580,8 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "settings", "
                             if (!state.category) {
                                 errMsg.innerText = `Missing category. The test will be saved in a file called '<category>.json'`;
                             }
-                            else if (!/^[a-zA-Z0-9-]+$/.test(state.category)) {
-                                errMsg.innerText = `Invalid category, please only use '[a-zA-Z0-9-]' in the name, i.e A-Z, numbers and dash (-).'`;
+                            else if (!/^[a-zA-Z0-9-_]+$/.test(state.category)) {
+                                errMsg.innerText = `Invalid category, please only use '[a-zA-Z0-9-_]' in the name, i.e A-Z, numbers, dash (-) and underscore (_).'`;
                             }
                             else if (!state.name) {
                                 errMsg.innerText = `Missing test name`;
@@ -3778,7 +3856,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     const titleRow = createTitle();
                     root.append(titleRow.element);
                     lastOutput = body;
-                    root.appendChild((0, encodeRpcBodyLines_3.default)(env, body, null));
+                    root.appendChild((0, encodeRpcBodyLines_3.default)(env, body));
                     const spinner = (0, createLoadingSpinner_4.default)();
                     spinner.style.display = 'none';
                     spinner.classList.add('absoluteCenter');
@@ -3908,7 +3986,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                     if (!parsed.nodes) {
                         root.appendChild(createTitle('err'));
                         if ((_a = parsed.body) === null || _a === void 0 ? void 0 : _a.length) {
-                            root.appendChild((0, encodeRpcBodyLines_4.default)(env, parsed.body, null));
+                            root.appendChild((0, encodeRpcBodyLines_4.default)(env, parsed.body));
                             return;
                         }
                         throw new Error(`Couldn't find expected line or body in output '${JSON.stringify(parsed)}'`);
@@ -4768,7 +4846,7 @@ define("model/runBgProbe", ["require", "exports"], function (require, exports) {
     };
     exports.default = runInvisibleProbe;
 });
-define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/UIElements", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, settings_6, createLoadingSpinner_6, createModalTitle_10, showWindow_11, UIElements_1, displayProbeModal_3, encodeRpcBodyLines_5) {
+define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, settings_6, createLoadingSpinner_6, createModalTitle_10, showWindow_11, UIElements_1, displayHelp_4, displayProbeModal_3, encodeRpcBodyLines_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     settings_6 = __importDefault(settings_6);
@@ -4776,6 +4854,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
     createModalTitle_10 = __importDefault(createModalTitle_10);
     showWindow_11 = __importDefault(showWindow_11);
     UIElements_1 = __importDefault(UIElements_1);
+    displayHelp_4 = __importDefault(displayHelp_4);
     displayProbeModal_3 = __importDefault(displayProbeModal_3);
     encodeRpcBodyLines_5 = __importDefault(encodeRpcBodyLines_5);
     const preventDragOnClick = (elem) => {
@@ -4913,6 +4992,10 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                     let contentUpdater = (tab) => { };
                     const localRefreshListeners = [];
                     env.onChangeListeners[queryId] = () => localRefreshListeners.forEach(lrl => lrl());
+                    const someOutputErr = testReport === 'failed-eval' || typeof testReport == 'object' && testReport.output !== 'pass';
+                    const someLocatorErr = testReport === 'failed-eval' || typeof testReport === 'object' && [
+                        testReport.sourceLocators, testReport.attrArgLocators, testReport.outputLocators
+                    ].some(loc => loc !== 'pass');
                     (() => {
                         const buttonRow = document.createElement('div');
                         buttonRow.style.display = 'flex';
@@ -4922,10 +5005,6 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                         const infoSelector = document.createElement('div');
                         infoSelector.classList.add('test-diff-info-selector');
                         buttonRow.append(infoSelector);
-                        const someOutputErr = testReport === 'failed-eval' || typeof testReport == 'object' && testReport.output !== 'pass';
-                        const someLocatorErr = testReport === 'failed-eval' || typeof testReport === 'object' && [
-                            testReport.sourceLocators, testReport.attrArgLocators, testReport.outputLocators
-                        ].some(loc => loc !== 'pass');
                         const infos = [
                             { name: `Output Diff ${someOutputErr ? '❌' : '✅'}`, type: 'output' },
                             { name: `Node Diff ${someLocatorErr ? '❌' : '✅'}`, type: 'node' },
@@ -5041,13 +5120,16 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                 switch (testCase.assert.type) {
                                     case 'identity':
                                     case 'set': {
-                                        leftPane.appendChild((0, encodeRpcBodyLines_5.default)(env, testCase.assert.lines, (line) => {
-                                            if (typeof testReport === 'object' && typeof testReport.output === 'object') {
-                                                if (testReport.output.unmatchedValid.includes(line)) {
-                                                    return 'unmatched';
+                                        leftPane.appendChild((0, encodeRpcBodyLines_5.default)(env, testCase.assert.lines, {
+                                            lateInteractivityEnabledChecker: () => false,
+                                            decorator: (line) => {
+                                                if (typeof testReport === 'object' && typeof testReport.output === 'object') {
+                                                    if (testReport.output.unmatchedValid.includes(line)) {
+                                                        return 'unmatched';
+                                                    }
                                                 }
-                                            }
-                                            return 'default';
+                                                return 'default';
+                                            },
                                         }));
                                         break;
                                     }
@@ -5074,13 +5156,16 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                   `.trim()));
                                 }
                                 else {
-                                    rightPane.appendChild((0, encodeRpcBodyLines_5.default)(env, testStatus.lines, (line) => {
-                                        if (typeof testReport === 'object' && typeof testReport.output === 'object') {
-                                            if (testReport.output.invalid.includes(line)) {
-                                                return 'error';
+                                    rightPane.appendChild((0, encodeRpcBodyLines_5.default)(env, testStatus.lines, {
+                                        lateInteractivityEnabledChecker: () => testCase.src === env.getLocalState(),
+                                        decorator: (line) => {
+                                            if (typeof testReport === 'object' && typeof testReport.output === 'object') {
+                                                if (testReport.output.invalid.includes(line)) {
+                                                    return 'error';
+                                                }
                                             }
-                                        }
-                                        return 'default';
+                                            return 'default';
+                                        },
                                     }));
                                 }
                                 splitPane.appendChild(rightPane);
@@ -5088,16 +5173,52 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                 break;
                             }
                             case 'node': {
-                                contentRoot.appendChild(document.createTextNode('todo node tab'));
+                                const wrapper = document.createElement('div');
+                                wrapper.style.padding = '0.25rem';
+                                contentRoot.appendChild(wrapper);
+                                const addP = (msg) => {
+                                    const explanationTail = document.createElement('p');
+                                    explanationTail.textContent = msg;
+                                    wrapper.appendChild(explanationTail);
+                                };
+                                const addTail = () => {
+                                    addP(`You can inspect the difference by opening a probe from 'Source Code' tab. If you are OK with the differences, click 'Save 💾'.`);
+                                };
+                                if (someLocatorErr && someOutputErr) {
+                                    addP(`Both property output and AST node reference(s) involved in property execution differ. This could mean that that both property behavior and AST structure has changed since this test was constructed.`);
+                                    addTail();
+                                }
+                                else if (someLocatorErr) {
+                                    wrapper.appendChild(document.createTextNode(`Property output is the same, but the AST node reference(s) involved in property execution are different. This could be because the AST structure has changed since this test was constructed. This might not be a problem.`));
+                                    addTail();
+                                }
+                                else if (someOutputErr) {
+                                    wrapper.appendChild(document.createTextNode('Output differs, but the AST node reference(s) involved in property execution are identical. This indicates that a property behaves differently to when the test was constructed.'));
+                                    addTail();
+                                }
+                                else {
+                                    wrapper.appendChild(document.createTextNode('All AST node references involved in property execution are identical to expected values.'));
+                                }
                                 break;
                             }
                             case 'source': {
                                 const wrapper = document.createElement('div');
                                 wrapper.style.padding = '0.25rem';
                                 contentRoot.appendChild(wrapper);
-                                const same = testCase.src === settings_6.default.getEditorContents();
+                                const same = testCase.src === env.getLocalState();
+                                const addText = (msg) => wrapper.appendChild(document.createTextNode(msg));
+                                const addHelp = (type) => {
+                                    const btn = document.createElement('button');
+                                    btn.innerText = `?`;
+                                    btn.style.marginLeft = '0.25rem';
+                                    btn.style.borderRadius = '50%';
+                                    btn.onclick = () => (0, displayHelp_4.default)(type);
+                                    wrapper.appendChild(btn);
+                                };
                                 if (same) {
-                                    wrapper.appendChild(document.createTextNode(`Current text in CodeProber matches the source code used for this test case.`));
+                                    // addText(`Current text in CodeProber matches the source code used for this test case.`);
+                                    addText(`Test code == CodeProber code.`);
+                                    addHelp('test-code-vs-codeprober-code');
                                     wrapper.appendChild(document.createElement('br'));
                                     wrapper.appendChild(document.createTextNode(`Press`));
                                     const btn = document.createElement('button');
@@ -5111,9 +5232,11 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                     wrapper.appendChild(document.createTextNode(`to explore the probe that created this test.`));
                                 }
                                 else {
-                                    wrapper.appendChild(document.createTextNode(`Current text in CodeProber does not match the source code used for this test case.`));
+                                    addText(`Test code ≠ CodeProber code.`);
+                                    addHelp('test-code-vs-codeprober-code');
+                                    // wrapper.appendChild(document.createTextNode(`Current text in CodeProber does not match the source code used for this test case.`));
                                     wrapper.appendChild(document.createElement('br'));
-                                    wrapper.appendChild(document.createTextNode(`Press`));
+                                    addText(`Press`);
                                     const btn = document.createElement('button');
                                     preventDragOnClick(btn);
                                     btn.style.margin = '0 0.125rem';
@@ -5122,7 +5245,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                         env.setLocalState(testCase.src);
                                     };
                                     wrapper.appendChild(btn);
-                                    wrapper.appendChild(document.createTextNode(`to replace CodeProber text with the test source.`));
+                                    addText(`to replace CodeProber text with the test source.`);
                                 }
                                 wrapper.appendChild(document.createElement('hr'));
                                 const addExplanationLine = (head, value, valueClass = '') => {
@@ -5154,7 +5277,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                     //   : `s ${span.lineStart}→${span.lineEnd}`;
                                     // addExplanationLine('AST Node:', `${locator.result.label || locator.result.type} on line${linesTail}`);
                                 }
-                                addExplanationLine('Source Code', '⬇️');
+                                addExplanationLine('Source Code', '⬇️, related line(s) in green.');
                                 testCase.src.split('\n').forEach((line, lineIdx) => {
                                     const lineContainer = document.createElement('div');
                                     lineContainer.classList.add('test-case-source-code-line');
@@ -5305,7 +5428,7 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
                 root.appendChild((0, createModalTitle_11.default)({
                     renderLeft: (container) => {
                         const header = document.createElement('span');
-                        header.innerText = `${category}`;
+                        header.innerText = `Test Suite: ${category}`;
                         container.appendChild(header);
                     },
                     onClose: cleanup,
@@ -5330,7 +5453,7 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
                     rowList.style.flexDirection = 'column';
                     rowList.style.margin = '0 0 auto';
                     root.appendChild(rowList);
-                    console.log('render contents', contents);
+                    // console.log('render contents', contents);
                     contents.forEach(tc => {
                         const row = document.createElement('div');
                         row.classList.add('test-case');
@@ -5342,9 +5465,9 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
                         row.appendChild(icons);
                         const status = document.createElement('span');
                         status.innerText = `⏳`;
-                        row.style.order = '5';
+                        row.style.order = '3';
                         env.testManager.getTestStatus(category, tc.name).then(result => {
-                            console.log('tstatus for', category, '>', tc.name, ':', result);
+                            // console.log('tstatus for', category, '>', tc.name, ':', result);
                             if (result == 'failed-fetching') {
                                 status.innerText = `<Evaluation Error>`;
                             }
@@ -5354,7 +5477,7 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
                                     switch (report) {
                                         case 'pass': {
                                             status.innerText = `✅`;
-                                            row.style.order = '2';
+                                            row.style.order = '5';
                                             break;
                                         }
                                         case 'failed-eval': {
@@ -5448,7 +5571,7 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
                         container.appendChild(header);
                     },
                     onClose: cleanup,
-                    extraActions: [
+                    extraActions: (typeof categories === 'string' || categories.length === 0) ? [] : [
                         {
                             title: 'Run all',
                             invoke: () => {
@@ -5458,6 +5581,10 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
                                     if (suites === 'failed-listing') {
                                         return;
                                     }
+                                    for (let i = 0; i < suites.length; ++i) {
+                                        localTestSuiteKnowledge[suites[i]] = { fail: 0, pass: 0 };
+                                    }
+                                    popup.refresh();
                                     // Very intentionally evaluate this sequentially (not Promise.all)
                                     // Don't want to send a billion requests at once
                                     for (let i = 0; i < suites.length; ++i) {
@@ -5531,9 +5658,15 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
                     rowList.style.flexDirection = 'column';
                     rowList.style.margin = '0 0 auto';
                     root.appendChild(rowList);
+                    if (categories.length == 0) {
+                        const emptyMsg = document.createElement('div');
+                        emptyMsg.innerText = 'No tests here. Create them from the "..." menu in a probe.';
+                        emptyMsg.style.textAlign = 'center';
+                        rowList.appendChild(emptyMsg);
+                    }
                     categories.forEach(cat => {
                         const row = document.createElement('div');
-                        row.classList.add('test-category');
+                        row.classList.add('test-suite');
                         const title = document.createElement('span');
                         title.innerText = cat;
                         title.style.marginRight = '1rem';
@@ -5596,13 +5729,13 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
     };
     exports.default = displayTestSuiteListModal;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_4, displayRagModal_1, displayHelp_4, displayAttributeModal_6, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_2, TestManager_1, displayTestSuiteListModal_1) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_4, displayRagModal_1, displayHelp_5, displayAttributeModal_6, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_2, TestManager_1, displayTestSuiteListModal_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
     displayProbeModal_4 = __importDefault(displayProbeModal_4);
     displayRagModal_1 = __importDefault(displayRagModal_1);
-    displayHelp_4 = __importDefault(displayHelp_4);
+    displayHelp_5 = __importDefault(displayHelp_5);
     displayAttributeModal_6 = __importDefault(displayAttributeModal_6);
     settings_7 = __importDefault(settings_7);
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
@@ -5677,6 +5810,34 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 }
                 return (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:${wsPort}`), addConnectionCloseNotice_1.default);
             })();
+            const jobUpdateHandlers = {};
+            wsHandler.on('jobUpdate', (data) => {
+                const { job, result } = data;
+                if (!job || !result) {
+                    console.warn('Invalid job update', data);
+                    return;
+                }
+                const handler = jobUpdateHandlers[job];
+                if (!handler) {
+                    console.log('Got not handler for job update:', data);
+                    return;
+                }
+                switch (result.status) {
+                    case 'running': {
+                        // Ignore for now, maybe show some loading somewhere?
+                        return;
+                    }
+                    case 'done': {
+                        delete jobUpdateHandlers[data === null || data === void 0 ? void 0 : data.job];
+                        handler(result.result);
+                        return;
+                    }
+                    default: {
+                        console.warn('Unknown job update:', data);
+                        return;
+                    }
+                }
+            });
             const rootElem = document.getElementById('root');
             wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds }, changeBufferTime }) => {
                 console.log('onInit, buffer:', changeBufferTime);
@@ -5817,7 +5978,13 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     document.getElementById('secret-debug-panel').style.display = 'block';
                 }
                 // const testManager = createTestManager(req => performRpcQuery(wsHandler, req));
-                const testManager = (0, TestManager_1.createTestManager)(req => wsHandler.sendRpc(req));
+                const createJobId = (updateHandler) => {
+                    const id = ++jobIdGenerator;
+                    jobUpdateHandlers[id] = updateHandler;
+                    return id;
+                };
+                const testManager = (0, TestManager_1.createTestManager)(req => wsHandler.sendRpc(req), createJobId);
+                let jobIdGenerator = 0;
                 const modalEnv = {
                     performRpcQuery: (args) => performRpcQuery(wsHandler, args),
                     probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
@@ -5845,6 +6012,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     currentlyLoadingModals: new Set(),
                     createCullingTaskSubmitter: (0, cullingTaskSubmitterFactory_2.default)(changeBufferTime),
                     testManager,
+                    createJobId,
                 };
                 modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {
                     if (reason === 'refresh-from-server') {
@@ -5857,7 +6025,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);
                 window.displayHelp = (type) => {
-                    const common = (type, button) => (0, displayHelp_4.default)(type, disabled => button.disabled = disabled);
+                    const common = (type, button) => (0, displayHelp_5.default)(type, disabled => button.disabled = disabled);
                     switch (type) {
                         case "general": return common('general', uiElements.generalHelpButton);
                         case 'recovery-strategy': return common('recovery-strategy', uiElements.positionRecoveryHelpButton);

@@ -37,7 +37,6 @@ const compareTestResult = (tc: TestCase, actual: { locator: NodeLocator, lines: 
 
   const argValueToNodeLocator = (val: ArgValue): NodeLocator | null => typeof val === 'object' ? val : null;
   const forEachLocator = (locator: NodeLocator, callback: (locator: NodeLocator) => void) => {
-    console.log('..foreachLocator: ', locator);
     callback(locator);
     locator.steps.forEach(step => {
       if (step.type === 'nta') {
@@ -113,20 +112,35 @@ const compareTestResult = (tc: TestCase, actual: { locator: NodeLocator, lines: 
     return report;
   }
 
+  const stripStepsFromAssertionLine = (line: AssertionLine): AssertionLine => {
+    if (typeof line === 'string') {
+      return line;
+    }
+    if (Array.isArray(line)) {
+      return line.map(stripStepsFromAssertionLine);
+    }
+    return {
+      robust: { result: line.robust.result, steps: [], },
+      naive: { result: line.naive.result, steps: [], }
+    };
+  };
+
   const actualLines = actual.lines;
   switch (tc.assert.type) {
     case 'identity': {
-      const expected = rpcLinesToAssertionLines(tc.assert.lines);
-
+      const expectedOutputStrings = rpcLinesToAssertionLines(tc.assert.lines).map(stripStepsFromAssertionLine).map(l => JSON.stringify(l));
+      const actualOutputStrings = actualLines.map(stripStepsFromAssertionLine).map(l => JSON.stringify(l));
       const unmatchedValidLines: number[] = [];
       const invalidLines: number[] = [];
       let pushValidLines = true;
 
       let expIdx = 0;
       let actIdx = 0;
-      while (expIdx < expected.length && actIdx < actualLines.length) {
-        const e = JSON.stringify(expected[expIdx]);
-        const a = JSON.stringify(actualLines[actIdx]);
+      while (expIdx < expectedOutputStrings.length && actIdx < actualOutputStrings.length) {
+        const e = expectedOutputStrings[expIdx];
+        const a = actualOutputStrings[actIdx];
+        // const e = JSON.stringify(expected[expIdx]);
+        // const a = JSON.stringify(actualLines[actIdx]);
 
         if (e === a) {
           ++expIdx;
@@ -134,8 +148,8 @@ const compareTestResult = (tc: TestCase, actual: { locator: NodeLocator, lines: 
         } else {
           // invalidLines.push(actIdx);
 
-          const nextExp = (offset: number) => (expIdx + offset) < expected.length ? JSON.stringify(expected[expIdx + offset]) : null;
-          const nextAct = (offset: number) => (actIdx + offset) < actualLines.length ? JSON.stringify(actualLines[actIdx + offset]) : null;
+          const nextExp = (offset: number) => (expIdx + offset) < expectedOutputStrings.length ? expectedOutputStrings[expIdx + offset] : null;
+          const nextAct = (offset: number) => (actIdx + offset) < actualOutputStrings.length ? actualOutputStrings[actIdx + offset] : null;
           let foundMatch = false;
           for (let offset = 1; offset <= 3; ++offset) {
             if (e == nextAct(offset)) {
@@ -179,7 +193,7 @@ const compareTestResult = (tc: TestCase, actual: { locator: NodeLocator, lines: 
           invalidLines.push(actIdx);
           ++actIdx;
         }
-        while (expIdx < expected.length) {
+        while (expIdx < expectedOutputStrings.length) {
           unmatchedValidLines.push(expIdx);
           ++expIdx;
         }
@@ -189,8 +203,8 @@ const compareTestResult = (tc: TestCase, actual: { locator: NodeLocator, lines: 
           unmatchedValid: unmatchedValidLines
         });
       }
-      if (expected.length != actualLines.length) {
-        console.log('diff length, exp:', expected.length, ', actualLines:', actualLines.length);
+      if (expectedOutputStrings.length != actualOutputStrings.length) {
+        console.log('diff length, exp:', expectedOutputStrings.length, ', actualLines:', actualLines.length);
         return getFullReport('different-number-of-lines');
       }
       return getFullReport('pass');

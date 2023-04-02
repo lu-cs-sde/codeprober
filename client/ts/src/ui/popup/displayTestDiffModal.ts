@@ -4,10 +4,10 @@ import settings from '../../settings';
 import createLoadingSpinner from '../create/createLoadingSpinner';
 import createModalTitle from '../create/createModalTitle';
 import showWindow from '../create/showWindow';
-import renderProbeModalTitleLeft from '../renderProbeModalTitleLeft';
 import UIElements from '../UIElements';
+import displayHelp from './displayHelp';
 import displayProbeModal from './displayProbeModal';
-import encodeRpcBodyLines from './encodeRpcBodyLines';
+import encodeRpcBodyLines, { mapRpcBodyLineDepthFirst } from './encodeRpcBodyLines';
 
 
 const preventDragOnClick = (elem: HTMLElement) => {
@@ -159,6 +159,10 @@ const displayTestDiffModal = (
 
           const localRefreshListeners: (() => void)[] = [];
           env.onChangeListeners[queryId] = () => localRefreshListeners.forEach(lrl => lrl());
+          const someOutputErr = testReport === 'failed-eval' || typeof testReport == 'object' && testReport.output !== 'pass';
+          const someLocatorErr = testReport === 'failed-eval' || typeof testReport === 'object' && [
+            testReport.sourceLocators, testReport.attrArgLocators, testReport.outputLocators
+          ].some(loc => loc !== 'pass');
           (() => {
 
             const buttonRow = document.createElement('div');
@@ -171,10 +175,6 @@ const displayTestDiffModal = (
             infoSelector.classList.add('test-diff-info-selector');
             buttonRow.append(infoSelector);
 
-            const someOutputErr = testReport === 'failed-eval' || typeof testReport == 'object' && testReport.output !== 'pass';
-            const someLocatorErr = testReport === 'failed-eval' || typeof testReport === 'object' && [
-              testReport.sourceLocators, testReport.attrArgLocators, testReport.outputLocators
-            ].some(loc => loc !== 'pass')
             const infos: { name: string, type: TabType, btn?: HTMLButtonElement }[] = [
               { name: `Output Diff ${someOutputErr ? '❌' : '✅'}`, type: 'output' },
               { name: `Node Diff ${someLocatorErr ? '❌' : '✅'}`, type: 'node' },
@@ -293,13 +293,16 @@ const displayTestDiffModal = (
                 switch (testCase.assert.type) {
                   case 'identity':
                     case 'set': {
-                      leftPane.appendChild(encodeRpcBodyLines(env, testCase.assert.lines, (line) => {
-                        if (typeof testReport === 'object' && typeof testReport.output === 'object') {
-                          if (testReport.output.unmatchedValid.includes(line)) {
-                            return 'unmatched';
+                      leftPane.appendChild(encodeRpcBodyLines(env, testCase.assert.lines, {
+                        lateInteractivityEnabledChecker: () => false,
+                        decorator: (line) => {
+                          if (typeof testReport === 'object' && typeof testReport.output === 'object') {
+                            if (testReport.output.unmatchedValid.includes(line)) {
+                              return 'unmatched';
+                            }
                           }
-                        }
-                        return 'default';
+                          return 'default';
+                        },
                       }));
                       break;
                     }
@@ -328,13 +331,16 @@ const displayTestDiffModal = (
                     Failed val
                   `.trim()));
                 } else {
-                  rightPane.appendChild(encodeRpcBodyLines(env, testStatus.lines, (line) => {
-                    if (typeof testReport === 'object' && typeof testReport.output === 'object') {
-                      if (testReport.output.invalid.includes(line)) {
-                        return 'error';
+                  rightPane.appendChild(encodeRpcBodyLines(env, testStatus.lines, {
+                    lateInteractivityEnabledChecker: () => testCase.src === env.getLocalState(),
+                    decorator: (line) => {
+                      if (typeof testReport === 'object' && typeof testReport.output === 'object') {
+                        if (testReport.output.invalid.includes(line)) {
+                          return 'error';
+                        }
                       }
-                    }
-                    return 'default';
+                      return 'default';
+                    },
                   }));
                 }
                 splitPane.appendChild(rightPane);
@@ -343,7 +349,35 @@ const displayTestDiffModal = (
                 break;
               }
               case 'node': {
-                contentRoot.appendChild(document.createTextNode('todo node tab'));
+                const wrapper = document.createElement('div');
+                wrapper.style.padding = '0.25rem';
+                contentRoot.appendChild(wrapper);
+
+                const addP = (msg: string) => {
+                  const explanationTail = document.createElement('p');
+                  explanationTail.textContent = msg;
+                  wrapper.appendChild(explanationTail);
+                }
+                const addTail = () => {
+                  addP( `You can inspect the difference by opening a probe from 'Source Code' tab. If you are OK with the differences, click 'Save 💾'.`);
+                };
+
+                if (someLocatorErr && someOutputErr) {
+                  addP(`Both property output and AST node reference(s) involved in property execution differ. This could mean that that both property behavior and AST structure has changed since this test was constructed.`);
+                  addTail();
+
+                }else if (someLocatorErr) {
+                  wrapper.appendChild(document.createTextNode(`Property output is the same, but the AST node reference(s) involved in property execution are different. This could be because the AST structure has changed since this test was constructed. This might not be a problem.`));
+                  addTail();
+
+                } else if (someOutputErr) {
+                  wrapper.appendChild(document.createTextNode('Output differs, but the AST node reference(s) involved in property execution are identical. This indicates that a property behaves differently to when the test was constructed.'));
+                  addTail();
+
+                } else {
+                  wrapper.appendChild(document.createTextNode('All AST node references involved in property execution are identical to expected values.'));
+
+                }
                 break;
               }
               case 'source': {
@@ -351,9 +385,21 @@ const displayTestDiffModal = (
                 wrapper.style.padding = '0.25rem';
                 contentRoot.appendChild(wrapper);
 
-                const same = testCase.src === settings.getEditorContents();
+                const same = testCase.src === env.getLocalState();
+                const addText = (msg: string) => wrapper.appendChild(document.createTextNode(msg));
+                const addHelp = (type: HelpType) => {
+                  const btn = document.createElement('button');
+                  btn.innerText = `?`;
+                  btn.style.marginLeft = '0.25rem';
+                  btn.style.borderRadius = '50%';
+                  btn.onclick = () => displayHelp(type);
+                  wrapper.appendChild(btn);
+                }
                 if (same) {
-                  wrapper.appendChild(document.createTextNode(`Current text in CodeProber matches the source code used for this test case.`));
+                  // addText(`Current text in CodeProber matches the source code used for this test case.`);
+                  addText(`Test code == CodeProber code.`);
+                  addHelp('test-code-vs-codeprober-code');
+
                   wrapper.appendChild(document.createElement('br'));
                   wrapper.appendChild(document.createTextNode(`Press`));
                   const btn = document.createElement('button');
@@ -366,9 +412,11 @@ const displayTestDiffModal = (
                   wrapper.appendChild(btn);
                   wrapper.appendChild(document.createTextNode(`to explore the probe that created this test.`));
                 } else {
-                  wrapper.appendChild(document.createTextNode(`Current text in CodeProber does not match the source code used for this test case.`));
+                  addText(`Test code ≠ CodeProber code.`);
+                  addHelp('test-code-vs-codeprober-code');
+                  // wrapper.appendChild(document.createTextNode(`Current text in CodeProber does not match the source code used for this test case.`));
                   wrapper.appendChild(document.createElement('br'));
-                  wrapper.appendChild(document.createTextNode(`Press`));
+                  addText(`Press`);
                   const btn = document.createElement('button');
                   preventDragOnClick(btn);
                   btn.style.margin = '0 0.125rem';
@@ -377,7 +425,7 @@ const displayTestDiffModal = (
                     env.setLocalState(testCase.src);
                   };
                   wrapper.appendChild(btn);
-                  wrapper.appendChild(document.createTextNode(`to replace CodeProber text with the test source.`));
+                  addText(`to replace CodeProber text with the test source.`);
                 }
 
                 wrapper.appendChild(document.createElement('hr'));
@@ -412,7 +460,7 @@ const displayTestDiffModal = (
                   //   : `s ${span.lineStart}→${span.lineEnd}`;
                   // addExplanationLine('AST Node:', `${locator.result.label || locator.result.type} on line${linesTail}`);
                 }
-                addExplanationLine('Source Code', '⬇️');
+                addExplanationLine('Source Code', '⬇️, related line(s) in green.');
 
                 testCase.src.split('\n').forEach((line, lineIdx) => {
 

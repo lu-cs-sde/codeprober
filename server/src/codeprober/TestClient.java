@@ -2,6 +2,9 @@ package codeprober;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -14,6 +17,7 @@ import codeprober.rpc.JsonRequestHandler;
 public class TestClient {
 
 	private final JsonRequestHandler requestHandler;
+	private final AtomicLong jobIdGenerator = new AtomicLong();
 
 	public TestClient(JsonRequestHandler requestHandler) {
 		this.requestHandler = requestHandler;
@@ -28,7 +32,8 @@ public class TestClient {
 	public JSONArray getTestSuites() {
 		return TestProtocol.ListTestSuites.suites.get(requestHandler.handleRequest( //
 				constructMessage(new JSONObject() //
-						.put("type", TestProtocol.ListTestSuites.type))));
+						.put("type", TestProtocol.ListTestSuites.type)),
+				null));
 	}
 
 	public JSONArray getTestSuiteContents(String suiteName) {
@@ -36,10 +41,10 @@ public class TestClient {
 				.put("type", TestProtocol.GetTestSuite.type);
 		TestProtocol.GetTestSuite.suite.put(request, suiteName);
 		return new JSONArray(TestProtocol.GetTestSuite.contents.get(requestHandler.handleRequest( //
-				constructMessage(request))));
+				constructMessage(request), null)));
 	}
 
-	public TestResult runTest(JSONObject tcase) {
+	private void doRunTest(JSONObject tcase, Consumer<TestResult> callback, boolean allowAsync) {
 		final JSONObject req = new JSONObject().put("type", "query");
 		ProbeProtocol.cache.put(req, ProbeProtocol.cache.get(tcase));
 		ProbeProtocol.positionRecovery.put(req, ProbeProtocol.positionRecovery.get(tcase));
@@ -56,7 +61,7 @@ public class TestClient {
 		ProbeProtocol.Query.locator.put(query, tcase.getJSONObject("locator").getJSONObject("robust"));
 		ProbeProtocol.query.put(req, query);
 
-		final JSONObject response;
+//		final JSONObject response;
 
 		// TODO use debugLines on errors
 		final List<String> debugLines = new ArrayList<>();
@@ -69,30 +74,111 @@ public class TestClient {
 		};
 		rootInterceptor.install();
 		try {
-			response = requestHandler.handleRequest(req);
-			System.out.println("respnse: " + response);
-		} finally {
+			final Object lock = new Object();
+//			final AtomicReference<JSONObject> responsePtr = new AtomicReference<>();
+			final Consumer<JSONObject> handleResponse = response -> {
+				rootInterceptor.flush();
+				rootInterceptor.restore();
+
+				final JSONArray actual = ProbeProtocol.body.get(response);
+
+				final JSONObject assertion = tcase.getJSONObject("assert");
+				switch (assertion.getString("type")) {
+				case "smoke": {
+					System.out.println("smoke test - todo check if errors perhaps?");
+					callback.accept(new TestResult(true, new JSONArray(), new JSONArray(), debugLines));
+					break;
+				}
+				case "identity": {
+					final JSONArray expected = assertion.getJSONArray("lines");
+					callback.accept(
+							new TestResult(expected.toString().equals(actual.toString()), expected, actual, debugLines));
+					break;
+				}
+				default: {
+					System.err.println("TODO support some other assertion type " + assertion);
+					callback.accept(new TestResult(false, new JSONArray().put("<Malformed Test File>"), actual, debugLines));
+					break;
+				}
+				}
+			};
+
+			final Consumer<JSONObject> handleCallback = msg -> {
+//				System.out.println("handleCallback: " + msg);
+				synchronized (lock) {
+					if (allowAsync) {
+						if (msg.has("type") && msg.get("type").equals("jobUpdate")) {
+							final JSONObject res = msg.getJSONObject("result");
+							if (res.get("status").equals("done")) {
+								handleResponse.accept(res.getJSONObject("result"));
+//								responsePtr.set(res.getJSONObject("result"));
+//								lock.notifyAll();
+								return;
+							}
+						}
+					} else {
+						handleResponse.accept(msg);
+//						responsePtr.set(msg);
+//						lock.notifyAll();
+					}
+				}
+			};
+			if (allowAsync) {
+				req.put("job", jobIdGenerator.getAndIncrement());
+				CodeProber.flog("-- TestClient :: starting job " + req);
+			}
+
+			System.out.println("send it");
+			handleCallback.accept(requestHandler.handleRequest(req, obj -> {
+				handleCallback.accept(obj);
+			}));
+		} catch (RuntimeException e) {
 			rootInterceptor.flush();
 			rootInterceptor.restore();
-		}
+			System.err.println("Error when submitting test");
+			e.printStackTrace();
+			System.out.println("Debug lines during tests:");
+			for (String s : debugLines) {
+				System.out.println("> " + s);
+			}
 
-		final JSONArray actual = ProbeProtocol.body.get(response);
+//			synchronized (lock) {
+//				while (responsePtr.get() == null) {
+//					try {
+//						lock.wait();
+//					} catch (InterruptedException e) {
+//						System.out.println("Test interrupted");
+//						e.printStackTrace();
+//					}
+//				}
+//				response = responsePtr.get();
+//			}
+		}
+	}
 
-		final JSONObject assertion = tcase.getJSONObject("assert");
-		switch (assertion.getString("type")) {
-		case "smoke": {
-			System.out.println("smoke test - todo check if errors perhaps?");
-			return new TestResult(true, new JSONArray(), new JSONArray(), debugLines);
+	public void runTestAsync(JSONObject tcase, Consumer<TestResult> onDone) {
+		doRunTest(tcase, onDone, true);
+	}
+
+	public TestResult runTest(JSONObject tcase) {
+		final AtomicReference<TestResult> ptr = new AtomicReference<>();
+		doRunTest(tcase, resp -> {
+			ptr.set(resp);
+			synchronized (ptr) {
+				ptr.notifyAll();
+			}
+		}, false);
+		synchronized (ptr) {
+			while (ptr.get() == null) {
+				try {
+					ptr.wait();
+				} catch (InterruptedException e) {
+					System.err.println("Interrupted while synchronously waiting for test to run");
+					throw new RuntimeException(e);
+				}
+			}
 		}
-		case "identity": {
-			final JSONArray expected = assertion.getJSONArray("lines");
-			return new TestResult(expected.toString().equals(actual.toString()), expected, actual, debugLines);
-		}
-		default: {
-			System.err.println("TODO support some other assertion type " + assertion);
-			return new TestResult(false, new JSONArray().put("<Malformed Test File>"), actual, debugLines);
-		}
-		}
+		return ptr.get();
 	}
 
 	public static class TestResult {

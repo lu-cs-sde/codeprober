@@ -68,7 +68,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
           if (!parsed.nodes) {
             root.appendChild(createTitle('err'));
             if (parsed.body?.length) {
-              root.appendChild(encodeRpcBodyLines(env, parsed.body, null));
+              root.appendChild(encodeRpcBodyLines(env, parsed.body));
               return;
             }
             throw new Error(`Couldn't find expected line or body in output '${JSON.stringify(parsed)}'`);

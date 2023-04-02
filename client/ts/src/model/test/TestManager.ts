@@ -1,4 +1,3 @@
-import { WebsocketHandler } from '../../createWebsocketHandler';
 import ModalEnv from '../ModalEnv';
 import compareTestResult, { TestComparisonReport } from './compareTestResult';
 import { rpcLinesToAssertionLines } from './rpcBodyToAssertionLine';
@@ -53,9 +52,10 @@ type RpcArgs =
     query: { [k: string]: string | {} };
     mainArgs: TestCase['mainArgs'];
     tmpSuffix: TestCase['tmpSuffix'];
+    job?: string;
   }
 
-const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): TestManager =>{
+const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, createJobId: ModalEnv['createJobId']): TestManager =>{
 
   const performMetaQuery = <
     T=ListTestSuitesResponse
@@ -102,7 +102,9 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): T
     }
     await saveCategoryState(category, [...(suiteListRepo[category] || []).filter(tc => tc.name !== test.name), test]);
     ++categoryInvalidationCount;
-    delete testStatusRepo[category];
+    if (overwriteIfExisting && testStatusRepo[category]) {
+      delete testStatusRepo[category][test.name];
+    }
     notifyListeners('added-test');
     return 'ok';
   };
@@ -189,20 +191,37 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>): T
         return 'failed-fetching';
       }
 
-      const res = await performRpcQuery({
-        type: 'query',
-        posRecovery: tcase.posRecovery,
-        cache: tcase.cache,
-        text: tcase.src,
-        stdout: false,
-        query: {
-          attr: tcase.attribute,
-          locator: tcase.locator.robust,
-        },
-        mainArgs: null,
-        tmpSuffix: tcase.tmpSuffix,
+      const res = await new Promise<any>(async (resolve, reject) => {
+        const handleUpdate = (data: any) => {
+          // console.log('handle testMgr update for', category, '>', name, '::', data);
+          if (data.job) {
+            // Status update, ignore
+            return;
+          }
+          resolve(data);
+          // resolve(data);
+        };
+
+        const jobId = createJobId(handleUpdate);
+        try {
+          handleUpdate(await performRpcQuery({
+            type: 'query',
+            posRecovery: tcase.posRecovery,
+            cache: tcase.cache,
+            text: tcase.src,
+            stdout: false,
+            query: {
+              attr: tcase.attribute,
+              locator: tcase.locator.robust,
+            },
+            mainArgs: null,
+            tmpSuffix: tcase.tmpSuffix,
+            job: `${jobId}`,
+          }));
+        } catch (e) {
+          reject(e);
+        }
       });
-      console.log('tcase raw res:', res);
       let report: TestComparisonReport;
       if (!res.locator) {
         report = 'failed-eval';

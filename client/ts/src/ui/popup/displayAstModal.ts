@@ -121,7 +121,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           root.appendChild(text);
           return;
         }
-        root.appendChild(encodeRpcBodyLines(env, state.body, null));
+        root.appendChild(encodeRpcBodyLines(env, state.body));
       } else {
         // Build UI
 

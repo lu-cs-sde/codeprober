@@ -32,7 +32,7 @@ public abstract class StreamInterceptor extends PrintStream {
 				prev.write(b);
 				return;
 			}
-			if (b == (int) '\n') {
+			if (b == '\n') {
 				consume(true);
 			} else {
 				stdOut.write(b);

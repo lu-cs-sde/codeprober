@@ -29,7 +29,7 @@ const displayTestSuiteModal = (
       root.appendChild(createModalTitle({
         renderLeft: (container) => {
           const header = document.createElement('span');
-          header.innerText = `${category}`;
+          header.innerText = `Test Suite: ${category}`;
           container.appendChild(header);
         },
         onClose: cleanup,
@@ -54,7 +54,7 @@ const displayTestSuiteModal = (
         rowList.style.margin = '0 0 auto';
         root.appendChild(rowList);
 
-        console.log('render contents', contents);
+        // console.log('render contents', contents);
         contents.forEach(tc => {
           const row = document.createElement('div');
           row.classList.add('test-case');
@@ -69,9 +69,9 @@ const displayTestSuiteModal = (
 
           const status = document.createElement('span');
           status.innerText = `⏳`;
-          row.style.order = '5';
+          row.style.order = '3';
           env.testManager.getTestStatus(category, tc.name).then(result => {
-            console.log('tstatus for', category, '>', tc.name, ':', result);
+            // console.log('tstatus for', category, '>', tc.name, ':', result);
             if (result == 'failed-fetching') {
               status.innerText = `<Evaluation Error>`;
             } else {
@@ -80,7 +80,7 @@ const displayTestSuiteModal = (
                 switch (report) {
                   case 'pass': {
                     status.innerText = `✅`;
-                    row.style.order = '2';
+                    row.style.order = '5';
                     break;
                   }
                   case 'failed-eval': {

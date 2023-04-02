@@ -41,7 +41,7 @@ const displayTestSuiteListModal = (
           container.appendChild(header);
         },
         onClose: cleanup,
-        extraActions: [
+        extraActions: (typeof categories === 'string' || categories.length === 0) ? [] : [
           {
             title: 'Run all',
             invoke: () => {
@@ -51,6 +51,10 @@ const displayTestSuiteListModal = (
                 if (suites === 'failed-listing') {
                   return;
                 }
+                for (let i = 0; i < suites.length; ++i) {
+                  localTestSuiteKnowledge[suites[i]] = { fail: 0, pass: 0 };
+                }
+                popup.refresh();
                 // Very intentionally evaluate this sequentially (not Promise.all)
                 // Don't want to send a billion requests at once
                 for (let i = 0; i < suites.length; ++i) {
@@ -128,9 +132,16 @@ const displayTestSuiteListModal = (
         rowList.style.margin = '0 0 auto';
         root.appendChild(rowList);
 
+        if (categories.length == 0) {
+          const emptyMsg = document.createElement('div');
+          emptyMsg.innerText = 'No tests here. Create them from the "..." menu in a probe.';
+          emptyMsg.style.textAlign = 'center';
+          rowList.appendChild(emptyMsg);
+        }
+
         categories.forEach(cat => {
           const row = document.createElement('div');
-          row.classList.add('test-category');
+          row.classList.add('test-suite');
 
           const title = document.createElement('span');
           title.innerText = cat;

@@ -10,6 +10,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -122,7 +124,7 @@ public class WebServer {
 	}
 
 	private static void handlePutRequest(Socket socket, String data, ServerToClientMessagePusher msgPusher,
-			Function<JSONObject, String> onQuery) throws IOException {
+			BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> onQuery) throws IOException {
 		final String[] parts = data.split("\r\n");
 		String putPath = null;
 		int contentLen = -1;
@@ -181,7 +183,11 @@ public class WebServer {
 				break;
 			}
 			default: {
-				response = onQuery.apply(body).getBytes(StandardCharsets.UTF_8);
+				final String remoteAddr = socket.getRemoteSocketAddress().toString();
+				response = onQuery.apply(body, asyncResponse -> {
+					// Push to 'msgPusher' for 'remoteAddr'
+					System.out.println("TODO handle async messages for wsput");
+				}).toString().getBytes(StandardCharsets.UTF_8);
 				break;
 			}
 			}
@@ -200,7 +206,7 @@ public class WebServer {
 	}
 
 	private static void handleRequest(Socket socket, ServerToClientMessagePusher msgPusher,
-			Function<JSONObject, String> onQuery) throws IOException, NoSuchAlgorithmException {
+			BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> onQuery) throws IOException, NoSuchAlgorithmException {
 		System.out.println("Incoming HTTP request from: " + socket.getRemoteSocketAddress());
 
 		final InputStream in = socket.getInputStream();
@@ -282,7 +288,7 @@ public class WebServer {
 		return 8000;
 	}
 
-	public static void start(ServerToClientMessagePusher msgPusher, Function<JSONObject, String> onQuery) {
+	public static void start(ServerToClientMessagePusher msgPusher, BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> onQuery) {
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, WebSocketServer.createServerFilter())) {
 			System.out.println(

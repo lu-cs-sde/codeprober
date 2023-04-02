@@ -142,7 +142,7 @@ const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition, locato
             update();
           };
         });
-
+        let errMsg: HTMLParagraphElement;
         let commitButton = document.createElement('button');
         addRow('', (row) => {
           commitButton.innerText = 'Add';
@@ -170,13 +170,20 @@ const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition, locato
                 name: state.name,
               },
               false
-            )
+            ).then((result) => {
+              if (result === 'ok') {
+                cleanup();
+                return;
+              } else {
+                errMsg.innerText = `Error when adding test. Please try again or check server log for more information.`;
+              }
+            })
           }
         });
 
 
         addRow('', (row) => {
-          const errMsg = document.createElement('p');
+          errMsg = document.createElement('p');
           errMsg.style.textAlign = 'center';
           errMsg.classList.add('captured-stderr')
           row.appendChild(errMsg);
@@ -184,8 +191,8 @@ const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition, locato
             commitButton.disabled = true;
             if (!state.category) {
               errMsg.innerText = `Missing category. The test will be saved in a file called '<category>.json'`;
-            } else if (!/^[a-zA-Z0-9-]+$/.test(state.category)) {
-              errMsg.innerText = `Invalid category, please only use '[a-zA-Z0-9-]' in the name, i.e A-Z, numbers and dash (-).'`;
+            } else if (!/^[a-zA-Z0-9-_]+$/.test(state.category)) {
+              errMsg.innerText = `Invalid category, please only use '[a-zA-Z0-9-_]' in the name, i.e A-Z, numbers, dash (-) and underscore (_).'`;
             } else if (!state.name) {
               errMsg.innerText = `Missing test name`;
             } else {

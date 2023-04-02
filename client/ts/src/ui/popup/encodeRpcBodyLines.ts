@@ -22,7 +22,12 @@ const getCommonStreamArgWhitespacePrefix = (line: RpcBodyLine): number => {
 
 type LineDecorator = (line: number) => 'default' | 'error' | 'unmatched';
 
-const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], decorator: LineDecorator | null): HTMLElement => {
+interface ExtraEncodingArgs {
+  decorator?: LineDecorator;
+  lateInteractivityEnabledChecker?: () => boolean;
+}
+
+const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEncodingArgs = {}): HTMLElement => {
   let needCapturedStreamArgExplanation = false;
 
   const streamArgPrefix = Math.min(...body.map(getCommonStreamArgWhitespacePrefix));
@@ -98,14 +103,23 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], decorator: LineD
           container.style.width = 'fit-content';
           container.style.display = 'inline';
           registerOnHover(container, on => {
-            env.updateSpanHighlight(on ? span : null)
+            if (!on || (extras.lateInteractivityEnabledChecker?.() ?? true)) {
+              env.updateSpanHighlight(on ? span : null);
+              container.style.cursor = 'default';
+              container.classList.add('clickHighlightOnHover');
+            } else {
+              container.style.cursor = 'not-allowed';
+              container.classList.remove('clickHighlightOnHover');
+            }
           });
           container.onmousedown = (e) => {
             e.stopPropagation();
-          }
+          };
           registerNodeSelector(container, () => line.value);
           container.addEventListener('click', () => {
-            displayAttributeModal(env, null, line.value);
+            if (extras.lateInteractivityEnabledChecker?.() ?? true) {
+              displayAttributeModal(env, null, line.value);
+            }
           });
           target.appendChild(container);
           break;
@@ -118,7 +132,7 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], decorator: LineD
       }
     }
   }
-  const pre = document.createElement(decorator ? 'div' : 'pre');
+  const pre = document.createElement(extras.decorator ? 'div' : 'pre');
   pre.style.margin = '0px';
   pre.style.padding = '0.5rem';
   pre.style.fontSize = '0.75rem';
@@ -132,12 +146,12 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], decorator: LineD
     })
     .forEach((line, lineIdx) => {
 
-      if (decorator) {
+      if (extras.decorator) {
         const holder = document.createElement('pre');
         holder.style.margin = '0px';
         holder.style.padding = '0';
 
-        switch (decorator(lineIdx)) {
+        switch (extras.decorator(lineIdx)) {
           case 'error': {
             holder.classList.add('test-diff-error');
             break;
@@ -187,4 +201,16 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], decorator: LineD
     return pre;
 };
 
+
+const mapRpcBodyLineDepthFirst = (line: RpcBodyLine, mapper: (line: RpcBodyLine) => RpcBodyLine): RpcBodyLine => {
+  if (typeof line === 'string') {
+    return mapper(line);
+  }
+  if (Array.isArray(line)) {
+    return mapper(line.map(sub => mapRpcBodyLineDepthFirst(sub, mapper)));
+  }
+  return mapper(line);
+}
+
+export { mapRpcBodyLineDepthFirst };
 export default encodeRpcBodyLines;

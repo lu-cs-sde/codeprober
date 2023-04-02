@@ -106,7 +106,7 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
           root.appendChild(text);
           return;
         }
-        root.appendChild(encodeRpcBodyLines(env, state.body, null));
+        root.appendChild(encodeRpcBodyLines(env, state.body));
       } else {
 
         const attrs = state.attrs;

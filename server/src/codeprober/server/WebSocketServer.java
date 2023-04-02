@@ -13,11 +13,13 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Locale;
 import java.util.Scanner;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.Locale;
 
 import org.json.JSONObject;
 
@@ -122,16 +124,16 @@ public class WebSocketServer {
 		}
 		initMsg.put("version", versionMsg);
 
-    int bufferTime = CodespacesCompat.getChangeBufferTime();
-    if (bufferTime > 0) {
-      initMsg.put("changeBufferTime", bufferTime);
-    }
+		int bufferTime = CodespacesCompat.getChangeBufferTime();
+		if (bufferTime > 0) {
+			initMsg.put("changeBufferTime", bufferTime);
+		}
 
 		return initMsg;
 	}
 
 	private static void handleRequest(Socket socket, ServerToClientMessagePusher msgPusher,
-			Function<JSONObject, String> onQuery) throws IOException, NoSuchAlgorithmException {
+			BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> onQuery) throws IOException, NoSuchAlgorithmException {
 		InputStream in = socket.getInputStream();
 		OutputStream out = socket.getOutputStream();
 		@SuppressWarnings("resource")
@@ -165,6 +167,21 @@ public class WebSocketServer {
 				Runnable cleanup = () -> msgPusher.removeJarChangeListener(onJarChange);
 
 				writeWsMessage(out, getInitMsg().toString());
+
+				final Consumer<JSONObject> asyncMessageWriter = asyncMsg -> {
+					try {
+						writeWsMessage(out, asyncMsg.toString());
+					} catch (IOException e) {
+						System.err.println("Failed sending async message");
+						e.printStackTrace();
+						try {
+							socket.close();
+						} catch (IOException e1) {
+							System.out.println("Failed to close the message after failed message");
+							e1.printStackTrace();
+						}
+					}
+				};
 				while (true) {
 
 					int first = in.read();
@@ -199,15 +216,9 @@ public class WebSocketServer {
 										| ((long) in.read() << 40) | ((long) in.read() << 32) | (in.read() << 24)
 										| (in.read() << 16) | (in.read() << 8) | in.read())];
 							}
-//							System.out.println("Got req w/ len " + reqData.length + ", lenid: " + lenIndicator);
-
 							final byte[] key = new byte[4];
 							readFully(in, key);
-//						System.out.println("Reading data..");
 							readFully(in, reqData);
-
-//						System.out.println(Arrays.toString(key));
-//						System.out.println(Arrays.toString(reqData));
 
 							// Decode request data
 							for (int i = 0; i < reqData.length; i++) {
@@ -217,7 +228,8 @@ public class WebSocketServer {
 							if (isFin && frameBuffer == null) {
 								// Only a single frame
 								final JSONObject jobj = new JSONObject(new String(reqData, StandardCharsets.UTF_8));
-								writeWsMessage(out, onQuery.apply(jobj));
+
+								writeWsMessage(out, onQuery.apply(jobj, asyncMessageWriter).toString());
 								break readFrame;
 							} else {
 								if (frameBuffer == null) {
@@ -227,7 +239,7 @@ public class WebSocketServer {
 								if (isFin) {
 									final JSONObject jobj = new JSONObject(
 											new String(frameBuffer.toByteArray(), StandardCharsets.UTF_8));
-									writeWsMessage(out, onQuery.apply(jobj));
+									writeWsMessage(out, onQuery.apply(jobj, asyncMessageWriter).toString());
 									break readFrame;
 								} else {
 									first = in.read();
@@ -292,7 +304,8 @@ public class WebSocketServer {
 		return 8080;
 	}
 
-	public static void start(ServerToClientMessagePusher msgPusher, Function<JSONObject, String> onQuery) {
+	public static void start(ServerToClientMessagePusher msgPusher,
+			BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> onQuery) {
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, createServerFilter())) {
 			System.out.println("Started WebSocket server on port " + port);
@@ -317,6 +330,11 @@ public class WebSocketServer {
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
+			if (e.getMessage().contains("Address already in use")) {
+				System.out.println(
+						"You can run parallell CodeProber instances, but each instance must have unique WEB_SERVER_PORT and WEBSOCKET_SERVER_PORT");
+				System.exit(1);
+			}
 			throw new RuntimeException(e);
 		}
 	}

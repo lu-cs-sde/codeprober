@@ -179,18 +179,18 @@ public class TestDefaultRequestHandler {
 		);
 		ProbeProtocol.query.put(requestObj, query);
 
-		final JSONObject initial = handler.handleRequest(requestObj);
+		final JSONObject initial = handler.handleRequest(requestObj, null);
 		assertEquals(1, parseCounter.get());
 		assertEquals(1, getDataCounter.get());
 		assertEquals("Hello World", initial.getJSONArray("body").getString(0));
 
-		final JSONObject sameTextShouldBeCached = handler.handleRequest(requestObj);
+		final JSONObject sameTextShouldBeCached = handler.handleRequest(requestObj, null);
 		assertEquals(1, parseCounter.get());
 		assertEquals(2, getDataCounter.get());
 		assertEquals("Hello World", sameTextShouldBeCached.getJSONArray("body").getString(0));
 
 		ProbeProtocol.text.put(requestObj, "Changed");
-		final JSONObject changedText = handler.handleRequest(requestObj);
+		final JSONObject changedText = handler.handleRequest(requestObj, null);
 		assertEquals(2, parseCounter.get());
 		assertEquals(3, getDataCounter.get());
 		assertEquals("Changed", changedText.getJSONArray("body").getString(0));

@@ -194,7 +194,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
           root.append(titleRow.element);
 
           lastOutput = body;
-          root.appendChild(encodeRpcBodyLines(env, body, null));
+          root.appendChild(encodeRpcBodyLines(env, body));
 
           const spinner = createLoadingSpinner();
           spinner.style.display = 'none';

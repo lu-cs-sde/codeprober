@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.json.JSONArray;
@@ -94,12 +95,14 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		} catch (RuntimeException e) {
 			// Not cpr_getStartLine..
 		}
-		try {
-			if (Reflect.invoke0(ast, "getStartLine") instanceof Integer) {
-				positionRepresentation = AstNodeApiStyle.JASTADD_SEPARATE_LINE_COLUMN;
+		if (positionRepresentation == null) {
+			try {
+				if (Reflect.invoke0(ast, "getStartLine") instanceof Integer) {
+					positionRepresentation = AstNodeApiStyle.JASTADD_SEPARATE_LINE_COLUMN;
+				}
+			} catch (RuntimeException e) {
+				// Not getStartLine..
 			}
-		} catch (RuntimeException e) {
-			// Not getStartLine..
 		}
 		if (positionRepresentation == null) {
 			try {
@@ -210,6 +213,16 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 				// Respond with new args, just like we respond with a new locator
 				JSONArray updatedArgs = new JSONArray();
+
+				final String slowdown = System.getenv("SIMULATED_SLOWDOWN_MS");
+				if (slowdown != null) {
+					try {
+						Thread.sleep(Integer.parseInt(slowdown));
+					} catch (InterruptedException | NumberFormatException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
 
 				if (queryAttrName.startsWith("l:")) {
 					// Special labeled zero-arg attr invocation
@@ -408,7 +421,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 	}
 
 	@Override
-	public JSONObject handleRequest(JSONObject queryObj) {
+	public JSONObject handleRequest(JSONObject queryObj, Consumer<JSONObject> sendAsyncMessage) {
 		final String queryType = queryObj.getString("type");
 		switch (queryType) {
 		case ProbeProtocol.type:

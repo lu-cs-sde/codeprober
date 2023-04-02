@@ -2,7 +2,7 @@
 type HelpType = 'general' | 'recovery-strategy' | 'probe-window' | 'magic-stdout-messages'
   | 'ast-cache-strategy' | 'syntax-highlighting' | 'main-args-override' | 'customize-file-suffix'
   | 'property-list-usage' | 'show-all-properties' | 'duplicate-probe-on-attr' | 'capture-stdout'
-  | 'location-style' | 'ast'
+  | 'location-style' | 'ast' | 'test-code-vs-codeprober-code'
   ;
 
 

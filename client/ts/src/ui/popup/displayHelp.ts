@@ -28,7 +28,8 @@ const getHelpTitle = (type: HelpType) => ({
   'duplicate-probe-on-attr': 'Duplicate probe',
   'capture-stdout': 'Capture stdout',
   'location-style': 'Location styles',
-  'ast': 'AST'
+  'ast': 'AST',
+  'test-code-vs-codeprober-code': 'Test code vs CodeProber code',
 })[type];
 
 const getHelpContents = (type: HelpType): (string|HTMLElement)[] => {
@@ -535,7 +536,6 @@ aspect MagicOutputDemo {
       }
 
       case 'ast': {
-
         return [
           `This window displays the abstract syntax tree (AST) around a node in the tree.`,
           `Nodes can be hovered and interacted with, just like when the output of a normal probe is an AST node.`,
@@ -543,11 +543,23 @@ aspect MagicOutputDemo {
           `You can click the '᠁' to continue exploring the AST from that point`,
         ];
       }
+      case 'test-code-vs-codeprober-code': {
+        return [
+          `When a test is created it saves the current state of CodeProber. This includes the code in the main CodeProber text editor, as well as some of the settings (cache settings, main args, file suffix, etc.).`,
+          ``,
+          `When tests are executed, they do so with their saved state, *not* the current CodeProber state. This lets you have multiple tests at the same time, each with their on unique configuration.`,
+          ``,
+          `When a test fails, you may want to open probes to inspect why. The first step is to change the current CodeProber code to the test code. Open the test in question and click the 'Source Code' tab. There will be a button labeled 'Load Source' or 'Open Probe'.`,
+          `• Clicking 'Load Source' will replace the code inside the main CodeProber editor with the saved code from the test.`,
+          `• Clicking 'Open Probe' will open the probe corresponding to the test.`,
+          `'Open Probe' is only available if the CodeProber code matches the test code.`,
+        ];
+      }
   }
 }
 
-const displayHelp = (type: HelpType, setHelpButtonDisabled: (disabled: boolean) => void): void => {
-  setHelpButtonDisabled(true);
+const displayHelp = (type: HelpType, setHelpButtonDisabled?: (disabled: boolean) => void): void => {
+  setHelpButtonDisabled?.(true);
   // TODO prevent this if help window already open
   // Maybe disable the help button, re-enable on close?
   const helpWindow = showWindow({
@@ -564,7 +576,7 @@ const displayHelp = (type: HelpType, setHelpButtonDisabled: (disabled: boolean) 
           container.appendChild(header);
         },
         onClose: () => {
-          setHelpButtonDisabled(false);
+          setHelpButtonDisabled?.(false);
           helpWindow.remove();
         },
       }).element);

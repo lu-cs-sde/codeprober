@@ -1,5 +1,7 @@
 import TestManager from './test/TestManager';
 
+type JobId = number;
+
 interface ModalEnv {
   performRpcQuery: (args: {
     attr: AstAttrWithValue;
@@ -24,6 +26,7 @@ interface ModalEnv {
   currentlyLoadingModals: Set<string>;
   createCullingTaskSubmitter: () => CullingTaskSubmitter;
   testManager: TestManager;
+  createJobId: (updateHandler: (data: any) => void) => JobId;
 }
 
 export default ModalEnv;

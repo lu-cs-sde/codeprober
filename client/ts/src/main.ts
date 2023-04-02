@@ -96,6 +96,35 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       );
     })();
 
+    const jobUpdateHandlers: {[id: string]: (data: any) => void }  = {};
+    wsHandler.on('jobUpdate', (data) => {
+      const { job, result } = data;
+      if (!job || !result) {
+        console.warn('Invalid job update', data);
+        return;
+      }
+      const handler = jobUpdateHandlers[job];
+      if (!handler) {
+        console.log('Got not handler for job update:', data);
+        return;
+      }
+      switch (result.status) {
+        case 'running': {
+          // Ignore for now, maybe show some loading somewhere?
+          return;
+        }
+        case 'done': {
+          delete jobUpdateHandlers[data?.job];
+          handler(result.result);
+          return;
+        }
+        default: {
+          console.warn('Unknown job update:', data);
+          return;
+        }
+      }
+    });
+
     const rootElem = document.getElementById('root') as HTMLElement;
     wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds }, changeBufferTime }) => {
       console.log('onInit, buffer:', changeBufferTime);
@@ -263,7 +292,13 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       }
 
       // const testManager = createTestManager(req => performRpcQuery(wsHandler, req));
-      const testManager = createTestManager(req => wsHandler.sendRpc(req));
+      const createJobId: ModalEnv['createJobId'] = (updateHandler) => {
+        const id = ++jobIdGenerator;
+        jobUpdateHandlers[id] = updateHandler;
+        return id;
+      };
+      const testManager = createTestManager(req => wsHandler.sendRpc(req), createJobId);
+      let jobIdGenerator = 0;
       const modalEnv: ModalEnv = {
         performRpcQuery: (args) => performRpcQuery(wsHandler, args),
         probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
@@ -291,6 +326,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         currentlyLoadingModals: new Set<string>(),
         createCullingTaskSubmitter: createCullingTaskSubmitterFactory(changeBufferTime),
         testManager,
+        createJobId,
        };
 
        modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {
