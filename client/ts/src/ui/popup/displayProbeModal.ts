@@ -5,7 +5,7 @@ import adjustLocator from "../../model/adjustLocator";
 import displayHelp from "./displayHelp";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import createStickyHighlightController from '../create/createStickyHighlightController';
-import ModalEnv from '../../model/ModalEnv';
+import ModalEnv, { JobId } from '../../model/ModalEnv';
 import displayTestAdditionModal from './displayTestAdditionModal';
 import renderProbeModalTitleLeft from '../renderProbeModalTitleLeft';
 import settings from '../../settings';
@@ -16,12 +16,17 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
   env.probeMarkers[queryId] = localErrors;
   const stickyController = createStickyHighlightController(env);
   let lastOutput: RpcBodyLine[] = [];
-  // const stickyMarker = env.registerStickyMarker(span)
+  let activelyLoadingJob: JobId | null = null;
+  let loading = false;
+  let isCleanedUp = false;
 
-  // if (attr.name == 'bytecodes') {
-  //   setTimeout(() => displayTestAdditionModal(env, queryWindow.getPos(), locator, attr, lastOutput), 500);
-  // }
+  const stopJob = (jobId: JobId) => env.performRpcQuery({
+    attr: { name: 'meta:stopJob' },
+    locator: null as any,
+  }, { jobId }).then(res => res.result === 'stopped');
+
   const cleanup = () => {
+    isCleanedUp = true;
     delete env.onChangeListeners[queryId];
     delete env.probeMarkers[queryId];
     delete env.probeWindowStateSavers[queryId];
@@ -31,6 +36,10 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
       env.updateMarkers();
     }
     stickyController.cleanup();
+    console.log('cleanup: ', { loading, activelyLoadingJob});
+    if (loading && activelyLoadingJob !== null) {
+      stopJob(activelyLoadingJob);
+    }
   };
 
   let copyBody: RpcBodyLine[] = [];
@@ -100,8 +109,8 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
   };
   let lastSpinner: HTMLElement | null = null;
   let isFirstRender = true;
-  let loading = false;
   let refreshOnDone = false;
+
   const queryWindow = showWindow({
     pos: modalPos,
     rootStyle: `
@@ -136,66 +145,163 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
 
       env.currentlyLoadingModals.add(queryId);
       const rpcQueryStart = performance.now();
-      env.performRpcQuery({
-        attr,
-        locator,
-      })
-        .then((parsed: RpcResponse) => {
-          const body = parsed.body;
-          copyBody = body;
+
+      const doFetch = () => new Promise<RpcResponse | 'stopped'>(async (resolve, reject) => {
+        let isDone = false;
+        let isConnectedToConcurrentCapableServer = false;
+        let statusPre: HTMLElement | null = null;
+        let localConcurrentCleanup = () => {};
+        setTimeout(() => {
+          if (isDone || isCleanedUp || !isConnectedToConcurrentCapableServer) {
+            console.log('not polling status, due to ', { isDone, isConnectedToConcurrentCapableServer });
+            return;
+          }
+          const stop = document.createElement('button');
+          stop.innerText = 'Stop';
+          stop.onclick = () => {
+            stopJob(jobId).then(stopped => {
+              if (stopped) {
+                isDone = true;
+                resolve('stopped');
+              }
+              // Else, job might have finished just as the user clicked stop
+            });
+          }
+          root.appendChild(stop);
+
+          statusPre = document.createElement('p');
+          statusPre.style.whiteSpace = 'pre';
+          statusPre.style.fontFamily = 'monospace';
+          root.appendChild(statusPre);
+          statusPre.innerText = `Request takes a while, polling status..\nIf you see message for longer than a few milliseconds then the job hasn't started running yet, or the server is severely overloaded.`;
+
+          localConcurrentCleanup = () => {
+            root.removeChild(stop);
+            if (statusPre) { root.removeChild(statusPre); }
+          };
+          const poll = () => {
+            if (isDone || isCleanedUp) {
+              return;
+            }
+            env.performRpcQuery({
+              attr: { name: 'meta:checkJobStatus' },
+              locator: null as any,
+            }, { jobId })
+              .then(res => {
+                console.log('rpc query for job status:', res)
+                setTimeout(poll, 1000);
+              });
+          };
+          poll();
+        }, 5000);
+        const jobId = env.createJobId(data => {
+          isConnectedToConcurrentCapableServer = true;
+          console.log('handleUpdate:', data);
+          if (data.status == 'done') {
+            isDone = true;
+            resolve(data.result);
+            localConcurrentCleanup();
+            return;
+          }
+          // Status update, ignore
+          console.log('ignoring status update?', data);
+          if (statusPre) {
+            const lines = [];
+            lines.push(`Property evaluation is taking a while, status below:`);
+            lines.push(`Status: ${data.status}`);
+            if (data.stack) {
+              lines.push("Stack trace:");
+              data.stack.forEach((ste: string) => lines.push(`> ${ste}`));
+            }
+            statusPre.innerText = lines.join('\n');
+          }
+        });
+        activelyLoadingJob = jobId;
+        env.performRpcQuery({
+          attr,
+          locator,
+        }, { jobId })
+          .then(data => {
+            if (data.job) {
+              // Async work queued, not done.
+            } else {
+              // Sync work executed, done.
+              isDone = true;
+              resolve(data);
+            }
+          })
+          .catch(err => {
+            isDone = true;
+            reject(err);
+          });
+      });
+      doFetch()
+        .then((parsed: RpcResponse | 'stopped') => {
           loading = false;
+          if (parsed === 'stopped') {
+            refreshOnDone = false;
+          }
           if (refreshOnDone) {
             refreshOnDone = false;
             queryWindow.refresh();
           }
-          if (typeof parsed.totalTime === 'number'
-            && typeof parsed.parseTime === 'number'
-            && typeof parsed.createLocatorTime === 'number'
-            && typeof parsed.applyLocatorTime === 'number'
-            && typeof parsed.attrEvalTime === 'number' ) {
-            env.statisticsCollector.addProbeEvaluationTime({
-              attrEvalMs: parsed.attrEvalTime / 1_000_000.0,
-              fullRpcMs: Math.max(performance.now() - rpcQueryStart),
-              serverApplyLocatorMs: parsed.applyLocatorTime / 1_000_000.0,
-              serverCreateLocatorMs: parsed.createLocatorTime / 1_000_000.0,
-              serverParseOnlyMs: parsed.parseTime / 1_000_000.0,
-              serverSideMs: parsed.totalTime / 1_000_000.0,
-            });
-          }
           if (cancelToken.cancelled) { return; }
-          if (!refreshOnDone) {
-            env.currentlyLoadingModals.delete(queryId);
-          }
-          while (root.firstChild) root.removeChild(root.firstChild);
+          if (parsed === 'stopped') {
+            while (root.firstChild) root.removeChild(root.firstChild);
+            root.append(createTitle().element);
+            const p = document.createElement('p');
+            p.innerText = `Property evaluation stopped. If any update happens (e.g text or setting changed within CodeProber), evaluation will be attempted again.`;
+            root.appendChild(p);
+          } else {
+            const body = parsed.body;
+            copyBody = body;
+            if (typeof parsed.totalTime === 'number'
+              && typeof parsed.parseTime === 'number'
+              && typeof parsed.createLocatorTime === 'number'
+              && typeof parsed.applyLocatorTime === 'number'
+              && typeof parsed.attrEvalTime === 'number' ) {
+              env.statisticsCollector.addProbeEvaluationTime({
+                attrEvalMs: parsed.attrEvalTime / 1_000_000.0,
+                fullRpcMs: Math.max(performance.now() - rpcQueryStart),
+                serverApplyLocatorMs: parsed.applyLocatorTime / 1_000_000.0,
+                serverCreateLocatorMs: parsed.createLocatorTime / 1_000_000.0,
+                serverParseOnlyMs: parsed.parseTime / 1_000_000.0,
+                serverSideMs: parsed.totalTime / 1_000_000.0,
+              });
+            }
+            if (!refreshOnDone) {
+              env.currentlyLoadingModals.delete(queryId);
+            }
+            while (root.firstChild) root.removeChild(root.firstChild);
 
-          let refreshMarkers = localErrors.length > 0;
-          localErrors.length = 0;
+            let refreshMarkers = localErrors.length > 0;
+            localErrors.length = 0;
 
-          parsed.errors.forEach(({severity, start: errStart, end: errEnd, msg }) => {
-            localErrors.push({ severity, errStart, errEnd, msg });
-          })
-          const updatedArgs = parsed.args;
-          if (updatedArgs) {
-            refreshMarkers = true;
-            attr.args?.forEach((arg, argIdx) => {
-              arg.type = updatedArgs[argIdx].type;
-              arg.detail = updatedArgs[argIdx].detail;
-              arg.value = updatedArgs[argIdx].value;
+            parsed.errors.forEach(({severity, start: errStart, end: errEnd, msg }) => {
+              localErrors.push({ severity, errStart, errEnd, msg });
             })
-          }
-          if (parsed.locator) {
-            refreshMarkers = true;
-            locator = parsed.locator;
-          }
-          if (refreshMarkers || localErrors.length > 0) {
-            env.updateMarkers();
-          }
-          const titleRow = createTitle();
-          root.append(titleRow.element);
+            const updatedArgs = parsed.args;
+            if (updatedArgs) {
+              refreshMarkers = true;
+              attr.args?.forEach((arg, argIdx) => {
+                arg.type = updatedArgs[argIdx].type;
+                arg.detail = updatedArgs[argIdx].detail;
+                arg.value = updatedArgs[argIdx].value;
+              })
+            }
+            if (parsed.locator) {
+              refreshMarkers = true;
+              locator = parsed.locator;
+            }
+            if (refreshMarkers || localErrors.length > 0) {
+              env.updateMarkers();
+            }
+            const titleRow = createTitle();
+            root.append(titleRow.element);
 
-          lastOutput = body;
-          root.appendChild(encodeRpcBodyLines(env, body));
-
+            lastOutput = body;
+            root.appendChild(encodeRpcBodyLines(env, body));
+          }
           const spinner = createLoadingSpinner();
           spinner.style.display = 'none';
           spinner.classList.add('absoluteCenter');

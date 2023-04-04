@@ -1,11 +1,11 @@
 package codeprober;
 
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
-import codeprober.metaprogramming.StdIoInterceptor;
+import codeprober.protocol.ClientRequest;
 import codeprober.rpc.JsonRequestHandler;
 
 public class ConcurrentWorker implements JsonRequestHandler {
@@ -55,7 +55,10 @@ public class ConcurrentWorker implements JsonRequestHandler {
 //					response.put("id", task.jobId);
 					System.out.println("running conc worker.. START");
 					CodeProber.flog("🕵️ conc start " + task.jobId);
-					final JSONObject result = underlyingHandler.handleRequest(task.config, task.writeAsyncMessage);
+					final JSONObject result = underlyingHandler.handleRequest(new ClientRequest( //
+							task.request.data.getJSONObject("data"), // Strip away wrapper obj
+							task.request::sendAsyncResponse, //
+							task.request.connectionIsAlive));
 					CodeProber.flog("🕵️ conc done " + task.jobId);
 					System.out.println("running conc worker.. DONE");
 //					response.put("result", result != null ? result : JSONObject.NULL);
@@ -67,7 +70,7 @@ public class ConcurrentWorker implements JsonRequestHandler {
 //					msg.put("data", response);
 					msg.put("result", result != null ? result : JSONObject.NULL);
 					System.out.println("sending " + msg);
-					task.writeAsyncMessage.accept(msg);
+					task.request.sendAsyncResponse(msg);
 				} catch (Throwable t) {
 					CodeProber.flog("🕵🕵🕵 conc caught for " + task.jobId);
 					System.out.println("Got throwable: " + t);
@@ -81,20 +84,29 @@ public class ConcurrentWorker implements JsonRequestHandler {
 	}
 
 	@Override
-	public JSONObject handleRequest(JSONObject queryObj, Consumer<JSONObject> writeAsyncMessage) {
+	public JSONObject handleRequest(ClientRequest request) {
 		System.out.println("ConcurrentWorker :: handleRequest");
-		switch (queryObj.getString("type")) {
-		case "concurrent:status": {
+		switch (request.data.getString("type")) {
+		case "concurrent:pollStatus": {
 			JSONObject response = new JSONObject();
 //			final JobStatus id = jobStatuses.get(queryObj.get("job"));
 			response.put("status", monitor.status.get().name());
+			JSONArray stack = new JSONArray();
+			for (StackTraceElement ste : workerThread.getStackTrace()) {
+				if (ste.getClassName().equals(DefaultRequestHandler.class.getName())) {
+					stack.put("...codeprober internals..");
+					break;
+				}
+				stack.put(ste.toString());
+			}
+			response.put("stack", stack);
 			return response;
 		}
 
 		case "concurrent:submit": {
-			final JSONObject data = queryObj.getJSONObject("data");
+//			final JSONObject data = queryObj.getJSONObject("data");
 			try {
-				monitor.submit(new Job(queryObj.getLong("job"), data, writeAsyncMessage));
+				monitor.submit(new Job(request.data.getLong("job"), request));
 			} catch (InterruptedException e) {
 				System.out.println("Failed to submit");
 			}
@@ -103,7 +115,7 @@ public class ConcurrentWorker implements JsonRequestHandler {
 		}
 
 		default: {
-			System.err.println("Invalid request " + queryObj);
+			System.err.println("Invalid request " + request.data);
 //			final long jobId = jobIdGenerator.getAndIncrement();
 //			jobStatuses.put(jobId, JobStatus.SUBMITTED);
 //			System.out.println("Got job: " + queryObj);
@@ -118,13 +130,13 @@ public class ConcurrentWorker implements JsonRequestHandler {
 
 	private static class Job {
 		public final long jobId;
-		public final JSONObject config;
-		public final Consumer<JSONObject> writeAsyncMessage;
+		public final ClientRequest request;
+//		public final JSONObject config;
+//		public final Consumer<JSONObject> writeAsyncMessage;
 
-		public Job(long jobId, JSONObject config, Consumer<JSONObject> writeAsyncMessage) {
+		public Job(long jobId, ClientRequest request) {
 			this.jobId = jobId;
-			this.config = config;
-			this.writeAsyncMessage = writeAsyncMessage;
+			this.request = request;
 		}
 	}
 

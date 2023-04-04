@@ -28,6 +28,10 @@ public class ServerToClientMessagePusher {
 		}
 	}
 
+	public int getEventCounter() {
+		return eventCounter;
+	}
+
 	public synchronized int pollEvent(int prevEventCtr) {
 		if (prevEventCtr == eventCounter) {
 			try {

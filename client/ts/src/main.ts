@@ -18,7 +18,7 @@ import createCullingTaskSubmitterFactory from "./model/cullingTaskSubmitterFacto
 import displayAstModal from "./ui/popup/displayAstModal";
 import { createTestManager } from './model/test/TestManager';
 import displayTestSuiteListModal from './ui/popup/displayTestSuiteListModal';
-import ModalEnv from './model/ModalEnv';
+import ModalEnv, { JobId } from './model/ModalEnv';
 import displayTestDiffModal from './ui/popup/displayTestDiffModal';
 
 
@@ -40,7 +40,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
   let basicHighlight: Span | null = null;
   const stickyHighlights: { [probeId: string]: StickyHighlight } = {};
   let updateSpanHighlight = (span: Span | null, stickies: StickyHighlight[]) => {};
-  const performRpcQuery = (handler: WebsocketHandler, props: { [key: string]: any }) => handler.sendRpc({
+  const performRpcQuery = (handler: WebsocketHandler, props: { [key: string]: any }, extras?: { jobId: JobId }) => handler.sendRpc({
     posRecovery: uiElements.positionRecoverySelector.value,
     cache: uiElements.astCacheStrategySelector.value,
     type: 'query',
@@ -49,6 +49,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
     query: props,
     mainArgs: settings.getMainArgsOverride(),
     tmpSuffix: settings.getCurrentFileSuffix(),
+    job: extras?.jobId,
   });
 
     const onChangeListeners: ModalEnv['onChangeListeners'] = {};
@@ -99,30 +100,20 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
     const jobUpdateHandlers: {[id: string]: (data: any) => void }  = {};
     wsHandler.on('jobUpdate', (data) => {
       const { job, result } = data;
+      console.log('jobUpdate for', job, '; result:', result);
       if (!job || !result) {
         console.warn('Invalid job update', data);
         return;
       }
       const handler = jobUpdateHandlers[job];
       if (!handler) {
-        console.log('Got not handler for job update:', data);
+        console.log('Got no handler for job update:', data);
         return;
       }
-      switch (result.status) {
-        case 'running': {
-          // Ignore for now, maybe show some loading somewhere?
-          return;
-        }
-        case 'done': {
-          delete jobUpdateHandlers[data?.job];
-          handler(result.result);
-          return;
-        }
-        default: {
-          console.warn('Unknown job update:', data);
-          return;
-        }
+      if (result.status === 'done') {
+        delete jobUpdateHandlers[data?.job];
       }
+      handler(result);
     });
 
     const rootElem = document.getElementById('root') as HTMLElement;
@@ -300,7 +291,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       const testManager = createTestManager(req => wsHandler.sendRpc(req), createJobId);
       let jobIdGenerator = 0;
       const modalEnv: ModalEnv = {
-        performRpcQuery: (args) => performRpcQuery(wsHandler, args),
+        performRpcQuery: (args, extras) => performRpcQuery(wsHandler, args, extras),
         probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
         themeIsLight: () => settings.isLightTheme(),
         getLocalState: () => getLocalState(),

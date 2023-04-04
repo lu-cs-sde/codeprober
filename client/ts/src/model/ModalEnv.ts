@@ -6,7 +6,7 @@ interface ModalEnv {
   performRpcQuery: (args: {
     attr: AstAttrWithValue;
     locator: NodeLocator;
-  }) => Promise<any>;
+  }, extras?: { jobId: JobId }) => Promise<any>;
   getLocalState: () => string;
   setLocalState: (val: string) => void;
   updateSpanHighlight: (span: Span | null) => void;
@@ -29,4 +29,5 @@ interface ModalEnv {
   createJobId: (updateHandler: (data: any) => void) => JobId;
 }
 
+export { JobId }
 export default ModalEnv;

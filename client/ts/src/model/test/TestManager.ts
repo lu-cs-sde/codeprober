@@ -193,18 +193,15 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, cr
 
       const res = await new Promise<any>(async (resolve, reject) => {
         const handleUpdate = (data: any) => {
-          // console.log('handle testMgr update for', category, '>', name, '::', data);
-          if (data.job) {
-            // Status update, ignore
-            return;
+          console.log('handle testMgr update for', category, '>', name, '::', data);
+          if (data.status === 'done') {
+            resolve(data.result);
           }
-          resolve(data);
-          // resolve(data);
         };
 
         const jobId = createJobId(handleUpdate);
         try {
-          handleUpdate(await performRpcQuery({
+          const res = await performRpcQuery({
             type: 'query',
             posRecovery: tcase.posRecovery,
             cache: tcase.cache,
@@ -217,7 +214,11 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, cr
             mainArgs: null,
             tmpSuffix: tcase.tmpSuffix,
             job: `${jobId}`,
-          }));
+          });
+          if (!res.job) {
+            // Non-concurrent server, handle request synchronously
+            resolve(res);
+          }
         } catch (e) {
           reject(e);
         }

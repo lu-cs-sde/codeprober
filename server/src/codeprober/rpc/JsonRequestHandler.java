@@ -1,27 +1,37 @@
 package codeprober.rpc;
 
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.json.JSONObject;
+
+import codeprober.protocol.ClientRequest;
 
 @FunctionalInterface
 public interface JsonRequestHandler {
 
 	static final Object lock = new Object();
 
-	JSONObject handleRequest(JSONObject queryObj, Consumer<JSONObject> sendAsyncMessage);
+	JSONObject handleRequest(ClientRequest request);
 
-	default BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> createRpcRequestHandler() {
-		return (obj, sendAsyncMessage) -> {
+	default void onOneOrMoreClientsDisconnected() {
+		/**
+		 * Default: noop. Override for request handlers with queues and/or long-lasting
+		 * requests thare are rendered obsolete due to the disconnects. Check disconnect
+		 * status in {@link ClientRequest#connectionIsAlive}.
+		 */
+	}
+
+	default Function<ClientRequest, JSONObject> createRpcRequestHandler() {
+		return (request) -> {
 			final long start = System.nanoTime();
 
 			JSONObject rpcResponse = new JSONObject();
 			rpcResponse.put("type", "rpc");
-			rpcResponse.put("id", obj.getLong("id"));
+			rpcResponse.put("id", request.data.getLong("id"));
 			try {
 				synchronized (lock) {
-					final JSONObject encoded = handleRequest(obj, sendAsyncMessage);
+					final JSONObject encoded = handleRequest(request);
 					rpcResponse.put("result", encoded == null ? JSONObject.NULL : encoded);
 				}
 			} catch (RuntimeException e) {

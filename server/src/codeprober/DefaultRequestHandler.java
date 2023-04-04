@@ -15,7 +15,6 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.json.JSONArray;
@@ -37,6 +36,7 @@ import codeprober.metaprogramming.StdIoInterceptor;
 import codeprober.metaprogramming.StreamInterceptor;
 import codeprober.metaprogramming.TypeIdentificationStyle;
 import codeprober.protocol.AstCacheStrategy;
+import codeprober.protocol.ClientRequest;
 import codeprober.protocol.ParameterValue;
 import codeprober.protocol.PositionRecoveryStrategy;
 import codeprober.protocol.ProbeProtocol;
@@ -421,7 +421,8 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 	}
 
 	@Override
-	public JSONObject handleRequest(JSONObject queryObj, Consumer<JSONObject> sendAsyncMessage) {
+	public JSONObject handleRequest(ClientRequest request) {
+		final JSONObject queryObj = request.data;
 		final String queryType = queryObj.getString("type");
 		switch (queryType) {
 		case ProbeProtocol.type:

@@ -10,8 +10,12 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
-import java.util.function.BiFunction;
-import java.util.function.Consumer;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -20,8 +24,118 @@ import java.util.regex.Pattern;
 import org.json.JSONObject;
 
 import codeprober.CodeProber;
+import codeprober.protocol.ClientRequest;
 
 public class WebServer {
+	private static class WsPutSession {
+		public final String id;
+		public long lastActivity = System.currentTimeMillis();
+		private final ConcurrentLinkedQueue<JSONObject> outgoingMessages = new ConcurrentLinkedQueue<>();
+		public final AtomicInteger activeConnections = new AtomicInteger();
+		public final AtomicBoolean isConnected = new AtomicBoolean(true);
+
+		private final AtomicInteger lastEventVersion = new AtomicInteger(-1);
+
+		public WsPutSession(String id) {
+			this.id = id;
+		}
+
+		public synchronized void onServerEvent(int eventVersion) {
+			if (lastEventVersion.getAndSet(eventVersion) == eventVersion) {
+				return;
+			}
+			notifyAll();
+		}
+
+		public synchronized void addMessage(JSONObject obj) {
+			outgoingMessages.add(obj);
+			notifyAll();
+		}
+
+		public synchronized JSONObject longPoll(int clientKnownEventVersion) throws InterruptedException {
+			final JSONObject immediate = pollWithoutWaiting(clientKnownEventVersion);
+			if (immediate != null) {
+				return immediate;
+			}
+			// 5 minutes
+			wait(5 * 60 * 1000);
+			return pollWithoutWaiting(clientKnownEventVersion);
+		}
+
+		private JSONObject pollWithoutWaiting(int clientKnownEventVersion) {
+			final JSONObject msg = outgoingMessages.poll();
+			if (msg != null) {
+				return new JSONObject().put("type", "push").put("message", msg);
+			}
+			if (lastEventVersion.get() != clientKnownEventVersion) {
+				return new JSONObject().put("etag", lastEventVersion.get());
+			}
+			return null;
+		}
+
+		@Override
+		public int hashCode() {
+			return id.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof WsPutSession && id.equals(((WsPutSession) obj).id);
+		}
+	}
+
+	private static class WsPutSessionMonitor {
+		private final List<WsPutSession> sessions = new ArrayList<>();
+
+		public synchronized void onServerEvent(int eventVersion) {
+			for (WsPutSession wps : sessions) {
+				wps.onServerEvent(eventVersion);
+			}
+		}
+
+		public synchronized WsPutSession getOrCreate(String id) {
+			for (WsPutSession wps : sessions) {
+				if (wps.id.equals(id)) {
+					wps.lastActivity = System.currentTimeMillis();
+					return wps;
+				}
+			}
+			final WsPutSession newSession = new WsPutSession(id);
+			sessions.add(newSession);
+			notifyAll();
+			return newSession;
+		}
+
+		public synchronized boolean pollDisconnects() throws InterruptedException {
+			if (sessions.isEmpty()) {
+				wait();
+			}
+			long oldestActivity = sessions.get(0).lastActivity;
+			for (int i = 1; i < sessions.size(); i++) {
+				oldestActivity = Math.min(oldestActivity, sessions.get(i).lastActivity);
+			}
+			final int allowedIdleTimeMs = 30_000;
+			// 30 seconds after last request - consider the client disconnected
+			final long disconnectTime = oldestActivity + allowedIdleTimeMs;
+			while (System.currentTimeMillis() < disconnectTime) {
+				wait();
+			}
+			final long cutoff = System.currentTimeMillis();
+			final Iterator<WsPutSession> iter = sessions.iterator();
+			boolean removedAny = false;
+			while (iter.hasNext()) {
+				final WsPutSession wps = iter.next();
+				if (cutoff >= (wps.lastActivity + allowedIdleTimeMs) && wps.activeConnections.get() == 0) {
+					iter.remove();
+					wps.isConnected.set(false);
+					removedAny = true;
+				}
+			}
+			return removedAny;
+		}
+
+	}
+
 	private static String guessMimeType(String path) {
 		switch (path.substring(path.lastIndexOf('.') + 1)) {
 		case "html":
@@ -50,7 +164,9 @@ public class WebServer {
 		}
 	}
 
-	private static void handleGetRequest(Socket socket, String data) throws IOException {
+	private final WsPutSessionMonitor monitor = new WsPutSessionMonitor();;
+
+	private void handleGetRequest(Socket socket, String data) throws IOException {
 		final OutputStream out = socket.getOutputStream();
 		final Matcher getReqPathMatcher = Pattern.compile("^GET (.*) HTTP").matcher(data);
 		if (!getReqPathMatcher.find()) {
@@ -123,8 +239,8 @@ public class WebServer {
 		stream.close();
 	}
 
-	private static void handlePutRequest(Socket socket, String data, ServerToClientMessagePusher msgPusher,
-			BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> onQuery) throws IOException {
+	private void handlePutRequest(Socket socket, String data, ServerToClientMessagePusher msgPusher,
+			Function<ClientRequest, JSONObject> onQuery) throws IOException {
 		final String[] parts = data.split("\r\n");
 		String putPath = null;
 		int contentLen = -1;
@@ -169,34 +285,48 @@ public class WebServer {
 		case "/wsput": {
 			final byte[] response;
 			final JSONObject body = new JSONObject(new String(getBody.get(), StandardCharsets.UTF_8));
-			switch (body.getString("type")) {
-			case "init": {
-				response = WebSocketServer.getInitMsg().toString().getBytes(StandardCharsets.UTF_8);
-				break;
+
+			final String remoteAddr = socket.getRemoteSocketAddress().toString();
+			final WsPutSession wps = monitor.getOrCreate(remoteAddr);
+			wps.activeConnections.incrementAndGet();
+			try {
+				switch (body.getString("type")) {
+				case "init": {
+					response = WebSocketServer.getInitMsg().toString().getBytes(StandardCharsets.UTF_8);
+					break;
+				}
+				case "longpoll": {
+					final int etag = body.getInt("etag");
+					final JSONObject message = wps.longPoll(etag);
+					if (message == null) {
+						response = new JSONObject() //
+								.put("etag", etag).toString() //
+								.getBytes(StandardCharsets.UTF_8);
+					} else {
+						response = message.toString().getBytes(StandardCharsets.UTF_8);
+					}
+//					final int newEtag = msgPusher.pollEvent(etag);
+					break;
+				}
+				default: {
+					response = onQuery.apply(new ClientRequest(body, wps::addMessage, wps.isConnected)).toString()
+							.getBytes(StandardCharsets.UTF_8);
+					break;
+				}
+				}
+				final OutputStream out = socket.getOutputStream();
+				out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
+				out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
+				out.write(("Content-Length: " + response.length + "\r\n").getBytes("UTF-8"));
+				out.write(("\r\n").getBytes("UTF-8"));
+				out.write(response);
+			} catch (InterruptedException e) {
+				System.err.println("/wsput request interrupted");
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} finally {
+				wps.activeConnections.decrementAndGet();
 			}
-			case "longpoll": {
-				final int etag = body.getInt("etag");
-				final int newEtag = msgPusher.pollEvent(etag);
-				response = new JSONObject() //
-						.put("etag", newEtag).toString() //
-						.getBytes(StandardCharsets.UTF_8);
-				break;
-			}
-			default: {
-				final String remoteAddr = socket.getRemoteSocketAddress().toString();
-				response = onQuery.apply(body, asyncResponse -> {
-					// Push to 'msgPusher' for 'remoteAddr'
-					System.out.println("TODO handle async messages for wsput");
-				}).toString().getBytes(StandardCharsets.UTF_8);
-				break;
-			}
-			}
-			final OutputStream out = socket.getOutputStream();
-			out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
-			out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
-			out.write(("Content-Length: " + response.length + "\r\n").getBytes("UTF-8"));
-			out.write(("\r\n").getBytes("UTF-8"));
-			out.write(response);
 			break;
 		}
 		default: {
@@ -205,8 +335,8 @@ public class WebServer {
 		}
 	}
 
-	private static void handleRequest(Socket socket, ServerToClientMessagePusher msgPusher,
-			BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> onQuery) throws IOException, NoSuchAlgorithmException {
+	private void handleRequest(Socket socket, ServerToClientMessagePusher msgPusher,
+			Function<ClientRequest, JSONObject> onQuery) throws IOException, NoSuchAlgorithmException {
 		System.out.println("Incoming HTTP request from: " + socket.getRemoteSocketAddress());
 
 		final InputStream in = socket.getInputStream();
@@ -288,11 +418,27 @@ public class WebServer {
 		return 8000;
 	}
 
-	public static void start(ServerToClientMessagePusher msgPusher, BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> onQuery) {
+	public static void start(ServerToClientMessagePusher msgPusher, Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected) {
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, WebSocketServer.createServerFilter())) {
 			System.out.println(
 					"Started web server on port " + port + ", visit http://localhost:" + port + "/ in your browser");
+			final WebServer ws = new WebServer();
+			new Thread(() -> {
+				while (true) {
+					try {
+						if (ws.monitor.pollDisconnects()) {
+							onSomeClientDisconnected.run();
+						}
+					} catch (InterruptedException e) {
+						System.err.println("wsput disconnect thread interrupted");
+						e.printStackTrace();
+					}
+				}
+			});
+			msgPusher.addJarChangeListener(() -> {
+				ws.monitor.onServerEvent(msgPusher.getEventCounter());
+			});
 			try {
 
 				while (true) {
@@ -300,7 +446,7 @@ public class WebServer {
 					System.out.println("got socket");
 					new Thread(() -> {
 						try {
-							handleRequest(s, msgPusher, onQuery);
+							ws.handleRequest(s, msgPusher, onQuery);
 						} catch (IOException | NoSuchAlgorithmException e) {
 							System.out.println("Error while handling request");
 							e.printStackTrace();

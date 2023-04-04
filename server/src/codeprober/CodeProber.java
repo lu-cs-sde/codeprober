@@ -7,15 +7,17 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import codeprober.RunAllTests.MergedResult;
 import codeprober.metaprogramming.StdIoInterceptor;
+import codeprober.protocol.ClientRequest;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.server.CodespacesCompat;
 import codeprober.server.ServerToClientMessagePusher;
@@ -37,12 +39,17 @@ public class CodeProber {
 	}
 
 	static void flog(String msg) {
-//		try {
-//			Files.write(new File("/Users/anton/eclipse-workspace/Pasta/log").toPath(), (msg + "\n").getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-//		} catch (IOException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
+		final String flogPath = System.getenv("FLOG_PATH");
+		if (flogPath != null) {
+
+			try {
+				Files.write(new File(flogPath).toPath(), (msg + "\n").getBytes(StandardCharsets.UTF_8),
+						StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
 	}
 
 	public static void main(String[] mainArgs) throws IOException {
@@ -157,9 +164,9 @@ public class CodeProber {
 
 			};
 			userFacingHandler = new ConcurrentWorker(defaultHandler);
-			final BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> rpcHandler = userFacingHandler
-					.createRpcRequestHandler();
+			final Function<ClientRequest, JSONObject> rpcHandler = userFacingHandler.createRpcRequestHandler();
 			new Thread(() -> {
+				final AtomicBoolean connectionIsAlive = new AtomicBoolean(true);
 				new IpcReader(System.in) {
 //					protected void handleByte(byte b) {
 //						super.handleByte(b);
@@ -179,7 +186,8 @@ public class CodeProber {
 							e.printStackTrace();
 							return;
 						}
-						writeToCoordinator.accept(rpcHandler.apply(obj, writeToCoordinator));
+						writeToCoordinator.accept(
+								rpcHandler.apply(new ClientRequest(obj, writeToCoordinator, connectionIsAlive)));
 					}
 				}.runForever();
 			}).start();
@@ -207,11 +215,11 @@ public class CodeProber {
 		CodespacesCompat.getChangeBufferTime();
 
 		final ServerToClientMessagePusher msgPusher = new ServerToClientMessagePusher();
-		final BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> reqHandler = userFacingHandler
-				.createRpcRequestHandler();
-		new Thread(() -> WebServer.start(msgPusher, reqHandler)).start();
+		final Function<ClientRequest, JSONObject> reqHandler = userFacingHandler.createRpcRequestHandler();
+		final Runnable onSomeClientDisconnected = userFacingHandler::onOneOrMoreClientsDisconnected;
+		new Thread(() -> WebServer.start(msgPusher, reqHandler, onSomeClientDisconnected)).start();
 		if (!WebSocketServer.shouldDelegateWebsocketToHttp()) {
-			new Thread(() -> WebSocketServer.start(msgPusher, reqHandler)).start();
+			new Thread(() -> WebSocketServer.start(msgPusher, reqHandler, onSomeClientDisconnected)).start();
 		} else {
 			System.out.println("Not starting websocket server, running requests over normal HTTP requests instead.");
 		}

@@ -15,7 +15,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.Scanner;
-import java.util.function.BiFunction;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
 
 import org.json.JSONObject;
 
+import codeprober.protocol.ClientRequest;
 import codeprober.util.VersionInfo;
 
 public class WebSocketServer {
@@ -133,7 +134,7 @@ public class WebSocketServer {
 	}
 
 	private static void handleRequest(Socket socket, ServerToClientMessagePusher msgPusher,
-			BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> onQuery) throws IOException, NoSuchAlgorithmException {
+			Function<ClientRequest, JSONObject> onQuery, AtomicBoolean connectionIsAlive) throws IOException, NoSuchAlgorithmException {
 		InputStream in = socket.getInputStream();
 		OutputStream out = socket.getOutputStream();
 		@SuppressWarnings("resource")
@@ -229,7 +230,7 @@ public class WebSocketServer {
 								// Only a single frame
 								final JSONObject jobj = new JSONObject(new String(reqData, StandardCharsets.UTF_8));
 
-								writeWsMessage(out, onQuery.apply(jobj, asyncMessageWriter).toString());
+								writeWsMessage(out, onQuery.apply(new ClientRequest(jobj, asyncMessageWriter, connectionIsAlive)).toString());
 								break readFrame;
 							} else {
 								if (frameBuffer == null) {
@@ -239,7 +240,7 @@ public class WebSocketServer {
 								if (isFin) {
 									final JSONObject jobj = new JSONObject(
 											new String(frameBuffer.toByteArray(), StandardCharsets.UTF_8));
-									writeWsMessage(out, onQuery.apply(jobj, asyncMessageWriter).toString());
+									writeWsMessage(out, onQuery.apply(new ClientRequest(jobj, asyncMessageWriter, connectionIsAlive)).toString());
 									break readFrame;
 								} else {
 									first = in.read();
@@ -305,7 +306,7 @@ public class WebSocketServer {
 	}
 
 	public static void start(ServerToClientMessagePusher msgPusher,
-			BiFunction<JSONObject, Consumer<JSONObject>, JSONObject> onQuery) {
+			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected) {
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, createServerFilter())) {
 			System.out.println("Started WebSocket server on port " + port);
@@ -313,8 +314,9 @@ public class WebSocketServer {
 				Socket s = server.accept();
 				System.out.println("New WS connection from " + s.getRemoteSocketAddress());
 				new Thread(() -> {
+					final AtomicBoolean connectionIsAlive = new AtomicBoolean(true);
 					try {
-						handleRequest(s, msgPusher, onQuery);
+						handleRequest(s, msgPusher, onQuery, connectionIsAlive);
 					} catch (IOException | NoSuchAlgorithmException e) {
 						System.out.println("Error while handling request");
 						e.printStackTrace();
@@ -325,6 +327,8 @@ public class WebSocketServer {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
 						}
+						connectionIsAlive.set(false);
+						onSomeClientDisconnected.run();
 					}
 				}).start();
 			}

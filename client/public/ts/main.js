@@ -1768,17 +1768,14 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
                 }
                 const res = await new Promise(async (resolve, reject) => {
                     const handleUpdate = (data) => {
-                        // console.log('handle testMgr update for', category, '>', name, '::', data);
-                        if (data.job) {
-                            // Status update, ignore
-                            return;
+                        console.log('handle testMgr update for', category, '>', name, '::', data);
+                        if (data.status === 'done') {
+                            resolve(data.result);
                         }
-                        resolve(data);
-                        // resolve(data);
                     };
                     const jobId = createJobId(handleUpdate);
                     try {
-                        handleUpdate(await performRpcQuery({
+                        const res = await performRpcQuery({
                             type: 'query',
                             posRecovery: tcase.posRecovery,
                             cache: tcase.cache,
@@ -1791,7 +1788,11 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
                             mainArgs: null,
                             tmpSuffix: tcase.tmpSuffix,
                             job: `${jobId}`,
-                        }));
+                        });
+                        if (!res.job) {
+                            // Non-concurrent server, handle request synchronously
+                            resolve(res);
+                        }
                     }
                     catch (e) {
                         reject(e);
@@ -3686,11 +3687,15 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         env.probeMarkers[queryId] = localErrors;
         const stickyController = (0, createStickyHighlightController_2.default)(env);
         let lastOutput = [];
-        // const stickyMarker = env.registerStickyMarker(span)
-        // if (attr.name == 'bytecodes') {
-        //   setTimeout(() => displayTestAdditionModal(env, queryWindow.getPos(), locator, attr, lastOutput), 500);
-        // }
+        let activelyLoadingJob = null;
+        let loading = false;
+        let isCleanedUp = false;
+        const stopJob = (jobId) => env.performRpcQuery({
+            attr: { name: 'meta:stopJob' },
+            locator: null,
+        }, { jobId }).then(res => res.result === 'stopped');
         const cleanup = () => {
+            isCleanedUp = true;
             delete env.onChangeListeners[queryId];
             delete env.probeMarkers[queryId];
             delete env.probeWindowStateSavers[queryId];
@@ -3700,6 +3705,10 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 env.updateMarkers();
             }
             stickyController.cleanup();
+            console.log('cleanup: ', { loading, activelyLoadingJob });
+            if (loading && activelyLoadingJob !== null) {
+                stopJob(activelyLoadingJob);
+            }
         };
         let copyBody = [];
         const createTitle = () => {
@@ -3761,7 +3770,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         };
         let lastSpinner = null;
         let isFirstRender = true;
-        let loading = false;
         let refreshOnDone = false;
         const queryWindow = (0, showWindow_7.default)({
             pos: modalPos,
@@ -3797,66 +3805,166 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 // console.log('req attr:', JSON.stringify(attr, null, 2));
                 env.currentlyLoadingModals.add(queryId);
                 const rpcQueryStart = performance.now();
-                env.performRpcQuery({
-                    attr,
-                    locator,
-                })
+                const doFetch = () => new Promise(async (resolve, reject) => {
+                    let isDone = false;
+                    let isConnectedToConcurrentCapableServer = false;
+                    let statusPre = null;
+                    let localConcurrentCleanup = () => { };
+                    setTimeout(() => {
+                        if (isDone || isCleanedUp || !isConnectedToConcurrentCapableServer) {
+                            console.log('not polling status, due to ', { isDone, isConnectedToConcurrentCapableServer });
+                            return;
+                        }
+                        const stop = document.createElement('button');
+                        stop.innerText = 'Stop';
+                        stop.onclick = () => {
+                            stopJob(jobId).then(stopped => {
+                                if (stopped) {
+                                    isDone = true;
+                                    resolve('stopped');
+                                }
+                                // Else, job might have finished just as the user clicked stop
+                            });
+                        };
+                        root.appendChild(stop);
+                        statusPre = document.createElement('p');
+                        statusPre.style.whiteSpace = 'pre';
+                        statusPre.style.fontFamily = 'monospace';
+                        root.appendChild(statusPre);
+                        statusPre.innerText = `Request takes a while, polling status..\nIf you see message for longer than a few milliseconds then the job hasn't started running yet, or the server is severely overloaded.`;
+                        localConcurrentCleanup = () => {
+                            root.removeChild(stop);
+                            if (statusPre) {
+                                root.removeChild(statusPre);
+                            }
+                        };
+                        const poll = () => {
+                            if (isDone || isCleanedUp) {
+                                return;
+                            }
+                            env.performRpcQuery({
+                                attr: { name: 'meta:checkJobStatus' },
+                                locator: null,
+                            }, { jobId })
+                                .then(res => {
+                                console.log('rpc query for job status:', res);
+                                setTimeout(poll, 1000);
+                            });
+                        };
+                        poll();
+                    }, 5000);
+                    const jobId = env.createJobId(data => {
+                        isConnectedToConcurrentCapableServer = true;
+                        console.log('handleUpdate:', data);
+                        if (data.status == 'done') {
+                            isDone = true;
+                            resolve(data.result);
+                            localConcurrentCleanup();
+                            return;
+                        }
+                        // Status update, ignore
+                        console.log('ignoring status update?', data);
+                        if (statusPre) {
+                            const lines = [];
+                            lines.push(`Property evaluation is taking a while, status below:`);
+                            lines.push(`Status: ${data.status}`);
+                            if (data.stack) {
+                                lines.push("Stack trace:");
+                                data.stack.forEach((ste) => lines.push(`> ${ste}`));
+                            }
+                            statusPre.innerText = lines.join('\n');
+                        }
+                    });
+                    activelyLoadingJob = jobId;
+                    env.performRpcQuery({
+                        attr,
+                        locator,
+                    }, { jobId })
+                        .then(data => {
+                        if (data.job) {
+                            // Async work queued, not done.
+                        }
+                        else {
+                            // Sync work executed, done.
+                            isDone = true;
+                            resolve(data);
+                        }
+                    })
+                        .catch(err => {
+                        isDone = true;
+                        reject(err);
+                    });
+                });
+                doFetch()
                     .then((parsed) => {
                     var _a;
-                    const body = parsed.body;
-                    copyBody = body;
                     loading = false;
+                    if (parsed === 'stopped') {
+                        refreshOnDone = false;
+                    }
                     if (refreshOnDone) {
                         refreshOnDone = false;
                         queryWindow.refresh();
                     }
-                    if (typeof parsed.totalTime === 'number'
-                        && typeof parsed.parseTime === 'number'
-                        && typeof parsed.createLocatorTime === 'number'
-                        && typeof parsed.applyLocatorTime === 'number'
-                        && typeof parsed.attrEvalTime === 'number') {
-                        env.statisticsCollector.addProbeEvaluationTime({
-                            attrEvalMs: parsed.attrEvalTime / 1000000,
-                            fullRpcMs: Math.max(performance.now() - rpcQueryStart),
-                            serverApplyLocatorMs: parsed.applyLocatorTime / 1000000,
-                            serverCreateLocatorMs: parsed.createLocatorTime / 1000000,
-                            serverParseOnlyMs: parsed.parseTime / 1000000,
-                            serverSideMs: parsed.totalTime / 1000000,
-                        });
-                    }
                     if (cancelToken.cancelled) {
                         return;
                     }
-                    if (!refreshOnDone) {
-                        env.currentlyLoadingModals.delete(queryId);
+                    if (parsed === 'stopped') {
+                        while (root.firstChild)
+                            root.removeChild(root.firstChild);
+                        root.append(createTitle().element);
+                        const p = document.createElement('p');
+                        p.innerText = `Property evaluation stopped. If any update happens (e.g text or setting changed within CodeProber), evaluation will be attempted again.`;
+                        root.appendChild(p);
                     }
-                    while (root.firstChild)
-                        root.removeChild(root.firstChild);
-                    let refreshMarkers = localErrors.length > 0;
-                    localErrors.length = 0;
-                    parsed.errors.forEach(({ severity, start: errStart, end: errEnd, msg }) => {
-                        localErrors.push({ severity, errStart, errEnd, msg });
-                    });
-                    const updatedArgs = parsed.args;
-                    if (updatedArgs) {
-                        refreshMarkers = true;
-                        (_a = attr.args) === null || _a === void 0 ? void 0 : _a.forEach((arg, argIdx) => {
-                            arg.type = updatedArgs[argIdx].type;
-                            arg.detail = updatedArgs[argIdx].detail;
-                            arg.value = updatedArgs[argIdx].value;
+                    else {
+                        const body = parsed.body;
+                        copyBody = body;
+                        if (typeof parsed.totalTime === 'number'
+                            && typeof parsed.parseTime === 'number'
+                            && typeof parsed.createLocatorTime === 'number'
+                            && typeof parsed.applyLocatorTime === 'number'
+                            && typeof parsed.attrEvalTime === 'number') {
+                            env.statisticsCollector.addProbeEvaluationTime({
+                                attrEvalMs: parsed.attrEvalTime / 1000000,
+                                fullRpcMs: Math.max(performance.now() - rpcQueryStart),
+                                serverApplyLocatorMs: parsed.applyLocatorTime / 1000000,
+                                serverCreateLocatorMs: parsed.createLocatorTime / 1000000,
+                                serverParseOnlyMs: parsed.parseTime / 1000000,
+                                serverSideMs: parsed.totalTime / 1000000,
+                            });
+                        }
+                        if (!refreshOnDone) {
+                            env.currentlyLoadingModals.delete(queryId);
+                        }
+                        while (root.firstChild)
+                            root.removeChild(root.firstChild);
+                        let refreshMarkers = localErrors.length > 0;
+                        localErrors.length = 0;
+                        parsed.errors.forEach(({ severity, start: errStart, end: errEnd, msg }) => {
+                            localErrors.push({ severity, errStart, errEnd, msg });
                         });
+                        const updatedArgs = parsed.args;
+                        if (updatedArgs) {
+                            refreshMarkers = true;
+                            (_a = attr.args) === null || _a === void 0 ? void 0 : _a.forEach((arg, argIdx) => {
+                                arg.type = updatedArgs[argIdx].type;
+                                arg.detail = updatedArgs[argIdx].detail;
+                                arg.value = updatedArgs[argIdx].value;
+                            });
+                        }
+                        if (parsed.locator) {
+                            refreshMarkers = true;
+                            locator = parsed.locator;
+                        }
+                        if (refreshMarkers || localErrors.length > 0) {
+                            env.updateMarkers();
+                        }
+                        const titleRow = createTitle();
+                        root.append(titleRow.element);
+                        lastOutput = body;
+                        root.appendChild((0, encodeRpcBodyLines_3.default)(env, body));
                     }
-                    if (parsed.locator) {
-                        refreshMarkers = true;
-                        locator = parsed.locator;
-                    }
-                    if (refreshMarkers || localErrors.length > 0) {
-                        env.updateMarkers();
-                    }
-                    const titleRow = createTitle();
-                    root.append(titleRow.element);
-                    lastOutput = body;
-                    root.appendChild((0, encodeRpcBodyLines_3.default)(env, body));
                     const spinner = (0, createLoadingSpinner_4.default)();
                     spinner.style.display = 'none';
                     spinner.classList.add('absoluteCenter');
@@ -5765,7 +5873,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         let basicHighlight = null;
         const stickyHighlights = {};
         let updateSpanHighlight = (span, stickies) => { };
-        const performRpcQuery = (handler, props) => handler.sendRpc({
+        const performRpcQuery = (handler, props, extras) => handler.sendRpc({
             posRecovery: uiElements.positionRecoverySelector.value,
             cache: uiElements.astCacheStrategySelector.value,
             type: 'query',
@@ -5774,6 +5882,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             query: props,
             mainArgs: settings_7.default.getMainArgsOverride(),
             tmpSuffix: settings_7.default.getCurrentFileSuffix(),
+            job: extras === null || extras === void 0 ? void 0 : extras.jobId,
         });
         const onChangeListeners = {};
         const probeWindowStateSavers = {};
@@ -5813,30 +5922,20 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             const jobUpdateHandlers = {};
             wsHandler.on('jobUpdate', (data) => {
                 const { job, result } = data;
+                console.log('jobUpdate for', job, '; result:', result);
                 if (!job || !result) {
                     console.warn('Invalid job update', data);
                     return;
                 }
                 const handler = jobUpdateHandlers[job];
                 if (!handler) {
-                    console.log('Got not handler for job update:', data);
+                    console.log('Got no handler for job update:', data);
                     return;
                 }
-                switch (result.status) {
-                    case 'running': {
-                        // Ignore for now, maybe show some loading somewhere?
-                        return;
-                    }
-                    case 'done': {
-                        delete jobUpdateHandlers[data === null || data === void 0 ? void 0 : data.job];
-                        handler(result.result);
-                        return;
-                    }
-                    default: {
-                        console.warn('Unknown job update:', data);
-                        return;
-                    }
+                if (result.status === 'done') {
+                    delete jobUpdateHandlers[data === null || data === void 0 ? void 0 : data.job];
                 }
+                handler(result);
             });
             const rootElem = document.getElementById('root');
             wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds }, changeBufferTime }) => {
@@ -5986,7 +6085,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 const testManager = (0, TestManager_1.createTestManager)(req => wsHandler.sendRpc(req), createJobId);
                 let jobIdGenerator = 0;
                 const modalEnv = {
-                    performRpcQuery: (args) => performRpcQuery(wsHandler, args),
+                    performRpcQuery: (args, extras) => performRpcQuery(wsHandler, args, extras),
                     probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
                     themeIsLight: () => settings_7.default.isLightTheme(),
                     getLocalState: () => getLocalState(),

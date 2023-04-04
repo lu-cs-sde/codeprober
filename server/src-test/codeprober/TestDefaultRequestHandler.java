@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.json.JSONArray;
@@ -18,6 +19,7 @@ import codeprober.ast.TestData;
 import codeprober.locator.CreateLocator;
 import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.AstCacheStrategy;
+import codeprober.protocol.ClientRequest;
 import codeprober.protocol.PositionRecoveryStrategy;
 import codeprober.protocol.ProbeProtocol;
 import codeprober.protocol.create.CreateType;
@@ -144,7 +146,7 @@ public class TestDefaultRequestHandler {
 		assertEquals("Second msg without linebreak", bodyBuilder.getJSONObject(1).getString("value"));
 	}
 
-	private JSONObject constructRequest(String text, String attrName) {
+	private ClientRequest constructRequest(String text, String attrName) {
 		final JSONObject requestObj = new JSONObject();
 		requestObj.put("type", ProbeProtocol.type);
 		ProbeProtocol.text.put(requestObj, text);
@@ -160,7 +162,8 @@ public class TestDefaultRequestHandler {
 				.put(ProbeProtocol.Attribute.name.key, attrName) //
 		);
 		ProbeProtocol.query.put(requestObj, query);
-		return requestObj;
+		return new ClientRequest(requestObj, obj -> {
+		}, new AtomicBoolean(true));
 	}
 
 	@Test
@@ -185,20 +188,20 @@ public class TestDefaultRequestHandler {
 		};
 		DefaultRequestHandler handler = new DefaultRequestHandler(countingTool, new String[0]);
 
-		final JSONObject requestObj = constructRequest("Hello World", "getData");
+		final ClientRequest requestObj = constructRequest("Hello World", "getData");
 
-		final JSONObject initial = handler.handleRequest(requestObj, null);
+		final JSONObject initial = handler.handleRequest(requestObj);
 		assertEquals(1, parseCounter.get());
 		assertEquals(1, getDataCounter.get());
 		assertEquals("Hello World", initial.getJSONArray("body").getString(0));
 
-		final JSONObject sameTextShouldBeCached = handler.handleRequest(requestObj, null);
+		final JSONObject sameTextShouldBeCached = handler.handleRequest(requestObj);
 		assertEquals(1, parseCounter.get());
 		assertEquals(2, getDataCounter.get());
 		assertEquals("Hello World", sameTextShouldBeCached.getJSONArray("body").getString(0));
 
-		ProbeProtocol.text.put(requestObj, "Changed");
-		final JSONObject changedText = handler.handleRequest(requestObj, null);
+		ProbeProtocol.text.put(requestObj.data, "Changed");
+		final JSONObject changedText = handler.handleRequest(requestObj);
 		assertEquals(2, parseCounter.get());
 		assertEquals(3, getDataCounter.get());
 		assertEquals("Changed", changedText.getJSONArray("body").getString(0));
@@ -209,7 +212,7 @@ public class TestDefaultRequestHandler {
 		DefaultRequestHandler handler = new DefaultRequestHandler(
 				args -> new ParseResult(new TestData.WithTwoLineVariants(123, 456)));
 
-		final JSONObject resp = handler.handleRequest(constructRequest("", "toString"), null);
+		final JSONObject resp = handler.handleRequest(constructRequest("", "toString"));
 		assertEquals((123 << 12) + 123, resp.getJSONObject("locator").getJSONObject("result").getLong("start"));
 	}
 
@@ -218,7 +221,7 @@ public class TestDefaultRequestHandler {
 		DefaultRequestHandler handler = new DefaultRequestHandler(
 				args -> new ParseResult(new TestData.WithTwoLineVariants(null, 456)));
 
-		final JSONObject resp = handler.handleRequest(constructRequest("", "toString"), null);
+		final JSONObject resp = handler.handleRequest(constructRequest("", "toString"));
 		assertEquals((456 << 12) + 456, resp.getJSONObject("locator").getJSONObject("result").getLong("start"));
 	}
 }

@@ -2,6 +2,7 @@ package codeprober;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -10,6 +11,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import codeprober.metaprogramming.StdIoInterceptor;
+import codeprober.protocol.ClientRequest;
 import codeprober.protocol.ProbeProtocol;
 import codeprober.protocol.TestProtocol;
 import codeprober.rpc.JsonRequestHandler;
@@ -23,17 +25,17 @@ public class TestClient {
 		this.requestHandler = requestHandler;
 	}
 
-	private JSONObject constructMessage(JSONObject query) {
-		return new JSONObject() //
+	private ClientRequest constructMessage(JSONObject query) {
+		return new ClientRequest(new JSONObject() //
 				.put("type", TestProtocol.type) //
-				.put("query", query);
+				.put("query", query), obj -> {
+				}, new AtomicBoolean(true));
 	}
 
 	public JSONArray getTestSuites() {
 		return TestProtocol.ListTestSuites.suites.get(requestHandler.handleRequest( //
 				constructMessage(new JSONObject() //
-						.put("type", TestProtocol.ListTestSuites.type)),
-				null));
+						.put("type", TestProtocol.ListTestSuites.type))));
 	}
 
 	public JSONArray getTestSuiteContents(String suiteName) {
@@ -41,7 +43,7 @@ public class TestClient {
 				.put("type", TestProtocol.GetTestSuite.type);
 		TestProtocol.GetTestSuite.suite.put(request, suiteName);
 		return new JSONArray(TestProtocol.GetTestSuite.contents.get(requestHandler.handleRequest( //
-				constructMessage(request), null)));
+				constructMessage(request))));
 	}
 
 	private void doRunTest(JSONObject tcase, Consumer<TestResult> callback, boolean allowAsync) {
@@ -91,13 +93,14 @@ public class TestClient {
 				}
 				case "identity": {
 					final JSONArray expected = assertion.getJSONArray("lines");
-					callback.accept(
-							new TestResult(expected.toString().equals(actual.toString()), expected, actual, debugLines));
+					callback.accept(new TestResult(expected.toString().equals(actual.toString()), expected, actual,
+							debugLines));
 					break;
 				}
 				default: {
 					System.err.println("TODO support some other assertion type " + assertion);
-					callback.accept(new TestResult(false, new JSONArray().put("<Malformed Test File>"), actual, debugLines));
+					callback.accept(
+							new TestResult(false, new JSONArray().put("<Malformed Test File>"), actual, debugLines));
 					break;
 				}
 				}
@@ -129,9 +132,8 @@ public class TestClient {
 			}
 
 			System.out.println("send it");
-			handleCallback.accept(requestHandler.handleRequest(req, obj -> {
-				handleCallback.accept(obj);
-			}));
+			handleCallback.accept(requestHandler
+					.handleRequest(new ClientRequest(req, handleCallback::accept, new AtomicBoolean(true))));
 		} catch (RuntimeException e) {
 			rootInterceptor.flush();
 			rootInterceptor.restore();
