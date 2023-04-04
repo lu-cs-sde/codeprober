@@ -150,6 +150,8 @@ public class WebServer {
 			return "image/png";
 		case "ico":
 			return "image/x-icon";
+		case "ttf":
+			return "font/ttf";
 
 		default:
 			System.out.println("Don't know mime type of path " + path);
@@ -286,7 +288,8 @@ public class WebServer {
 			final byte[] response;
 			final JSONObject body = new JSONObject(new String(getBody.get(), StandardCharsets.UTF_8));
 
-			final String remoteAddr = socket.getRemoteSocketAddress().toString();
+			final String remoteAddr = body.optString("session",
+					socket.getRemoteSocketAddress().toString().split(":")[0]);
 			final WsPutSession wps = monitor.getOrCreate(remoteAddr);
 			wps.activeConnections.incrementAndGet();
 			try {
@@ -418,7 +421,8 @@ public class WebServer {
 		return 8000;
 	}
 
-	public static void start(ServerToClientMessagePusher msgPusher, Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected) {
+	public static void start(ServerToClientMessagePusher msgPusher, Function<ClientRequest, JSONObject> onQuery,
+			Runnable onSomeClientDisconnected) {
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, WebSocketServer.createServerFilter())) {
 			System.out.println(
@@ -443,7 +447,6 @@ public class WebServer {
 
 				while (true) {
 					Socket s = server.accept();
-					System.out.println("got socket");
 					new Thread(() -> {
 						try {
 							ws.handleRequest(s, msgPusher, onQuery);

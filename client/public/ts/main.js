@@ -102,6 +102,7 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
         };
         let didReceiveAtLeastOneMessage = false;
         const defaultRetryBudget = 3;
+        const session = `cpr_${(Number.MAX_SAFE_INTEGER * Math.random()) | 0}`;
         const wsHandler = {
             on: (id, cb) => messageHandlers[id] = cb,
             sendRpc: (msg) => new Promise(async (res, rej) => {
@@ -124,7 +125,7 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
                         rej('Timeout');
                     }, 30000);
                     try {
-                        const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify(body) });
+                        const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({ ...body, session }) });
                         if (!rawFetchResult.ok) {
                             if (remainingTries > 0) {
                                 console.warn('wsput request failed, trying again in 1 second..');
@@ -159,20 +160,37 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
         let prevEtagValue = -1;
         let longPoller = async (retryBudget) => {
             try {
+                console.log('really starting it');
                 const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
-                        id: -1, type: 'longpoll', etag: prevEtagValue
+                        id: -1, type: 'longpoll', etag: prevEtagValue, session
                     }) });
+                console.log('rawFetchResult');
                 if (!rawFetchResult.ok) {
                     throw new Error(`Fetch result: ${rawFetchResult.status}`);
                 }
-                const { etag } = await rawFetchResult.json();
-                if (prevEtagValue !== etag) {
-                    if (prevEtagValue !== -1) {
-                        if (messageHandlers.refresh) {
-                            messageHandlers.refresh({});
+                console.log('starting longPoll');
+                const pollResult = await rawFetchResult.json();
+                console.log('pollResult:', pollResult);
+                if (pollResult.etag) {
+                    const { etag } = pollResult;
+                    if (prevEtagValue !== etag) {
+                        if (prevEtagValue !== -1) {
+                            if (messageHandlers.refresh) {
+                                messageHandlers.refresh({});
+                            }
                         }
+                        prevEtagValue = etag;
                     }
-                    prevEtagValue = etag;
+                }
+                else if (pollResult.type === 'push') {
+                    const { message } = pollResult;
+                    const handler = messageHandlers[message.type];
+                    if (handler) {
+                        handler(message);
+                    }
+                    else {
+                        console.warn('Got /wsput push message of unknown type', message);
+                    }
                 }
             }
             catch (e) {
