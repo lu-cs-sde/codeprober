@@ -49,7 +49,9 @@ public class TestDefaultRequestHandler {
 			return null;
 		}
 
-		public String getData() { return data; }
+		public String getData() {
+			return data;
+		}
 	}
 
 	private class DummyTool implements UnderlyingTool {
@@ -63,6 +65,7 @@ public class TestDefaultRequestHandler {
 				throw new RuntimeException(e);
 			}
 		}
+
 		@Override
 		public ParseResult parse(String[] args) {
 			return new ParseResult(new DummyAst(extractContents(args[args.length - 1])));
@@ -141,6 +144,25 @@ public class TestDefaultRequestHandler {
 		assertEquals("Second msg without linebreak", bodyBuilder.getJSONObject(1).getString("value"));
 	}
 
+	private JSONObject constructRequest(String text, String attrName) {
+		final JSONObject requestObj = new JSONObject();
+		requestObj.put("type", ProbeProtocol.type);
+		ProbeProtocol.text.put(requestObj, text);
+		ProbeProtocol.positionRecovery.put(requestObj, PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD.name());
+		ProbeProtocol.cache.put(requestObj, AstCacheStrategy.FULL.name());
+		ProbeProtocol.tmpSuffix.put(requestObj, ".tmp");
+
+		final JSONObject query = new JSONObject();
+		ProbeProtocol.Query.locator.put(query, new JSONObject() //
+				.put("result", new JSONObject()) //
+				.put("steps", new JSONArray()));
+		ProbeProtocol.Query.attribute.put(query, new JSONObject() //
+				.put(ProbeProtocol.Attribute.name.key, attrName) //
+		);
+		ProbeProtocol.query.put(requestObj, query);
+		return requestObj;
+	}
+
 	@Test
 	public void testParseCachingWorks() {
 		final AtomicInteger parseCounter = new AtomicInteger();
@@ -163,21 +185,7 @@ public class TestDefaultRequestHandler {
 		};
 		DefaultRequestHandler handler = new DefaultRequestHandler(countingTool, new String[0]);
 
-		final JSONObject requestObj = new JSONObject();
-		requestObj.put("type", ProbeProtocol.type);
-		ProbeProtocol.text.put(requestObj, "Hello World");
-		ProbeProtocol.positionRecovery.put(requestObj, PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD.name());
-		ProbeProtocol.cache.put(requestObj, AstCacheStrategy.FULL.name());
-		ProbeProtocol.tmpSuffix.put(requestObj, ".tmp");
-
-		final JSONObject query = new JSONObject();
-		ProbeProtocol.Query.locator.put(query, new JSONObject() //
-				.put("result", new JSONObject()) //
-				.put("steps", new JSONArray()));
-		ProbeProtocol.Query.attribute.put(query, new JSONObject() //
-				.put(ProbeProtocol.Attribute.name.key, "getData") //
-		);
-		ProbeProtocol.query.put(requestObj, query);
+		final JSONObject requestObj = constructRequest("Hello World", "getData");
 
 		final JSONObject initial = handler.handleRequest(requestObj, null);
 		assertEquals(1, parseCounter.get());
@@ -194,6 +202,23 @@ public class TestDefaultRequestHandler {
 		assertEquals(2, parseCounter.get());
 		assertEquals(3, getDataCounter.get());
 		assertEquals("Changed", changedText.getJSONArray("body").getString(0));
+	}
 
+	@Test
+	public void testCprApiStyleHasPrecedenceOverNormal() {
+		DefaultRequestHandler handler = new DefaultRequestHandler(
+				args -> new ParseResult(new TestData.WithTwoLineVariants(123, 456)));
+
+		final JSONObject resp = handler.handleRequest(constructRequest("", "toString"), null);
+		assertEquals((123 << 12) + 123, resp.getJSONObject("locator").getJSONObject("result").getLong("start"));
+	}
+
+	@Test
+	public void testNormalApiStyleIsUsedIfNullCprStyle() {
+		DefaultRequestHandler handler = new DefaultRequestHandler(
+				args -> new ParseResult(new TestData.WithTwoLineVariants(null, 456)));
+
+		final JSONObject resp = handler.handleRequest(constructRequest("", "toString"), null);
+		assertEquals((456 << 12) + 456, resp.getJSONObject("locator").getJSONObject("result").getLong("start"));
 	}
 }

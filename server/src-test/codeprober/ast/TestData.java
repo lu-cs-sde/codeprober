@@ -150,6 +150,31 @@ public class TestData {
 
 	}
 
+	/**
+	 * Supports both {@link AstNodeApiStyle#CPR_SEPARATE_LINE_COLUMN} and
+	 * {@link AstNodeApiStyle#JASTADD_SEPARATE_LINE_COLUMN}.
+	 */
+	public static class WithTwoLineVariants extends Node {
+		private Integer cprVal;
+		private Integer noPrefixVal;
+
+		public WithTwoLineVariants(Integer cprVal, Integer noPrefixVal) {
+			super(0, 0);
+			this.cprVal = cprVal;
+			this.noPrefixVal = noPrefixVal;
+		}
+
+		public Integer cpr_getStartLine() { return cprVal; }
+		public Integer cpr_getStartColumn() { return cprVal; }
+		public Integer cpr_getEndLine() { return cprVal; }
+		public Integer cpr_getEndColumn() { return cprVal; }
+
+		public Integer getStartLine() { return noPrefixVal; }
+		public Integer getStartColumn() { return noPrefixVal; }
+		public Integer getEndLine() { return noPrefixVal; }
+		public Integer getEndColumn() { return noPrefixVal; }
+	}
+
 	private static int lc(int line, int col) {
 		return (line << 12) + col;
 	}
