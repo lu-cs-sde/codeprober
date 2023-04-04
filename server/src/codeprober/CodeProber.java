@@ -37,12 +37,12 @@ public class CodeProber {
 	}
 
 	static void flog(String msg) {
-		try {
-			Files.write(new File("/Users/anton/eclipse-workspace/Pasta/log").toPath(), (msg + "\n").getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+//		try {
+//			Files.write(new File("/Users/anton/eclipse-workspace/Pasta/log").toPath(), (msg + "\n").getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+//		} catch (IOException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
 	}
 
 	public static void main(String[] mainArgs) throws IOException {
