@@ -72,7 +72,7 @@ public class ConcurrentWorker implements JsonRequestHandler {
 					System.out.println("sending " + msg);
 					task.request.sendAsyncResponse(msg);
 				} catch (Throwable t) {
-					CodeProber.flog("🕵🕵🕵 conc caught for " + task.jobId);
+					CodeProber.flog("🕵 conc caught for " + task.jobId + ": " + t);
 					System.out.println("Got throwable: " + t);
 					throw t;
 				} finally {

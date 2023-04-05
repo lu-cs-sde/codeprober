@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 import org.json.JSONObject;
 
 import codeprober.protocol.ClientRequest;
+import codeprober.util.ParsedArgs;
 import codeprober.util.VersionInfo;
 
 public class WebSocketServer {
@@ -111,7 +112,7 @@ public class WebSocketServer {
 		}
 	}
 
-	static JSONObject getInitMsg() {
+	static JSONObject getInitMsg(ParsedArgs args) {
 		final JSONObject initMsg = new JSONObject();
 		initMsg.put("type", "init");
 
@@ -130,10 +131,14 @@ public class WebSocketServer {
 			initMsg.put("changeBufferTime", bufferTime);
 		}
 
+		if (args.workerProcessCount != null) {
+			initMsg.put("workerProcessCount", args.workerProcessCount.intValue());
+		}
+
 		return initMsg;
 	}
 
-	private static void handleRequest(Socket socket, ServerToClientMessagePusher msgPusher,
+	private static void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
 			Function<ClientRequest, JSONObject> onQuery, AtomicBoolean connectionIsAlive) throws IOException, NoSuchAlgorithmException {
 		InputStream in = socket.getInputStream();
 		OutputStream out = socket.getOutputStream();
@@ -167,7 +172,7 @@ public class WebSocketServer {
 				msgPusher.addJarChangeListener(onJarChange);
 				Runnable cleanup = () -> msgPusher.removeJarChangeListener(onJarChange);
 
-				writeWsMessage(out, getInitMsg().toString());
+				writeWsMessage(out, getInitMsg(args).toString());
 
 				final Consumer<JSONObject> asyncMessageWriter = asyncMsg -> {
 					try {
@@ -305,7 +310,7 @@ public class WebSocketServer {
 		return 8080;
 	}
 
-	public static void start(ServerToClientMessagePusher msgPusher,
+	public static void start(ParsedArgs args, ServerToClientMessagePusher msgPusher,
 			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected) {
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, createServerFilter())) {
@@ -316,7 +321,7 @@ public class WebSocketServer {
 				new Thread(() -> {
 					final AtomicBoolean connectionIsAlive = new AtomicBoolean(true);
 					try {
-						handleRequest(s, msgPusher, onQuery, connectionIsAlive);
+						handleRequest(s, args, msgPusher, onQuery, connectionIsAlive);
 					} catch (IOException | NoSuchAlgorithmException e) {
 						System.out.println("Error while handling request");
 						e.printStackTrace();

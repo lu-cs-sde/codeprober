@@ -34,6 +34,7 @@ class UIElements {
   get generalHelpButton() { return document.getElementById('display-help') as HTMLButtonElement; }
   get darkModeCheckbox() { return document.getElementById('control-dark-mode') as HTMLInputElement; }
   get displayStatisticsButton() { return document.getElementById('display-statistics') as HTMLButtonElement; }
+  get displayWorkerStatusButton() { return document.getElementById('display-worker-status') as HTMLButtonElement; }
   get versionInfo() { return document.getElementById('version') as HTMLDivElement; }
   get settingsHider() { return document.getElementById('settings-hider') as HTMLButtonElement; }
   get settingsRevealer() { return document.getElementById('settings-revealer') as HTMLButtonElement; }

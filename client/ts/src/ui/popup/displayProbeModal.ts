@@ -155,9 +155,8 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
         let isConnectedToConcurrentCapableServer = false;
         let statusPre: HTMLElement | null = null;
         let localConcurrentCleanup = () => {};
-        setTimeout(() => {
+        const initialPollDelayTimer = setTimeout(() => {
           if (isDone || isCleanedUp || !isConnectedToConcurrentCapableServer) {
-            console.log('not polling status, due to ', { isDone, isConnectedToConcurrentCapableServer });
             return;
           }
           const stop = document.createElement('button');
@@ -225,12 +224,14 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
         evaluateProbe(env, env.wrapTextRpc({
           query: { attr, locator },
           jobId,
+          jobLabel: `Probe: '${`${locator.result.label ?? locator.result.type}`.split('.').slice(-1)[0]}.${attr.name}'`,
         }))
           .then(data => {
             if (data.job !== undefined) {
               // Async work queued, not done.
             } else {
               // Sync work executed, done.
+              clearTimeout(initialPollDelayTimer);
               isDone = true;
               resolve(data);
             }

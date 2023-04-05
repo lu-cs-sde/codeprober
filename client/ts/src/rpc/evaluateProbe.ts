@@ -6,7 +6,7 @@ interface ConcurrentResponse {
 };
 
 export interface ProbeResponse {
-  job: undefined;
+  job?: undefined;
   body: RpcBodyLine[];
   totalTime?: number;
   parseTime?: number;

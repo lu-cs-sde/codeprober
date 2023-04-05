@@ -1406,6 +1406,48 @@ aspect MagicOutputDemo {
     };
     exports.default = displayHelp;
 });
+define("rpc/Rpc", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.buildRpc = void 0;
+    const buildRpc = () => (env, req) => env.performTypedRpc(req);
+    exports.buildRpc = buildRpc;
+});
+define("rpc/TextRpc", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.buildTextRpc = void 0;
+    const buildTextRpc = () => (0, Rpc_1.buildRpc)();
+    exports.buildTextRpc = buildTextRpc;
+});
+define("rpc/evaluateProbe", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    ;
+    exports.default = (0, TextRpc_1.buildTextRpc)();
+});
+define("rpc/TestRpc", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.buildTestRpc = void 0;
+    const buildTestRpc = () => (0, Rpc_2.buildRpc)();
+    exports.buildTestRpc = buildTestRpc;
+});
+define("rpc/getTestSuite", ["require", "exports", "rpc/TestRpc"], function (require, exports, TestRpc_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (0, TestRpc_1.buildTestRpc)();
+});
+define("rpc/listTestSuites", ["require", "exports", "rpc/TestRpc"], function (require, exports, TestRpc_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (0, TestRpc_2.buildTestRpc)();
+});
+define("rpc/putTestSuite", ["require", "exports", "rpc/TestRpc"], function (require, exports, TestRpc_3) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (0, TestRpc_3.buildTestRpc)();
+});
 define("model/test/TestCase", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -1646,29 +1688,31 @@ define("model/test/compareTestResult", ["require", "exports", "model/test/rpcBod
     };
     exports.default = compareTestResult;
 });
-define("model/test/TestManager", ["require", "exports", "model/test/compareTestResult", "model/test/rpcBodyToAssertionLine"], function (require, exports, compareTestResult_1, rpcBodyToAssertionLine_2) {
+define("model/test/TestManager", ["require", "exports", "rpc/evaluateProbe", "rpc/getTestSuite", "rpc/listTestSuites", "rpc/putTestSuite", "model/test/compareTestResult", "model/test/rpcBodyToAssertionLine"], function (require, exports, evaluateProbe_1, getTestSuite_1, listTestSuites_1, putTestSuite_1, compareTestResult_1, rpcBodyToAssertionLine_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.createTestManager = void 0;
+    evaluateProbe_1 = __importDefault(evaluateProbe_1);
+    getTestSuite_1 = __importDefault(getTestSuite_1);
+    listTestSuites_1 = __importDefault(listTestSuites_1);
+    putTestSuite_1 = __importDefault(putTestSuite_1);
     compareTestResult_1 = __importDefault(compareTestResult_1);
     ;
     ;
-    const createTestManager = (performRpcQuery, createJobId) => {
-        const performMetaQuery = (props) => performRpcQuery({
-            type: 'testMeta',
-            query: props,
-        });
+    const createTestManager = (getEnv, createJobId) => {
         const suiteListRepo = {};
-        // const
         const saveCategoryState = async (category, cases) => {
             console.log('save', category, '-->', cases);
             console.log('expected bytelen:', JSON.stringify(cases).length);
             // const newState = [...(repo[category] || {}),
             suiteListRepo[category] = cases;
-            const resp = await performMetaQuery({
-                type: "meta:putTestSuite",
-                suite: `${category}.json`,
-                contents: JSON.stringify(cases),
+            const resp = await (0, putTestSuite_1.default)(getEnv(), {
+                query: {
+                    type: "meta:putTestSuite",
+                    suite: `${category}.json`,
+                    contents: JSON.stringify(cases),
+                },
+                type: 'testMeta',
             });
             if (resp.ok)
                 return true;
@@ -1684,7 +1728,7 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
                 return 'failed-fetching';
             }
             // console.log('todo add', category, '/', test.name);
-            const existing = await getTestSuite(category);
+            const existing = await doGetTestSuite(category);
             if (existing == 'failed-fetching') {
                 // Doesn't exist yet, this is OK
             }
@@ -1700,7 +1744,7 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
             return 'ok';
         };
         const removeTest = async (category, name) => {
-            const existing = await getTestSuite(category);
+            const existing = await doGetTestSuite(category);
             if (existing == 'failed-fetching') {
                 return 'failed-fetching';
             }
@@ -1719,7 +1763,10 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
             return () => {
                 if (!categoryLister || categoryInvalidationCount !== categoryListingVersion) {
                     categoryListingVersion = categoryInvalidationCount;
-                    categoryLister = performMetaQuery({ type: 'meta:listTestSuites' })
+                    categoryLister = (0, listTestSuites_1.default)(getEnv(), {
+                        query: { type: 'meta:listTestSuites', },
+                        type: 'testMeta',
+                    })
                         .then(({ suites }) => {
                         if (!suites) {
                             return 'failed-listing';
@@ -1738,13 +1785,16 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
                 return categoryLister;
             };
         })();
-        const getTestSuite = async (id) => {
+        const doGetTestSuite = async (id) => {
             if (suiteListRepo[id]) {
                 return suiteListRepo[id];
             }
-            const { contents } = await performMetaQuery({
-                type: 'meta:getTestSuite',
-                suite: `${id}.json`,
+            const { contents } = await (0, getTestSuite_1.default)(getEnv(), {
+                query: {
+                    type: 'meta:getTestSuite',
+                    suite: `${id}.json`,
+                },
+                type: 'testMeta',
             });
             if (contents) {
                 try {
@@ -1771,7 +1821,7 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
                 return existing;
             }
             const fresh = (async () => {
-                const suite = await getTestSuite(category);
+                const suite = await doGetTestSuite(category);
                 if (suite === 'failed-fetching') {
                     return 'failed-fetching';
                 }
@@ -1782,14 +1832,13 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
                 }
                 const res = await new Promise(async (resolve, reject) => {
                     const handleUpdate = (data) => {
-                        console.log('handle testMgr update for', category, '>', name, '::', data);
                         if (data.status === 'done') {
                             resolve(data.result);
                         }
                     };
                     const jobId = createJobId(handleUpdate);
                     try {
-                        const res = await performRpcQuery({
+                        const res = await (0, evaluateProbe_1.default)(getEnv(), {
                             type: 'query',
                             posRecovery: tcase.posRecovery,
                             cache: tcase.cache,
@@ -1799,9 +1848,10 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
                                 attr: tcase.attribute,
                                 locator: tcase.locator.robust,
                             },
-                            mainArgs: null,
+                            mainArgs: tcase.mainArgs,
                             tmpSuffix: tcase.tmpSuffix,
-                            job: `${jobId}`,
+                            job: jobId,
+                            jobLabel: `Test ${category} > '${tcase.name}'`,
                         });
                         if (!res.job) {
                             // Non-concurrent server, handle request synchronously
@@ -1844,7 +1894,7 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
             addTest,
             removeTest,
             listTestSuiteCategories,
-            getTestSuite,
+            getTestSuite: doGetTestSuite,
             getTestStatus,
             addListener,
             removeListener,
@@ -1856,20 +1906,6 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
         };
     };
     exports.createTestManager = createTestManager;
-});
-define("rpc/Rpc", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.buildRpc = void 0;
-    const buildRpc = () => (env, req) => env.performTypedRpc(req);
-    exports.buildRpc = buildRpc;
-});
-define("rpc/TextRpc", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.buildTextRpc = void 0;
-    const buildTextRpc = () => (0, Rpc_1.buildRpc)();
-    exports.buildTextRpc = buildTextRpc;
 });
 define("model/ModalEnv", ["require", "exports"], function (require, exports) {
     "use strict";
@@ -2407,10 +2443,10 @@ define("ui/create/createStickyHighlightController", ["require", "exports"], func
     };
     exports.default = createStickyHighlightController;
 });
-define("rpc/listTree", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_1) {
+define("rpc/listTree", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, TextRpc_1.buildTextRpc)();
+    exports.default = (0, TextRpc_2.buildTextRpc)();
 });
 define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/popup/displayHelp", "model/adjustLocator", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "rpc/listTree"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, showWindow_4, displayHelp_1, adjustLocator_2, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_2, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, listTree_1) {
     "use strict";
@@ -2858,15 +2894,6 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                 }
                 case 'queued': return;
             }
-            // env.performRpcQuery({
-            //   attr: {
-            //     name: ({
-            //       'upwards': 'meta:listTreeUpwards',
-            //       'downwards': 'meta:listTreeDownwards'
-            //     }[listDirection] || 'meta:listTreeDownwards'),
-            //   },
-            //   locator,
-            // })
             (0, listTree_1.default)(env, env.wrapTextRpc({
                 query: {
                     attr: {
@@ -2931,10 +2958,10 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     };
     exports.default = displayAstModal;
 });
-define("rpc/listProperties", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_2) {
+define("rpc/listProperties", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, TextRpc_2.buildTextRpc)();
+    exports.default = (0, TextRpc_3.buildTextRpc)();
 });
 define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "model/adjustLocator", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "rpc/listProperties"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_2, showWindow_5, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, adjustLocator_3, settings_2, encodeRpcBodyLines_2, trimTypeName_2, displayAstModal_1, listProperties_1) {
     "use strict";
@@ -3726,23 +3753,17 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
     };
     exports.default = renderProbeModalTitleLeft;
 });
-define("rpc/evaluateProbe", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_3) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    ;
-    exports.default = (0, TextRpc_3.buildTextRpc)();
-});
-define("rpc/checkJobStatus", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_2) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, Rpc_2.buildRpc)();
-});
-define("rpc/stopJob", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_3) {
+define("rpc/checkJobStatus", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (0, Rpc_3.buildRpc)();
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "rpc/evaluateProbe", "rpc/checkJobStatus", "rpc/stopJob"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, showWindow_7, adjustLocator_4, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_4, evaluateProbe_1, checkJobStatus_1, stopJob_1) {
+define("rpc/stopJob", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_4) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (0, Rpc_4.buildRpc)();
+});
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "rpc/evaluateProbe", "rpc/checkJobStatus", "rpc/stopJob"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, showWindow_7, adjustLocator_4, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_4, evaluateProbe_2, checkJobStatus_1, stopJob_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_4 = __importDefault(createLoadingSpinner_4);
@@ -3755,7 +3776,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     displayTestAdditionModal_1 = __importDefault(displayTestAdditionModal_1);
     renderProbeModalTitleLeft_1 = __importDefault(renderProbeModalTitleLeft_1);
     settings_4 = __importDefault(settings_4);
-    evaluateProbe_1 = __importDefault(evaluateProbe_1);
+    evaluateProbe_2 = __importDefault(evaluateProbe_2);
     checkJobStatus_1 = __importDefault(checkJobStatus_1);
     stopJob_1 = __importDefault(stopJob_1);
     const displayProbeModal = (env, modalPos, locator, attr) => {
@@ -3884,13 +3905,13 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 env.currentlyLoadingModals.add(queryId);
                 const rpcQueryStart = performance.now();
                 const doFetch = () => new Promise(async (resolve, reject) => {
+                    var _a;
                     let isDone = false;
                     let isConnectedToConcurrentCapableServer = false;
                     let statusPre = null;
                     let localConcurrentCleanup = () => { };
-                    setTimeout(() => {
+                    const initialPollDelayTimer = setTimeout(() => {
                         if (isDone || isCleanedUp || !isConnectedToConcurrentCapableServer) {
-                            console.log('not polling status, due to ', { isDone, isConnectedToConcurrentCapableServer });
                             return;
                         }
                         const stop = document.createElement('button');
@@ -3955,9 +3976,10 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         }
                     });
                     activelyLoadingJob = jobId;
-                    (0, evaluateProbe_1.default)(env, env.wrapTextRpc({
+                    (0, evaluateProbe_2.default)(env, env.wrapTextRpc({
                         query: { attr, locator },
                         jobId,
+                        jobLabel: `Probe: '${`${(_a = locator.result.label) !== null && _a !== void 0 ? _a : locator.result.type}`.split('.').slice(-1)[0]}.${attr.name}'`,
                     }))
                         .then(data => {
                         if (data.job !== undefined) {
@@ -3965,6 +3987,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         }
                         else {
                             // Sync work executed, done.
+                            clearTimeout(initialPollDelayTimer);
                             isDone = true;
                             resolve(data);
                         }
@@ -4908,6 +4931,7 @@ define("ui/UIElements", ["require", "exports"], function (require, exports) {
         get generalHelpButton() { return document.getElementById('display-help'); }
         get darkModeCheckbox() { return document.getElementById('control-dark-mode'); }
         get displayStatisticsButton() { return document.getElementById('display-statistics'); }
+        get displayWorkerStatusButton() { return document.getElementById('display-worker-status'); }
         get versionInfo() { return document.getElementById('version'); }
         get settingsHider() { return document.getElementById('settings-hider'); }
         get settingsRevealer() { return document.getElementById('settings-revealer'); }
@@ -4986,10 +5010,10 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
     };
     exports.default = showVersionInfo;
 });
-define("model/runBgProbe", ["require", "exports", "rpc/evaluateProbe"], function (require, exports, evaluateProbe_2) {
+define("model/runBgProbe", ["require", "exports", "rpc/evaluateProbe"], function (require, exports, evaluateProbe_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    evaluateProbe_2 = __importDefault(evaluateProbe_2);
+    evaluateProbe_3 = __importDefault(evaluateProbe_3);
     const runInvisibleProbe = (env, locator, attr) => {
         const id = `invisible-probe-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
@@ -5005,7 +5029,7 @@ define("model/runBgProbe", ["require", "exports", "rpc/evaluateProbe"], function
         };
         const performRpc = () => {
             state = 'loading';
-            (0, evaluateProbe_2.default)(env, env.wrapTextRpc({ query: { attr, locator } }))
+            (0, evaluateProbe_3.default)(env, env.wrapTextRpc({ query: { attr, locator } }))
                 .then((res) => {
                 if (res.job !== undefined) {
                     throw new Error(`Got concurrent response for non-concurrent request`);
@@ -5128,7 +5152,6 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
         };
         let lastSpinner = null;
         let isFirstRender = true;
-        let loading = false;
         let refreshOnDone = false;
         const queryWindow = (0, showWindow_11.default)({
             pos: modalPos,
@@ -5137,7 +5160,6 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
       min-height: fit-content;
     `,
             resizable: true,
-            // onFinishedMove: () => env.triggerWindowSave(),
             render: (root, { cancelToken }) => {
                 if (lastSpinner != null) {
                     lastSpinner.style.display = 'inline-block';
@@ -5157,18 +5179,10 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                     spinnerWrapper.appendChild(spinner);
                     root.appendChild(spinnerWrapper);
                 }
-                loading = true;
-                Promise.all([
-                    // env.performRpcQuery({
-                    //   attr,
-                    //   locator,
-                    // }),
-                    env.testManager.getTestStatus(testCategory, testCase.name)
-                ]).then((promiseResults) => {
+                env.testManager.getTestStatus(testCategory, testCase.name)
+                    .then((testStatus) => {
                     if (isCleanedUp)
                         return;
-                    const testStatus = promiseResults[0];
-                    loading = false;
                     if (refreshOnDone) {
                         refreshOnDone = false;
                         queryWindow.refresh();
@@ -5554,7 +5568,6 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                     root.appendChild(spinner);
                 })
                     .catch(err => {
-                    loading = false;
                     if (refreshOnDone) {
                         refreshOnDone = false;
                         queryWindow.refresh();
@@ -5731,7 +5744,7 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
     createModalTitle_12 = __importDefault(createModalTitle_12);
     showWindow_13 = __importDefault(showWindow_13);
     displayTestSuiteModal_1 = __importDefault(displayTestSuiteModal_1);
-    const displayTestSuiteListModal = (env, onClose) => {
+    const displayTestSuiteListModal = (env, onClose, serverSideWorkerProcessCount) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let isClosed = false;
         const cleanup = () => {
@@ -5790,9 +5803,9 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
                                         if (isClosed) {
                                             return;
                                         }
-                                        cases = [...cases];
+                                        const sorted = [...cases];
                                         // For caching purposes, sort so that all equal-text cases are evaluated next to each other
-                                        cases.sort((a, b) => {
+                                        sorted.sort((a, b) => {
                                             if (a.src !== b.src) {
                                                 return a.src < b.src ? -1 : 1;
                                             }
@@ -5802,24 +5815,35 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
                                             // Close enough to equal
                                             return 0;
                                         });
-                                        for (let j = 0; j < cases.length; ++j) {
-                                            const expectedChangeCallback = changeCallbackCounter + 1;
-                                            const status = await env.testManager.getTestStatus(suite, cases[j].name);
-                                            console.log('Ran test', suite, '>', cases[j].name, ', status:', status);
+                                        // Eval (process - 1) tests at a time to avoid overlapping with normal CodeProber usage.
+                                        const sliceSize = (serverSideWorkerProcessCount !== undefined) ? Math.max(1, serverSideWorkerProcessCount - 1) : 1;
+                                        const numSlices = Math.ceil(sorted.length / sliceSize);
+                                        const evaluateSlice = async (slice) => {
+                                            const relatedCases = sorted.slice(slice * sliceSize, Math.min(sorted.length, (slice + 1) * sliceSize));
+                                            const expectedChangeCallback = changeCallbackCounter + relatedCases.length;
+                                            await Promise.all(relatedCases.map(async (tcase) => {
+                                                const status = await env.testManager.getTestStatus(suite, tcase.name);
+                                                // console.log('Ran test', suite, '>', tcase.name, ', status:', status);
+                                                if (isClosed) {
+                                                    return;
+                                                }
+                                                if (status === 'failed-fetching' || status.report !== 'pass') {
+                                                    ++getLocalKnowledge(suite).fail;
+                                                }
+                                                else if (status.report === 'pass') {
+                                                    ++getLocalKnowledge(suite).pass;
+                                                }
+                                            }));
+                                            if (changeCallbackCounter !== expectedChangeCallback) {
+                                                // One or more result was cached, force reload
+                                                popup.refresh();
+                                            }
+                                        };
+                                        for (let i = 0; i < numSlices; ++i) {
                                             if (isClosed) {
                                                 return;
                                             }
-                                            if (status === 'failed-fetching' || status.report !== 'pass') {
-                                                ++getLocalKnowledge(suite).fail;
-                                            }
-                                            else if (status.report === 'pass') {
-                                                ++getLocalKnowledge(suite).pass;
-                                            }
-                                            if (changeCallbackCounter !== expectedChangeCallback) {
-                                                // Result was cached, force reload to
-                                                popup.refresh();
-                                            }
-                                            // await new Promise((res) => setTimeout(res, 10));
+                                            await evaluateSlice(i);
                                         }
                                     }
                                 })()
@@ -5921,7 +5945,83 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
     };
     exports.default = displayTestSuiteListModal;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_4, displayRagModal_1, displayHelp_5, displayAttributeModal_6, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_2, TestManager_1, displayTestSuiteListModal_1) {
+define("rpc/subscribeToWorkerStatus", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_5) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (0, Rpc_5.buildRpc)();
+});
+define("rpc/unsubscribeFromWorkerStatus", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_6) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (0, Rpc_6.buildRpc)();
+});
+define("ui/popup/displayWorkerStatus", ["require", "exports", "rpc/subscribeToWorkerStatus", "rpc/unsubscribeFromWorkerStatus", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, subscribeToWorkerStatus_1, unsubscribeFromWorkerStatus_1, createModalTitle_13, showWindow_14) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    subscribeToWorkerStatus_1 = __importDefault(subscribeToWorkerStatus_1);
+    unsubscribeFromWorkerStatus_1 = __importDefault(unsubscribeFromWorkerStatus_1);
+    createModalTitle_13 = __importDefault(createModalTitle_13);
+    showWindow_14 = __importDefault(showWindow_14);
+    const displayWorkerStatus = (env, setDisplayButtonDisabled) => {
+        let activeSubscription = null;
+        const onClose = () => {
+            helpWindow.remove();
+            setDisplayButtonDisabled(false);
+            if (activeSubscription != null) {
+                (0, unsubscribeFromWorkerStatus_1.default)(env, {
+                    query: {
+                        attr: { name: 'meta:unsubscribeFromWorkerStatus', },
+                    },
+                    type: 'query',
+                    job: activeSubscription.job,
+                    subscriberId: activeSubscription.subscriberId,
+                });
+            }
+        };
+        setDisplayButtonDisabled(true);
+        const helpWindow = (0, showWindow_14.default)({
+            rootStyle: `
+      width: 32rem;
+      min-height: 12rem;
+    `,
+            resizable: true,
+            render: (root) => {
+                while (root.firstChild)
+                    root.removeChild(root.firstChild);
+                root.appendChild((0, createModalTitle_13.default)({
+                    renderLeft: (container) => {
+                        container.appendChild(document.createTextNode('Worker status'));
+                    },
+                    onClose,
+                }).element);
+                const pre = document.createElement('pre');
+                root.appendChild(pre);
+                pre.innerText = `Requesting worker status..`;
+                const job = env.createJobId(data => {
+                    console.log('worker status data:', data);
+                    if (!data.workers) {
+                        return;
+                    }
+                    // pre.innerText = `status: ${JSON.stringify(data. null, data)}`;
+                    pre.innerText = `Status:\n${data.workers.map((stat, idx) => `${`${idx + 1}`.padStart(3, ' ')}:${stat}`).join('\n')}`;
+                });
+                // activeJob = job;
+                (0, subscribeToWorkerStatus_1.default)(env, {
+                    query: { attr: { name: 'meta:subscribeToWorkerStatus' } },
+                    type: 'query',
+                    job,
+                }).then(res => {
+                    activeSubscription = {
+                        job,
+                        subscriberId: res.subscriberId,
+                    };
+                });
+            },
+        });
+    };
+    exports.default = displayWorkerStatus;
+});
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_4, displayRagModal_1, displayHelp_5, displayAttributeModal_6, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_2, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -5941,6 +6041,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
     displayAstModal_2 = __importDefault(displayAstModal_2);
     displayTestSuiteListModal_1 = __importDefault(displayTestSuiteListModal_1);
+    displayWorkerStatus_1 = __importDefault(displayWorkerStatus_1);
     window.clearUserSettings = () => {
         settings_7.default.set({});
         location.reload();
@@ -6011,8 +6112,8 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 handler(result);
             });
             const rootElem = document.getElementById('root');
-            wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds }, changeBufferTime }) => {
-                console.log('onInit, buffer:', changeBufferTime);
+            wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount }) => {
+                console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
                 rootElem.style.display = "grid";
                 const onChange = (newValue, adjusters) => {
                     settings_7.default.setEditorContents(newValue);
@@ -6155,7 +6256,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     jobUpdateHandlers[id] = updateHandler;
                     return id;
                 };
-                const testManager = (0, TestManager_1.createTestManager)(req => wsHandler.sendRpc(req), createJobId);
+                const testManager = (0, TestManager_1.createTestManager)(() => modalEnv, createJobId);
                 let jobIdGenerator = 0;
                 const modalEnv = {
                     performTypedRpc: (req) => wsHandler.sendRpc(req),
@@ -6169,6 +6270,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         mainArgs: settings_7.default.getMainArgsOverride(),
                         tmpSuffix: settings_7.default.getCurrentFileSuffix(),
                         job: req.jobId,
+                        jobLabel: req.jobLabel,
                     }),
                     probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
                     themeIsLight: () => settings_7.default.isLightTheme(),
@@ -6204,7 +6306,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 uiElements.showTests.onclick = () => {
                     uiElements.showTests.disabled = true;
-                    (0, displayTestSuiteListModal_1.default)(modalEnv, () => { uiElements.showTests.disabled = false; });
+                    (0, displayTestSuiteListModal_1.default)(modalEnv, () => { uiElements.showTests.disabled = false; }, workerProcessCount);
                 };
                 (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);
                 window.displayHelp = (type) => {
@@ -6214,6 +6316,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         case 'recovery-strategy': return common('recovery-strategy', uiElements.positionRecoveryHelpButton);
                         case "ast-cache-strategy": return common('ast-cache-strategy', uiElements.astCacheStrategyHelpButton);
                         case "probe-statistics": return (0, displayStatistics_1.default)(statCollectorImpl, disabled => uiElements.displayStatisticsButton.disabled = disabled, newContents => setLocalState(newContents), () => modalEnv.currentlyLoadingModals.size > 0);
+                        case 'worker-status': return (0, displayWorkerStatus_1.default)(modalEnv, disabled => uiElements.displayWorkerStatusButton.disabled = disabled);
                         case 'syntax-highlighting': return common('syntax-highlighting', uiElements.syntaxHighlightingHelpButton);
                         case 'main-args-override': return common('main-args-override', uiElements.mainArgsOverrideHelpButton);
                         case 'customize-file-suffix': return common('customize-file-suffix', uiElements.customFileSuffixHelpButton);

@@ -6,7 +6,7 @@ type JobId = number;
 
 interface ModalEnv {
   performTypedRpc: <Req, Res>(req: Req) => Promise<Res>;
-  wrapTextRpc: <Query>(req: { query: Query, jobId?: JobId }) => TextRpcRequest<Query>;
+  wrapTextRpc: <Query>(req: { query: Query, jobId?: JobId, jobLabel?: string, }) => TextRpcRequest<Query>;
   getLocalState: () => string;
   setLocalState: (val: string) => void;
   updateSpanHighlight: (span: Span | null) => void;

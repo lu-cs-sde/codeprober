@@ -1,3 +1,7 @@
+import evaluateProbe from '../../rpc/evaluateProbe';
+import getTestSuite from '../../rpc/getTestSuite';
+import listTestSuites from '../../rpc/listTestSuites';
+import putTestSuite from '../../rpc/putTestSuite';
 import ModalEnv from '../ModalEnv';
 import compareTestResult, { TestComparisonReport } from './compareTestResult';
 import { rpcLinesToAssertionLines } from './rpcBodyToAssertionLine';
@@ -22,62 +26,21 @@ interface TestManager {
   flushTestCaseData: () => void;
 };
 
-type TestMetaQuery = {
-  type: 'meta:listTestSuites';
-} | {
-  type: 'meta:getTestSuite';
-  suite: string;
-} | {
-  type: 'meta:putTestSuite';
-  suite: string;
-  contents: string;
-}
-
-interface ListTestSuitesResponse { suites?: string[]; }
-interface GetTestSuiteResponse { contents?: string; }
-interface PutTestSuiteResponse { ok?: boolean; }
-
-type RpcArgs =
-  {
-    type: 'testMeta';
-    // query: { [k: string]: string | {} };
-    query: TestMetaQuery;
-  }
-  | {
-    posRecovery: TestCase['posRecovery'];
-    cache: TestCase['cache'];
-    type: 'query';
-    text: string;
-    stdout: false;
-    query: { [k: string]: string | {} };
-    mainArgs: TestCase['mainArgs'];
-    tmpSuffix: TestCase['tmpSuffix'];
-    job?: string;
-  }
-
-const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, createJobId: ModalEnv['createJobId']): TestManager =>{
-
-  const performMetaQuery = <
-    T=ListTestSuitesResponse
-    | GetTestSuiteResponse
-    | PutTestSuiteResponse
-  >(props: TestMetaQuery): Promise<T> => performRpcQuery({
-    type: 'testMeta',
-    query: props,
-  });
-
+const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['createJobId']): TestManager =>{
   const suiteListRepo: { [categoryId: string]: TestCase[]} = {};
-  // const
 
   const saveCategoryState: (category: string, cases: TestCase[]) => Promise<boolean>  = async (category, cases) => {
     console.log('save', category, '-->', cases);
     console.log('expected bytelen:', JSON.stringify(cases).length);
     // const newState = [...(repo[category] || {}),
     suiteListRepo[category] = cases;
-    const resp = await performMetaQuery<PutTestSuiteResponse>({
-      type: "meta:putTestSuite",
-      suite: `${category}.json`,
-      contents: JSON.stringify(cases),
+    const resp = await putTestSuite(getEnv(), {
+      query: {
+        type: "meta:putTestSuite",
+        suite: `${category}.json`,
+        contents: JSON.stringify(cases),
+      },
+      type: 'testMeta',
     });
     if (resp.ok) return true;
     console.warn(`Failed saving cases for ${category}`);
@@ -94,7 +57,7 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, cr
 
     // console.log('todo add', category, '/', test.name);
 
-    const existing = await getTestSuite(category);
+    const existing = await doGetTestSuite(category);
     if (existing == 'failed-fetching') {
       // Doesn't exist yet, this is OK
     } else if (existing.some(tc => tc.name == test.name) && !overwriteIfExisting) {
@@ -109,7 +72,7 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, cr
     return 'ok';
   };
   const removeTest: TestManager['removeTest'] = async (category, name) => {
-    const existing = await getTestSuite(category);
+    const existing = await doGetTestSuite(category);
     if (existing == 'failed-fetching') { return 'failed-fetching'; }
 
 
@@ -128,7 +91,10 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, cr
     return () => {
       if (!categoryLister || categoryInvalidationCount !== categoryListingVersion) {
         categoryListingVersion = categoryInvalidationCount;
-        categoryLister = performMetaQuery<ListTestSuitesResponse>({ type: 'meta:listTestSuites' })
+        categoryLister = listTestSuites(getEnv(), {
+          query: { type: 'meta:listTestSuites', },
+          type: 'testMeta',
+        })
           .then(({ suites }) => {
             if (!suites) {
               return 'failed-listing';
@@ -148,11 +114,14 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, cr
     };
   })();
 
-  const getTestSuite: TestManager['getTestSuite'] = async (id) => {
+  const doGetTestSuite: TestManager['getTestSuite'] = async (id) => {
     if (suiteListRepo[id]) { return suiteListRepo[id]; }
-    const { contents } = await performMetaQuery<GetTestSuiteResponse>({
-      type: 'meta:getTestSuite',
-      suite: `${id}.json`,
+    const { contents } = await getTestSuite(getEnv(), {
+      query: {
+        type: 'meta:getTestSuite',
+        suite: `${id}.json`,
+      },
+      type: 'testMeta',
     });
     if (contents) {
       try {
@@ -181,7 +150,7 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, cr
     }
 
     const fresh: Promise<TestStatus | 'failed-fetching'> = (async () => {
-      const suite = await getTestSuite(category);
+      const suite = await doGetTestSuite(category);
       if (suite === 'failed-fetching') {
         return 'failed-fetching';
       }
@@ -193,7 +162,6 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, cr
 
       const res = await new Promise<any>(async (resolve, reject) => {
         const handleUpdate = (data: any) => {
-          console.log('handle testMgr update for', category, '>', name, '::', data);
           if (data.status === 'done') {
             resolve(data.result);
           }
@@ -201,7 +169,7 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, cr
 
         const jobId = createJobId(handleUpdate);
         try {
-          const res = await performRpcQuery({
+          const res = await evaluateProbe(getEnv(), {
             type: 'query',
             posRecovery: tcase.posRecovery,
             cache: tcase.cache,
@@ -211,10 +179,11 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, cr
               attr: tcase.attribute,
               locator: tcase.locator.robust,
             },
-            mainArgs: null,
+            mainArgs: tcase.mainArgs,
             tmpSuffix: tcase.tmpSuffix,
-            job: `${jobId}`,
-          });
+            job: jobId,
+            jobLabel: `Test ${category} > '${tcase.name}'`,
+          })
           if (!res.job) {
             // Non-concurrent server, handle request synchronously
             resolve(res);
@@ -257,7 +226,7 @@ const createTestManager = (performRpcQuery: (props: RpcArgs) => Promise<any>, cr
     addTest,
     removeTest,
     listTestSuiteCategories,
-    getTestSuite,
+    getTestSuite: doGetTestSuite,
     getTestStatus,
     addListener,
     removeListener,

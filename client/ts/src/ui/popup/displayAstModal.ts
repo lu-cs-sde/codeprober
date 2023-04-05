@@ -492,15 +492,6 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     case 'queued': return;
   }
 
-  // env.performRpcQuery({
-  //   attr: {
-  //     name: ({
-  //       'upwards': 'meta:listTreeUpwards',
-  //       'downwards': 'meta:listTreeDownwards'
-  //     }[listDirection] || 'meta:listTreeDownwards'),
-  //   },
-  //   locator,
-  // })
   listTree(env, env.wrapTextRpc({
     query: {
       attr: {

@@ -11,6 +11,7 @@ interface TextRpcRequest<Query> {
   mainArgs: string[] | null;
   tmpSuffix: string;
   job?: JobId;
+  jobLabel?: string;
 }
 const buildTextRpc: <Req, Res>() => Rpc<TextRpcRequest<Req>, Res> = () => buildRpc();
 

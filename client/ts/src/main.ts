@@ -19,6 +19,7 @@ import displayAstModal from "./ui/popup/displayAstModal";
 import { createTestManager } from './model/test/TestManager';
 import displayTestSuiteListModal from './ui/popup/displayTestSuiteListModal';
 import ModalEnv from './model/ModalEnv';
+import displayWorkerStatus from './ui/popup/displayWorkerStatus';
 
 window.clearUserSettings = () => {
   settings.set({});
@@ -103,8 +104,8 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
     });
 
     const rootElem = document.getElementById('root') as HTMLElement;
-    wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds }, changeBufferTime }) => {
-      console.log('onInit, buffer:', changeBufferTime);
+    wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount }) => {
+      console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
       rootElem.style.display = "grid";
 
       const onChange = (newValue: string, adjusters?: LocationAdjuster[]) => {
@@ -274,7 +275,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         jobUpdateHandlers[id] = updateHandler;
         return id;
       };
-      const testManager = createTestManager(req => wsHandler.sendRpc(req), createJobId);
+      const testManager = createTestManager(() => modalEnv, createJobId);
       let jobIdGenerator = 0;
       const modalEnv: ModalEnv = {
         performTypedRpc: (req) => wsHandler.sendRpc(req),
@@ -288,6 +289,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
           mainArgs: settings.getMainArgsOverride(),
           tmpSuffix: settings.getCurrentFileSuffix(),
           job: req.jobId,
+          jobLabel: req.jobLabel,
         }),
         probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
         themeIsLight: () => settings.isLightTheme(),
@@ -328,6 +330,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         displayTestSuiteListModal(
           modalEnv,
           () => { uiElements.showTests.disabled = false; },
+          workerProcessCount,
         );
       };
 
@@ -344,6 +347,10 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
             disabled => uiElements.displayStatisticsButton.disabled = disabled,
             newContents => setLocalState(newContents),
             () => modalEnv.currentlyLoadingModals.size > 0,
+          );
+          case 'worker-status': return displayWorkerStatus(
+            modalEnv,
+            disabled => uiElements.displayWorkerStatusButton.disabled = disabled,
           );
           case 'syntax-highlighting': return common('syntax-highlighting', uiElements.syntaxHighlightingHelpButton);
           case 'main-args-override': return common('main-args-override', uiElements.mainArgsOverrideHelpButton);

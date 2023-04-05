@@ -10,11 +10,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -35,20 +38,66 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 	private final String jarPath;
 	private final String[] mainArgs;
 
+	private final AtomicInteger workerStatusSubscriberIdGenerator = new AtomicInteger(1);
+	private final CopyOnWriteArrayList<ActiveSubscriber> workerStatusSubscribers = new CopyOnWriteArrayList<>();
+
 	public ConcurrentCoordinator(JsonRequestHandler nonConcurrentHandler, String jarPath, String[] mainArgs,
-			Integer workerCount) throws IOException {
+			Integer workerProcessCount) throws IOException {
 		this.jarPath = jarPath;
 		this.mainArgs = mainArgs;
 		this.nonConcurrentHandler = nonConcurrentHandler;
-		workers = new Worker[workerCount != null ? workerCount : 4];
+		workers = new Worker[workerProcessCount != null ? workerProcessCount : 4];
 		System.out.println("Starting " + workers.length + " worker process" + (workers.length == 1 ? "" : "es"));
 		for (int i = 0; i < workers.length; i++) {
 			workers[i] = new Worker(jarPath, mainArgs);
 		}
 	}
 
+	private void dispatchStatusToSubscribers() {
+		if (workerStatusSubscribers.isEmpty()) {
+			return;
+		}
+
+		final JSONArray workerStatuses = new JSONArray();
+		for (Worker w : workers) {
+			// Normally we synchronize on w, but here it doesn't really matter
+			// Also it can easily cause deadlocks since this is called from the workers
+			// themselves.
+//			synchronized (w) {
+			if (w.destroyed.get()) {
+				workerStatuses.put("Destroyed - failed to replace process");
+			} else {
+
+				final ActiveJob job = w.job;
+				if (job != null) {
+					final String label = job.request.data.optString("jobLabel");
+					workerStatuses.put("Working" + (label == null ? "" : (": " + label)));
+				} else {
+					workerStatuses.put("Idle");
+				}
+
+			}
+		}
+//		final JSONObject status = new JSONObject().put(jarPath, false)
+
+		for (ActiveJob subscriber : workerStatusSubscribers) {
+			final JSONObject msg = new JSONObject();
+			msg.put("type", "jobUpdate");
+			msg.put("job", subscriber.jobId);
+			msg.put("result", new JSONObject() //
+					.put("workers", workerStatuses));
+//			try {
+//
+//			}
+			subscriber.request.sendAsyncResponse(msg);
+		}
+
+	}
+
 	@Override
 	public void onOneOrMoreClientsDisconnected() {
+		workerStatusSubscribers.removeIf(sub -> !sub.request.connectionIsAlive.get());
+
 		for (int i = 0; i < workers.length; i++) {
 			final Worker w = workers[i];
 			synchronized (w) {
@@ -130,6 +179,18 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 					}
 					return ret.put("result", "error").put("message", "No such active job");
 				}
+				case "meta:subscribeToWorkerStatus": {
+					final int id = workerStatusSubscriberIdGenerator.getAndIncrement();
+					workerStatusSubscribers.add(new ActiveSubscriber(jobId, request, id));
+					dispatchStatusToSubscribers();
+					return new JSONObject().put("job", jobId).put("subscriberId", id);
+				}
+				case "meta:unsubscribeFromWorkerStatus": {
+					final int prevCount = workerStatusSubscribers.size();
+					final int subscriberId = request.data.getInt("subscriberId");
+					workerStatusSubscribers.removeIf(sub -> sub.subscriberId == subscriberId);
+					return new JSONObject().put("job", jobId).put("ok", prevCount != workerStatusSubscribers.size());
+				}
 				}
 			}
 		}
@@ -145,12 +206,7 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 		for (Worker w : workers) {
 			synchronized (w) {
 				if (w.maybeTakeWork()) {
-					System.out.println("Immediate submitted " + job.jobId);
-//					w.submit(job);
 					return result;
-//				result.put("status", "submitted");
-//				return result;
-//					break;
 				}
 			}
 		}
@@ -168,6 +224,16 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 			this.jobId = jobId;
 			this.request = request;
 		}
+	}
+
+	private static class ActiveSubscriber extends ActiveJob {
+		public final int subscriberId;
+
+		public ActiveSubscriber(long jobId, ClientRequest request, int subscriberId) {
+			super(jobId, request);
+			this.subscriberId = subscriberId;
+		}
+
 	}
 
 	private enum CallbackCleanup {
@@ -325,6 +391,7 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 
 		public synchronized void submit(ActiveJob job) {
 			this.job = job;
+			dispatchStatusToSubscribers();
 
 			final long msgId = messageIdGenerator.getAndIncrement();
 			rpcHandlers.put(msgId, resp -> {
@@ -340,6 +407,9 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 					synchronized (Worker.this) {
 						this.job = null;
 						maybeTakeWork();
+					}
+					if (this.job == null) {
+						dispatchStatusToSubscribers();
 					}
 					return CallbackCleanup.REMOVE_CALLBACK;
 				}

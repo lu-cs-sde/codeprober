@@ -8,7 +8,6 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -25,13 +24,11 @@ import codeprober.server.WebServer;
 import codeprober.server.WebSocketServer;
 import codeprober.toolglue.UnderlyingTool;
 import codeprober.util.FileMonitor;
+import codeprober.util.ParsedArgs;
+import codeprober.util.ParsedArgs.ConcurrencyMode;
 import codeprober.util.VersionInfo;
 
 public class CodeProber {
-
-	private static enum ConcurrencyMode {
-		DISABLED, COORDINATOR, WORKER,
-	}
 
 	public static void printUsage() {
 		System.out.println(
@@ -59,74 +56,18 @@ public class CodeProber {
 			System.exit(1);
 		}
 
-		boolean runTests = false;
-		AtomicReference<ConcurrencyMode> concurrency = new AtomicReference<>(ConcurrencyMode.DISABLED);
-		final Consumer<ConcurrencyMode> setConcurrencyMode = (mode -> {
-			if (concurrency.get() != ConcurrencyMode.DISABLED) {
-				throw new IllegalArgumentException(
-						"Can only specify either '--concurrent', '--concurrent=[workerCount]' or '--worker', not multiple options simultaneously");
-			}
-			;
-			concurrency.set(mode);
-		});
+		final ParsedArgs parsedArgs = ParsedArgs.parse(mainArgs);
 
-		String jarPath = null;
-		String[] extraArgs = null;
-		Integer workerCount = null;
-		gatherArgs: for (int i = 0; i < mainArgs.length; ++i) {
-			switch (mainArgs[i]) {
-			case "--test": {
-				if (runTests) {
-					throw new IllegalArgumentException("Duplicate '--test'");
-				}
-				runTests = true;
-				break;
-			}
-			case "--concurrent": {
-				setConcurrencyMode.accept(ConcurrencyMode.COORDINATOR);
-				break;
-			}
-			case "--worker": {
-
-				setConcurrencyMode.accept(ConcurrencyMode.WORKER);
-				break;
-			}
-
-			default: {
-				if (mainArgs[i].startsWith("--concurrent=")) {
-					setConcurrencyMode.accept(ConcurrencyMode.COORDINATOR);
-					try {
-						workerCount = Integer.parseInt(mainArgs[i].substring("--concurrent=".length()));
-						if (workerCount <= 0) {
-							throw new IllegalArgumentException("Minimum worker count is 1, got '" + workerCount + "'");
-						}
-					} catch (NumberFormatException e) {
-						System.out.println("Invalid value for '--concurrent'");
-						e.printStackTrace();
-						System.exit(1);
-					}
-				} else {
-					jarPath = mainArgs[i];
-					extraArgs = Arrays.copyOfRange(mainArgs, i + 1, mainArgs.length);
-					break gatherArgs;
-				}
-			}
-			}
-		}
-		if (jarPath == null) {
-			printUsage();
-			System.exit(1);
-		}
-
-		final JsonRequestHandler defaultHandler = new DefaultRequestHandler(UnderlyingTool.fromJar(jarPath), extraArgs);
+		final JsonRequestHandler defaultHandler = new DefaultRequestHandler(UnderlyingTool.fromJar(parsedArgs.jarPath), parsedArgs.extraArgs);
 		final JsonRequestHandler userFacingHandler;
 		flog(Arrays.toString(mainArgs));
 
-		switch (concurrency.get()) {
+		switch (parsedArgs.concurrencyMode) {
 
 		case COORDINATOR: {
 			try {
-				userFacingHandler = new ConcurrentCoordinator(defaultHandler, jarPath, extraArgs, workerCount);
+				userFacingHandler = new ConcurrentCoordinator(defaultHandler, parsedArgs.jarPath, parsedArgs.extraArgs,
+						parsedArgs.workerProcessCount);
 			} catch (IOException e) {
 				System.err.println(
 						"Error while initializing concurrent mode. Are you running CodeProber from a jar file?");
@@ -200,9 +141,9 @@ public class CodeProber {
 			userFacingHandler = defaultHandler;
 			break;
 		}
-		if (runTests) {
+		if (parsedArgs.runTest) {
 			final MergedResult res = RunAllTests.run(new TestClient(userFacingHandler),
-					concurrency.get() != ConcurrencyMode.DISABLED);
+					parsedArgs.concurrencyMode != ConcurrencyMode.DISABLED);
 //			userFacingHandler.shutdown();
 			System.exit(res == MergedResult.ALL_PASS ? 0 : 1);
 
@@ -217,14 +158,14 @@ public class CodeProber {
 		final ServerToClientMessagePusher msgPusher = new ServerToClientMessagePusher();
 		final Function<ClientRequest, JSONObject> reqHandler = userFacingHandler.createRpcRequestHandler();
 		final Runnable onSomeClientDisconnected = userFacingHandler::onOneOrMoreClientsDisconnected;
-		new Thread(() -> WebServer.start(msgPusher, reqHandler, onSomeClientDisconnected)).start();
+		new Thread(() -> WebServer.start(parsedArgs, msgPusher, reqHandler, onSomeClientDisconnected)).start();
 		if (!WebSocketServer.shouldDelegateWebsocketToHttp()) {
-			new Thread(() -> WebSocketServer.start(msgPusher, reqHandler, onSomeClientDisconnected)).start();
+			new Thread(() -> WebSocketServer.start(parsedArgs, msgPusher, reqHandler, onSomeClientDisconnected)).start();
 		} else {
 			System.out.println("Not starting websocket server, running requests over normal HTTP requests instead.");
 		}
 
-		new FileMonitor(new File(jarPath)) {
+		new FileMonitor(new File(parsedArgs.jarPath)) {
 			public void onChange() {
 				System.out.println("Jar changed!");
 				msgPusher.onJarChange();

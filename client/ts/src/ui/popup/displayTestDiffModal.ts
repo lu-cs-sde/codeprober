@@ -7,8 +7,7 @@ import showWindow from '../create/showWindow';
 import UIElements from '../UIElements';
 import displayHelp from './displayHelp';
 import displayProbeModal from './displayProbeModal';
-import encodeRpcBodyLines, { mapRpcBodyLineDepthFirst } from './encodeRpcBodyLines';
-
+import encodeRpcBodyLines from './encodeRpcBodyLines';
 
 const preventDragOnClick = (elem: HTMLElement) => {
   elem.onmousedown = (e) => {
@@ -103,7 +102,6 @@ const displayTestDiffModal = (
 
   let lastSpinner: HTMLElement | null = null;
   let isFirstRender = true;
-  let loading = false;
   let refreshOnDone = false;
   const queryWindow = showWindow({
     pos: modalPos,
@@ -112,7 +110,6 @@ const displayTestDiffModal = (
       min-height: fit-content;
     `,
     resizable: true,
-    // onFinishedMove: () => env.triggerWindowSave(),
     render: (root, { cancelToken }) => {
       if (lastSpinner != null) {
         lastSpinner.style.display = 'inline-block';
@@ -130,19 +127,11 @@ const displayTestDiffModal = (
         spinnerWrapper.appendChild(spinner);
         root.appendChild(spinnerWrapper);
       }
-      loading = true;
 
-      Promise.all([
-        // env.performRpcQuery({
-        //   attr,
-        //   locator,
-        // }),
-        env.testManager.getTestStatus(testCategory, testCase.name)
-      ]).then((promiseResults) => {
+      env.testManager.getTestStatus(testCategory, testCase.name)
+        .then((testStatus) => {
           if (isCleanedUp) return;
-          const testStatus = promiseResults[0];
 
-          loading = false;
           if (refreshOnDone) {
             refreshOnDone = false;
             queryWindow.refresh();
@@ -557,7 +546,6 @@ const displayTestDiffModal = (
           root.appendChild(spinner);
         })
         .catch(err => {
-          loading = false;
           if (refreshOnDone) {
             refreshOnDone = false;
             queryWindow.refresh();

@@ -177,7 +177,7 @@ interface Window {
     };
   };
   loadPreload: (preloader: EditorPreloader, onDone: () => void) => void;
-  displayHelp: (type: HelpType | 'probe-statistics') => void;
+  displayHelp: (type: HelpType | 'probe-statistics' | 'worker-status') => void;
   initCodeProber: () => void;
   MiniEditorMain: () => void;
   clearUserSettings: () => void;

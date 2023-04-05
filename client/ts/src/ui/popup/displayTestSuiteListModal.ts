@@ -7,6 +7,7 @@ import displayTestSuiteModal from './displayTestSuiteModal';
 const displayTestSuiteListModal = (
   env: ModalEnv,
   onClose: () => void,
+  serverSideWorkerProcessCount: number | undefined,
 ) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
 
@@ -67,9 +68,9 @@ const displayTestSuiteListModal = (
                   if (isClosed) {
                     return;
                   }
-                  cases = [...cases];
+                  const sorted = [...cases];
                   // For caching purposes, sort so that all equal-text cases are evaluated next to each other
-                  cases.sort((a, b) => {
+                  sorted.sort((a, b) => {
                     if (a.src !== b.src) {
                       return a.src < b.src ? -1 : 1;
                     }
@@ -78,26 +79,38 @@ const displayTestSuiteListModal = (
                     }
                     // Close enough to equal
                     return 0;
-                  })
+                  });
 
-                  for (let j = 0; j < cases.length; ++j) {
-                    const expectedChangeCallback = changeCallbackCounter + 1;
-                    const status = await env.testManager.getTestStatus(suite, cases[j].name);
-                    console.log('Ran test', suite, '>', cases[j].name, ', status:', status);
+                  // Eval (process - 1) tests at a time to avoid overlapping with normal CodeProber usage.
+                  const sliceSize = (serverSideWorkerProcessCount !== undefined) ? Math.max(1, serverSideWorkerProcessCount - 1) : 1;
+                  const numSlices = Math.ceil(sorted.length / sliceSize);
+
+                  const evaluateSlice = async (slice: number) => {
+                    const relatedCases = sorted.slice(slice * sliceSize, Math.min(sorted.length, (slice + 1) * sliceSize));
+
+                    const expectedChangeCallback = changeCallbackCounter + relatedCases.length;
+                    await Promise.all(relatedCases.map(async tcase => {
+                      const status = await env.testManager.getTestStatus(suite, tcase.name);
+                      // console.log('Ran test', suite, '>', tcase.name, ', status:', status);
+                      if (isClosed) {
+                        return;
+                      }
+                      if (status === 'failed-fetching' || status.report !== 'pass') {
+                        ++getLocalKnowledge(suite).fail;
+                      } else if (status.report === 'pass') {
+                        ++getLocalKnowledge(suite).pass;
+                      }
+                    }));
+                    if (changeCallbackCounter !== expectedChangeCallback) {
+                      // One or more result was cached, force reload
+                      popup.refresh();
+                    }
+                  };
+                  for (let i = 0; i < numSlices; ++i) {
                     if (isClosed) {
                       return;
                     }
-                    if (status === 'failed-fetching' || status.report !== 'pass') {
-                      ++getLocalKnowledge(suite).fail;
-                    } else if (status.report === 'pass') {
-                      ++getLocalKnowledge(suite).pass;
-                    }
-                    if (changeCallbackCounter !== expectedChangeCallback) {
-                      // Result was cached, force reload to
-                      popup.refresh();
-                    }
-
-                    // await new Promise((res) => setTimeout(res, 10));
+                    await evaluateSlice(i);
                   }
                 }
 

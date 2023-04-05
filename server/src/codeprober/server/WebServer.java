@@ -25,6 +25,7 @@ import org.json.JSONObject;
 
 import codeprober.CodeProber;
 import codeprober.protocol.ClientRequest;
+import codeprober.util.ParsedArgs;
 
 public class WebServer {
 	private static class WsPutSession {
@@ -253,7 +254,7 @@ public class WebServer {
 		stream.close();
 	}
 
-	private void handlePutRequest(Socket socket, String data, ServerToClientMessagePusher msgPusher,
+	private void handlePutRequest(Socket socket, String data, ParsedArgs args, ServerToClientMessagePusher msgPusher,
 			Function<ClientRequest, JSONObject> onQuery) throws IOException {
 		final String[] parts = data.split("\r\n");
 		String putPath = null;
@@ -307,7 +308,7 @@ public class WebServer {
 			try {
 				switch (body.getString("type")) {
 				case "init": {
-					response = WebSocketServer.getInitMsg().toString().getBytes(StandardCharsets.UTF_8);
+					response = WebSocketServer.getInitMsg(args).toString().getBytes(StandardCharsets.UTF_8);
 					break;
 				}
 				case "longpoll": {
@@ -352,7 +353,7 @@ public class WebServer {
 		}
 	}
 
-	private void handleRequest(Socket socket, ServerToClientMessagePusher msgPusher,
+	private void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
 			Function<ClientRequest, JSONObject> onQuery) throws IOException, NoSuchAlgorithmException {
 		System.out.println("Incoming HTTP request from: " + socket.getRemoteSocketAddress());
 
@@ -416,7 +417,7 @@ public class WebServer {
 		}
 		final Matcher put = Pattern.compile("^PUT").matcher(headers);
 		if (put.find()) {
-			handlePutRequest(socket, headers, msgPusher, onQuery);
+			handlePutRequest(socket, headers, args, msgPusher, onQuery);
 			return;
 		}
 		System.out.println("Not sure how to handle request " + headers);
@@ -435,8 +436,8 @@ public class WebServer {
 		return 8000;
 	}
 
-	public static void start(ServerToClientMessagePusher msgPusher, Function<ClientRequest, JSONObject> onQuery,
-			Runnable onSomeClientDisconnected) {
+	public static void start(ParsedArgs args, ServerToClientMessagePusher msgPusher,
+			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected) {
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, WebSocketServer.createServerFilter())) {
 			System.out.println(
@@ -466,7 +467,7 @@ public class WebServer {
 					Socket s = server.accept();
 					new Thread(() -> {
 						try {
-							ws.handleRequest(s, msgPusher, onQuery);
+							ws.handleRequest(s, args, msgPusher, onQuery);
 						} catch (IOException | NoSuchAlgorithmException e) {
 							System.out.println("Error while handling request");
 							e.printStackTrace();
