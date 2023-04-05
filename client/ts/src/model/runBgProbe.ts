@@ -1,3 +1,4 @@
+import evaluateProbe from '../rpc/evaluateProbe';
 import ModalEnv from './ModalEnv';
 
 const runInvisibleProbe = (env: ModalEnv, locator: NodeLocator, attr: AstAttrWithValue) => {
@@ -16,11 +17,11 @@ const runInvisibleProbe = (env: ModalEnv, locator: NodeLocator, attr: AstAttrWit
   }
   const performRpc = () => {
     state = 'loading';
-    env.performRpcQuery({
-      attr,
-      locator,
-    })
-      .then((res: RpcResponse) => {
+    evaluateProbe(env, env.wrapTextRpc({ query: { attr, locator } }))
+      .then((res) => {
+        if (res.job !== undefined) {
+          throw new Error(`Got concurrent response for non-concurrent request`);
+        }
         const prevLen = localErrors.length;
         localErrors.length = 0;
         res.errors.forEach(({severity, start: errStart, end: errEnd, msg }) => {

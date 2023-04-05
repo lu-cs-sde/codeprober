@@ -7,6 +7,7 @@ import registerNodeSelector from "../create/registerNodeSelector";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import trimTypeName from "../trimTypeName";
 import ModalEnv from '../../model/ModalEnv';
+import listNodes from '../../rpc/listNodes';
 
 const displayRagModal = (env: ModalEnv, line: number, col: number) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -43,23 +44,21 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
         },
       }).element;
 
-      const rootProgramLocator: TypeAtLocStep = {
-        type: '?',
-        start: (line << 12) + col,
-        end: (line << 12) + col,
-        depth: 0,
-      };
-      env.performRpcQuery({
-        attr: {
-          name: 'meta:listNodes',
-        },
-        locator: {
-          // root: rootProgramLocator,
-          result: rootProgramLocator,
-          steps: []
-        },
-      })
-        .then((parsed: RpcResponse) => {
+      listNodes(env, env.wrapTextRpc({
+        query: {
+          attr: { name: 'meta:listNodes' },
+          locator: {
+            result: {
+              type: '?',
+              start: (line << 12) + col,
+              end: (line << 12) + col,
+              depth: 0,
+            },
+            steps: [],
+          },
+        }
+      }))
+        .then((parsed) => {
           if (cancelToken.cancelled) { return; }
           while (root.firstChild) root.removeChild(root.firstChild);
           root.style.minHeight = '4rem';

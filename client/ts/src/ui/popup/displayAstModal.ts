@@ -10,11 +10,17 @@ import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import createCullingTaskSubmitterFactory from '../../model/cullingTaskSubmitterFactory';
 import createStickyHighlightController from '../create/createStickyHighlightController';
 import ModalEnv from '../../model/ModalEnv';
+import listTree, { ListedTreeNode } from '../../rpc/listTree';
 
+interface Point { x: number; y: number }
+interface Node extends ListedTreeNode {
+  boundingBox?: Point;
+  children: (Node[]) | { type: 'placeholder', num: number };
+}
 type AstListDirection = 'downwards' | 'upwards';
 const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator, listDirection: AstListDirection, initialTransform?: { [id: string]: number }) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-  let state: { type: 'ok', data: any } | { type: 'err', body: RpcBodyLine[] } | null = null;
+  let state: { type: 'ok', data: Node } | { type: 'err', body: RpcBodyLine[] } | null = null;
   let lightTheme = env.themeIsLight();
   const stickyController = createStickyHighlightController(env);
 
@@ -163,7 +169,6 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
         // const trn = Array(9).fill(0);
 
         const lastClick = { x: 0, y: 0 };
-        interface Point { x: number; y: number }
         const getScaleY = () => trn.scale * (cv.clientWidth / 1920) / (cv.clientHeight / 1080);
         const clientToWorld = (pt: Point, trnx = trn.x, trny = trn.y, scaleX = trn.scale, scaleY = getScaleY()): Point => {
           const csx = 1920 / cv.clientWidth;
@@ -253,42 +258,36 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             renderFrame();
           })
 
-          interface Node {
-            type: 'node';
-            locator: NodeLocator;
-            name?: string;
-            children: (Node[]) | { type: 'placeholder', num: number };
-            boundingBox: Point;
-          }
-          const rootNode = state.data as Node;
+          const rootNode = state.data;
 
           const nodew = 256 + 128;
           const nodeh = 64;
           const nodepadx = nodew * 0.05;
           const nodepady = nodeh * 0.75;
-          const measureBoundingBox = (node: Node) => {
-            if (node.boundingBox) { return ; }
+          const measureBoundingBox = (node: Node): Point => {
+            if (node.boundingBox) { return node.boundingBox ; }
             let bb: Point = { x: nodew, y: nodeh};
 
             if (Array.isArray(node.children)) {
               let childW = 0;
               node.children.forEach((child, childIdx) => {
-                measureBoundingBox(child);
+                const childBox = measureBoundingBox(child);
                 if (childIdx >= 1) {
                   childW += nodepadx;
                 }
-                childW += child.boundingBox.x;
-                bb.y = Math.max(bb.y, nodeh + nodepady + child.boundingBox.y);
+                childW += childBox.x;
+                bb.y = Math.max(bb.y, nodeh + nodepady + childBox.y);
               });
               bb.x = Math.max(bb.x, childW);
             }
             node.boundingBox = bb;
+            return bb;
           };
-          measureBoundingBox(rootNode);
+          const rootBox = measureBoundingBox(rootNode);
           if (resetTranslationOnRender) {
             resetTranslationOnRender = false;
             trn.scale = 1;
-            trn.x = (1920 -rootNode.boundingBox.x) / 2;
+            trn.x = (1920 -rootBox.x) / 2;
             trn.y = 0;
           }
 
@@ -307,7 +306,8 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           cv.style.cursor = 'default';
           let didHighlightSomething = false;
           const renderNode = (node: Node, ox: number, oy: number) => {
-            const renderx = ox + (node.boundingBox.x - nodew) / 2;
+            const nodeBox = measureBoundingBox(node);
+            const renderx = ox + (nodeBox.x - nodew) / 2;
             const rendery = oy;
             if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
               ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
@@ -415,7 +415,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             const childOffY = nodeh + nodepady;
 
             node.children.forEach((child, childIdx) => {
-              const chbb = child.boundingBox;
+              const chbb = measureBoundingBox(child);
               if (childIdx >= 1) {
                 childOffX += nodepadx;
               }
@@ -492,16 +492,24 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     case 'queued': return;
   }
 
-  env.performRpcQuery({
-    attr: {
-      name: ({
-        'upwards': 'meta:listTreeUpwards',
-        'downwards': 'meta:listTreeDownwards'
-      }[listDirection] || 'meta:listTreeDownwards'),
-    },
-    locator,
-  })
-    .then((result: RpcResponse) => {
+  // env.performRpcQuery({
+  //   attr: {
+  //     name: ({
+  //       'upwards': 'meta:listTreeUpwards',
+  //       'downwards': 'meta:listTreeDownwards'
+  //     }[listDirection] || 'meta:listTreeDownwards'),
+  //   },
+  //   locator,
+  // })
+  listTree(env, env.wrapTextRpc({
+    query: {
+      attr: {
+        name: listDirection === 'upwards' ? 'meta:listTreeUpwards' : 'meta:listTreeDownwards',
+      },
+      locator,
+    }
+  }))
+    .then((result) => {
       const refetch = fetchState == 'queued';
       fetchState = 'idle';
       if (refetch) fetchAttrs();
@@ -520,7 +528,15 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
 
       // Handle resp
       locator = result.locator;
-      state = { type: 'ok', data: parsed };
+      const mapNode = (src: ListedTreeNode): Node => ({
+        type: src.type,
+        locator: src.locator,
+        name: src.name,
+        children: Array.isArray(src.children)
+          ? src.children.map(mapNode)
+          : src.children,
+      });
+      state = { type: 'ok', data: mapNode(parsed) };
       popup.refresh();
 
     })

@@ -2,7 +2,7 @@
 type HandlerFn = (data: { [key: string]: any }) => void;
 
 interface  WebsocketHandler {
-  sendRpc: (msg: { [key: string]: any }) => Promise<any>;
+  sendRpc: (msg: any) => Promise<any>;
   on: (msgId: string, callback: HandlerFn) => void;
 }
 
@@ -146,17 +146,13 @@ const createWebsocketOverHttpHandler = (
   let prevEtagValue = -1;
   let longPoller = async (retryBudget: number) => {
     try {
-      console.log('really starting it');
       const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
         id: -1, type: 'longpoll', etag: prevEtagValue, session
       }) });
-      console.log('rawFetchResult')
       if (!rawFetchResult.ok) {
         throw new Error(`Fetch result: ${rawFetchResult.status}`);
       }
-      console.log('starting longPoll');
       const pollResult = await rawFetchResult.json();
-      console.log('pollResult:', pollResult);
       if (pollResult.etag) {
         const { etag } = pollResult;
         if (prevEtagValue !== etag) {

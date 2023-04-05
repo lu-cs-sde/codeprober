@@ -18,9 +18,7 @@ import createCullingTaskSubmitterFactory from "./model/cullingTaskSubmitterFacto
 import displayAstModal from "./ui/popup/displayAstModal";
 import { createTestManager } from './model/test/TestManager';
 import displayTestSuiteListModal from './ui/popup/displayTestSuiteListModal';
-import ModalEnv, { JobId } from './model/ModalEnv';
-import displayTestDiffModal from './ui/popup/displayTestDiffModal';
-
+import ModalEnv from './model/ModalEnv';
 
 window.clearUserSettings = () => {
   settings.set({});
@@ -40,18 +38,6 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
   let basicHighlight: Span | null = null;
   const stickyHighlights: { [probeId: string]: StickyHighlight } = {};
   let updateSpanHighlight = (span: Span | null, stickies: StickyHighlight[]) => {};
-  const performRpcQuery = (handler: WebsocketHandler, props: { [key: string]: any }, extras?: { jobId: JobId }) => handler.sendRpc({
-    posRecovery: uiElements.positionRecoverySelector.value,
-    cache: uiElements.astCacheStrategySelector.value,
-    type: 'query',
-    text: getLocalState(),
-    stdout: settings.shouldCaptureStdio(),
-    query: props,
-    mainArgs: settings.getMainArgsOverride(),
-    tmpSuffix: settings.getCurrentFileSuffix(),
-    job: extras?.jobId,
-  });
-
     const onChangeListeners: ModalEnv['onChangeListeners'] = {};
 
     const probeWindowStateSavers: { [key: string]: (target: WindowState[]) => void } = {};
@@ -291,7 +277,18 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       const testManager = createTestManager(req => wsHandler.sendRpc(req), createJobId);
       let jobIdGenerator = 0;
       const modalEnv: ModalEnv = {
-        performRpcQuery: (args, extras) => performRpcQuery(wsHandler, args, extras),
+        performTypedRpc: (req) => wsHandler.sendRpc(req),
+        wrapTextRpc: (req) => ({
+          posRecovery: uiElements.positionRecoverySelector.value as any,
+          cache: uiElements.astCacheStrategySelector.value as any,
+          type: 'query',
+          text: getLocalState(),
+          stdout: settings.shouldCaptureStdio(),
+          query: req.query,
+          mainArgs: settings.getMainArgsOverride(),
+          tmpSuffix: settings.getCurrentFileSuffix(),
+          job: req.jobId,
+        }),
         probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
         themeIsLight: () => settings.isLightTheme(),
         getLocalState: () => getLocalState(),

@@ -52,13 +52,13 @@ public class WebServer {
 			notifyAll();
 		}
 
-		public synchronized JSONObject longPoll(int clientKnownEventVersion) throws InterruptedException {
+		public synchronized JSONObject pollForThreeMinutes(int clientKnownEventVersion) throws InterruptedException {
 			final JSONObject immediate = pollWithoutWaiting(clientKnownEventVersion);
 			if (immediate != null) {
 				return immediate;
 			}
-			// 5 minutes
-			wait(5 * 60 * 1000);
+			// 3 minutes
+			wait(3 * 60 * 1000);
 			return pollWithoutWaiting(clientKnownEventVersion);
 		}
 
@@ -110,6 +110,9 @@ public class WebServer {
 			if (sessions.isEmpty()) {
 				wait();
 			}
+			if (sessions.isEmpty()) {
+				return false;
+			}
 			long oldestActivity = sessions.get(0).lastActivity;
 			for (int i = 1; i < sessions.size(); i++) {
 				oldestActivity = Math.min(oldestActivity, sessions.get(i).lastActivity);
@@ -118,18 +121,27 @@ public class WebServer {
 			// 30 seconds after last request - consider the client disconnected
 			final long disconnectTime = oldestActivity + allowedIdleTimeMs;
 			while (System.currentTimeMillis() < disconnectTime) {
-				wait();
+				wait(Math.max(0L, disconnectTime - System.currentTimeMillis()));
 			}
 			final long cutoff = System.currentTimeMillis();
 			final Iterator<WsPutSession> iter = sessions.iterator();
 			boolean removedAny = false;
+			boolean keptAnyDueToActiveConections = false;
 			while (iter.hasNext()) {
 				final WsPutSession wps = iter.next();
-				if (cutoff >= (wps.lastActivity + allowedIdleTimeMs) && wps.activeConnections.get() == 0) {
-					iter.remove();
-					wps.isConnected.set(false);
-					removedAny = true;
+				if (cutoff >= (wps.lastActivity + allowedIdleTimeMs)) {
+					if (wps.activeConnections.get() == 0) {
+						iter.remove();
+						wps.isConnected.set(false);
+						removedAny = true;
+					} else {
+						keptAnyDueToActiveConections = true;
+					}
 				}
+			}
+			if (!removedAny && keptAnyDueToActiveConections) {
+				// Sleep a few seconds to avoid this thread being active 100%
+				wait(5_000);
 			}
 			return removedAny;
 		}
@@ -300,7 +312,10 @@ public class WebServer {
 				}
 				case "longpoll": {
 					final int etag = body.getInt("etag");
-					final JSONObject message = wps.longPoll(etag);
+
+					final JSONObject message = wps.pollForThreeMinutes(etag);
+					wps.lastActivity = System.currentTimeMillis(); // Mark as active at the end of a poll
+
 					if (message == null) {
 						response = new JSONObject() //
 								.put("etag", etag).toString() //
@@ -308,7 +323,6 @@ public class WebServer {
 					} else {
 						response = message.toString().getBytes(StandardCharsets.UTF_8);
 					}
-//					final int newEtag = msgPusher.pollEvent(etag);
 					break;
 				}
 				default: {
@@ -437,9 +451,12 @@ public class WebServer {
 					} catch (InterruptedException e) {
 						System.err.println("wsput disconnect thread interrupted");
 						e.printStackTrace();
+					} catch (RuntimeException e) {
+						System.err.println("Unexpected error in disconnect poller");
+						e.printStackTrace();
 					}
 				}
-			});
+			}).start();
 			msgPusher.addJarChangeListener(() -> {
 				ws.monitor.onServerEvent(msgPusher.getEventCounter());
 			});

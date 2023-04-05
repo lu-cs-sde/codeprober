@@ -9,6 +9,9 @@ import ModalEnv, { JobId } from '../../model/ModalEnv';
 import displayTestAdditionModal from './displayTestAdditionModal';
 import renderProbeModalTitleLeft from '../renderProbeModalTitleLeft';
 import settings from '../../settings';
+import evaluateProbe, { ProbeResponse } from '../../rpc/evaluateProbe';
+import checkJobStatus from '../../rpc/checkJobStatus';
+import stopJob from '../../rpc/stopJob';
 
 const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator, attr: AstAttrWithValue) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -20,10 +23,11 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
   let loading = false;
   let isCleanedUp = false;
 
-  const stopJob = (jobId: JobId) => env.performRpcQuery({
-    attr: { name: 'meta:stopJob' },
-    locator: null as any,
-  }, { jobId }).then(res => res.result === 'stopped');
+  const doStopJob = (jobId: JobId) => stopJob(env, {
+    query: { attr: { name: 'meta:stopJob', } },
+    type: 'query',
+    job: jobId,
+  }).then(res => res.result === 'stopped');
 
   const cleanup = () => {
     isCleanedUp = true;
@@ -38,7 +42,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
     stickyController.cleanup();
     console.log('cleanup: ', { loading, activelyLoadingJob});
     if (loading && activelyLoadingJob !== null) {
-      stopJob(activelyLoadingJob);
+      doStopJob(activelyLoadingJob);
     }
   };
 
@@ -146,7 +150,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
       env.currentlyLoadingModals.add(queryId);
       const rpcQueryStart = performance.now();
 
-      const doFetch = () => new Promise<RpcResponse | 'stopped'>(async (resolve, reject) => {
+      const doFetch = () => new Promise<ProbeResponse | 'stopped'>(async (resolve, reject) => {
         let isDone = false;
         let isConnectedToConcurrentCapableServer = false;
         let statusPre: HTMLElement | null = null;
@@ -159,7 +163,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
           const stop = document.createElement('button');
           stop.innerText = 'Stop';
           stop.onclick = () => {
-            stopJob(jobId).then(stopped => {
+            doStopJob(jobId).then(stopped => {
               if (stopped) {
                 isDone = true;
                 resolve('stopped');
@@ -183,10 +187,11 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
             if (isDone || isCleanedUp) {
               return;
             }
-            env.performRpcQuery({
-              attr: { name: 'meta:checkJobStatus' },
-              locator: null as any,
-            }, { jobId })
+            checkJobStatus(env, {
+              query: { attr: { name: 'meta:checkJobStatus', } },
+              type: 'query',
+              job: jobId,
+            })
               .then(res => {
                 console.log('rpc query for job status:', res)
                 setTimeout(poll, 1000);
@@ -217,12 +222,12 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
           }
         });
         activelyLoadingJob = jobId;
-        env.performRpcQuery({
-          attr,
-          locator,
-        }, { jobId })
+        evaluateProbe(env, env.wrapTextRpc({
+          query: { attr, locator },
+          jobId,
+        }))
           .then(data => {
-            if (data.job) {
+            if (data.job !== undefined) {
               // Async work queued, not done.
             } else {
               // Sync work executed, done.
@@ -236,7 +241,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
           });
       });
       doFetch()
-        .then((parsed: RpcResponse | 'stopped') => {
+        .then((parsed) => {
           loading = false;
           if (parsed === 'stopped') {
             refreshOnDone = false;
@@ -293,7 +298,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
               refreshMarkers = true;
               locator = parsed.locator;
             }
-            if (refreshMarkers || localErrors.length > 0) {
+            if (refreshMarkers || localErrors.length > 0) {
               env.updateMarkers();
             }
             const titleRow = createTitle();

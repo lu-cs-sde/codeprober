@@ -160,17 +160,13 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
         let prevEtagValue = -1;
         let longPoller = async (retryBudget) => {
             try {
-                console.log('really starting it');
                 const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
                         id: -1, type: 'longpoll', etag: prevEtagValue, session
                     }) });
-                console.log('rawFetchResult');
                 if (!rawFetchResult.ok) {
                     throw new Error(`Fetch result: ${rawFetchResult.status}`);
                 }
-                console.log('starting longPoll');
                 const pollResult = await rawFetchResult.json();
-                console.log('pollResult:', pollResult);
                 if (pollResult.etag) {
                     const { etag } = pollResult;
                     if (prevEtagValue !== etag) {
@@ -1861,6 +1857,20 @@ define("model/test/TestManager", ["require", "exports", "model/test/compareTestR
     };
     exports.createTestManager = createTestManager;
 });
+define("rpc/Rpc", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.buildRpc = void 0;
+    const buildRpc = () => (env, req) => env.performTypedRpc(req);
+    exports.buildRpc = buildRpc;
+});
+define("rpc/TextRpc", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.buildTextRpc = void 0;
+    const buildTextRpc = () => (0, Rpc_1.buildRpc)();
+    exports.buildTextRpc = buildTextRpc;
+});
 define("model/ModalEnv", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -2397,7 +2407,12 @@ define("ui/create/createStickyHighlightController", ["require", "exports"], func
     };
     exports.default = createStickyHighlightController;
 });
-define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/popup/displayHelp", "model/adjustLocator", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, showWindow_4, displayHelp_1, adjustLocator_2, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_2, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1) {
+define("rpc/listTree", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (0, TextRpc_1.buildTextRpc)();
+});
+define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/popup/displayHelp", "model/adjustLocator", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "rpc/listTree"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, showWindow_4, displayHelp_1, adjustLocator_2, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_2, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, listTree_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
@@ -2411,6 +2426,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     createTextSpanIndicator_3 = __importDefault(createTextSpanIndicator_3);
     cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
     createStickyHighlightController_1 = __importDefault(createStickyHighlightController_1);
+    listTree_1 = __importDefault(listTree_1);
     const displayAstModal = (env, modalPos, locator, listDirection, initialTransform) => {
         var _a, _b, _c, _d, _e;
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -2635,28 +2651,29 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     const nodepady = nodeh * 0.75;
                     const measureBoundingBox = (node) => {
                         if (node.boundingBox) {
-                            return;
+                            return node.boundingBox;
                         }
                         let bb = { x: nodew, y: nodeh };
                         if (Array.isArray(node.children)) {
                             let childW = 0;
                             node.children.forEach((child, childIdx) => {
-                                measureBoundingBox(child);
+                                const childBox = measureBoundingBox(child);
                                 if (childIdx >= 1) {
                                     childW += nodepadx;
                                 }
-                                childW += child.boundingBox.x;
-                                bb.y = Math.max(bb.y, nodeh + nodepady + child.boundingBox.y);
+                                childW += childBox.x;
+                                bb.y = Math.max(bb.y, nodeh + nodepady + childBox.y);
                             });
                             bb.x = Math.max(bb.x, childW);
                         }
                         node.boundingBox = bb;
+                        return bb;
                     };
-                    measureBoundingBox(rootNode);
+                    const rootBox = measureBoundingBox(rootNode);
                     if (resetTranslationOnRender) {
                         resetTranslationOnRender = false;
                         trn.scale = 1;
-                        trn.x = (1920 - rootNode.boundingBox.x) / 2;
+                        trn.x = (1920 - rootBox.x) / 2;
                         trn.y = 0;
                     }
                     const renderFrame = () => {
@@ -2673,7 +2690,8 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         let didHighlightSomething = false;
                         const renderNode = (node, ox, oy) => {
                             var _a, _b;
-                            const renderx = ox + (node.boundingBox.x - nodew) / 2;
+                            const nodeBox = measureBoundingBox(node);
+                            const renderx = ox + (nodeBox.x - nodew) / 2;
                             const rendery = oy;
                             if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
                                 ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
@@ -2773,7 +2791,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                             let childOffX = 0;
                             const childOffY = nodeh + nodepady;
                             node.children.forEach((child, childIdx) => {
-                                const chbb = child.boundingBox;
+                                const chbb = measureBoundingBox(child);
                                 if (childIdx >= 1) {
                                     childOffX += nodepadx;
                                 }
@@ -2840,15 +2858,23 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                 }
                 case 'queued': return;
             }
-            env.performRpcQuery({
-                attr: {
-                    name: ({
-                        'upwards': 'meta:listTreeUpwards',
-                        'downwards': 'meta:listTreeDownwards'
-                    }[listDirection] || 'meta:listTreeDownwards'),
-                },
-                locator,
-            })
+            // env.performRpcQuery({
+            //   attr: {
+            //     name: ({
+            //       'upwards': 'meta:listTreeUpwards',
+            //       'downwards': 'meta:listTreeDownwards'
+            //     }[listDirection] || 'meta:listTreeDownwards'),
+            //   },
+            //   locator,
+            // })
+            (0, listTree_1.default)(env, env.wrapTextRpc({
+                query: {
+                    attr: {
+                        name: listDirection === 'upwards' ? 'meta:listTreeUpwards' : 'meta:listTreeDownwards',
+                    },
+                    locator,
+                }
+            }))
                 .then((result) => {
                 var _a;
                 const refetch = fetchState == 'queued';
@@ -2868,7 +2894,15 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                 }
                 // Handle resp
                 locator = result.locator;
-                state = { type: 'ok', data: parsed };
+                const mapNode = (src) => ({
+                    type: src.type,
+                    locator: src.locator,
+                    name: src.name,
+                    children: Array.isArray(src.children)
+                        ? src.children.map(mapNode)
+                        : src.children,
+                });
+                state = { type: 'ok', data: mapNode(parsed) };
                 popup.refresh();
             })
                 .catch(err => {
@@ -2897,7 +2931,12 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     };
     exports.default = displayAstModal;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "model/adjustLocator", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_2, showWindow_5, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, adjustLocator_3, settings_2, encodeRpcBodyLines_2, trimTypeName_2, displayAstModal_1) {
+define("rpc/listProperties", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (0, TextRpc_2.buildTextRpc)();
+});
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "model/adjustLocator", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "rpc/listProperties"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_2, showWindow_5, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, adjustLocator_3, settings_2, encodeRpcBodyLines_2, trimTypeName_2, displayAstModal_1, listProperties_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
@@ -2913,6 +2952,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     encodeRpcBodyLines_2 = __importDefault(encodeRpcBodyLines_2);
     trimTypeName_2 = __importDefault(trimTypeName_2);
     displayAstModal_1 = __importDefault(displayAstModal_1);
+    listProperties_1 = __importDefault(listProperties_1);
     const displayAttributeModal = (env, modalPos, locator) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let filter = '';
@@ -3175,12 +3215,12 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                 }
                 case 'queued': return;
             }
-            env.performRpcQuery({
-                attr: {
-                    name: settings_2.default.shouldShowAllProperties() ? 'meta:listAllProperties' : 'meta:listProperties'
+            (0, listProperties_1.default)(env, env.wrapTextRpc({
+                query: {
+                    attr: { name: settings_2.default.shouldShowAllProperties() ? 'meta:listAllProperties' : 'meta:listProperties' },
+                    locator
                 },
-                locator,
-            })
+            }))
                 .then((result) => {
                 var _a;
                 const refetch = fetchState == 'queued';
@@ -3686,7 +3726,23 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
     };
     exports.default = renderProbeModalTitleLeft;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, showWindow_7, adjustLocator_4, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_4) {
+define("rpc/evaluateProbe", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_3) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    ;
+    exports.default = (0, TextRpc_3.buildTextRpc)();
+});
+define("rpc/checkJobStatus", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (0, Rpc_2.buildRpc)();
+});
+define("rpc/stopJob", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_3) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (0, Rpc_3.buildRpc)();
+});
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "rpc/evaluateProbe", "rpc/checkJobStatus", "rpc/stopJob"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, showWindow_7, adjustLocator_4, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_4, evaluateProbe_1, checkJobStatus_1, stopJob_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_4 = __importDefault(createLoadingSpinner_4);
@@ -3699,6 +3755,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     displayTestAdditionModal_1 = __importDefault(displayTestAdditionModal_1);
     renderProbeModalTitleLeft_1 = __importDefault(renderProbeModalTitleLeft_1);
     settings_4 = __importDefault(settings_4);
+    evaluateProbe_1 = __importDefault(evaluateProbe_1);
+    checkJobStatus_1 = __importDefault(checkJobStatus_1);
+    stopJob_1 = __importDefault(stopJob_1);
     const displayProbeModal = (env, modalPos, locator, attr) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
@@ -3708,10 +3767,11 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         let activelyLoadingJob = null;
         let loading = false;
         let isCleanedUp = false;
-        const stopJob = (jobId) => env.performRpcQuery({
-            attr: { name: 'meta:stopJob' },
-            locator: null,
-        }, { jobId }).then(res => res.result === 'stopped');
+        const doStopJob = (jobId) => (0, stopJob_1.default)(env, {
+            query: { attr: { name: 'meta:stopJob', } },
+            type: 'query',
+            job: jobId,
+        }).then(res => res.result === 'stopped');
         const cleanup = () => {
             isCleanedUp = true;
             delete env.onChangeListeners[queryId];
@@ -3725,7 +3785,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             stickyController.cleanup();
             console.log('cleanup: ', { loading, activelyLoadingJob });
             if (loading && activelyLoadingJob !== null) {
-                stopJob(activelyLoadingJob);
+                doStopJob(activelyLoadingJob);
             }
         };
         let copyBody = [];
@@ -3836,7 +3896,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         const stop = document.createElement('button');
                         stop.innerText = 'Stop';
                         stop.onclick = () => {
-                            stopJob(jobId).then(stopped => {
+                            doStopJob(jobId).then(stopped => {
                                 if (stopped) {
                                     isDone = true;
                                     resolve('stopped');
@@ -3860,10 +3920,11 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             if (isDone || isCleanedUp) {
                                 return;
                             }
-                            env.performRpcQuery({
-                                attr: { name: 'meta:checkJobStatus' },
-                                locator: null,
-                            }, { jobId })
+                            (0, checkJobStatus_1.default)(env, {
+                                query: { attr: { name: 'meta:checkJobStatus', } },
+                                type: 'query',
+                                job: jobId,
+                            })
                                 .then(res => {
                                 console.log('rpc query for job status:', res);
                                 setTimeout(poll, 1000);
@@ -3894,12 +3955,12 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         }
                     });
                     activelyLoadingJob = jobId;
-                    env.performRpcQuery({
-                        attr,
-                        locator,
-                    }, { jobId })
+                    (0, evaluateProbe_1.default)(env, env.wrapTextRpc({
+                        query: { attr, locator },
+                        jobId,
+                    }))
                         .then(data => {
-                        if (data.job) {
+                        if (data.job !== undefined) {
                             // Async work queued, not done.
                         }
                         else {
@@ -4043,7 +4104,12 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     };
     exports.default = displayProbeModal;
 });
-define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName"], function (require, exports, createLoadingSpinner_5, createModalTitle_7, displayAttributeModal_5, registerOnHover_4, showWindow_8, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5) {
+define("rpc/listNodes", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_4) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (0, TextRpc_4.buildTextRpc)();
+});
+define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "rpc/listNodes"], function (require, exports, createLoadingSpinner_5, createModalTitle_7, displayAttributeModal_5, registerOnHover_4, showWindow_8, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5, listNodes_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_5 = __importDefault(createLoadingSpinner_5);
@@ -4054,6 +4120,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
     registerNodeSelector_4 = __importDefault(registerNodeSelector_4);
     encodeRpcBodyLines_4 = __importDefault(encodeRpcBodyLines_4);
     trimTypeName_5 = __importDefault(trimTypeName_5);
+    listNodes_1 = __importDefault(listNodes_1);
     const displayRagModal = (env, line, col) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const cleanup = () => {
@@ -4085,22 +4152,20 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         cleanup();
                     },
                 }).element;
-                const rootProgramLocator = {
-                    type: '?',
-                    start: (line << 12) + col,
-                    end: (line << 12) + col,
-                    depth: 0,
-                };
-                env.performRpcQuery({
-                    attr: {
-                        name: 'meta:listNodes',
-                    },
-                    locator: {
-                        // root: rootProgramLocator,
-                        result: rootProgramLocator,
-                        steps: []
-                    },
-                })
+                (0, listNodes_1.default)(env, env.wrapTextRpc({
+                    query: {
+                        attr: { name: 'meta:listNodes' },
+                        locator: {
+                            result: {
+                                type: '?',
+                                start: (line << 12) + col,
+                                end: (line << 12) + col,
+                                depth: 0,
+                            },
+                            steps: [],
+                        },
+                    }
+                }))
                     .then((parsed) => {
                     var _a;
                     if (cancelToken.cancelled) {
@@ -4921,9 +4986,10 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
     };
     exports.default = showVersionInfo;
 });
-define("model/runBgProbe", ["require", "exports"], function (require, exports) {
+define("model/runBgProbe", ["require", "exports", "rpc/evaluateProbe"], function (require, exports, evaluateProbe_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    evaluateProbe_2 = __importDefault(evaluateProbe_2);
     const runInvisibleProbe = (env, locator, attr) => {
         const id = `invisible-probe-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
@@ -4939,11 +5005,11 @@ define("model/runBgProbe", ["require", "exports"], function (require, exports) {
         };
         const performRpc = () => {
             state = 'loading';
-            env.performRpcQuery({
-                attr,
-                locator,
-            })
+            (0, evaluateProbe_2.default)(env, env.wrapTextRpc({ query: { attr, locator } }))
                 .then((res) => {
+                if (res.job !== undefined) {
+                    throw new Error(`Got concurrent response for non-concurrent request`);
+                }
                 const prevLen = localErrors.length;
                 localErrors.length = 0;
                 res.errors.forEach(({ severity, start: errStart, end: errEnd, msg }) => {
@@ -5891,17 +5957,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         let basicHighlight = null;
         const stickyHighlights = {};
         let updateSpanHighlight = (span, stickies) => { };
-        const performRpcQuery = (handler, props, extras) => handler.sendRpc({
-            posRecovery: uiElements.positionRecoverySelector.value,
-            cache: uiElements.astCacheStrategySelector.value,
-            type: 'query',
-            text: getLocalState(),
-            stdout: settings_7.default.shouldCaptureStdio(),
-            query: props,
-            mainArgs: settings_7.default.getMainArgsOverride(),
-            tmpSuffix: settings_7.default.getCurrentFileSuffix(),
-            job: extras === null || extras === void 0 ? void 0 : extras.jobId,
-        });
         const onChangeListeners = {};
         const probeWindowStateSavers = {};
         const triggerWindowSave = () => {
@@ -6103,7 +6158,18 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 const testManager = (0, TestManager_1.createTestManager)(req => wsHandler.sendRpc(req), createJobId);
                 let jobIdGenerator = 0;
                 const modalEnv = {
-                    performRpcQuery: (args, extras) => performRpcQuery(wsHandler, args, extras),
+                    performTypedRpc: (req) => wsHandler.sendRpc(req),
+                    wrapTextRpc: (req) => ({
+                        posRecovery: uiElements.positionRecoverySelector.value,
+                        cache: uiElements.astCacheStrategySelector.value,
+                        type: 'query',
+                        text: getLocalState(),
+                        stdout: settings_7.default.shouldCaptureStdio(),
+                        query: req.query,
+                        mainArgs: settings_7.default.getMainArgsOverride(),
+                        tmpSuffix: settings_7.default.getCurrentFileSuffix(),
+                        job: req.jobId,
+                    }),
                     probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
                     themeIsLight: () => settings_7.default.isLightTheme(),
                     getLocalState: () => getLocalState(),

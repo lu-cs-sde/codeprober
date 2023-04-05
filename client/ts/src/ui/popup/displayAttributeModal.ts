@@ -12,6 +12,7 @@ import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import trimTypeName from "../trimTypeName";
 import displayAstModal from "./displayAstModal";
 import ModalEnv from '../../model/ModalEnv';
+import listProperties from '../../rpc/listProperties';
 
 const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -284,13 +285,13 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
     case 'queued': return;
   }
 
-  env.performRpcQuery({
-    attr: {
-      name: settings.shouldShowAllProperties() ? 'meta:listAllProperties' : 'meta:listProperties'
+  listProperties(env, env.wrapTextRpc({
+    query: {
+      attr: { name: settings.shouldShowAllProperties() ? 'meta:listAllProperties' : 'meta:listProperties' },
+      locator
     },
-    locator,
-  })
-    .then((result: RpcResponse) => {
+  }))
+    .then((result) => {
       const refetch = fetchState == 'queued';
       fetchState = 'idle';
       if (refetch) fetchAttrs();

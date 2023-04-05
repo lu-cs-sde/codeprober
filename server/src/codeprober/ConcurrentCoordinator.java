@@ -128,7 +128,7 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 							}
 						}
 					}
-					return ret.put("error", "No such active job");
+					return ret.put("result", "error").put("message", "No such active job");
 				}
 				}
 			}

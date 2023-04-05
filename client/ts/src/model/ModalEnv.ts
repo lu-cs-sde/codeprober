@@ -1,12 +1,12 @@
 import TestManager from './test/TestManager';
+import Rpc from '../rpc/Rpc'
+import { TextRpcRequest } from '../rpc/TextRpc';
 
 type JobId = number;
 
 interface ModalEnv {
-  performRpcQuery: (args: {
-    attr: AstAttrWithValue;
-    locator: NodeLocator;
-  }, extras?: { jobId: JobId }) => Promise<any>;
+  performTypedRpc: <Req, Res>(req: Req) => Promise<Res>;
+  wrapTextRpc: <Query>(req: { query: Query, jobId?: JobId }) => TextRpcRequest<Query>;
   getLocalState: () => string;
   setLocalState: (val: string) => void;
   updateSpanHighlight: (span: Span | null) => void;
