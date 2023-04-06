@@ -560,13 +560,17 @@ aspect MagicOutputDemo {
 
 const displayHelp = (type: HelpType, setHelpButtonDisabled?: (disabled: boolean) => void): void => {
   setHelpButtonDisabled?.(true);
-  // TODO prevent this if help window already open
-  // Maybe disable the help button, re-enable on close?
+
+  const cleanup = () => {
+    helpWindow.remove();
+    setHelpButtonDisabled?.(false);
+  };
   const helpWindow = showWindow({
     rootStyle: `
       width: 32rem;
       min-height: 8rem;
     `,
+    onForceClose: cleanup,
     resizable: true,
     render: (root) => {
       root.appendChild(createModalTitle({
@@ -575,10 +579,7 @@ const displayHelp = (type: HelpType, setHelpButtonDisabled?: (disabled: boolean)
           header.innerText = getHelpTitle(type);
           container.appendChild(header);
         },
-        onClose: () => {
-          setHelpButtonDisabled?.(false);
-          helpWindow.remove();
-        },
+        onClose: cleanup,
       }).element);
 
       const textHolder = document.createElement('div');

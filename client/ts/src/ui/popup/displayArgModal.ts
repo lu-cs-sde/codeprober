@@ -1,10 +1,15 @@
+import { assertUnreachable } from '../../hacks';
 import adjustLocator from "../../model/adjustLocator";
 import ModalEnv from '../../model/ModalEnv';
+import UpdatableNodeLocator, { createMutableLocator } from '../../model/UpdatableNodeLocator';
+import { NestedWindows } from '../../model/WindowState';
+import { Property, NodeLocator, PropertyArg, NullableNodeLocator } from '../../protocol';
 import createModalTitle from "../create/createModalTitle";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import registerNodeSelector from "../create/registerNodeSelector";
 import registerOnHover from "../create/registerOnHover";
-import showModal from "../create/showWindow";
+import showWindow from "../create/showWindow";
+import startEndToSpan from '../startEndToSpan';
 import trimTypeName from "../trimTypeName";
 import displayAttributeModal from "./displayAttributeModal";
 import displayProbeModal from "./displayProbeModal";
@@ -30,7 +35,7 @@ const startLocatorRequest = (onSelected: (locator: NodeLocator) => void) => {
   return callback;
 }
 
-const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLocator, attr: AstAttrWithValue) => {
+const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: UpdatableNodeLocator, attr: Property, nested: NestedWindows) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
 
   let lastLocatorRequest: ActiveNodeLocatorRequest | null = null;
@@ -39,6 +44,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
       cancelLocatorRequest();
     }
     delete env.onChangeListeners[queryId];
+    popup.remove();
   };
   const args = attr.args;
   if (!args || !args.length) {
@@ -47,7 +53,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
 
   env.onChangeListeners[queryId] = (adjusters) => {
     if (adjusters) {
-      adjusters.forEach(adj => adjustLocator(adj, locator));
+      locator.adjust(adjusters);
     }
   };
 
@@ -58,14 +64,14 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
           title: 'Duplicate window',
           invoke: () => {
             const pos = popup.getPos();
-            displayArgModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator, attr);
+            displayArgModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator, attr, nested);
           },
         }
       ],
       renderLeft: (container) => {
         const headType = document.createElement('span');
         headType.classList.add('syntax-type');
-        headType.innerText = `${locator.result.label ?? trimTypeName(locator.result.type)}`;
+        headType.innerText = `${locator.get().result.label ?? trimTypeName(locator.get().result.type)}`;
 
         const headAttr = document.createElement('span');
         headAttr.classList.add('syntax-attr');
@@ -75,17 +81,17 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
         container.appendChild(headAttr);
       },
       onClose: () => {
-        popup.remove();
         cleanup();
       },
     });
   };
-  const popup = showModal({
+  const popup = env.showWindow({
     pos: modalPos,
     rootStyle: `
       min-width: 16rem;
       min-height: 4rem;
     `,
+    onForceClose: cleanup,
     render: (root) => {
       root.appendChild(createTitle().element);
 
@@ -93,17 +99,14 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
       const attrList = document.createElement('div');
       attrList.classList.add('attr-arg-list');
 
-      const argValues: (null | string | number | boolean | NodeLocator)[] = [];
+      const argValues: PropertyArg[] = [];
 
       const proceed = () => {
-        popup.remove();
+        cleanup();
         displayProbeModal(env, popup.getPos(), locator, {
           name: attr.name,
-          args: attr.args?.map((arg, argIdx) => ({
-            ...arg,
-            value: argValues[argIdx],
-          })),
-        });
+          args: attr.args?.map((arg, argIdx) => argValues[argIdx]),
+        }, nested);
       }
 
       args.forEach((arg, argIdx) => {
@@ -118,18 +121,19 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
 
         const argType = document.createElement('span');
         argType.classList.add('syntax-type');
-        argType.innerText = formatAttrType(arg.type);
+        argType.innerText = formatAttrType(arg);
         argHeader.appendChild(argType);
 
         // argHeader.appendChild(document.createTextNode(` ${arg.name}`));
         attrList.appendChild(argHeader);
 
-        const setupTextInput = (init: (elem: HTMLInputElement) => void, cleanupValue: (val: string) => string) => {
+        const setupTextInput = (init: (elem: HTMLInputElement) => void, cleanupValue: (val: string) => PropertyArg) => {
           const inp = document.createElement('input');
           inp.classList.add('attr-arg-input-text');
           init(inp);
-          inp.placeholder = arg.name;
+          inp.placeholder = `Arg ${argIdx}`;
           inp.oninput = () => {
+            // argValues[argIdx] = { type: 'string', value: cleanupValue(inp.value) };
             argValues[argIdx] = cleanupValue(inp.value);
           };
           inp.onkeydown = (e) => {
@@ -198,152 +202,155 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLo
           return inp;
         };
         // inp.style.marginLeft = '1rem';
+        argValues[argIdx] = arg;
         switch (arg.type) {
-          case "int": {
-            argValues[argIdx] = arg.value || '0';
+          case 'integer': {
+            // argValues[argIdx] = arg.value || '0';
             attrList.appendChild(setupTextInput(
               (elem) => {
                 elem.type = 'number';
-                elem.value = `${parseInt(`${argValues[argIdx]}`, 10) || ''}`;
+                elem.value = `${typeof argValues[argIdx].value === 'number' ? argValues[argIdx].value : ''}`;
               },
-              (val) => `${parseInt(val, 10) || 0}`
+              (val) => ({ type: 'integer', value: parseInt(val, 10) || 0 }),
             ));
             break;
           }
-          case "boolean": {
-            argValues[argIdx] = `${arg.value === 'true'}`;
+          case 'bool': {
+            argValues[argIdx] = { type: 'bool', value: arg.value === true };
             attrList.appendChild(setupTwoPillInput(
               (parent, left, right) => {
                 left.innerText = 'true';
                 right.innerText = 'false';
               },
-              () => argValues[argIdx] === 'true' ? 'left' : 'right',
+              () => argValues[argIdx].value === true ? 'left' : 'right',
               (node, updateActive) => {
-                argValues[argIdx] = `${node === 'left'}`;
+                argValues[argIdx] = { type: 'bool', value: node === 'left' };
                 updateActive();
               }
             ))
             break;
           }
-          default:
-            switch (arg.detail) {
-              case 'AST_NODE': {
-                argValues[argIdx] = arg.value || null;
-
-                let pickedNodePanel = document.createElement('div');
-
-                let pickedNodeHighlighter: (on: boolean) => void = () => {};
-                registerOnHover(pickedNodePanel, (on) => pickedNodeHighlighter(on));
-                let state: 'null' | 'node' = (argValues[argIdx] && typeof argValues[argIdx] === 'object') ? 'node' : 'null';
-                const refreshPickedNode = () => {
-                  while (pickedNodePanel.firstChild) {
-                    pickedNodePanel.firstChild.remove();
-                  }
-                  pickedNodePanel.style.fontStyle = 'unset';
-                  pickedNodePanel.classList.remove('clickHighlightOnHover');
-                  pickedNodeHighlighter = () => {};
-                  // const state = argValues[argIdx];
-                  if (state === 'null') {
-                    pickedNodePanel.style.display = 'hidden';
-                    pickedNodePanel.style.height= '0px';
-                    return;
-                  }
-                  pickedNodePanel.style.height= '';
-                  const pickedNode = argValues[argIdx];
-                  if (!pickedNode || typeof pickedNode !== 'object') {
-                    pickedNodePanel.style.display = 'block';
-                    pickedNodePanel.style.fontStyle = 'italic';
-                    pickedNodePanel.innerText = 'No node picked yet..';
-                    return;
-                  }
-                  // if (typeof state !== 'object') {
-                  //   console.warn('unknown state', state);
-                  //   pickedNodePanel.style.display = 'none';
-                  //   return;
-                  // }
-
-                  const nodeWrapper = document.createElement('div');
-                  registerNodeSelector(nodeWrapper, () => pickedNode);
-                  nodeWrapper.addEventListener('click', () => {
-                    displayAttributeModal(env, null, pickedNode);
-
-                  })
-                  const span = startEndToSpan(pickedNode.result.start, pickedNode.result.end);
-                  nodeWrapper.appendChild(createTextSpanIndicator({
-                    span,
-                  }));
-                  const typeNode = document.createElement('span');
-                  typeNode.classList.add('syntax-type');
-                  typeNode.innerText = pickedNode.result.label ?? trimTypeName(pickedNode.result.type);
-                  nodeWrapper.appendChild(typeNode);
-
-                  pickedNodePanel.appendChild(nodeWrapper);
-                  pickedNodePanel.classList.add('clickHighlightOnHover');
-                  pickedNodeHighlighter = (on) => env.updateSpanHighlight(on ? span : null);
-                };
-                refreshPickedNode();
-                attrList.appendChild(setupTwoPillInput(
-                  (parent, left, right) => {
-                    left.innerText = 'null';
-                    // right.innerText = '';
-                    // right.classList.add('locator-symbol');
-                    right.style.display = 'flex';
-                    right.style.flexDirection= 'row';
-                    right.style.justifyContent= 'space-around';
-
-                    const lbl = document.createElement('span');
-                    lbl.innerText = 'Select node';
-                    lbl.style.margin = 'auto';
-                    right.appendChild(lbl);
-
-                    const icon = document.createElement('img');
-                    icon.src = '/icons/my_location_white_24dp.svg';
-                    icon.style.height = '18px';
-                    icon.style.alignSelf = 'center';
-                    icon.style.margin = '0 4px 0 0';
-                    right.appendChild(icon);
-                  },
-                  () => state === 'null' ? 'left' : 'right',
-                  (node, updateActive) => {
-                    if (node === 'left') {
-                      state = 'null';
-                      argValues[argIdx] = null;
-                      cancelLocatorRequest();
-                    } else {
-                      state = 'node';
-                      lastLocatorRequest = startLocatorRequest(locator => {
-                        argValues[argIdx] = locator;
-                        refreshPickedNode();
-                        updateActive();
-                      });
-                    }
-                    refreshPickedNode();
-                    updateActive();
-                  }
-                ));
-                attrList.appendChild(document.createElement('span')); // <-- for grid alignment
-                attrList.appendChild(pickedNodePanel);
-                return;
-              }
-
-              case 'OUTPUTSTREAM': {
-                argValues[argIdx] = null;
-
-                const node = document.createElement('span');
-                node.innerText = '<captured to probe output>';
-                node.classList.add('stream-arg-msg');
-                attrList.appendChild(node);
-                return;
-              }
-            }
-            console.warn('Unknown arg type', arg.type, ', defaulting to string input');
-            // Fall through
-          case 'java.lang.String': {
-            argValues[argIdx] = arg.value || '';
+          case 'collection': {
+            console.warn('todo should we support collections?');
             attrList.appendChild(setupTextInput((elem) => {
               elem.type = 'text';
               elem.value = `${argValues[argIdx]}`;
-            }, id => id));
+            }, id => ({ type: 'string', value: id })));
+            break;
+          }
+
+          case 'nodeLocator': {
+            const origLocator = arg.value;
+            let pickedNodePanel = document.createElement('div');
+
+            let pickedNodeHighlighter: (on: boolean) => void = () => {};
+            registerOnHover(pickedNodePanel, (on) => pickedNodeHighlighter(on));
+            let state: 'null' | 'node' = arg.value ? 'node' : 'null';
+            const refreshPickedNode = () => {
+              while (pickedNodePanel.firstChild) {
+                pickedNodePanel.firstChild.remove();
+              }
+              pickedNodePanel.style.fontStyle = 'unset';
+              pickedNodePanel.classList.remove('clickHighlightOnHover');
+              pickedNodeHighlighter = () => {};
+              // const state = argValues[argIdx];
+              if (state === 'null') {
+                pickedNodePanel.style.display = 'hidden';
+                pickedNodePanel.style.height= '0px';
+                return;
+              }
+              pickedNodePanel.style.height= '';
+              const pickedNode = (argValues[argIdx].value as NullableNodeLocator).value;
+              if (!pickedNode || typeof pickedNode !== 'object') {
+                pickedNodePanel.style.display = 'block';
+                pickedNodePanel.style.fontStyle = 'italic';
+                pickedNodePanel.innerText = 'No node picked yet..';
+                return;
+              }
+
+              const nodeWrapper = document.createElement('div');
+              registerNodeSelector(nodeWrapper, () => pickedNode);
+              nodeWrapper.addEventListener('click', () => {
+                displayAttributeModal(env, null, createMutableLocator(pickedNode));
+
+              })
+              const span = startEndToSpan(pickedNode.result.start, pickedNode.result.end);
+              nodeWrapper.appendChild(createTextSpanIndicator({
+                span,
+              }));
+              const typeNode = document.createElement('span');
+              typeNode.classList.add('syntax-type');
+              typeNode.innerText = pickedNode.result.label ?? trimTypeName(pickedNode.result.type);
+              nodeWrapper.appendChild(typeNode);
+
+              pickedNodePanel.appendChild(nodeWrapper);
+              pickedNodePanel.classList.add('clickHighlightOnHover');
+              pickedNodeHighlighter = (on) => env.updateSpanHighlight(on ? span : null);
+            };
+            refreshPickedNode();
+            attrList.appendChild(setupTwoPillInput(
+              (parent, left, right) => {
+                left.innerText = 'null';
+                // right.innerText = '';
+                // right.classList.add('locator-symbol');
+                right.style.display = 'flex';
+                right.style.flexDirection= 'row';
+                right.style.justifyContent= 'space-around';
+
+                const lbl = document.createElement('span');
+                lbl.innerText = 'Select node';
+                lbl.style.margin = 'auto';
+                right.appendChild(lbl);
+
+                const icon = document.createElement('img');
+                icon.src = '/icons/my_location_white_24dp.svg';
+                icon.style.height = '18px';
+                icon.style.alignSelf = 'center';
+                icon.style.margin = '0 4px 0 0';
+                right.appendChild(icon);
+              },
+              () => state === 'null' ? 'left' : 'right',
+              (node, updateActive) => {
+                if (node === 'left') {
+                  state = 'null';
+                  argValues[argIdx] = { type: 'nodeLocator', value: { type: origLocator.type, value: undefined } };
+                  cancelLocatorRequest();
+                } else {
+                  state = 'node';
+                  lastLocatorRequest = startLocatorRequest(locator => {
+                    argValues[argIdx] = { type: 'nodeLocator', value: { type: origLocator.type, value: locator } };
+                    refreshPickedNode();
+                    updateActive();
+                  });
+                }
+                refreshPickedNode();
+                updateActive();
+              }
+            ));
+            attrList.appendChild(document.createElement('span')); // <-- for grid alignment
+            attrList.appendChild(pickedNodePanel);
+            break;
+          }
+
+          case 'outputstream': {
+            const node = document.createElement('span');
+            node.innerText = '<captured to probe output>';
+            node.classList.add('stream-arg-msg');
+            attrList.appendChild(node);
+            break;
+          }
+
+          default: {
+            assertUnreachable(arg);
+            console.warn('Unknown arg type', arg, ', defaulting to string input');
+            // Fall through
+          }
+
+          case 'string': {
+            attrList.appendChild(setupTextInput((elem) => {
+              elem.type = 'text';
+              elem.value = `${argValues[argIdx].value}`;
+            }, id => ({ type: 'string', value: id })));
             break;
           }
         }

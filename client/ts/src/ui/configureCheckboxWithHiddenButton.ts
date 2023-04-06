@@ -4,7 +4,7 @@ const configureCheckboxWithHiddenButton = (
   button: HTMLButtonElement,
   onCheckboxChange: (checked: boolean) => void,
   displayEditor: (onClose: () => void) => ({ forceClose: () => void }),
-  getButtonDecoration: () => string | null,
+  getButtonDecoration: () => string | null,
 ) => {
   checkbox.checked = getButtonDecoration() !== null;
   let overrideEditorCloser: (() => void) | null = null;

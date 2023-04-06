@@ -1,11 +1,22 @@
 package codeprober;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
+import codeprober.metaprogramming.StreamInterceptor;
 import codeprober.protocol.ClientRequest;
+import codeprober.protocol.data.AsyncRpcUpdate;
+import codeprober.protocol.data.AsyncRpcUpdateValue;
+import codeprober.protocol.data.GetWorkerStatusReq;
+import codeprober.protocol.data.GetWorkerStatusRes;
+import codeprober.protocol.data.RequestAdapter;
+import codeprober.protocol.data.SubmitWorkerTaskReq;
+import codeprober.protocol.data.SubmitWorkerTaskRes;
+import codeprober.protocol.data.WorkerTaskDone;
 import codeprober.rpc.JsonRequestHandler;
 
 public class ConcurrentWorker implements JsonRequestHandler {
@@ -19,17 +30,8 @@ public class ConcurrentWorker implements JsonRequestHandler {
 //	private final JsonRequestHandler underlyingHandler;
 
 	public ConcurrentWorker(JsonRequestHandler underlyingHandler) {
-//		this.underlyingHandler = underlyingHandler;
 		monitor = new Monitor();
 		workerThread = new Thread(() -> {
-//			StdIoInterceptor io = new StdIoInterceptor(false) {
-//
-//				@Override
-//				public void onLine(boolean stdout, String line) {
-//					CodeProber.flog(line);
-//				}
-//			};
-//			io.install();
 			while (true) {
 				Job task;
 				try {
@@ -43,38 +45,40 @@ public class ConcurrentWorker implements JsonRequestHandler {
 				}
 				monitor.status.set(JobStatus.RUNNING);
 
-//				try {
-//					Thread.sleep(1000);
-//				} catch (InterruptedException e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
 				try {
-//					final JSONObject response = new JSONObject();
-//					response.put("type", "status");
-//					response.put("id", task.jobId);
 					System.out.println("running conc worker.. START");
 					CodeProber.flog("🕵️ conc start " + task.jobId);
 					final JSONObject result = underlyingHandler.handleRequest(new ClientRequest( //
-							task.request.data.getJSONObject("data"), // Strip away wrapper obj
+							task.parsedRequestData.data,
 							task.request::sendAsyncResponse, //
 							task.request.connectionIsAlive));
 					CodeProber.flog("🕵️ conc done " + task.jobId);
 					System.out.println("running conc worker.. DONE");
-//					response.put("result", result != null ? result : JSONObject.NULL);
-//					System.out.println("sending stuff from worker to coordinator: " + response);
 
-					final JSONObject msg = new JSONObject();
-					msg.put("type", "concurrent:done");
-					msg.put("job", task.jobId);
-//					msg.put("data", response);
-					msg.put("result", result != null ? result : JSONObject.NULL);
-					System.out.println("sending " + msg);
-					task.request.sendAsyncResponse(msg);
+					task.request.sendAsyncResponse(
+							new AsyncRpcUpdate(task.jobId, true, AsyncRpcUpdateValue.fromWorkerTaskDone(WorkerTaskDone.fromNormal(result)) //
+					));
 				} catch (Throwable t) {
 					CodeProber.flog("🕵 conc caught for " + task.jobId + ": " + t);
 					System.out.println("Got throwable: " + t);
-					throw t;
+					final List<String> stackTrace = new ArrayList<>();
+					stackTrace.add(t.toString());
+					t.printStackTrace(new StreamInterceptor(System.err, false) {
+
+						@Override
+						protected void onLine(String line) {
+							stackTrace.add(line);
+							CodeProber.flog(line);
+						}
+					});
+					task.request.sendAsyncResponse(
+							new AsyncRpcUpdate(task.jobId, true, AsyncRpcUpdateValue.fromWorkerTaskDone(WorkerTaskDone.fromUnexpectedError(stackTrace)) //
+					));
+
+//					task.request.sendAsyncResponse(
+//							new AsyncRpcUpdate(task.jobId, true, AsyncRpcUpdateValue.fromTaskDone(result) //
+//					));
+//					throw t;
 				} finally {
 					monitor.status.set(JobStatus.IDLE);
 				}
@@ -86,57 +90,80 @@ public class ConcurrentWorker implements JsonRequestHandler {
 	@Override
 	public JSONObject handleRequest(ClientRequest request) {
 		System.out.println("ConcurrentWorker :: handleRequest");
-		switch (request.data.getString("type")) {
-		case "concurrent:pollStatus": {
-			JSONObject response = new JSONObject();
-//			final JobStatus id = jobStatuses.get(queryObj.get("job"));
-			response.put("status", monitor.status.get().name());
-			JSONArray stack = new JSONArray();
-			for (StackTraceElement ste : workerThread.getStackTrace()) {
-				if (ste.getClassName().equals(DefaultRequestHandler.class.getName())) {
-					stack.put("...codeprober internals..");
-					break;
+		CodeProber.flog("Worker :: handle " + request.data);
+
+		final JSONObject handled = new RequestAdapter() {
+
+			@Override
+			protected GetWorkerStatusRes handleGetWorkerStatus(GetWorkerStatusReq req) {
+				final List<String> stackTrace = new ArrayList<>();
+				for (StackTraceElement ste : workerThread.getStackTrace()) {
+					if (ste.getClassName().equals(DefaultRequestHandler.class.getName())) {
+						stackTrace.add("...codeprober internals..");
+						break;
+					}
+					stackTrace.add(ste.toString());
 				}
-				stack.put(ste.toString());
+				return new GetWorkerStatusRes(stackTrace);
 			}
-			response.put("stack", stack);
-			return response;
-		}
 
-		case "concurrent:submit": {
-//			final JSONObject data = queryObj.getJSONObject("data");
-			try {
-				monitor.submit(new Job(request.data.getLong("job"), request));
-			} catch (InterruptedException e) {
-				System.out.println("Failed to submit");
+			@Override
+			protected SubmitWorkerTaskRes handleSubmitWorkerTask(SubmitWorkerTaskReq req) {
+				try {
+					monitor.submit(new Job(req.job, request, req));
+					return new SubmitWorkerTaskRes(true);
+				} catch (InterruptedException e) {
+					System.out.println("Failed to submit");
+					e.printStackTrace();
+					return new SubmitWorkerTaskRes(false);
+				}
 			}
-			return new JSONObject().put("status", "running");
-//			return underlyingHandler.handleRequest(data, writeAsyncMessage);
+		}.handle(request.data); // TODO remove this wrapper
+		if (handled == null) {
+			throw new JSONException("Unknown request type on " + request.data);
 		}
+		return handled;
 
-		default: {
-			System.err.println("Invalid request " + request.data);
-//			final long jobId = jobIdGenerator.getAndIncrement();
-//			jobStatuses.put(jobId, JobStatus.SUBMITTED);
-//			System.out.println("Got job: " + queryObj);
-//			System.out.println("It should contain jobId somewhere");
-//			monitor.submit(new Job(jobId, queryObj));
-//			break;
-			return null;
-		}
-		}
+//		switch (request.data.getString("type")) {
+//		case "concurrent:pollStatus": {
+//			JSONObject response = new JSONObject();
+////			final JobStatus id = jobStatuses.get(queryObj.get("job"));
+//			response.put("status", monitor.status.get().name());
+//			JSONArray stack = new JSONArray();
+//			for (StackTraceElement ste : workerThread.getStackTrace()) {
+//				if (ste.getClassName().equals(DefaultRequestHandler.class.getName())) {
+//					stack.put("...codeprober internals..");
+//					break;
+//				}
+//				stack.put(ste.toString());
+//			}
+//			response.put("stack", stack);
+//			return response;
+//		}
+//
+//		default: {
+//			System.err.println("Invalid request " + request.data);
+////			final long jobId = jobIdGenerator.getAndIncrement();
+////			jobStatuses.put(jobId, JobStatus.SUBMITTED);
+////			System.out.println("Got job: " + queryObj);
+////			System.out.println("It should contain jobId somewhere");
+////			monitor.submit(new Job(jobId, queryObj));
+////			break;
+//			return null;
+//		}
+//		}
 //		return null;
 	}
 
 	private static class Job {
 		public final long jobId;
 		public final ClientRequest request;
-//		public final JSONObject config;
-//		public final Consumer<JSONObject> writeAsyncMessage;
+		public final SubmitWorkerTaskReq parsedRequestData;
 
-		public Job(long jobId, ClientRequest request) {
+		public Job(long jobId, ClientRequest request, SubmitWorkerTaskReq parsedRequestData) {
 			this.jobId = jobId;
 			this.request = request;
+			this.parsedRequestData = parsedRequestData;
 		}
 	}
 

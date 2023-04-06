@@ -1,11 +1,14 @@
 package codeprober.metaprogramming;
 
 import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
+import codeprober.CodeProber;
+import codeprober.protocol.data.RpcBodyLine;
 
 public abstract class StdIoInterceptor {
 
@@ -33,7 +36,13 @@ public abstract class StdIoInterceptor {
 		};
 	}
 
+	public static String tag = "";
+
+	public static AtomicInteger installCount = new AtomicInteger();
+
 	public void install() {
+		CodeProber.flog("++intercept " + tag +", count: " + installCount.incrementAndGet());
+
 		System.setOut(new PrintStream(out, true));
 		System.setErr(new PrintStream(err, true));
 	}
@@ -44,6 +53,7 @@ public abstract class StdIoInterceptor {
 	}
 
 	public void restore() {
+		CodeProber.flog("--intercept " + tag +", count: " + installCount.decrementAndGet());
 		System.setOut(out.getPrev());
 		System.setErr(err.getPrev());
 	}
@@ -67,27 +77,27 @@ public abstract class StdIoInterceptor {
 		}
 	}
 
-	public static JSONArray performCaptured(BiFunction<Boolean, String, JSONObject> lineParser, Runnable body) {
-		final JSONArray ret = new JSONArray();
+	public static <T> List<T> performCaptured(BiFunction<Boolean, String, T> lineParser, Runnable body) {
+		final List<T> ret = new ArrayList<>();
 		performLiveCaptured((stdout, line) -> {
-			final JSONObject magicMsg = lineParser.apply(stdout, line);
+			final T magicMsg = lineParser.apply(stdout, line);
 			if (magicMsg != null) {
-				ret.put(magicMsg);
+				ret.add(magicMsg);
 			}
 		}, body);
 		return ret;
 	}
 
-	public static JSONArray performDefaultCapture(Runnable body) {
+	public static List<RpcBodyLine> performDefaultCapture(Runnable body) {
 		return performCaptured(createDefaultLineEncoder(), body);
 	}
 
-	public static BiFunction<Boolean, String, JSONObject> createDefaultLineEncoder() {
+	public static BiFunction<Boolean, String, RpcBodyLine> createDefaultLineEncoder() {
 		return (stdout, line) -> {
-			JSONObject fmt = new JSONObject();
-			fmt.put("type", stdout ? "stdout" : "stderr");
-			fmt.put("value", line);
-			return fmt;
+			if (stdout) {
+				return RpcBodyLine.fromStdout(line);
+			}
+			return RpcBodyLine.fromStderr(line);
 		};
 	}
 }

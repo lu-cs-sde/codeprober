@@ -1,6 +1,5 @@
 import ModalEnv from './ModalEnv';
 
-
 const createCullingTaskSubmitterFactory: (timeout: any | number) => ModalEnv['createCullingTaskSubmitter'] = (cullTime) => {
   if (typeof cullTime !== 'number') {
     return () => ({ submit: (cb) => cb(), cancel: () => {}, });

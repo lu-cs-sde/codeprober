@@ -1,34 +1,31 @@
-import { AssertionLine } from './TestCase';
+import { assertUnreachable } from '../../hacks';
+import { RpcBodyLine } from '../../protocol';
 
-
-const rpcBodyToTestBody = (line: RpcBodyLine): AssertionLine | null => {
-  if (typeof line === 'string') {
-    return line;
-  }
-  if (Array.isArray(line)) {
-    return line.map(rpcBodyToTestBody).filter(Boolean) as AssertionLine[];
-  }
-
+const rpcBodyToTestBody = (line: RpcBodyLine): RpcBodyLine | null => {
   switch (line.type) {
-    case 'node': return { naive: line.value, robust: line.value };
-    default: {
-      switch (line.type) {
-        case 'stdout':
-        case 'stderr':
-          // Do not keep these
-          return null;
+    case 'plain':
+    case 'streamArg':
+    case 'node':
+      return line;
 
-        case 'stream-arg':
-        default:
-          return line.value;
-      }
+    case 'stdout':
+    case 'stderr':
+      // Do not keep these
+      return null;
+
+    case 'arr':
+      return { type: 'arr', value: line.value.map(rpcBodyToTestBody).filter(Boolean) as RpcBodyLine[] };
+
+    default: {
+      assertUnreachable(line);
+      return line;
     }
   }
 }
 
-const rpcLinesToAssertionLines = (lines: RpcBodyLine[]): AssertionLine[] => {
+const rpcLinesToAssertionLines = (lines: RpcBodyLine[]): RpcBodyLine[] => {
   const mapped = lines.map(rpcBodyToTestBody);
-  return mapped.filter(Boolean) as AssertionLine[];
+  return mapped.filter(Boolean) as RpcBodyLine[];
 };
 
 export { rpcLinesToAssertionLines }

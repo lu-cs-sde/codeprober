@@ -1,4 +1,5 @@
 import { getAppropriateFileSuffix } from "./model/syntaxHighlighting";
+import WindowState from './model/WindowState';
 import { TextSpanStyle } from "./ui/create/createTextSpanIndicator";
 
 
@@ -66,7 +67,8 @@ const settings = {
           data: {
             type: 'probe',
             locator: (item as any).locator, // as any to access previously typed data
-            attr: (item as any).attr, // as any to access previously typed data
+            property: (item as any).property, // as any to access previously typed data
+            nested: {},
           }
         };
       }
@@ -92,7 +94,7 @@ const settings = {
   setLocationStyle: (locationStyle: TextSpanStyle | null) => settings.set({ ...settings.get(), locationStyle }),
 
   shouldHideSettingsPanel: () => settings.get()?.hideSettingsPanel ?? false,
-  setShouldHideSettingsPanel: (shouldHide: boolean) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),
+  setShouldHideSettingsPanel: (shouldHide: boolean) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),
 
   shouldEnableTesting: () => window.location.search.includes('enableTesting=true'),
 };

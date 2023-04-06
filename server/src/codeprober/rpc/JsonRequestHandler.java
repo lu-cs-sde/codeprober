@@ -1,11 +1,13 @@
 package codeprober.rpc;
 
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.json.JSONObject;
 
 import codeprober.protocol.ClientRequest;
+import codeprober.protocol.data.TopRequestReq;
+import codeprober.protocol.data.TopRequestRes;
+import codeprober.protocol.data.TopRequestResponseData;
 
 @FunctionalInterface
 public interface JsonRequestHandler {
@@ -26,21 +28,31 @@ public interface JsonRequestHandler {
 		return (request) -> {
 			final long start = System.nanoTime();
 
-			JSONObject rpcResponse = new JSONObject();
-			rpcResponse.put("type", "rpc");
-			rpcResponse.put("id", request.data.getLong("id"));
+			final TopRequestReq parsed = TopRequestReq.fromJSON(request.data);
+
+			TopRequestResponseData response;
 			try {
+				final JSONObject encoded;
 				synchronized (lock) {
-					final JSONObject encoded = handleRequest(request);
-					rpcResponse.put("result", encoded == null ? JSONObject.NULL : encoded);
+					encoded = handleRequest(
+							// Strip away data wraooer
+							new ClientRequest(parsed.data, //
+									request::sendAsyncResponse, request.connectionIsAlive));
 				}
+				response = TopRequestResponseData.fromSuccess(encoded);
 			} catch (RuntimeException e) {
 				System.out.println("Request threw an error");
 				e.printStackTrace();
-				rpcResponse.put("error", "Error while processing request. See server for more info");
+				response = TopRequestResponseData
+						.fromFailureMsg("Error while processing request. See server for more info");
 			}
+
 			System.out.printf("Handled request in %.2fms\n", (System.nanoTime() - start) / 1_000_000.0);
-			return rpcResponse;
+			return new TopRequestRes(parsed.id, response).toJSON();
+//			JSONObject rpcResponse = new JSONObject();
+//			rpcResponse.put("type", "rpc");
+//			rpcResponse.put("id", request.data.getLong("id"));
+//			return rpcResponse;
 		};
 	}
 }

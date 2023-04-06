@@ -3,45 +3,47 @@ package codeprober.protocol.create;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Parameter;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 import codeprober.AstInfo;
-import codeprober.protocol.ParameterType;
-import codeprober.protocol.ParameterTypeDetail;
+import codeprober.protocol.data.NullableNodeLocator;
+import codeprober.protocol.data.PropertyArg;
+import codeprober.protocol.data.PropertyArgCollection;
 
 public abstract class CreateType {
 
-	public static ParameterType fromClass(Class<?> paramType, Class<?> baseAstClazz) {
-		if (paramType == Boolean.TYPE || paramType == Integer.TYPE || paramType == String.class) {
-			return new ParameterType(paramType, ParameterTypeDetail.NORMAL);
+	public static PropertyArg fromClass(Class<?> param, Class<?> baseAstClazz) {
+		if (param == Boolean.TYPE) {
+			return PropertyArg.fromBool(false);
 		}
-		if (baseAstClazz.isAssignableFrom(paramType)) {
-			return new ParameterType(paramType, ParameterTypeDetail.AST_NODE);
+		if (param == Integer.TYPE) {
+			return PropertyArg.fromInteger(0);
 		}
-		// Two special cases that aren't visible to the end user, but important
-		// for identifying NTA nodes.
-		// "Object" is a fallback for when we don't know the type.
-		// Again, this should never be shown to the user!
-		if (paramType == Collection.class) {
-			return new ParameterType(paramType, ParameterTypeDetail.NORMAL);
+		if (param == String.class) {
+			return PropertyArg.fromString("");
 		}
-
-		if (paramType == OutputStream.class || paramType == PrintStream.class) {
-			return new ParameterType(paramType, ParameterTypeDetail.OUTPUTSTREAM);
+		if (param == Collection.class) {
+			return PropertyArg.fromCollection(new PropertyArgCollection(param.getName(), new ArrayList<>()));
 		}
-//		System.out.println("Unknown parameter type '" + paramType.getName() + " , " + paramType.getClass().getName()
-//				+ ", " + paramType.getClassLoader() + "' , " + OutputStream.class.isAssignableFrom(paramType.getClass())
-//				+ " ;; " + paramType.getClass().isAssignableFrom(OutputStream.class));
+		if (param == OutputStream.class || param == PrintStream.class) {
+			return PropertyArg.fromOutputstream(param.getName());
+		}
+		if (baseAstClazz.isAssignableFrom(param)) {
+			return PropertyArg.fromNodeLocator(new NullableNodeLocator(param.getName(), null));
+		}
 		return null;
 	}
 
-	public static ParameterType[] fromParameters(AstInfo info, Parameter[] parameters) {
-		final ParameterType[] ret = new ParameterType[parameters.length];
-		for (int i = 0; i < ret.length; i++) {
-			ret[i] = fromClass(parameters[i].getType(), info.baseAstClazz);
-			if (ret[i] == null) {
+	public static List<PropertyArg> fromParameters(AstInfo info, Parameter[] parameters) {
+		final List<PropertyArg> ret = new ArrayList<>();
+		for (Parameter p : parameters) {
+			final PropertyArg arg = fromClass(p.getType(), info.baseAstClazz);
+			if (arg == null) {
 				return null;
 			}
+			ret.add(arg);
 		}
 		return ret;
 	}

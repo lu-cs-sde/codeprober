@@ -20,13 +20,37 @@ import { createTestManager } from './model/test/TestManager';
 import displayTestSuiteListModal from './ui/popup/displayTestSuiteListModal';
 import ModalEnv from './model/ModalEnv';
 import displayWorkerStatus from './ui/popup/displayWorkerStatus';
+import { AsyncRpcUpdate, Diagnostic, InitInfo, TALStep } from './protocol';
+import showWindow from './ui/create/showWindow';
+import { createMutableLocator } from './model/UpdatableNodeLocator';
+import WindowState from './model/WindowState';
+
+const uiElements = new UIElements();
 
 window.clearUserSettings = () => {
   settings.set({});
   location.reload();
 }
+const clearHashFromLocation = () => history.replaceState('', document.title, `${window.location.pathname}${window.location.search}`);
 
-const uiElements = new UIElements();
+window.saveStateAsUrl = () => {
+  const encoded = encodeURIComponent(JSON.stringify(settings.getProbeWindowStates()));
+  clearHashFromLocation();
+  // delete location.hash;'
+  // console.log('loc:', location.toString());
+  navigator.clipboard.writeText(
+    `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.search.length === 0 ? '?' : '&'}ws=${encoded}`
+  );
+  const btn = uiElements.saveAsUrlButton;
+  const saveText = btn.textContent;
+  setTimeout(() => {
+    btn.textContent = saveText;
+    delete (btn.style as any).border;
+  }, 1000);
+  btn.textContent = `Copied to clipboard`;
+  btn.style.border = '1px solid green'
+}
+
 
 const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', 'from': number, to: number }) => {
   if (settings.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
@@ -47,6 +71,10 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       Object.values(probeWindowStateSavers).forEach(v => v(states));
       settings.setProbeWindowStates(states);
     };
+
+    // setInterval(() => {
+    //   console.log('listener ids:', JSON.stringify(Object.keys(onChangeListeners)));
+    // }, 1000);
 
     const notifyLocalChangeListeners = (adjusters?: LocationAdjuster[], reason?: string) => {
       Object.values(onChangeListeners).forEach(l => l(adjusters, reason));
@@ -84,11 +112,12 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       );
     })();
 
-    const jobUpdateHandlers: {[id: string]: (data: any) => void }  = {};
-    wsHandler.on('jobUpdate', (data) => {
-      const { job, result } = data;
-      console.log('jobUpdate for', job, '; result:', result);
-      if (!job || !result) {
+    const jobUpdateHandlers: {[id: string]: (data: AsyncRpcUpdate) => void }  = {};
+    wsHandler.on('asyncUpdate', (rawData) => {
+      const data = rawData as AsyncRpcUpdate; // Ideally stricly parse this, but this works
+      const { job, isFinalUpdate, value } = data;
+      // console.log('jobUpdate for', job, '; result:', result);
+      if (!job || value === undefined) {
         console.warn('Invalid job update', data);
         return;
       }
@@ -97,14 +126,15 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         console.log('Got no handler for job update:', data);
         return;
       }
-      if (result.status === 'done') {
+      if (isFinalUpdate) {
         delete jobUpdateHandlers[data?.job];
       }
-      handler(result);
+      handler(data);
     });
 
     const rootElem = document.getElementById('root') as HTMLElement;
-    wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount }) => {
+    const initHandler = (info: InitInfo) => {
+      const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount } = info;
       console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
       rootElem.style.display = "grid";
 
@@ -153,7 +183,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
             if (kv.startsWith(needle)) {
               runBgProbe(
                 modalEnv,
-                { result: { start: 0, end: 0, type: '<ROOT>' }, steps: [] },
+                { result: { start: 0, end: 0, type: '<ROOT>', depth: 0 }, steps: [] },
                 { name: kv.slice(needle.length), },
               );
             }
@@ -172,7 +202,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         activeMarkers.length = 0;
 
         const deduplicator = new Set();
-        const filteredAddMarker = (severity: MarkerSeverity, start: number, end: number, msg: string) => {
+        const filteredAddMarker = (severity: Diagnostic['type'], start: number, end: number, msg: string) => {
           const uniqId = [severity, start, end, msg].join(' | ');;
           if (deduplicator.has(uniqId)) {
             return;
@@ -185,7 +215,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
           const colEnd = end & 0xFFF;
           activeMarkers.push(markText({ severity, lineStart, colStart, lineEnd, colEnd, message: msg }));
         }
-        Object.values(probeMarkers).forEach(arr => arr.forEach(({ severity, errStart, errEnd, msg }) => filteredAddMarker(severity, errStart, errEnd, msg)));
+        Object.values(probeMarkers).forEach(arr => arr.forEach(({ type, start, end, msg }) => filteredAddMarker(type, start, end, msg)));
       };
 
       const setupSimpleCheckbox = (input: HTMLInputElement, initial: boolean, update: (checked: boolean) => void) => {
@@ -278,18 +308,15 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       const testManager = createTestManager(() => modalEnv, createJobId);
       let jobIdGenerator = 0;
       const modalEnv: ModalEnv = {
+        showWindow,
         performTypedRpc: (req) => wsHandler.sendRpc(req),
-        wrapTextRpc: (req) => ({
+        createParsingRequestData: () => ({
           posRecovery: uiElements.positionRecoverySelector.value as any,
           cache: uiElements.astCacheStrategySelector.value as any,
-          type: 'query',
           text: getLocalState(),
           stdout: settings.shouldCaptureStdio(),
-          query: req.query,
-          mainArgs: settings.getMainArgsOverride(),
+          mainArgs: settings.getMainArgsOverride() ?? undefined,
           tmpSuffix: settings.getCurrentFileSuffix(),
-          job: req.jobId,
-          jobLabel: req.jobLabel,
         }),
         probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
         themeIsLight: () => settings.isLightTheme(),
@@ -317,6 +344,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         createCullingTaskSubmitter: createCullingTaskSubmitterFactory(changeBufferTime),
         testManager,
         createJobId,
+        getGlobalModalEnv: () => modalEnv,
        };
 
        modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {
@@ -334,7 +362,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         );
       };
 
-       showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);
+       showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, modalEnv.performTypedRpc);
 
       window.displayHelp = (type) => {
         const common = (type: HelpType, button: HTMLButtonElement) => displayHelp(type, disabled => button.disabled = disabled);
@@ -364,14 +392,34 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       }
       setTimeout(() => {
         try {
-          settings.getProbeWindowStates().forEach((state) => {
+          let windowStates: WindowState[] = settings.getProbeWindowStates();
+          let wsMatch: RegExpExecArray | null;
+          if ((wsMatch = /[?&]?ws=[^?&]+/.exec(location.search)) != null) {
+            const trimmedSearch = wsMatch.index === 0
+            ? (
+              wsMatch[0].length < location.search.length
+                ? `?${location.search.slice(wsMatch[0].length + 1)}`
+                : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`
+            )
+            : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`
+            ;
+
+            history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
+            try {
+              windowStates = JSON.parse(decodeURIComponent(wsMatch[0].slice('?ws='.length)));
+              clearHashFromLocation();
+            } catch (e) {
+              console.warn('Invalid windowState in hash', e);
+            }
+          }
+          windowStates.forEach((state) => {
             switch (state.data.type) {
               case 'probe': {
-                displayProbeModal(modalEnv, state.modalPos, state.data.locator, state.data.attr);
+                displayProbeModal(modalEnv, state.modalPos, createMutableLocator(state.data.locator), state.data.property, state.data.nested);
                 break;
               }
               case 'ast': {
-                displayAstModal(modalEnv, state.modalPos, state.data.locator, state.data.direction, state.data.transform);
+                displayAstModal(modalEnv, state.modalPos, createMutableLocator(state.data.locator), state.data.direction, state.data.transform);
                 break;
               }
               default: {
@@ -385,15 +433,17 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       }, 300); // JUUUUUUUST in case the stored window state causes issues, this 300ms timeout allows people to click the 'clear state' button
       window.RagQuery = (line, col, autoSelectRoot) => {
         if (autoSelectRoot) {
-          const node: TypeAtLocStep = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1, depth: 0 };
-          displayAttributeModal(modalEnv, null, { result: node, steps: [] });
+          const node: TALStep = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1, depth: 0 };
+          displayAttributeModal(modalEnv, null, createMutableLocator({ result: node, steps: [] }));
         } else {
           displayRagModal(modalEnv, line, col);
 
         }
       }
-    });
+    };
+    wsHandler.on('init', initHandler);
     wsHandler.on('refresh', () => {
+      console.log('notifying of refresh..');
       notifyLocalChangeListeners(undefined, 'refresh-from-server');
     });
   }

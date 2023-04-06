@@ -4,17 +4,20 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 
-import java.util.function.BiConsumer;
+import java.util.Arrays;
+import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.ast.TestData;
 import codeprober.locator.ApplyLocator.ResolvedNode;
+import codeprober.protocol.data.NodeLocator;
+import codeprober.protocol.data.NodeLocatorStep;
+import codeprober.protocol.data.TALStep;
 
 public class TestApplyLocator {
 
@@ -22,7 +25,7 @@ public class TestApplyLocator {
 		final AstInfo info = TestData.getInfo(new AstNode(ast));
 		final AstNode node = pickTestNode.apply(info);
 
-		final JSONObject locator = CreateLocator.fromNode(info, node);
+		final NodeLocator locator = CreateLocator.fromNode(info, node);
 		final ResolvedNode result = ApplyLocator.toNode(info, locator);
 
 		assertNotNull(result);
@@ -64,25 +67,28 @@ public class TestApplyLocator {
 	}
 
 	private void testMatchAmbiguousBarWithShifter(AstInfo info, ExpectedShiftedMatch expect,
-			BiConsumer<JSONObject, AstNode> adjuster) {
+			BiFunction<TALStep, AstNode, TALStep> adjuster) {
 		final AstNode shallowBar = info.ast.getNthChild(info, 0);
 		final AstNode deepBar = info.ast.getNthChild(info, 1).getNthChild(info, 0);
-		final JSONObject locator = new JSONObject().put("steps", new JSONArray().put(//
-				new TypeAtLocEdge(info.ast, TypeAtLoc.from(info, info.ast), shallowBar,
-						TypeAtLoc.from(info, shallowBar), 1, false).toJson()));
+		final TALStep talStep = CreateLocator.createTALStep(info, shallowBar, 1);
+//		final JSONObject locator = new JSONObject().put("steps", new JSONArray().put(//
+//				new TypeAtLocEdge(info.ast, TypeAtLoc.from(info, info.ast), shallowBar,
+//						TypeAtLoc.from(info, shallowBar), 1, false).toJson()));
+		final List<NodeLocatorStep> steps = Arrays.asList(NodeLocatorStep.fromTal(talStep));
+		final TALStep dummyResult = new TALStep("", "", 0, 0, 0, null);
 
-		final JSONObject talStep = locator.getJSONArray("steps").getJSONObject(0);
-		assertEquals("tal", talStep.getString("type"));
+//		final JSONObject talStep = locator.getJSONArray("steps").getJSONObject(0);
+//		assertEquals("tal", talStep.getString("type"));
 
-		final JSONObject talPos = talStep.getJSONObject("value");
-		assertEquals(1, talPos.getInt("depth"));
-		assertEquals(shallowBar.getRecoveredSpan(info).start, talPos.getInt("start"));
-		assertEquals(shallowBar.getRecoveredSpan(info).end, talPos.getInt("end"));
-		assertSame(shallowBar, ApplyLocator.toNode(info, locator).node);
+//		final JSONObject talPos = talStep.getJSONObject("value");
+//		assertEquals(1, talPos.getInt("depth"));
+		assertEquals(shallowBar.getRecoveredSpan(info).start, talStep.start);
+		assertEquals(shallowBar.getRecoveredSpan(info).end, talStep.end);
+		assertSame(shallowBar, ApplyLocator.toNode(info, new NodeLocator(dummyResult, steps)).node);
 
-		adjuster.accept(talPos, deepBar);
+		final TALStep adjusted = adjuster.apply(talStep, deepBar);
 
-		final ResolvedNode result = ApplyLocator.toNode(info, locator);
+		final ResolvedNode result = ApplyLocator.toNode(info, new NodeLocator(dummyResult, Arrays.asList(NodeLocatorStep.fromTal(adjusted))));
 		assertNotNull(result);
 		assertSame(expect == ExpectedShiftedMatch.SHALLOW ? shallowBar : deepBar, result.node);
 	}
@@ -90,44 +96,43 @@ public class TestApplyLocator {
 	@Test
 	public void testMatchAmbiguousBarWithShiftedDepth() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
-		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.SHALLOW, (talPos, deepBar) -> {
+		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.SHALLOW, (tal, deepBar) -> {
 			// Increase depth so it no longer matches the shallow bar.
 			// Since start/end still matches perfectly, we should still match shallow in the
 			// end.
-			talPos.put("depth", 4);
+			return new TALStep(tal.type, tal.label, tal.start, tal.end, 4, tal.external);
 		});
 	}
 
 	@Test
 	public void testMatchAmbiguousBarWithShiftedStartEnd() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
-		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.DEEP, (talPos, deepBar) -> {
+		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.DEEP, (tal, deepBar) -> {
 			// Change start/end to perfectly match deepBar
 			// The depth value is wrong, but perfect start/end match should take precedence.
-			talPos.put("start", deepBar.getRecoveredSpan(info).start);
-			talPos.put("end", deepBar.getRecoveredSpan(info).end);
+			final Span deep = deepBar.getRecoveredSpan(info);
+			return new TALStep(tal.type, tal.label, deep.start, deep.end, tal.depth, tal.external);
 		});
 	}
 
 	@Test
 	public void testMatchAmbiguousBarWithShiftedStartEndSlightlyOff() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
-		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.SHALLOW, (talPos, deepBar) -> {
+		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.SHALLOW, (tal, deepBar) -> {
 			// Change start/end to _almost_ match deepBar
 			// Non-perfect matches matter less than depth, so we should match shallow
-			talPos.put("start", deepBar.getRecoveredSpan(info).start);
-			talPos.put("end", deepBar.getRecoveredSpan(info).end + 1);
+			final Span deep = deepBar.getRecoveredSpan(info);
+			return new TALStep(tal.type, tal.label, deep.start, deep.end + 1, tal.depth, tal.external);
 		});
 	}
 
 	@Test
 	public void testMatchAmbiguousBarWithShiftedStartDepth() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getHillyAmbiguous()));
-		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.DEEP, (talPos, deepBar) -> {
+		testMatchAmbiguousBarWithShifter(info, ExpectedShiftedMatch.DEEP, (tal, deepBar) -> {
 			// Change start to no longer match shallowBar.
-			talPos.put("start", talPos.getInt("start") - 1);
 			// Also change depth to better match deepBar
-			talPos.put("depth", 3);
+			return new TALStep(tal.type, tal.label, tal.start - 1, tal.end, 3, tal.external);
 		});
 	}
 
@@ -167,18 +172,17 @@ public class TestApplyLocator {
 	public void testSlightlyIncorrectLocator() {
 		final AstInfo info = TestData.getInfo(new AstNode(TestData.getSimple()));
 		final AstNode foo = info.ast.getNthChild(info, 0);
-		final JSONObject locator = CreateLocator.fromNode(info, foo);
+		final NodeLocator locator = CreateLocator.fromNode(info, foo);
 
-		final JSONObject talStep = locator.getJSONArray("steps").getJSONObject(0);
-		assertEquals("tal", talStep.getString("type"));
+		final NodeLocatorStep talStep = locator.steps.get(0);
+		assertEquals(NodeLocatorStep.Type.tal, talStep.type);
 
-		final JSONObject talPos = talStep.getJSONObject("value");
+		final TALStep tal = talStep.asTal();
 		// Shift start/end to be 2 columns off the target.
 		// ApplyLocator should permit minor errors.
-		talPos.put("end", talPos.getInt("start") - 2);
-		talPos.put("start", talPos.getInt("start") - 3);
+		final TALStep adjusted = new TALStep(tal.type, tal.label, tal.start - 3, tal.start - 2, tal.depth, tal.external);
 
-		final ResolvedNode result = ApplyLocator.toNode(info, locator);
+		final ResolvedNode result = ApplyLocator.toNode(info, new NodeLocator(locator.result, Arrays.asList(NodeLocatorStep.fromTal(adjusted))));
 
 		assertNotNull(result);
 		assertSame(foo, result.node);

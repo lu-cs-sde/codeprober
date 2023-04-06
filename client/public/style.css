@@ -175,6 +175,10 @@ body[data-theme-light="true"] .attr-input-twopill {
 
 }
 
+.nodeLocatorContainer {
+  cursor: pointer;
+}
+
 body.locator-request-active .nodeLocatorContainer {
   position: relative;
 }
@@ -264,6 +268,9 @@ body[data-theme-light="true"] .modalWindow {
   box-shadow: 0px 2px 0.5rem #aaa;
 }
 
+.subWindow {
+  border-top: 1px dashed black;;
+}
 
 .modalTitle {
   background: #111;
@@ -275,6 +282,8 @@ body[data-theme-light="true"] .modalWindow {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
+  overflow: scroll;
+  min-height: 1rem;
 }
 body[data-theme-light="true"] .modalTitle {
   background: white;
@@ -704,8 +713,15 @@ body[data-theme-light="true"] .test-case:hover:not(:active) {
   margin: auto 0;
 }
 
+.test-diff-error-root {
+  box-shadow: -0.125rem 0 0 0 #f006;
+
+}
 .test-diff-error {
   background-color: #f002;
+}
+.test-diff-unmatched-root {
+  box-shadow: -0.125rem 0 0 0 #0f06;
 }
 .test-diff-unmatched {
   background-color: #0f02;
@@ -719,6 +735,8 @@ body[data-theme-light="true"] .test-case:hover:not(:active) {
 .tab-button-active,
 .tab-button-inactive {
   height: 1.75rem;
+  border-color: #222;
+  /* border-radius: 0.125rem; */
 }
 .tab-button-active {
   background: #FFF;
@@ -731,7 +749,7 @@ body[data-theme-light="true"] .test-case:hover:not(:active) {
 
 body[data-theme-light="true"] .tab-button-active,
 body[data-theme-light="true"] .tab-button-inactive {
-  /* border-color: #CCC; */
+  border-color: #CCC;
 }
 body[data-theme-light="true"] .tab-button-active {
   background: #999;
@@ -765,4 +783,26 @@ body[data-theme-light="true"] .tab-button-inactive:active {
 .test-case-source-code-line[data-relevant] {
   border-left-color: green;
   background: #0f01;
+}
+
+.linkedProbeCreator {
+  border: 1px solid white;
+  border-radius: 50%;
+  width: 0.875rem;
+  height: 0.875rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.linkedProbeCreator:hover {
+  background: green;
+  cursor: pointer;
+}
+body[data-theme-light="true"] .linkedProbeCreator {
+  border-color: black;
+}
+
+body[data-theme-light="true"] .linkedProbeCreator:hover {
+  background: greenyellow;
 }

@@ -1,58 +1,65 @@
 import createLoadingSpinner from "../create/createLoadingSpinner";
 import createModalTitle from "../create/createModalTitle";
 import displayProbeModal from "./displayProbeModal";
-import showWindow from "../create/showWindow";
 import displayArgModal from "./displayArgModal";
 import formatAttr from "./formatAttr";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import displayHelp from "./displayHelp";
-import adjustLocator from "../../model/adjustLocator";
 import settings from "../../settings";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import trimTypeName from "../trimTypeName";
 import displayAstModal from "./displayAstModal";
 import ModalEnv from '../../model/ModalEnv';
-import listProperties from '../../rpc/listProperties';
+import { Property, ListPropertiesReq, ListPropertiesRes, RpcBodyLine } from '../../protocol';
+import startEndToSpan from '../startEndToSpan';
+import UpdatableNodeLocator from '../../model/UpdatableNodeLocator';
 
-const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator) => {
-  const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+const displayAttributeModal = (
+  env: ModalEnv,
+  modalPos: ModalPosition | null,
+  locator: UpdatableNodeLocator,
+) => {
+  const queryId = `attr-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+  console.log('dAM');
   let filter: string = '';
-  let state: { type: 'attrs', attrs: AstAttr[] } | { type: 'err', body: RpcBodyLine[] } | null = null;
+  let state: { type: 'attrs', attrs: Property[] } | { type: 'err', body: RpcBodyLine[] } | null = null;
 
  let fetchState: 'idle' | 'fetching' | 'queued' = 'idle';
   const cleanup = () => {
+    console.log('DAM, cleanup');
     delete env.onChangeListeners[queryId];
     popup.remove();
   };
   let isFirstRender = true;
-  const popup = showWindow({
+  const popup = env.showWindow({
     pos: modalPos,
     rootStyle: `
       min-width: 16rem;
       min-height: 8rem;
       80vh;
     `,
+    onForceClose: cleanup,
     render: (root) => {
       while (root.firstChild) root.firstChild.remove();
-      // root.innerText = 'Loading..';
 
       root.appendChild(createModalTitle({
         renderLeft: (container) => {
-          const headType = document.createElement('span');
-          headType.classList.add('syntax-type');
-          headType.innerText = `${locator.result.label ?? trimTypeName(locator.result.type)}`;
+          if (env === env.getGlobalModalEnv()) {
+            const headType = document.createElement('span');
+            headType.classList.add('syntax-type');
+            headType.innerText = `${locator.get().result.label ?? trimTypeName(locator.get().result.type)}`;
+            container.appendChild(headType);
+          }
 
           const headAttr = document.createElement('span');
           headAttr.classList.add('syntax-attr');
           headAttr.innerText = `.?`;
-          // headAttr.style.fontStyle= 'italic';
 
-          container.appendChild(headType);
           container.appendChild(headAttr);
           container.appendChild(createTextSpanIndicator({
-            span: startEndToSpan(locator.result.start, locator.result.end),
+            span: startEndToSpan(locator.get().result.start, locator.get().result.end),
             marginLeft: true,
-            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
+            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.get().result.start, locator.get().result.end) : null),
           }));
         },
         onClose: () => {
@@ -128,7 +135,6 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
           resortList();
         }
         filterInput.onkeydown = (e) => {
-          // filterInput.scrollIntoView();
           if (e.key === 'Enter') {
             submit();
           } else if (e.key === 'ArrowDown') {
@@ -160,7 +166,7 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
           }
 
           const reg = filter ? new RegExp(`.*${[...filter].map(part => part.trim()).filter(Boolean).map(part => escapeRegex(part)).join('.*')}.*`, 'i') : null;
-          const match = (attr: AstAttr) => {
+          const match = (attr: Property) => {
             if (!reg) {
               return !!attr.astChildName;
             }
@@ -170,34 +176,21 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
           const matches = attrs.filter(match);
           const misses = attrs.filter(a => !match(a));
 
-          const showProbe = (attr: AstAttr) => {
+          const showProbe = (attr: Property) => {
             cleanup();
 
             if (!attr.args || attr.args.length === 0) {
-              displayProbeModal(env, popup.getPos(), locator, { name: attr.name });
+              displayProbeModal(env, popup.getPos(), locator, { name: attr.name }, {});
             } else {
-              if (attr.args.every(arg => arg.detail === 'OUTPUTSTREAM')) {
+              if (attr.args.every(arg => arg.type ==='outputstream')) {
                 // Shortcut directly to probe since there is nothing for user to add in arg modal
-                displayProbeModal(env, popup.getPos(), locator, {
-                  name: attr.name,
-                  args: attr.args.map(arg => ({
-                    ...arg,
-                    value: null
-                  })),
-                });
+                displayProbeModal(env, popup.getPos(), locator, attr, {});
               } else {
-                displayArgModal(env, popup.getPos(), locator, {
-                  name: attr.name,
-                  args: attr.args.map(arg => ({
-                    ...arg,
-                    value: ''
-                  })),
-                });
+                displayArgModal(env, popup.getPos(), locator, attr, {});
               }
-
             }
           }
-          const buildNode = (attr: AstAttr, borderTop: boolean, highlight: boolean) => {
+          const buildNode = (attr: Property, borderTop: boolean, highlight: boolean) => {
             const node = document.createElement('div');
             const ourNodeIndex = nodesList.length;
             nodesList.push(node);
@@ -262,15 +255,17 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
     },
   });
   const refresher = env.createCullingTaskSubmitter();
+  console.log('DAM, inserting', queryId);
   env.onChangeListeners[queryId] = (adjusters) => {
     if (adjusters) {
-      adjusters.forEach(adj => adjustLocator(adj, locator));
+      locator.adjust(adjusters);
     }
     refresher.submit(() => {
       fetchAttrs();
       popup.refresh();
     });
   };
+  console.log('changeListeners:', env.onChangeListeners);
 
  const fetchAttrs = () => {
   switch (fetchState) {
@@ -285,12 +280,12 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
     case 'queued': return;
   }
 
-  listProperties(env, env.wrapTextRpc({
-    query: {
-      attr: { name: settings.shouldShowAllProperties() ? 'meta:listAllProperties' : 'meta:listProperties' },
-      locator
-    },
-  }))
+  env.performTypedRpc<ListPropertiesReq, ListPropertiesRes>({
+    locator: locator.get(),
+    src: env.createParsingRequestData(),
+    type: 'ListProperties',
+    all: settings.shouldShowAllProperties(),
+  })
     .then((result) => {
       const refetch = fetchState == 'queued';
       fetchState = 'idle';
@@ -298,17 +293,15 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
 
       const parsed = result.properties;
       if (!parsed) {
-        // root.appendChild(createTitle('err'));
         if (result.body?.length) {
           state = { type: 'err', body: result.body };
           popup.refresh();
-          // root.appendChild(encodeRpcBodyLines(env, parsed.body));
           return;
         }
         throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
       }
 
-      const uniq: AstAttr[] = [];
+      const uniq: Property[] = [];
       const deudplicator = new Set();
       parsed.forEach(attr => {
         const uniqId = JSON.stringify(attr);
@@ -325,7 +318,6 @@ const displayAttributeModal = (env: ModalEnv, modalPos: ModalPosition | null, lo
     .catch(err => {
       console.warn('Error when loading attributes', err);
       state = { type: 'err', body: [] };
-      // showErr = true;
       popup.refresh();
     });
  };

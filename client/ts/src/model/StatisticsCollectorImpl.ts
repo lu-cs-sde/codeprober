@@ -30,9 +30,9 @@ class StatisticsCollectorImpl implements ProbeStatisticsCollector {
     this.onChange = callback;
   }
 
-  getLastMeasurement() { return this.lastMeasurement }
-  getMergedMeasurements() { return this.mergedMeasurements }
-  getNumberOfMeasurements() { return this.numberOfMeasurements }
+  getLastMeasurement() { return this.lastMeasurement }
+  getMergedMeasurements() { return this.mergedMeasurements }
+  getNumberOfMeasurements() { return this.numberOfMeasurements }
 
   reset() {
     this.lastMeasurement = null;

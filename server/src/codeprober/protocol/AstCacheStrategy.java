@@ -49,4 +49,8 @@ public enum AstCacheStrategy {
 			return PARTIAL;
 		}
 	}
+
+	public static AstCacheStrategy parseFromJson(String string) {
+		return fallbackParse(string);
+	}
 }

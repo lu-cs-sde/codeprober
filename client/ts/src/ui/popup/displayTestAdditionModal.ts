@@ -1,24 +1,19 @@
 import ModalEnv from '../../model/ModalEnv';
-import { rpcLinesToAssertionLines } from '../../model/test/rpcBodyToAssertionLine';
-import { AssertionLine } from '../../model/test/TestCase';
-import settings from '../../settings';
+import { Property, NodeLocator, RpcBodyLine, NestedTest } from '../../protocol';
 import createLoadingSpinner from '../create/createLoadingSpinner';
 import createModalTitle from '../create/createModalTitle';
 import showWindow from '../create/showWindow';
+import { NestedTestRequest, NestedTestResponse } from '../../model/test/TestManager';
 
 
-const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition, locator: NodeLocator, attribute: AstAttrWithValue, output: RpcBodyLine[]) => {
+const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator, request: Omit<NestedTestRequest, 'path'>) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
 
-  // Capture this immediately, in case the user modifies text while this dialog is open
-  const baseProps = {
-    src: settings.getEditorContents() ?? '',
-    posRecovery: settings.getPositionRecoveryStrategy() as any,
-    cache: settings.getAstCacheStrategy() as any,
-    tmpSuffix: settings.getCurrentFileSuffix(),
-    mainArgs: settings.getMainArgsOverride(),
-  } ;
+  // Capture `baseProps` immediately, in case the user modifies text while this dialog is open
+  const baseProps = env.createParsingRequestData();
   let categories: string[] | 'loading' | 'failed-listing' = 'loading';
+
+  const fullEvaluate = () => env.testManager.fullyEvaluate(baseProps, request.property, locator, request.nested, 'Get reference output');
 
   const cleanup = () => {
     popup.remove();
@@ -28,7 +23,8 @@ const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition, locato
       width: 32rem;
       min-height: 8rem;
     `,
-
+    pos: modalPos,
+    onForceClose: cleanup,
     resizable: true,
     render: (root) => {
       while (root.firstChild) root.removeChild(root.firstChild);
@@ -147,37 +143,55 @@ const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition, locato
         addRow('', (row) => {
           commitButton.innerText = 'Add';
           row.appendChild(commitButton);
+
           commitButton.onclick = () => {
+            commitButton.disabled = true;
+            fullEvaluate()
+              .then((evalRes) => {
+                const convTest = env.testManager.convertTestResponseToTest({
+                  src: baseProps,
+                  assertType: state.assertionType === 'Exact Match'
+                  ? 'IDENTITY'
+                  : (
+                    state.assertionType === 'Set Comparison'
+                      ? 'SET'
+                      : 'SMOKE'
+                  ),
+                  expectedOutput: [],
+                  nestedProperties: [],
+                  property: evalRes.property,
+                  locator,
+                  name: state.name,
+                }, evalRes);
+                if (convTest === null) {
+                  throw new Error(`Couldn't locate root test node`);
+                }
+
+                env.testManager.addTest(
+                  state.category,
+                  convTest,
+                  false
+                ).then((result) => {
+                  if (result === 'ok') {
+                    cleanup();
+                    return;
+                  } else {
+                    console.warn('Error when adding test:', result);
+                    commitButton.disabled = false;
+                    errMsg.innerText = `Error when adding test. Please try again or check server log for more information.`;
+                  }
+                }).catch(err => {
+                  console.warn('Failed adding test:', err);
+                  commitButton.disabled = false;
+                  errMsg.innerText = `Failed adding test. Please try again`;
+                });
+              })
+              .catch((err) => {
+                commitButton.disabled = false;
+                console.warn('Failed getting test reference data:', err);
+                errMsg.innerText = `Failed creating test. Please try again`;
+              })
             // typeof line === 'string' ? line : { naive: line, robust: line }
-            env.testManager.addTest(
-              state.category,
-              {
-                ...baseProps,
-                type: 'test',
-                assert: state.assertionType === 'Exact Match' ?
-                {
-                  type: 'identity',
-                  lines: output, // : rpcLinesToAssertionLines(output),
-                } : state.assertionType === 'Set Comparison' ?
-                {
-                  type: 'set',
-                  lines: output, // rpcLinesToAssertionLines(output),
-                } : {
-                  type: 'smoke'
-                },
-                attribute,
-                locator: { naive: locator, robust: locator },
-                name: state.name,
-              },
-              false
-            ).then((result) => {
-              if (result === 'ok') {
-                cleanup();
-                return;
-              } else {
-                errMsg.innerText = `Error when adding test. Please try again or check server log for more information.`;
-              }
-            })
           }
         });
 

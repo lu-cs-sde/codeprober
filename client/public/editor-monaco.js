@@ -157,7 +157,7 @@ window.defineEditor(
 
             ctx.lineTo(len - tipw, barTop);
             switch (rightStyle) {
-              case 'a': {
+              case 'A': {
                 ctx.lineTo(len - tipw, 0);
                 ctx.lineTo(len, height / 2);
                 ctx.lineTo(len - tipw, height);
@@ -166,7 +166,7 @@ window.defineEditor(
               }
               default:
                 console.log('Unknown left line style "', leftStyle, '", rendering plain');
-              case 'p': {
+              case 'P': {
                 ctx.lineTo(len, barTop);
                 ctx.lineTo(len, barBot);
                 ctx.lineTo(len - tipw, barBot);
@@ -447,9 +447,9 @@ window.defineEditor(
       markText: ({ severity, lineStart, colStart, lineEnd, colEnd, message }) => {
         const problemId = `problem_${++problemIdGenerator}`;
 
-        if (/^line-[pa]{2}$/.test(severity)) {
+        if (/^LINE_[PA]{2}$/.test(severity)) {
 
-          coolMarkerDescriptors[problemId] = { style: [...severity.slice('line-'.length)], start: (lineStart << 12) + colStart, end: (lineEnd << 12) + colEnd, message };
+          coolMarkerDescriptors[problemId] = { style: [...severity.slice('LINE_'.length)], start: (lineStart << 12) + colStart, end: (lineEnd << 12) + colEnd, message };
           refreshCoolMarkers();
           return {
             clear: () => {

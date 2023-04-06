@@ -21,10 +21,22 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import codeprober.CodeProber;
 import codeprober.protocol.ClientRequest;
+import codeprober.protocol.data.LongPollResponse;
+import codeprober.protocol.data.RequestAdapter;
+import codeprober.protocol.data.TopRequestReq;
+import codeprober.protocol.data.TopRequestRes;
+import codeprober.protocol.data.TopRequestResponseData;
+import codeprober.protocol.data.TunneledWsPutRequestReq;
+import codeprober.protocol.data.TunneledWsPutRequestRes;
+import codeprober.protocol.data.WsPutInitReq;
+import codeprober.protocol.data.WsPutInitRes;
+import codeprober.protocol.data.WsPutLongpollReq;
+import codeprober.protocol.data.WsPutLongpollRes;
 import codeprober.util.ParsedArgs;
 
 public class WebServer {
@@ -35,7 +47,7 @@ public class WebServer {
 		public final AtomicInteger activeConnections = new AtomicInteger();
 		public final AtomicBoolean isConnected = new AtomicBoolean(true);
 
-		private final AtomicInteger lastEventVersion = new AtomicInteger(-1);
+		private final AtomicInteger lastEventVersion = new AtomicInteger(0);
 
 		public WsPutSession(String id) {
 			this.id = id;
@@ -53,8 +65,9 @@ public class WebServer {
 			notifyAll();
 		}
 
-		public synchronized JSONObject pollForThreeMinutes(int clientKnownEventVersion) throws InterruptedException {
-			final JSONObject immediate = pollWithoutWaiting(clientKnownEventVersion);
+		public synchronized LongPollResponse pollForThreeMinutes(int clientKnownEventVersion)
+				throws InterruptedException {
+			final LongPollResponse immediate = pollWithoutWaiting(clientKnownEventVersion);
 			if (immediate != null) {
 				return immediate;
 			}
@@ -63,13 +76,13 @@ public class WebServer {
 			return pollWithoutWaiting(clientKnownEventVersion);
 		}
 
-		private JSONObject pollWithoutWaiting(int clientKnownEventVersion) {
+		private LongPollResponse pollWithoutWaiting(int clientKnownEventVersion) {
 			final JSONObject msg = outgoingMessages.poll();
 			if (msg != null) {
-				return new JSONObject().put("type", "push").put("message", msg);
+				return LongPollResponse.fromPush(msg);
 			}
 			if (lastEventVersion.get() != clientKnownEventVersion) {
-				return new JSONObject().put("etag", lastEventVersion.get());
+				return LongPollResponse.fromEtag(lastEventVersion.get());
 			}
 			return null;
 		}
@@ -298,53 +311,127 @@ public class WebServer {
 
 		switch (putPath) {
 		case "/wsput": {
-			final byte[] response;
 			final JSONObject body = new JSONObject(new String(getBody.get(), StandardCharsets.UTF_8));
+			final OutputStream out = socket.getOutputStream();
 
-			final String remoteAddr = body.optString("session",
-					socket.getRemoteSocketAddress().toString().split(":")[0]);
-			final WsPutSession wps = monitor.getOrCreate(remoteAddr);
-			wps.activeConnections.incrementAndGet();
+			final JSONObject responseObj;
 			try {
-				switch (body.getString("type")) {
-				case "init": {
-					response = WebSocketServer.getInitMsg(args).toString().getBytes(StandardCharsets.UTF_8);
-					break;
-				}
-				case "longpoll": {
-					final int etag = body.getInt("etag");
+				responseObj = new RequestAdapter() {
 
-					final JSONObject message = wps.pollForThreeMinutes(etag);
-					wps.lastActivity = System.currentTimeMillis(); // Mark as active at the end of a poll
-
-					if (message == null) {
-						response = new JSONObject() //
-								.put("etag", etag).toString() //
-								.getBytes(StandardCharsets.UTF_8);
-					} else {
-						response = message.toString().getBytes(StandardCharsets.UTF_8);
+					@Override
+					protected TopRequestRes handleTopRequest(TopRequestReq req) {
+						final JSONObject resp = this.handle(req.data);
+						return new TopRequestRes(req.id, TopRequestResponseData.fromSuccess(resp));
 					}
-					break;
-				}
-				default: {
-					response = onQuery.apply(new ClientRequest(body, wps::addMessage, wps.isConnected)).toString()
-							.getBytes(StandardCharsets.UTF_8);
-					break;
-				}
-				}
-				final OutputStream out = socket.getOutputStream();
-				out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
-				out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
-				out.write(("Content-Length: " + response.length + "\r\n").getBytes("UTF-8"));
+
+					@Override
+					protected WsPutInitRes handleWsPutInit(WsPutInitReq req) {
+						final WsPutSession wps = monitor.getOrCreate(req.session);
+						wps.activeConnections.incrementAndGet();
+						try {
+							return new WsPutInitRes(WebSocketServer.getInitMsg(args));
+						} finally {
+							wps.activeConnections.decrementAndGet();
+						}
+					}
+
+					@Override
+					protected WsPutLongpollRes handleWsPutLongpoll(WsPutLongpollReq req) {
+						final WsPutSession wps = monitor.getOrCreate(req.session);
+						wps.activeConnections.incrementAndGet();
+						try {
+							final LongPollResponse resp = wps.pollForThreeMinutes(req.etag);
+							wps.lastActivity = System.currentTimeMillis(); // Mark as active at the end of a poll
+							return new WsPutLongpollRes(resp);
+						} catch (InterruptedException e) {
+							System.err.println("/wsput request interrupted");
+							throw new JSONException("Interrupted");
+						} finally {
+							wps.activeConnections.decrementAndGet();
+						}
+					}
+
+					@Override
+					protected TunneledWsPutRequestRes handleTunneledWsPutRequest(TunneledWsPutRequestReq req) {
+						final WsPutSession wps = monitor.getOrCreate(req.session);
+						final ClientRequest cr = new ClientRequest(req.request,
+								asyncMsg -> wps.addMessage(asyncMsg.toJSON()), wps.isConnected);
+
+						wps.activeConnections.incrementAndGet();
+						try {
+							final JSONObject resp = onQuery.apply(cr);
+							return new TunneledWsPutRequestRes(resp);
+						} finally {
+							wps.activeConnections.decrementAndGet();
+						}
+					}
+
+				}.handle(body);
+
+			} catch (JSONException e) {
+				System.out.println("Malformed wsput request");
+				e.printStackTrace(System.out);
+//				System.out.println("Bad request: " + body);
+				out.write("HTTP/1.1 400 Bad Request\r\n".getBytes("UTF-8"));
 				out.write(("\r\n").getBytes("UTF-8"));
-				out.write(response);
-			} catch (InterruptedException e) {
-				System.err.println("/wsput request interrupted");
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} finally {
-				wps.activeConnections.decrementAndGet();
+				return;
 			}
+
+			if (responseObj == null) {
+				System.out.println("Bad request: " + body);
+				out.write("HTTP/1.1 400 Bad Request\r\n".getBytes("UTF-8"));
+//				out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
+//				out.write(("Content-Length: " + response.length + "\r\n").getBytes("UTF-8"));
+				out.write(("\r\n").getBytes("UTF-8"));
+				return;
+			}
+
+			final byte[] response = responseObj.toString().getBytes(StandardCharsets.UTF_8);
+			out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
+			out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
+			out.write(("Content-Length: " + response.length + "\r\n").getBytes("UTF-8"));
+			out.write(("\r\n").getBytes("UTF-8"));
+			out.write(response);
+
+//			final String remoteAddr = body.optString("session",
+//					socket.getRemoteSocketAddress().toString().split(":")[0]);
+//			final WsPutSession wps = monitor.getOrCreate(remoteAddr);
+//			wps.activeConnections.incrementAndGet();
+//			try {
+//				switch (body.getString("type")) {
+//				case "init": {
+//					response = WebSocketServer.getInitMsg(args).toString().getBytes(StandardCharsets.UTF_8);
+//					break;
+//				}
+//				case "longpoll": {
+//					final int etag = body.getInt("etag");
+//
+//					final JSONObject message = wps.pollForThreeMinutes(etag);
+//					wps.lastActivity = System.currentTimeMillis(); // Mark as active at the end of a poll
+//
+//					if (message == null) {
+//						response = new JSONObject() //
+//								.put("etag", etag).toString() //
+//								.getBytes(StandardCharsets.UTF_8);
+//					} else {
+//						response = message.toString().getBytes(StandardCharsets.UTF_8);
+//					}
+//					break;
+//				}
+//				default: {
+//					response = onQuery.apply(
+//							new ClientRequest(body, asyncMsg -> wps.addMessage(asyncMsg.toJSON()), wps.isConnected))
+//							.toString().getBytes(StandardCharsets.UTF_8);
+//					break;
+//				}
+//				}
+//			} catch (InterruptedException e) {
+//				System.err.println("/wsput request interrupted");
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			} finally {
+//				wps.activeConnections.decrementAndGet();
+//			}
 			break;
 		}
 		default: {

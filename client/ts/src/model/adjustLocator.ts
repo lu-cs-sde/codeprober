@@ -1,4 +1,19 @@
+import { PropertyArg, NodeLocator, NodeLocatorStep } from '../protocol';
 import adjustTypeAtLoc from "./adjustTypeAtLoc";
+
+const adjustValue = (adj: LocationAdjuster, arg: PropertyArg) => {
+  switch (arg.type) {
+    case 'nodeLocator': {
+      if (arg.value.value) {
+        adjustLocator(adj, arg.value.value);
+      }
+      break;
+    }
+    case 'collection': {
+      arg.value.entries.forEach(v => adjustValue(adj, v));
+    }
+  }
+}
 
 const adjustLocator = (adj: LocationAdjuster, loc: NodeLocator) => {
   adjustTypeAtLoc(adj, loc.result);
@@ -10,15 +25,7 @@ const adjustLocator = (adj: LocationAdjuster, loc: NodeLocator) => {
         break;
       }
       case 'nta': {
-        step.value.args.forEach(({ args }) => {
-          if (args) {
-            args.forEach(({ value }) => {
-              if (value && typeof value === 'object') {
-                adjustLocator(adj, value);
-              }
-            })
-          }
-        });
+        step.value.property.args?.forEach(arg => adjustValue(adj, arg));
         break;
       }
     }
@@ -26,4 +33,5 @@ const adjustLocator = (adj: LocationAdjuster, loc: NodeLocator) => {
   loc.steps.forEach(adjustStep);
 };
 
+export { adjustValue };
 export default adjustLocator;

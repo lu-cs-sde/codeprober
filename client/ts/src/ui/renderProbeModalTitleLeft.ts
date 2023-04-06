@@ -1,29 +1,36 @@
 import ModalEnv from '../model/ModalEnv';
+import UpdatableNodeLocator from '../model/UpdatableNodeLocator';
+import { NestedWindows } from '../model/WindowState';
+import { Property } from '../protocol';
 import { StickyHighlightController } from './create/createStickyHighlightController';
 import createTextSpanIndicator from './create/createTextSpanIndicator';
 import registerNodeSelector from './create/registerNodeSelector';
 import displayArgModal from './popup/displayArgModal';
 import displayAttributeModal from './popup/displayAttributeModal';
 import formatAttr, { formatAttrArgList } from './popup/formatAttr';
+import startEndToSpan from './startEndToSpan';
 import trimTypeName from './trimTypeName';
 
-
 const renderProbeModalTitleLeft = (
-  env: ModalEnv,
+  env: ModalEnv | null,
   container: HTMLElement,
-  close: () => void,
+  close: (() => void) | null,
   getWindowPos: () => ModalPosition,
   stickyController: StickyHighlightController | null,
-  locator: NodeLocator,
-  attr: AstAttrWithValue
+  locator: UpdatableNodeLocator,
+  attr: Property,
+  nested: NestedWindows,
+  typeRenderingStyle: 'default' | 'minimal-nested',
 ) => {
-  const headType = document.createElement('span');
-  headType.classList.add('syntax-type');
-  headType.innerText = `${locator.result.label ?? trimTypeName(locator.result.type)}`;
+  if (typeRenderingStyle !== 'minimal-nested') {
+    const headType = document.createElement('span');
+    headType.classList.add('syntax-type');
+    headType.innerText = `${locator.get().result.label ?? trimTypeName(locator.get().result.type)}`;
+    container.appendChild(headType);
+  }
 
   const headAttr = document.createElement('span');
   headAttr.classList.add('syntax-attr');
-  headAttr.classList.add('clickHighlightOnHover');
   if (!attr.args || attr.args.length === 0) {
     headAttr.innerText = `.${formatAttr(attr)}`;
   } else {
@@ -31,44 +38,48 @@ const renderProbeModalTitleLeft = (
     formatAttrArgList(headAttr, attr);
     headAttr.appendChild(document.createTextNode(`)`));
   }
-  headAttr.onmousedown = (e) => { e.stopPropagation(); }
-  headAttr.onclick = (e) => {
-    if (env.duplicateOnAttr() != e.shiftKey) {
-      displayAttributeModal(env, null, JSON.parse(JSON.stringify(locator)));
-    } else {
-      close();
-      displayAttributeModal(env, getWindowPos(), locator);
-    }
-    e.stopPropagation();
-  };
+  if (env) {
+    headAttr.onmousedown = (e) => { e.stopPropagation(); }
+    headAttr.classList.add('clickHighlightOnHover');
+    headAttr.onclick = (e) => {
+      if (env.duplicateOnAttr() != e.shiftKey) {
+        displayAttributeModal(env, null, locator.isMutable() ? locator.createMutableClone() : locator);
+      } else {
+        close?.();
+        displayAttributeModal(env, getWindowPos(), locator);
+      }
+      e.stopPropagation();
+    };
+  }
 
-  container.appendChild(headType);
   container.appendChild(headAttr);
 
-  if (attr.args?.length) {
+  if (attr.args?.length && env) {
     const editButton = document.createElement('img');
     editButton.src = '/icons/edit_white_24dp.svg';
     editButton.classList.add('modalEditButton');
     editButton.classList.add('clickHighlightOnHover');
     editButton.onmousedown = (e) => { e.stopPropagation(); }
     editButton.onclick = () => {
-      close();
-      displayArgModal(env, getWindowPos(), locator, attr);
+      close?.();
+      displayArgModal(env, getWindowPos(), locator, attr, nested);
     };
 
     container.appendChild(editButton);
   }
 
-  const spanIndicator = createTextSpanIndicator({
-    span: startEndToSpan(locator.result.start, locator.result.end),
-    marginLeft: true,
-    onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
-    onClick: stickyController?.onClick ?? undefined,
-    external: locator.result.external,
-  });
-  stickyController?.configure(spanIndicator, locator);
-  registerNodeSelector(spanIndicator, () => locator);
-  container.appendChild(spanIndicator);
+  if (env) {
+    const spanIndicator = createTextSpanIndicator({
+      span: startEndToSpan(locator.get().result.start, locator.get().result.end),
+      marginLeft: true,
+      onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.get().result.start, locator.get().result.end) : null),
+      onClick: stickyController?.onClick ?? undefined,
+      external: locator.get().result.external,
+    });
+    stickyController?.configure(spanIndicator, locator);
+    registerNodeSelector(spanIndicator, () => locator.get());
+    container.appendChild(spanIndicator);
+  }
 }
 
 export default renderProbeModalTitleLeft;

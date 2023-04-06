@@ -1,5 +1,5 @@
 import ModalEnv from '../../model/ModalEnv';
-import TestCase from '../../model/test/TestCase';
+import { TestCase } from '../../protocol';
 import createLoadingSpinner from '../create/createLoadingSpinner';
 import createModalTitle from '../create/createModalTitle';
 import showWindow from '../create/showWindow';
@@ -23,6 +23,7 @@ const displayTestSuiteModal = (
       min-width: 16rem;
       min-height: fit-content;
     `,
+    onForceClose: cleanup,
     resizable: true,
     render: (root) => {
       while (root.firstChild) root.removeChild(root.firstChild);
@@ -33,6 +34,39 @@ const displayTestSuiteModal = (
           container.appendChild(header);
         },
         onClose: cleanup,
+        extraActions: [
+          {
+            title: 'Save all tests as expected behavior',
+            invoke: () => {
+              const confirmation = confirm(`Are you sure? This cannot be undone. One or more of the test failures may represent meaningful information, which will be lost if you save it as 'expected' behavior`);
+              if (!confirmation) {
+                return;
+              }
+              (async () => {
+                const suite = await env.testManager.getTestSuite(category);
+                if (suite === 'failed-fetching') {
+                  return;
+                }
+                for (let i = 0; i < suite.length; ++i) {
+                  const tcase = suite[i];
+                  // if (tcase === '')
+                  const evalRes = await env.testManager.evaluateTest(category, tcase.name);
+                  if (evalRes === 'failed-fetching') {
+                    continue;
+                  }
+                  if (evalRes.status.overall === 'ok') {
+                    continue;
+                  }
+                  const mapped = env.testManager.convertTestResponseToTest(tcase, evalRes.output);
+                  if (mapped === null) {
+                    continue;
+                  }
+                  await env.testManager.addTest(category, mapped, true);
+                }
+              })();
+            }
+          }
+        ],
       }).element);
 
       if (typeof contents === 'string') {
@@ -70,53 +104,45 @@ const displayTestSuiteModal = (
           const status = document.createElement('span');
           status.innerText = `⏳`;
           row.style.order = '3';
-          env.testManager.getTestStatus(category, tc.name).then(result => {
+          env.testManager.evaluateTest(category, tc.name).then(result => {
             // console.log('tstatus for', category, '>', tc.name, ':', result);
             if (result == 'failed-fetching') {
               status.innerText = `<Evaluation Error>`;
             } else {
-              const report = result.report;
-              if (typeof report === 'string') {
+              const report = result.status.overall;
+              // if (typeof report === 'string') {
                 switch (report) {
-                  case 'pass': {
+                  case 'ok': {
                     status.innerText = `✅`;
                     row.style.order = '5';
                     break;
                   }
-                  case 'failed-eval': {
+                  case 'error': {
                     status.innerText = `❌`;
-                  row.style.order = '1';
+                    row.style.order = '1';
+                    break;
                   }
                   default: {
                     console.warn('Unknown test report string value:', report);
                   }
                 }
-              } else {
-                if (report.output === 'pass') {
-                  // "only" locator diff, should be less severe
-                  console.log('partial test failure?', JSON.stringify(report))
-                  status.innerText = `⚠️`;
-                } else {
-                  status.innerText = `❌`;
-                  row.style.order = '1';
+              // } else {
+              //   if (report.output === 'pass') {
+              //     // "only" locator diff, should be less severe
+              //     console.log('partial test failure?', JSON.stringify(report))
+              //     status.innerText = `⚠️`;
+              //   } else {
+              //     status.innerText = `❌`;
+              //     row.style.order = '1';
 
-                }
-              }
+              //   }
+              // }
             }
           });
-          // env.testManager.getTestSuite(cat).then((res) => {
-          //   if (res === 'failed-fetching') {
-          //     status.innerText = `<failed fetching>`;
-          //   } else if (res.length === 0) {
-          //     status.innerText = `Empty suite`;
-          //   } else {
-          //     status.innerText = `${res.length}/${res.length} ✅`;
-          //   }
-          // });
           icons.appendChild(status);
 
           row.onclick = () => {
-            displayTestDiffModal(env, null, tc.locator.robust, tc.attribute, category, tc);
+            displayTestDiffModal(env, null, tc.locator, tc.property, category, tc.name);
           };
 
           rowList.appendChild(row);

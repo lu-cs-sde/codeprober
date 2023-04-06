@@ -1,4 +1,4 @@
-
+import { NodeLocator } from '../../protocol';
 
 const registerNodeSelector = (elem: HTMLElement, getLocator: () => NodeLocator) => {
   elem.classList.add('nodeLocatorContainer');

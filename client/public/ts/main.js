@@ -25,6 +25,10 @@ var __importStar = (this && this.__importStar) || function (mod) {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+define("protocol", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
 define("createWebsocketHandler", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -64,19 +68,26 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
             on: (id, cb) => messageHandlers[id] = cb,
             sendRpc: (msg) => new Promise(async (res, rej) => {
                 const id = rpcIdGenerator++;
-                socket.send(JSON.stringify({
-                    ...msg,
-                    id,
-                }));
+                const topReq = { type: 'rpc', id, data: msg, };
+                socket.send(JSON.stringify(topReq));
                 const cleanup = () => delete pendingCallbacks[id];
-                pendingCallbacks[id] = ({ error, result }) => {
+                pendingCallbacks[id] = (callback) => {
                     cleanup();
-                    if (error) {
-                        console.warn('RPC request failed', error);
-                        rej(error);
-                    }
-                    else {
-                        res(result);
+                    switch (callback.data.type) {
+                        case 'success': {
+                            res(callback.data.value);
+                            break;
+                        }
+                        case 'failureMsg': {
+                            console.warn('RPC request failed', callback.data.value);
+                            rej(callback.data.value);
+                            break;
+                        }
+                        default: {
+                            console.error('Unexpected RPC response');
+                            rej(JSON.stringify(callback));
+                            break;
+                        }
                     }
                 };
                 setTimeout(() => {
@@ -103,89 +114,151 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
         let didReceiveAtLeastOneMessage = false;
         const defaultRetryBudget = 3;
         const session = `cpr_${(Number.MAX_SAFE_INTEGER * Math.random()) | 0}`;
-        const wsHandler = {
-            on: (id, cb) => messageHandlers[id] = cb,
-            sendRpc: (msg) => new Promise(async (res, rej) => {
-                const id = rpcIdGenerator++;
-                const body = { ...msg, id };
-                pendingCallbacks[id] = ({ error, result }) => {
+        const sendRpc = (msg, extraArgs) => new Promise(async (res, rej) => {
+            const id = rpcIdGenerator++;
+            // const body = { ...msg, id };
+            const topReq = { type: 'rpc', id, data: msg, };
+            // {...topReq, session}
+            // pendingCallbacks[id] = ({ error, result }) => {
+            //   cleanup();
+            //   if (error) {
+            //     console.warn('RPC request failed', error);
+            //     rej(error);
+            //   } else {
+            //     res(result);
+            //   }
+            // };
+            pendingCallbacks[id] = (callback) => {
+                cleanup();
+                switch (callback.data.type) {
+                    case 'success': {
+                        res(callback.data.value);
+                        break;
+                    }
+                    case 'failureMsg': {
+                        console.warn('RPC request failed', callback.data.value);
+                        rej(callback.data.value);
+                        break;
+                    }
+                    default: {
+                        console.error('Unexpected RPC response');
+                        rej(JSON.stringify(callback));
+                        break;
+                    }
+                }
+            };
+            const cleanup = () => delete pendingCallbacks[id];
+            const attemptFetch = async (remainingTries) => {
+                var _a;
+                const cleanupTimer = setTimeout(() => {
                     cleanup();
-                    if (error) {
-                        console.warn('RPC request failed', error);
-                        rej(error);
+                    rej('Timeout');
+                }, (_a = extraArgs === null || extraArgs === void 0 ? void 0 : extraArgs.timeout) !== null && _a !== void 0 ? _a : 30000);
+                try {
+                    const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify(topReq) });
+                    if (!rawFetchResult.ok) {
+                        if (remainingTries > 0) {
+                            console.warn('wsput request failed, trying again in 1 second..');
+                            clearTimeout(cleanupTimer);
+                            setTimeout(() => attemptFetch(remainingTries - 1), 1000);
+                            return;
+                        }
+                    }
+                    const fetchResult = await rawFetchResult.json();
+                    didReceiveAtLeastOneMessage = true;
+                    if (messageHandlers[fetchResult.type]) {
+                        messageHandlers[fetchResult.type](fetchResult);
+                        cleanup();
+                        res(true);
                     }
                     else {
-                        res(result);
-                    }
-                };
-                const cleanup = () => delete pendingCallbacks[id];
-                const attemptFetch = async (remainingTries) => {
-                    const cleanupTimer = setTimeout(() => {
+                        console.log('No handler for message', fetchResult, ', got handlers for', Object.keys(messageHandlers));
                         cleanup();
-                        rej('Timeout');
-                    }, 30000);
-                    try {
-                        const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({ ...body, session }) });
-                        if (!rawFetchResult.ok) {
-                            if (remainingTries > 0) {
-                                console.warn('wsput request failed, trying again in 1 second..');
-                                clearTimeout(cleanupTimer);
-                                setTimeout(() => attemptFetch(remainingTries - 1), 1000);
-                                return;
-                            }
-                        }
-                        const fetchResult = await rawFetchResult.json();
-                        didReceiveAtLeastOneMessage = true;
-                        if (messageHandlers[fetchResult.type]) {
-                            messageHandlers[fetchResult.type](fetchResult);
-                            cleanup();
-                            res(true);
-                        }
-                        else {
-                            console.log('No handler for message', fetchResult, ', got handlers for', Object.keys(messageHandlers));
-                            cleanup();
-                            rej('Bad response');
-                        }
+                        rej('Bad response');
                     }
-                    catch (e) {
-                        console.warn('Error when performing ws-over-http request', e);
-                        cleanup();
-                        rej('Unknown error');
-                    }
+                }
+                catch (e) {
+                    console.warn('Error when performing ws-over-http request', e);
+                    cleanup();
+                    rej('Unknown error');
+                }
+            };
+            attemptFetch(defaultRetryBudget);
+        });
+        const wsHandler = {
+            on: (id, cb) => messageHandlers[id] = cb,
+            // sendRpc: (msg) => {
+            //   console.log('todo send normal rpc messages, wrapped in rpc something something');
+            //   // return Promise.reject('todo');
+            // },
+            sendRpc: async (msg) => {
+                const wrapped = {
+                    type: 'wsput:tunnel',
+                    session,
+                    request: msg,
                 };
-                attemptFetch(defaultRetryBudget);
-            }),
+                const res = await sendRpc(wrapped);
+                return res.response;
+            },
         };
-        wsHandler.sendRpc({ type: 'init' });
+        const initReq = ({ type: 'wsput:init', session });
+        sendRpc(initReq)
+            .then((init) => {
+            if (messageHandlers['init']) {
+                messageHandlers['init'](init.info);
+            }
+            else {
+                console.warn('Got init message, but no handler for it');
+            }
+        })
+            .catch(err => {
+            console.warn('Failed to get init message', err);
+        });
         let prevEtagValue = -1;
         let longPoller = async (retryBudget) => {
             try {
-                const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
-                        id: -1, type: 'longpoll', etag: prevEtagValue, session
-                    }) });
-                if (!rawFetchResult.ok) {
-                    throw new Error(`Fetch result: ${rawFetchResult.status}`);
-                }
-                const pollResult = await rawFetchResult.json();
-                if (pollResult.etag) {
-                    const { etag } = pollResult;
-                    if (prevEtagValue !== etag) {
-                        if (prevEtagValue !== -1) {
-                            if (messageHandlers.refresh) {
-                                messageHandlers.refresh({});
+                const longPollRequest = {
+                    type: 'wsput:longpoll',
+                    session,
+                    etag: prevEtagValue,
+                };
+                const result = await sendRpc(longPollRequest, { timeout: 10 * 60 * 1000 });
+                // const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
+                //   id: -1, type: 'longpoll', etag: prevEtagValue, session
+                // }) });
+                // if (!rawFetchResult.ok) {
+                //   throw new Error(`Fetch result: ${rawFetchResult.status}`);
+                // }
+                // const pollResult = await rawFetchResult.json();
+                if (result.data) {
+                    switch (result.data.type) {
+                        case 'etag': {
+                            const etag = result.data.value;
+                            if (prevEtagValue !== etag) {
+                                if (prevEtagValue !== -1) {
+                                    if (messageHandlers.refresh) {
+                                        messageHandlers.refresh({});
+                                    }
+                                }
+                                prevEtagValue = etag;
                             }
+                            break;
                         }
-                        prevEtagValue = etag;
-                    }
-                }
-                else if (pollResult.type === 'push') {
-                    const { message } = pollResult;
-                    const handler = messageHandlers[message.type];
-                    if (handler) {
-                        handler(message);
-                    }
-                    else {
-                        console.warn('Got /wsput push message of unknown type', message);
+                        case 'push': {
+                            const message = result.data.value;
+                            const handler = messageHandlers[message.type];
+                            if (handler) {
+                                handler(message);
+                            }
+                            else {
+                                console.warn('Got /wsput push message of unknown type', message);
+                            }
+                            break;
+                        }
+                        default: {
+                            console.warn('Unknown longpoll response type:', result.data);
+                            break;
+                        }
                     }
                 }
             }
@@ -209,6 +282,16 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
     };
     exports.createWebsocketOverHttpHandler = createWebsocketOverHttpHandler;
     exports.default = createWebsocketHandler;
+});
+define("hacks", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.assertUnreachable = void 0;
+    const assertUnreachable = (val) => {
+        console.warn('Exhaustive switch matched default case - typedefs are out of date');
+        console.warn('Related value:', val);
+    };
+    exports.assertUnreachable = assertUnreachable;
 });
 define("ui/addConnectionCloseNotice", ["require", "exports"], function (require, exports) {
     "use strict";
@@ -484,9 +567,7 @@ define("ui/create/createModalTitle", ["require", "exports", "ui/create/showWindo
                     window.removeEventListener('mousedown', cleanup);
                 };
                 const contextMenu = (0, showWindow_1.default)({
-                    rootStyle: `
-          // width: 16rem;
-        `,
+                    onForceClose: cleanup,
                     render: (container) => {
                         container.addEventListener('mousedown', (e) => {
                             e.stopPropagation();
@@ -521,15 +602,17 @@ define("ui/create/createModalTitle", ["require", "exports", "ui/create/showWindo
             };
             buttons.appendChild(overflowButton);
         }
-        const closeButton = document.createElement('div');
-        closeButton.classList.add('modalCloseButton');
-        const textHolder = document.createElement('span');
-        textHolder.innerText = '𝖷';
-        closeButton.appendChild(textHolder);
-        closeButton.classList.add('clickHighlightOnHover');
-        closeButton.onmousedown = (e) => { e.stopPropagation(); };
-        closeButton.onclick = () => onClose();
-        buttons.appendChild(closeButton);
+        if (onClose) {
+            const closeButton = document.createElement('div');
+            closeButton.classList.add('modalCloseButton');
+            const textHolder = document.createElement('span');
+            textHolder.innerText = '𝖷';
+            closeButton.appendChild(textHolder);
+            closeButton.classList.add('clickHighlightOnHover');
+            closeButton.onmousedown = (e) => { e.stopPropagation(); };
+            closeButton.onclick = () => onClose();
+            buttons.appendChild(closeButton);
+        }
         titleRowHolder.appendChild(buttons);
         return {
             element: titleRowHolder
@@ -537,16 +620,28 @@ define("ui/create/createModalTitle", ["require", "exports", "ui/create/showWindo
     };
     exports.default = createModalTitle;
 });
-define("model/adjustTypeAtLoc", ["require", "exports"], function (require, exports) {
+define("ui/startEndToSpan", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    const startEndToSpan = (start, end) => ({
+        lineStart: (start >>> 12),
+        colStart: start & 0xFFF,
+        lineEnd: (end >>> 12),
+        colEnd: end & 0xFFF,
+    });
+    exports.default = startEndToSpan;
+});
+define("model/adjustTypeAtLoc", ["require", "exports", "ui/startEndToSpan"], function (require, exports, startEndToSpan_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    startEndToSpan_1 = __importDefault(startEndToSpan_1);
     const adjustTypeAtLoc = (adjuster, tal) => {
         if (tal.external) {
             // Refuse to adjust things in external files.
             // CodeProber is only expected to get change events for our own "internal" file.
             return;
         }
-        const span = startEndToSpan(tal.start, tal.end);
+        const span = (0, startEndToSpan_1.default)(tal.start, tal.end);
         let [ls, cs] = adjuster(span.lineStart, span.colStart);
         let [le, ce] = adjuster(span.lineEnd, span.colEnd);
         if (ls == le && cs == ce) {
@@ -557,8 +652,6 @@ define("model/adjustTypeAtLoc", ["require", "exports"], function (require, expor
                 // Instead of accepting change to zero-width span, take same line/col diff as before
                 le = ls + (span.lineEnd - span.lineStart);
                 ce = cs + (span.colEnd - span.colStart);
-                // console.log('Ignoring adjustmpent from', span, 'to', { lineStart: ls, colStart: cs, lineEnd: le, colEnd: ce }, 'because it looks very improbable');
-                // return;
             }
         }
         tal.start = (ls << 12) + Math.max(0, cs);
@@ -569,25 +662,33 @@ define("model/adjustTypeAtLoc", ["require", "exports"], function (require, expor
 define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], function (require, exports, adjustTypeAtLoc_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.adjustValue = void 0;
     adjustTypeAtLoc_1 = __importDefault(adjustTypeAtLoc_1);
+    const adjustValue = (adj, arg) => {
+        switch (arg.type) {
+            case 'nodeLocator': {
+                if (arg.value.value) {
+                    adjustLocator(adj, arg.value.value);
+                }
+                break;
+            }
+            case 'collection': {
+                arg.value.entries.forEach(v => adjustValue(adj, v));
+            }
+        }
+    };
+    exports.adjustValue = adjustValue;
     const adjustLocator = (adj, loc) => {
         (0, adjustTypeAtLoc_1.default)(adj, loc.result);
         const adjustStep = (step) => {
+            var _a;
             switch (step.type) {
                 case 'tal': {
                     (0, adjustTypeAtLoc_1.default)(adj, step.value);
                     break;
                 }
                 case 'nta': {
-                    step.value.args.forEach(({ args }) => {
-                        if (args) {
-                            args.forEach(({ value }) => {
-                                if (value && typeof value === 'object') {
-                                    adjustLocator(adj, value);
-                                }
-                            });
-                        }
-                    });
+                    (_a = step.value.property.args) === null || _a === void 0 ? void 0 : _a.forEach(arg => adjustValue(adj, arg));
                     break;
                 }
             }
@@ -698,6 +799,10 @@ define("model/syntaxHighlighting", ["require", "exports"], function (require, ex
     const getAvailableLanguages = () => Object.assign(Object.entries(langstoSuffixes).map(([k, v]) => ({ id: k, alias: v[1] })));
     exports.getAvailableLanguages = getAvailableLanguages;
 });
+define("model/WindowState", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
 define("settings", ["require", "exports", "model/syntaxHighlighting"], function (require, exports, syntaxHighlighting_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -743,7 +848,8 @@ define("settings", ["require", "exports", "model/syntaxHighlighting"], function 
                         data: {
                             type: 'probe',
                             locator: item.locator,
-                            attr: item.attr, // as any to access previously typed data
+                            property: item.property,
+                            nested: {},
                         }
                     };
                 }
@@ -790,6 +896,10 @@ define("ui/create/createTextSpanIndicator", ["require", "exports", "settings", "
         indicator.style.color = 'gray';
         if (marginLeft) {
             indicator.style.marginLeft = '0.25rem';
+        }
+        if (args.autoVerticalMargin) {
+            indicator.style.marginTop = 'auto';
+            indicator.style.marginBottom = 'auto';
         }
         indicator.style.marginRight = '0.25rem';
         const ext = args.external ? '↰' : '';
@@ -1362,13 +1472,16 @@ aspect MagicOutputDemo {
     };
     const displayHelp = (type, setHelpButtonDisabled) => {
         setHelpButtonDisabled === null || setHelpButtonDisabled === void 0 ? void 0 : setHelpButtonDisabled(true);
-        // TODO prevent this if help window already open
-        // Maybe disable the help button, re-enable on close?
+        const cleanup = () => {
+            helpWindow.remove();
+            setHelpButtonDisabled === null || setHelpButtonDisabled === void 0 ? void 0 : setHelpButtonDisabled(false);
+        };
         const helpWindow = (0, showWindow_2.default)({
             rootStyle: `
       width: 32rem;
       min-height: 8rem;
     `,
+            onForceClose: cleanup,
             resizable: true,
             render: (root) => {
                 root.appendChild((0, createModalTitle_1.default)({
@@ -1377,10 +1490,7 @@ aspect MagicOutputDemo {
                         header.innerText = getHelpTitle(type);
                         container.appendChild(header);
                     },
-                    onClose: () => {
-                        setHelpButtonDisabled === null || setHelpButtonDisabled === void 0 ? void 0 : setHelpButtonDisabled(false);
-                        helpWindow.remove();
-                    },
+                    onClose: cleanup,
                 }).element);
                 const textHolder = document.createElement('div');
                 textHolder.style.padding = '0.5rem';
@@ -1406,75 +1516,303 @@ aspect MagicOutputDemo {
     };
     exports.default = displayHelp;
 });
-define("rpc/Rpc", ["require", "exports"], function (require, exports) {
+define("model/findLocatorWithNestingPath", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.buildRpc = void 0;
-    const buildRpc = () => (env, req) => env.performTypedRpc(req);
-    exports.buildRpc = buildRpc;
+    const findLocatorWithNestingPath = (path, rootLines) => {
+        const step = (index, from) => {
+            const line = rootLines[path[index]];
+            if (!line) {
+                return null;
+            }
+            if (index >= path.length - 1) {
+                switch (line.type) {
+                    case 'node':
+                        return line.value;
+                    default:
+                        return null;
+                }
+            }
+            switch (line.type) {
+                case 'arr':
+                    return step(index + 1, line.value);
+                default:
+                    return null;
+            }
+        };
+        return step(0, rootLines);
+    };
+    exports.default = findLocatorWithNestingPath;
 });
-define("rpc/TextRpc", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_1) {
+define("dependencies/onp/data", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.buildTextRpc = void 0;
-    const buildTextRpc = () => (0, Rpc_1.buildRpc)();
-    exports.buildTextRpc = buildTextRpc;
+    exports.position = exports.SES_ADD = exports.SES_COMMON = exports.SES_DELETE = void 0;
+    exports.SES_DELETE = -1;
+    exports.SES_COMMON = 0;
+    exports.SES_ADD = 1;
+    function position(x, y, k) {
+        return { x, y, k };
+    }
+    exports.position = position;
 });
-define("rpc/evaluateProbe", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_1) {
+define("dependencies/onp/results", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    ;
-    exports.default = (0, TextRpc_1.buildTextRpc)();
+    exports.createTextResults = exports.createResultItem = void 0;
+    function createResultItem(left, right, state) {
+        return { left, right, state };
+    }
+    exports.createResultItem = createResultItem;
+    function createTextResults(results) {
+        if (results.length === 0) {
+            return [];
+        }
+        let last = createResultItem(results[0].left, results[0].right, results[0].state);
+        let shrink = [last];
+        results.slice(1).forEach((item) => {
+            if (item.state !== last.state) {
+                last = createResultItem(item.left, item.right, item.state);
+                shrink.push(last);
+            }
+            else {
+                last.left += item.left;
+                last.right += item.right;
+            }
+        });
+        return shrink;
+    }
+    exports.createTextResults = createTextResults;
 });
-define("rpc/TestRpc", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_2) {
+define("dependencies/onp/onp", ["require", "exports", "dependencies/onp/data", "dependencies/onp/results"], function (require, exports, data_1, results_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.buildTestRpc = void 0;
-    const buildTestRpc = () => (0, Rpc_2.buildRpc)();
-    exports.buildTestRpc = buildTestRpc;
+    exports.onp = void 0;
+    function createInfo(a, b) {
+        //switch sides
+        if (a.length >= b.length) {
+            return {
+                a: b,
+                b: a,
+                m: b.length,
+                n: a.length,
+                reverse: true,
+                offset: b.length + 1
+            };
+        }
+        return {
+            a: a,
+            b: b,
+            m: a.length,
+            n: b.length,
+            reverse: false,
+            offset: a.length + 1
+        };
+    }
+    function onp(textA, textB) {
+        const [epc, ed] = positions(textA, textB);
+        const [result, lcs] = sequence(textA, textB, epc);
+        return [result, ed, lcs];
+    }
+    exports.onp = onp;
+    function positions(textA, textB) {
+        const { n, m, offset } = createInfo(textA, textB);
+        const path = [];
+        const pos = [];
+        const delta = n - m;
+        const size = m + n + 3;
+        const fp = {};
+        for (let i = 0; i < size; i++) {
+            fp[i] = data_1.SES_DELETE;
+            path[i] = data_1.SES_DELETE;
+        }
+        let p = data_1.SES_DELETE;
+        do {
+            ++p;
+            for (let k = -p; k <= delta - 1; k++) {
+                fp[k + offset] = snake(textA, textB, path, pos, k, fp[k - 1 + offset] + 1, fp[k + 1 + offset]);
+            }
+            for (let k = delta + p; k >= delta + 1; k--) {
+                fp[k + offset] = snake(textA, textB, path, pos, k, fp[k - 1 + offset] + 1, fp[k + 1 + offset]);
+            }
+            fp[delta + offset] = snake(textA, textB, path, pos, delta, fp[delta - 1 + offset] + 1, fp[delta + 1 + offset]);
+        } while (fp[delta + offset] !== n);
+        let ed = delta + 2 * p;
+        let epc = [];
+        let r = path[delta + offset];
+        while (r !== data_1.SES_DELETE) {
+            epc[epc.length] = (0, data_1.position)(pos[r].x, pos[r].y, null);
+            r = pos[r].k;
+        }
+        return [epc, ed];
+    }
+    function sequence(textA, textB, epc) {
+        const { a, b, reverse } = createInfo(textA, textB);
+        const changes = [];
+        let y_idx = 1;
+        let x_idx = 1;
+        let py_idx = 0;
+        let px_idx = 0;
+        let lcs = "";
+        for (let i = epc.length - 1; i >= 0; i--) {
+            while (px_idx < epc[i].x || py_idx < epc[i].y) {
+                if (epc[i].y - epc[i].x > py_idx - px_idx) {
+                    if (reverse) {
+                        changes[changes.length] = (0, results_1.createResultItem)(b[py_idx], b[py_idx], data_1.SES_DELETE);
+                    }
+                    else {
+                        changes[changes.length] = (0, results_1.createResultItem)(b[py_idx], b[py_idx], data_1.SES_ADD);
+                    }
+                    ++y_idx;
+                    ++py_idx;
+                }
+                else if (epc[i].y - epc[i].x < py_idx - px_idx) {
+                    if (reverse) {
+                        changes[changes.length] = (0, results_1.createResultItem)(a[px_idx], a[px_idx], data_1.SES_ADD);
+                    }
+                    else {
+                        changes[changes.length] = (0, results_1.createResultItem)(a[px_idx], a[px_idx], data_1.SES_DELETE);
+                    }
+                    ++x_idx;
+                    ++px_idx;
+                }
+                else {
+                    changes[changes.length] = (0, results_1.createResultItem)(a[px_idx], b[py_idx], data_1.SES_COMMON);
+                    lcs += a[px_idx];
+                    ++x_idx;
+                    ++y_idx;
+                    ++px_idx;
+                    ++py_idx;
+                }
+            }
+        }
+        return [changes, lcs];
+    }
+    function snake(textA, textB, path, pos, k, p, pp) {
+        const { a, b, n, m, offset } = createInfo(textA, textB);
+        const r = p > pp ? path[k - 1 + offset] : path[k + 1 + offset];
+        let y = Math.max(p, pp);
+        let x = y - k;
+        while (x < m && y < n && a[x] === b[y]) {
+            ++x;
+            ++y;
+        }
+        path[k + offset] = pos.length;
+        pos[pos.length] = (0, data_1.position)(x, y, r);
+        return y;
+    }
 });
-define("rpc/getTestSuite", ["require", "exports", "rpc/TestRpc"], function (require, exports, TestRpc_1) {
+define("dependencies/onp/array", ["require", "exports", "dependencies/onp/results", "dependencies/onp/data"], function (require, exports, results_2, data_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, TestRpc_1.buildTestRpc)();
+    exports.objectifyLcs = exports.objectifyArray = exports.stringifyArray = void 0;
+    function stringifyArray(a, b) {
+        const map = { forward: {}, backward: {}, pointer: 1 };
+        const textA = a.map((item) => determineCode(map, item)).join("");
+        const textB = b.map((item) => determineCode(map, item)).join("");
+        return [textA, textB, map];
+    }
+    exports.stringifyArray = stringifyArray;
+    function objectifyArray(arrayA, arrayB, res, map) {
+        const results = res.map((r) => (0, results_2.createResultItem)(map.backward[r.left], map.backward[r.right], r.state));
+        results
+            .filter(filter([data_2.SES_COMMON, data_2.SES_DELETE]))
+            .forEach((item, index) => setData(item, arrayA[index], -1));
+        results
+            .filter(filter([data_2.SES_COMMON, data_2.SES_ADD]))
+            .forEach((item, index) => setData(item, arrayB[index], 1));
+        return results;
+    }
+    exports.objectifyArray = objectifyArray;
+    function objectifyLcs(map, res) {
+        return res.filter((item) => {
+            return item.state === data_2.SES_COMMON;
+        }).map((item) => {
+            return item.right;
+        });
+    }
+    exports.objectifyLcs = objectifyLcs;
+    function determineCode(map, item) {
+        let id = item.toString();
+        let code = map.forward[id];
+        if (!code) {
+            code = String.fromCharCode(map.pointer);
+            map.forward[id] = code;
+            map.backward[code] = id;
+            map.pointer++;
+        }
+        return code;
+    }
+    function filter(what) {
+        return (item) => {
+            return what.indexOf(item.state) >= 0;
+        };
+    }
+    function setData(item, data, side) {
+        switch (true) {
+            case item.state === data_2.SES_DELETE:
+            case item.state === data_2.SES_ADD:
+                item.left = item.right = data;
+                break;
+            case item.state === data_2.SES_COMMON && side === -1:
+                item.left = data;
+                break;
+            case item.state === data_2.SES_COMMON && side === 1:
+                item.right = data;
+                break;
+            default:
+                break;
+        }
+    }
 });
-define("rpc/listTestSuites", ["require", "exports", "rpc/TestRpc"], function (require, exports, TestRpc_2) {
+define("dependencies/onp/index", ["require", "exports", "dependencies/onp/data", "dependencies/onp/results", "dependencies/onp/onp", "dependencies/onp/array"], function (require, exports, data_3, results_3, onp_1, array_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, TestRpc_2.buildTestRpc)();
+    exports.diffArray = exports.diffText = exports.SES_ADD = exports.SES_COMMON = exports.SES_DELETE = void 0;
+    Object.defineProperty(exports, "SES_DELETE", { enumerable: true, get: function () { return data_3.SES_DELETE; } });
+    Object.defineProperty(exports, "SES_COMMON", { enumerable: true, get: function () { return data_3.SES_COMMON; } });
+    Object.defineProperty(exports, "SES_ADD", { enumerable: true, get: function () { return data_3.SES_ADD; } });
+    function diffText(a, b) {
+        const [results, ed, lcs] = (0, onp_1.onp)(a, b);
+        return {
+            distance: ed,
+            lcs: lcs,
+            results: (0, results_3.createTextResults)(results)
+        };
+    }
+    exports.diffText = diffText;
+    function diffArray(arrayA, arrayB) {
+        const [a, b, map] = (0, array_1.stringifyArray)(arrayA, arrayB);
+        const [res, ed] = (0, onp_1.onp)(a, b);
+        const results = (0, array_1.objectifyArray)(arrayA, arrayB, res, map);
+        const lcs = (0, array_1.objectifyLcs)(map, results);
+        return {
+            distance: ed,
+            lcs: lcs,
+            results: results
+        };
+    }
+    exports.diffArray = diffArray;
 });
-define("rpc/putTestSuite", ["require", "exports", "rpc/TestRpc"], function (require, exports, TestRpc_3) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, TestRpc_3.buildTestRpc)();
-});
-define("model/test/TestCase", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-});
-define("model/test/rpcBodyToAssertionLine", ["require", "exports"], function (require, exports) {
+define("model/test/rpcBodyToAssertionLine", ["require", "exports", "hacks"], function (require, exports, hacks_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.rpcLinesToAssertionLines = void 0;
     const rpcBodyToTestBody = (line) => {
-        if (typeof line === 'string') {
-            return line;
-        }
-        if (Array.isArray(line)) {
-            return line.map(rpcBodyToTestBody).filter(Boolean);
-        }
         switch (line.type) {
-            case 'node': return { naive: line.value, robust: line.value };
+            case 'plain':
+            case 'streamArg':
+            case 'node':
+                return line;
+            case 'stdout':
+            case 'stderr':
+                // Do not keep these
+                return null;
+            case 'arr':
+                return { type: 'arr', value: line.value.map(rpcBodyToTestBody).filter(Boolean) };
             default: {
-                switch (line.type) {
-                    case 'stdout':
-                    case 'stderr':
-                        // Do not keep these
-                        return null;
-                    case 'stream-arg':
-                    default:
-                        return line.value;
-                }
+                (0, hacks_1.assertUnreachable)(line);
+                return line;
             }
         }
     };
@@ -1485,238 +1823,138 @@ define("model/test/rpcBodyToAssertionLine", ["require", "exports"], function (re
     exports.rpcLinesToAssertionLines = rpcLinesToAssertionLines;
     exports.default = rpcBodyToTestBody;
 });
-define("model/test/compareTestResult", ["require", "exports", "model/test/rpcBodyToAssertionLine"], function (require, exports, rpcBodyToAssertionLine_1) {
+define("model/test/compareTestResult", ["require", "exports", "dependencies/onp/index", "model/test/rpcBodyToAssertionLine"], function (require, exports, index_1, rpcBodyToAssertionLine_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    // TODO return type, append | 'same-output-but-different-locators'
-    const compareTestResult = (tc, actual) => {
-        const argValueToNodeLocator = (val) => typeof val === 'object' ? val : null;
-        const forEachLocator = (locator, callback) => {
-            callback(locator);
-            locator.steps.forEach(step => {
-                if (step.type === 'nta') {
-                    step.value.args.forEach(arg => {
-                        var _a;
-                        (_a = arg.args) === null || _a === void 0 ? void 0 : _a.forEach(val => {
-                            const vv = argValueToNodeLocator(val.value);
-                            if (vv) {
-                                console.log('.. > recurse');
-                                forEachLocator(vv, callback);
-                            }
-                        });
-                    });
+    const flattenLines = (lines, callback) => {
+        lines = (0, rpcBodyToAssertionLine_1.rpcLinesToAssertionLines)(lines);
+        lines.forEach((line, idx) => {
+            switch (line.type) {
+                case 'arr': {
+                    flattenLines(line.value, (path, line) => callback([idx, ...path], line));
+                    break;
                 }
-            });
-        };
-        const flattenLocator = (locator) => {
-            const res = [];
-            forEachLocator(locator, loc => res.push(loc));
-            return res;
-        };
-        const createLocatorComparison = (expected, actual) => {
-            const flattenedExpected = expected.reduce((acc, add) => acc.concat(flattenLocator(add)), []);
-            const flattenedActual = actual.reduce((acc, add) => acc.concat(flattenLocator(add)), []);
-            if (flattenedExpected.length != flattenedActual.length) {
-                return 'different-number-of-locators';
-            }
-            const diffIndexes = {};
-            flattenedExpected.forEach((exp, idx) => {
-                if (JSON.stringify(exp) !== JSON.stringify(flattenedActual[idx])) {
-                    if (JSON.stringify(exp.result) === JSON.stringify(flattenedActual[idx].result)) {
-                        diffIndexes[idx] = 'same-result-but-different-steps';
-                    }
-                    else {
-                        diffIndexes[idx] = 'different-result';
-                    }
+                default: {
+                    callback([idx], line);
+                    break;
                 }
-            });
-            if (Object.keys(diffIndexes).length === 0) {
-                return 'pass';
             }
-            return diffIndexes;
-        };
-        const getLocatorsFromAssertionLines = (lines) => {
-            const res = [];
-            lines.forEach(line => {
-                if (Array.isArray(line)) {
-                    res.push(...getLocatorsFromAssertionLines(line));
-                }
-                else if (typeof line === 'object') {
-                    res.push(line.robust);
-                }
-            });
-            return res;
-        };
-        const getFullReport = (output) => {
-            const report = ({
-                output,
-                sourceLocators: createLocatorComparison([tc.locator.robust], [actual.locator]),
-                attrArgLocators: 'pass',
-                outputLocators: tc.assert.type === 'smoke'
-                    ? 'pass'
-                    : createLocatorComparison(getLocatorsFromAssertionLines((0, rpcBodyToAssertionLine_1.rpcLinesToAssertionLines)(tc.assert.lines)), getLocatorsFromAssertionLines(actual.lines)),
-            });
-            if (Object.values(report).every(ent => ent === 'pass')) {
-                return 'pass';
-            }
-            return report;
-        };
-        const stripStepsFromAssertionLine = (line) => {
-            if (typeof line === 'string') {
-                return line;
-            }
-            if (Array.isArray(line)) {
-                return line.map(stripStepsFromAssertionLine);
-            }
-            return {
-                robust: { result: line.robust.result, steps: [], },
-                naive: { result: line.naive.result, steps: [], }
-            };
-        };
-        const actualLines = actual.lines;
-        switch (tc.assert.type) {
-            case 'identity': {
-                const expectedOutputStrings = (0, rpcBodyToAssertionLine_1.rpcLinesToAssertionLines)(tc.assert.lines).map(stripStepsFromAssertionLine).map(l => JSON.stringify(l));
-                const actualOutputStrings = actualLines.map(stripStepsFromAssertionLine).map(l => JSON.stringify(l));
-                const unmatchedValidLines = [];
-                const invalidLines = [];
-                let pushValidLines = true;
-                let expIdx = 0;
-                let actIdx = 0;
-                while (expIdx < expectedOutputStrings.length && actIdx < actualOutputStrings.length) {
-                    const e = expectedOutputStrings[expIdx];
-                    const a = actualOutputStrings[actIdx];
-                    // const e = JSON.stringify(expected[expIdx]);
-                    // const a = JSON.stringify(actualLines[actIdx]);
-                    if (e === a) {
-                        ++expIdx;
-                        ++actIdx;
-                    }
-                    else {
-                        // invalidLines.push(actIdx);
-                        const nextExp = (offset) => (expIdx + offset) < expectedOutputStrings.length ? expectedOutputStrings[expIdx + offset] : null;
-                        const nextAct = (offset) => (actIdx + offset) < actualOutputStrings.length ? actualOutputStrings[actIdx + offset] : null;
-                        let foundMatch = false;
-                        for (let offset = 1; offset <= 3; ++offset) {
-                            if (e == nextAct(offset)) {
-                                console.log('found e->', offset, ' compromise at ', expIdx, '/', actIdx);
-                                // unmatchedValidLines.push(expIdx);
-                                for (let report = 0; report < offset; ++report) {
-                                    invalidLines.push(actIdx + report);
-                                }
-                                actIdx += offset;
-                                foundMatch = true;
-                                ++actIdx;
-                                ++expIdx;
-                                break;
-                            }
-                            if (a == nextExp(offset)) {
-                                console.log('Found act(1)->', offset, ' compromise at ', expIdx, '/', actIdx);
-                                // console.log('the conte')
-                                // invalidLines.push(actIdx);
-                                for (let report = 0; report < offset; ++report) {
-                                    unmatchedValidLines.push(expIdx + report);
-                                }
-                                expIdx += offset;
-                                ++actIdx;
-                                foundMatch = true;
-                                ++actIdx;
-                                ++expIdx;
-                                break;
-                            }
-                        }
-                        if (!foundMatch) {
-                            console.log('couldnt find compromise at ', expIdx, '/', actIdx, '; reporting both');
-                            invalidLines.push(actIdx);
-                            unmatchedValidLines.push(expIdx);
-                            ++actIdx;
-                            ++expIdx;
-                        }
-                    }
-                }
-                if (invalidLines.length !== 0) {
-                    while (actIdx < actualLines.length) {
-                        invalidLines.push(actIdx);
-                        ++actIdx;
-                    }
-                    while (expIdx < expectedOutputStrings.length) {
-                        unmatchedValidLines.push(expIdx);
-                        ++expIdx;
-                    }
-                    return getFullReport({
-                        type: 'difference-at-lines',
-                        invalid: invalidLines,
-                        unmatchedValid: unmatchedValidLines
-                    });
-                }
-                if (expectedOutputStrings.length != actualOutputStrings.length) {
-                    console.log('diff length, exp:', expectedOutputStrings.length, ', actualLines:', actualLines.length);
-                    return getFullReport('different-number-of-lines');
-                }
-                return getFullReport('pass');
-            }
-            case 'set': {
-                const expected = (0, rpcBodyToAssertionLine_1.rpcLinesToAssertionLines)(tc.assert.lines);
-                if (expected.length != actualLines.length) {
-                    return getFullReport('different-number-of-lines');
-                }
-                const count = (lines) => {
-                    const ret = {};
-                    lines.forEach(line => {
-                        const str = JSON.stringify(line);
-                        ret[str] = (ret[str] || 0) + 1;
-                    });
-                    return ret;
-                };
-                const expCount = count(expected);
-                const actCount = count(actualLines);
-                const invalidLines = [];
-                actualLines.forEach((line, lineIdx) => {
-                    const key = JSON.stringify(line);
-                    if (expCount[key] !== actCount[key]) {
-                        invalidLines.push(lineIdx);
-                    }
-                });
-                return getFullReport(invalidLines.length === 0 ? 'pass' : { type: 'difference-at-lines', invalid: invalidLines, unmatchedValid: [] });
-            }
-            case 'smoke':
-            default: {
-                // TODO check if output contains error or not
-                return 'pass';
-            }
-        }
+        });
     };
+    const createEncounterCounter = () => {
+        const encounterCounter = {};
+        return (path) => {
+            var _a;
+            const encoded = JSON.stringify(path);
+            const prevEncounters = (_a = encounterCounter[encoded]) !== null && _a !== void 0 ? _a : 0;
+            encounterCounter[encoded] = prevEncounters + 1;
+            return prevEncounters;
+        };
+    };
+    const flattenNestedTestResponses = (tests, callback) => {
+        const encounterCounter = createEncounterCounter();
+        tests.forEach(test => {
+            if (test.result === 'could-not-find-node') {
+                return;
+            }
+            const encIndex = encounterCounter(test.path);
+            flattenLines(test.result.body, (path, line) => callback([...test.path, encIndex, ...path], line));
+            flattenNestedTestResponses(test.result.nested, (path, line) => callback([...test.path, encIndex, ...path], line));
+        });
+    };
+    const createFlattenedLine = (path, line, side) => {
+        return {
+            path, line, side,
+            toString: () => `${JSON.stringify(path.slice(0, path.length - 1))} - ${JSON.stringify(line)}`,
+        };
+    };
+    const compareTestResult = (assertionType, tcase, evalRes) => {
+        // const flattenedExpected: { [id: string]: FlattenedLine } = {};
+        const flattenedExpected = [];
+        const addExpected = (path, line) => flattenedExpected.push(createFlattenedLine(path, line, 'left'));
+        if (tcase.result !== 'could-not-find-node') {
+            flattenLines(tcase.result.body, addExpected);
+            flattenNestedTestResponses(tcase.result.nested, addExpected);
+        }
+        // const flattenedActual: { [id: string]: RpcBodyLine } = {};
+        const flattenedActual = [];
+        const addActual = (path, line) => flattenedActual.push(createFlattenedLine(path, line, 'right'));
+        // const addActual = (path: number[], line: RpcBodyLine) => flattenedActual[JSON.stringify(path)] = line;
+        if (evalRes.result !== 'could-not-find-node') {
+            flattenLines(evalRes.result.body, addActual);
+            flattenNestedTestResponses(evalRes.result.nested, addActual);
+        }
+        let someErr = false;
+        if (assertionType === 'SET') {
+            const sorter = (a, b) => {
+                const lhs = a.toString();
+                const rhs = b.toString();
+                if (lhs == rhs) {
+                    return 0;
+                }
+                return lhs < rhs ? -1 : 1;
+            };
+            flattenedExpected.sort(sorter);
+            flattenedActual.sort(sorter);
+        }
+        const retExp = {};
+        const retAct = {};
+        const diffResult = (0, index_1.diffArray)(flattenedExpected, flattenedActual);
+        diffResult.results.forEach(result => {
+            if (!result.state) {
+                return; // No diff, no marker to add
+            }
+            someErr = true;
+            if (result.state === -1) {
+                // Expected line not matched
+                retExp[JSON.stringify(result.left.path)] = 'error';
+            }
+            else {
+                // Unexpected actual line
+                retAct[JSON.stringify(result.right.path)] = 'error';
+            }
+        });
+        return {
+            overall: someErr ? 'error' : 'ok',
+            expectedMarkers: retExp,
+            actualMarkers: retAct,
+        };
+    };
+    // export { TestComparisonReport }
     exports.default = compareTestResult;
 });
-define("model/test/TestManager", ["require", "exports", "rpc/evaluateProbe", "rpc/getTestSuite", "rpc/listTestSuites", "rpc/putTestSuite", "model/test/compareTestResult", "model/test/rpcBodyToAssertionLine"], function (require, exports, evaluateProbe_1, getTestSuite_1, listTestSuites_1, putTestSuite_1, compareTestResult_1, rpcBodyToAssertionLine_2) {
+define("model/test/TestManager", ["require", "exports", "model/findLocatorWithNestingPath", "model/test/compareTestResult"], function (require, exports, findLocatorWithNestingPath_1, compareTestResult_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createTestManager = void 0;
-    evaluateProbe_1 = __importDefault(evaluateProbe_1);
-    getTestSuite_1 = __importDefault(getTestSuite_1);
-    listTestSuites_1 = __importDefault(listTestSuites_1);
-    putTestSuite_1 = __importDefault(putTestSuite_1);
+    exports.nestedTestResponseToTest = exports.createTestManager = void 0;
+    findLocatorWithNestingPath_1 = __importDefault(findLocatorWithNestingPath_1);
     compareTestResult_1 = __importDefault(compareTestResult_1);
-    ;
     ;
     const createTestManager = (getEnv, createJobId) => {
         const suiteListRepo = {};
         const saveCategoryState = async (category, cases) => {
             console.log('save', category, '-->', cases);
             console.log('expected bytelen:', JSON.stringify(cases).length);
-            // const newState = [...(repo[category] || {}),
+            const prev = suiteListRepo[category];
             suiteListRepo[category] = cases;
-            const resp = await (0, putTestSuite_1.default)(getEnv(), {
-                query: {
-                    type: "meta:putTestSuite",
+            let resp;
+            try {
+                resp = await getEnv().performTypedRpc({
+                    type: "Test:PutTestSuite",
                     suite: `${category}.json`,
-                    contents: JSON.stringify(cases),
-                },
-                type: 'testMeta',
-            });
-            if (resp.ok)
+                    contents: {
+                        v: 1,
+                        cases
+                    },
+                });
+            }
+            catch (e) {
+                suiteListRepo[category] = prev;
+                throw e;
+            }
+            if (!resp.err)
                 return true;
-            console.warn(`Failed saving cases for ${category}`);
+            console.warn(`Failed saving cases for ${category}, error:`, resp.err);
             return false;
         };
         const listeners = {};
@@ -1729,18 +1967,22 @@ define("model/test/TestManager", ["require", "exports", "rpc/evaluateProbe", "rp
             }
             // console.log('todo add', category, '/', test.name);
             const existing = await doGetTestSuite(category);
+            let alreadyExisted = false;
             if (existing == 'failed-fetching') {
                 // Doesn't exist yet, this is OK
             }
-            else if (existing.some(tc => tc.name == test.name) && !overwriteIfExisting) {
-                return 'already-exists-with-that-name';
+            else if (existing.some(tc => tc.name == test.name)) {
+                if (!overwriteIfExisting) {
+                    return 'already-exists-with-that-name';
+                }
+                alreadyExisted = true;
             }
             await saveCategoryState(category, [...(suiteListRepo[category] || []).filter(tc => tc.name !== test.name), test]);
             ++categoryInvalidationCount;
             if (overwriteIfExisting && testStatusRepo[category]) {
                 delete testStatusRepo[category][test.name];
             }
-            notifyListeners('added-test');
+            notifyListeners(alreadyExisted ? 'updated-test' : 'added-test');
             return 'ok';
         };
         const removeTest = async (category, name) => {
@@ -1763,15 +2005,15 @@ define("model/test/TestManager", ["require", "exports", "rpc/evaluateProbe", "rp
             return () => {
                 if (!categoryLister || categoryInvalidationCount !== categoryListingVersion) {
                     categoryListingVersion = categoryInvalidationCount;
-                    categoryLister = (0, listTestSuites_1.default)(getEnv(), {
-                        query: { type: 'meta:listTestSuites', },
-                        type: 'testMeta',
+                    categoryLister = getEnv().performTypedRpc({
+                        type: 'Test:ListTestSuites',
                     })
-                        .then(({ suites }) => {
-                        if (!suites) {
+                        .then(({ result }) => {
+                        if (result.type == 'err') {
+                            console.warn('Failed listing test suites. Error code:', result.value);
                             return 'failed-listing';
                         }
-                        return suites
+                        return result.value
                             .map((suite) => {
                             if (!suite.endsWith('.json')) {
                                 console.warn(`Unexpected suite file name ${suite}`);
@@ -1789,31 +2031,20 @@ define("model/test/TestManager", ["require", "exports", "rpc/evaluateProbe", "rp
             if (suiteListRepo[id]) {
                 return suiteListRepo[id];
             }
-            const { contents } = await (0, getTestSuite_1.default)(getEnv(), {
-                query: {
-                    type: 'meta:getTestSuite',
-                    suite: `${id}.json`,
-                },
-                type: 'testMeta',
+            const { result } = await getEnv().performTypedRpc({
+                type: 'Test:GetTestSuite',
+                suite: `${id}.json`,
             });
-            if (contents) {
-                try {
-                    const ret = JSON.parse(contents.trim());
-                    suiteListRepo[id] = ret;
-                    return ret;
-                }
-                catch (e) {
-                    console.warn(e);
-                    console.warn(`Suite contents for ${id} is not a valid json string`);
-                    console.warn('-->', contents);
-                    return 'failed-fetching';
-                }
+            if (result.type === 'contents') {
+                const cases = result.value.cases;
+                suiteListRepo[id] = cases;
+                return cases;
             }
-            console.warn(`Failed to get test suite '${id}'`);
+            console.warn(`Failed to get test suite '${id}'. Error code: ${result.value}`);
             return 'failed-fetching';
         };
         const testStatusRepo = {};
-        const getTestStatus = (category, name) => {
+        const evaluateTest = (category, name) => {
             const categoryStatus = testStatusRepo[category] || {};
             testStatusRepo[category] = categoryStatus;
             const existing = categoryStatus[name];
@@ -1830,86 +2061,243 @@ define("model/test/TestManager", ["require", "exports", "rpc/evaluateProbe", "rp
                     console.warn(`No such test case '${name}' in ${category}`);
                     return 'failed-fetching';
                 }
-                const res = await new Promise(async (resolve, reject) => {
-                    const handleUpdate = (data) => {
-                        if (data.status === 'done') {
-                            resolve(data.result);
-                        }
-                    };
-                    const jobId = createJobId(handleUpdate);
-                    try {
-                        const res = await (0, evaluateProbe_1.default)(getEnv(), {
-                            type: 'query',
-                            posRecovery: tcase.posRecovery,
-                            cache: tcase.cache,
-                            text: tcase.src,
-                            stdout: false,
-                            query: {
-                                attr: tcase.attribute,
-                                locator: tcase.locator.robust,
-                            },
-                            mainArgs: tcase.mainArgs,
-                            tmpSuffix: tcase.tmpSuffix,
-                            job: jobId,
-                            jobLabel: `Test ${category} > '${tcase.name}'`,
-                        });
-                        if (!res.job) {
-                            // Non-concurrent server, handle request synchronously
-                            resolve(res);
-                        }
-                    }
-                    catch (e) {
-                        reject(e);
-                    }
+                const nestedTestToRequest = (test) => ({
+                    path: test.path,
+                    property: test.property,
+                    nested: test.nestedProperties.map(nestedTestToRequest),
                 });
-                let report;
-                if (!res.locator) {
-                    report = 'failed-eval';
+                const res = await fullyEvaluate(tcase.src, tcase.property, tcase.locator, tcase.nestedProperties.map(nestedTestToRequest), `${tcase.name}`);
+                if (tcase.assertType === 'SMOKE') {
+                    return {
+                        test: tcase,
+                        output: res,
+                        status: {
+                            overall: 'ok',
+                            expectedMarkers: {},
+                            actualMarkers: {},
+                        },
+                    };
                 }
-                else {
-                    report = (0, compareTestResult_1.default)(tcase, { locator: res.locator, lines: (0, rpcBodyToAssertionLine_2.rpcLinesToAssertionLines)(res.body) });
-                }
-                notifyListeners('test-status-update');
                 return {
-                    report,
-                    lines: res.body,
+                    test: tcase,
+                    output: res,
+                    status: (0, compareTestResult_1.default)(tcase.assertType, testToNestedTestResponse({
+                        expectedOutput: tcase.expectedOutput,
+                        nestedProperties: tcase.nestedProperties,
+                        path: [],
+                        property: tcase.property,
+                    }), res),
                 };
-                // await new Promise(res => setTimeout(res, 1000));
-                // return 'pass';
             })();
             categoryStatus[name] = fresh;
+            notifyListeners('test-status-update');
             return fresh;
         };
-        // env.onChangeListeners[`test-manager-${(Math.random() * Number.MAX_SAFE_INTEGER)|0}`] = () => {
-        //   Object.keys(testStatusRepo).forEach(id => delete testStatusRepo[id]);
-        //   notifyListeners('test-status-update');
-        // };
         const addListener = (uid, callback) => {
             listeners[uid] = callback;
         };
         const removeListener = (uid) => {
             delete listeners[uid];
         };
+        const fullyEvaluate = async (src, property, locator, nested, debugLabel) => {
+            // let ret: NestedTestResponse = {
+            //   path: '',
+            //   property,
+            //   body: [],
+            //   nested: [],
+            // };
+            const rootRes = await new Promise(async (resolve, reject) => {
+                const handleUpdate = (data) => {
+                    switch (data.value.type) {
+                        case 'workerTaskDone': {
+                            const res = data.value.value;
+                            if (res.type === 'normal') {
+                                const cast = res.value;
+                                if (cast.response.type == 'job') {
+                                    throw new Error(`Unexpected 'job' result in async test update`);
+                                }
+                                resolve(cast.response.value);
+                            }
+                            else {
+                                reject(res.value);
+                            }
+                        }
+                    }
+                    // if (data.status === 'done') {
+                    //   resolve(data.result.response.value);
+                    // }
+                };
+                const jobId = createJobId(handleUpdate);
+                try {
+                    const env = getEnv();
+                    const res = await env.performTypedRpc({
+                        type: 'EvaluateProperty',
+                        property,
+                        locator,
+                        src,
+                        captureStdout: true,
+                        job: jobId,
+                        jobLabel: `Test > ${debugLabel}`,
+                    });
+                    if (res.response.type === 'sync') {
+                        // Non-concurrent server, handle request synchronously
+                        resolve(res.response.value);
+                    }
+                }
+                catch (e) {
+                    reject(e);
+                }
+            });
+            const nestedTestResponses = await Promise.all(nested.map(async (nest) => {
+                const nestPathParts = nest.path;
+                const nestLocator = (0, findLocatorWithNestingPath_1.default)(nestPathParts, rootRes.body);
+                if (!nestLocator) {
+                    return {
+                        path: nest.path,
+                        property: nest.property,
+                        result: 'could-not-find-node',
+                    };
+                }
+                const nestRes = await fullyEvaluate(src, nest.property, nestLocator, nest.nested, debugLabel);
+                return {
+                    ...nestRes,
+                    path: nest.path,
+                };
+            }));
+            return {
+                path: [],
+                property,
+                result: {
+                    body: rootRes.body,
+                    nested: nestedTestResponses,
+                },
+            };
+        };
+        const convertTestResponseToTest = (tcase, response) => {
+            if (response.result === 'could-not-find-node') {
+                return null;
+            }
+            const convertResToTest = (res) => {
+                if (res.result === 'could-not-find-node') {
+                    return { path: res.path, property: res.property, expectedOutput: [{
+                                type: 'plain', value: 'Could not find',
+                            }], nestedProperties: [] };
+                }
+                return {
+                    path: res.path,
+                    property: res.property,
+                    expectedOutput: res.result.body,
+                    nestedProperties: res.result.nested.map(convertResToTest),
+                };
+            };
+            return {
+                src: tcase.src,
+                assertType: tcase.assertType,
+                expectedOutput: response.result.body,
+                nestedProperties: response.result.nested.map(convertResToTest),
+                property: tcase.property,
+                locator: tcase.locator,
+                name: tcase.name,
+            };
+        };
         return {
             addTest,
             removeTest,
             listTestSuiteCategories,
             getTestSuite: doGetTestSuite,
-            getTestStatus,
+            evaluateTest,
             addListener,
             removeListener,
             flushTestCaseData: () => {
                 Object.keys(testStatusRepo).forEach(id => delete testStatusRepo[id]);
                 notifyListeners('test-status-update');
             },
-            // onSourceTextChange,
+            fullyEvaluate,
+            convertTestResponseToTest,
         };
     };
     exports.createTestManager = createTestManager;
+    const testToNestedTestResponse = (src) => ({
+        path: src.path,
+        property: src.property,
+        result: {
+            body: src.expectedOutput,
+            nested: src.nestedProperties.map(testToNestedTestResponse),
+        },
+    });
+    const nestedTestResponseToTest = (src) => {
+        if (src.result === 'could-not-find-node') {
+            return null;
+        }
+        const nestedProperties = [];
+        src.result.nested.forEach(nest => {
+            const res = nestedTestResponseToTest(nest);
+            if (res) {
+                nestedProperties.push(res);
+            }
+        });
+        return {
+            path: src.path,
+            property: src.property,
+            expectedOutput: src.result.body,
+            nestedProperties,
+        };
+    };
+    exports.nestedTestResponseToTest = nestedTestResponseToTest;
 });
 define("model/ModalEnv", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+});
+define("model/UpdatableNodeLocator", ["require", "exports", "model/adjustLocator"], function (require, exports, adjustLocator_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createMutableLocator = exports.createImmutableLocator = void 0;
+    adjustLocator_1 = __importDefault(adjustLocator_1);
+    const createImmutableLocator = (source) => {
+        // const callbacks: { [id: string]: () => void } = {};
+        // const ourOwnListenerId = `immut-${(Math.random() * Number.MAX_SAFE_INTEGER)|0}`;
+        // source.setUpdateCallback()
+        // HMM How would this be cleaned up? Does it need to be?
+        return {
+            get: () => source.get(),
+            set: () => { },
+            adjust: () => { },
+            isMutable: () => false,
+            createMutableClone: () => createMutableLocator(JSON.parse(JSON.stringify(source.get()))),
+            // setUpdateCallback: (id, callback) => {
+            //   if (callback) {
+            //     callbacks[id] = callback;
+            //   } else {
+            //     delete callbacks[id];
+            //   }
+            // },
+        };
+    };
+    exports.createImmutableLocator = createImmutableLocator;
+    const createMutableLocator = (locator) => {
+        // const callbacks: { [id: string]: () => void } = {};
+        return {
+            get: () => locator,
+            set: (val) => {
+                locator = val;
+                // Object.values(callbacks).forEach(cb => cb());
+            },
+            adjust: (adjusters) => {
+                adjusters.forEach(adj => (0, adjustLocator_1.default)(adj, locator));
+            },
+            isMutable: () => true,
+            createMutableClone: () => createMutableLocator(JSON.parse(JSON.stringify(locator))),
+            // setUpdateCallback: (id, callback) => {
+            //   if (callback) {
+            //     callbacks[id] = callback;
+            //   } else {
+            //     delete callbacks[id];
+            //   }
+            // }
+        };
+    };
+    exports.createMutableLocator = createMutableLocator;
 });
 define("ui/create/registerNodeSelector", ["require", "exports"], function (require, exports) {
     "use strict";
@@ -1942,71 +2330,69 @@ define("ui/popup/formatAttr", ["require", "exports"], function (require, exports
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.formatAttrArgList = exports.formatAttrType = void 0;
     const formatAttrType = (orig) => {
-        switch (orig) {
-            case 'java.lang.String': return 'String';
-            default: return orig;
+        switch (orig.type) {
+            case 'nodeLocator': return orig.value.type;
+            case 'integer': return 'int';
+            // case ''
+            // case 'java.lang.String': return 'String';
+            default: return orig.type;
         }
     };
     exports.formatAttrType = formatAttrType;
     const formatAttr = (attr) => `${attr.name.startsWith('l:') ? attr.name.slice(2) : attr.name}${(attr.args
-        ? `(${attr.args.map(a => formatAttrType(a.type)).join(', ')})`
+        ? `(${attr.args.map(a => formatAttrType(a)).join(', ')})`
         : '')}`;
     const formatAttrArgList = (target, attr) => {
         var _a;
         (_a = attr.args) === null || _a === void 0 ? void 0 : _a.forEach((arg, argIdx) => {
+            var _a, _b, _c;
             if (argIdx > 0) {
                 target.appendChild(document.createTextNode(`,`));
             }
             switch (arg.type) {
-                case 'java.lang.String': {
+                case 'string': {
                     const node = document.createElement('span');
                     node.classList.add('syntax-string');
                     node.innerText = `"${arg.value}"`;
                     target.appendChild(node);
                     break;
                 }
-                case 'int': {
+                case 'integer': {
                     const node = document.createElement('span');
                     node.classList.add('syntax-int');
                     node.innerText = `${arg.value}`;
                     target.appendChild(node);
                     break;
                 }
-                case 'boolean': {
+                case 'bool': {
                     const node = document.createElement('span');
                     node.classList.add('syntax-modifier');
                     node.innerText = `${arg.value}`;
                     target.appendChild(node);
                     break;
                 }
-                default: {
-                    switch (arg.detail) {
-                        case 'AST_NODE': {
-                            const node = document.createElement('span');
-                            node.classList.add('syntax-type');
-                            if (!arg.value || (typeof arg.value !== 'object')) {
-                                // Probably null
-                                node.innerText = `${arg.value}`;
-                            }
-                            else {
-                                node.innerText = arg.value.result.type;
-                            }
-                            target.appendChild(node);
-                            break;
-                        }
-                        case 'OUTPUTSTREAM': {
-                            const node = document.createElement('span');
-                            node.classList.add('stream-arg-msg');
-                            node.innerText = '<stream>';
-                            target.appendChild(node);
-                            break;
-                        }
-                        default: {
-                            console.warn('Unsure of how to render', arg.type);
-                            target.appendChild(document.createTextNode(`${arg.value}`));
-                        }
+                case 'nodeLocator': {
+                    const node = document.createElement('span');
+                    node.classList.add('syntax-type');
+                    if (!arg.value || (typeof arg.value !== 'object')) {
+                        node.innerText = `null`;
                     }
+                    else {
+                        node.innerText = (_c = (_b = (_a = arg.value.value) === null || _a === void 0 ? void 0 : _a.result) === null || _b === void 0 ? void 0 : _b.type) !== null && _c !== void 0 ? _c : arg.value.type; // .split('.')[0];
+                    }
+                    target.appendChild(node);
                     break;
+                }
+                case 'outputstream': {
+                    const node = document.createElement('span');
+                    node.classList.add('stream-arg-msg');
+                    node.innerText = '<stream>';
+                    target.appendChild(node);
+                    break;
+                }
+                default: {
+                    console.warn('Unsure of how to render', arg.type);
+                    target.appendChild(document.createTextNode(`${arg.value}`));
                 }
             }
         });
@@ -2014,15 +2400,14 @@ define("ui/popup/formatAttr", ["require", "exports"], function (require, exports
     exports.formatAttrArgList = formatAttrArgList;
     exports.default = formatAttr;
 });
-define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/create/showWindow", "ui/trimTypeName", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, adjustLocator_1, createModalTitle_2, createTextSpanIndicator_2, registerNodeSelector_1, registerOnHover_2, showWindow_3, trimTypeName_1, displayAttributeModal_1, displayProbeModal_1, formatAttr_1) {
+define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/UpdatableNodeLocator", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/startEndToSpan", "ui/trimTypeName", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, hacks_2, UpdatableNodeLocator_1, createModalTitle_2, createTextSpanIndicator_2, registerNodeSelector_1, registerOnHover_2, startEndToSpan_2, trimTypeName_1, displayAttributeModal_1, displayProbeModal_1, formatAttr_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    adjustLocator_1 = __importDefault(adjustLocator_1);
     createModalTitle_2 = __importDefault(createModalTitle_2);
     createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
     registerNodeSelector_1 = __importDefault(registerNodeSelector_1);
     registerOnHover_2 = __importDefault(registerOnHover_2);
-    showWindow_3 = __importDefault(showWindow_3);
+    startEndToSpan_2 = __importDefault(startEndToSpan_2);
     trimTypeName_1 = __importDefault(trimTypeName_1);
     displayAttributeModal_1 = __importDefault(displayAttributeModal_1);
     displayProbeModal_1 = __importDefault(displayProbeModal_1);
@@ -2045,7 +2430,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
         window.ActiveLocatorRequest = callback;
         return callback;
     };
-    const displayArgModal = (env, modalPos, locator, attr) => {
+    const displayArgModal = (env, modalPos, locator, attr, nested) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let lastLocatorRequest = null;
         const cleanup = () => {
@@ -2053,6 +2438,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                 cancelLocatorRequest();
             }
             delete env.onChangeListeners[queryId];
+            popup.remove();
         };
         const args = attr.args;
         if (!args || !args.length) {
@@ -2060,7 +2446,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
         }
         env.onChangeListeners[queryId] = (adjusters) => {
             if (adjusters) {
-                adjusters.forEach(adj => (0, adjustLocator_1.default)(adj, locator));
+                locator.adjust(adjusters);
             }
         };
         const createTitle = () => {
@@ -2070,7 +2456,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                         title: 'Duplicate window',
                         invoke: () => {
                             const pos = popup.getPos();
-                            displayArgModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator, attr);
+                            displayArgModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator, attr, nested);
                         },
                     }
                 ],
@@ -2078,7 +2464,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                     var _a;
                     const headType = document.createElement('span');
                     headType.classList.add('syntax-type');
-                    headType.innerText = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_1.default)(locator.result.type)}`;
+                    headType.innerText = `${(_a = locator.get().result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_1.default)(locator.get().result.type)}`;
                     const headAttr = document.createElement('span');
                     headAttr.classList.add('syntax-attr');
                     headAttr.innerText = `.${(0, formatAttr_1.default)(attr)}`;
@@ -2086,17 +2472,17 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                     container.appendChild(headAttr);
                 },
                 onClose: () => {
-                    popup.remove();
                     cleanup();
                 },
             });
         };
-        const popup = (0, showWindow_3.default)({
+        const popup = env.showWindow({
             pos: modalPos,
             rootStyle: `
       min-width: 16rem;
       min-height: 4rem;
     `,
+            onForceClose: cleanup,
             render: (root) => {
                 root.appendChild(createTitle().element);
                 console.log('Show arg modal : ', JSON.stringify(attr, null, 2));
@@ -2105,14 +2491,11 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                 const argValues = [];
                 const proceed = () => {
                     var _a;
-                    popup.remove();
+                    cleanup();
                     (0, displayProbeModal_1.default)(env, popup.getPos(), locator, {
                         name: attr.name,
-                        args: (_a = attr.args) === null || _a === void 0 ? void 0 : _a.map((arg, argIdx) => ({
-                            ...arg,
-                            value: argValues[argIdx],
-                        })),
-                    });
+                        args: (_a = attr.args) === null || _a === void 0 ? void 0 : _a.map((arg, argIdx) => argValues[argIdx]),
+                    }, nested);
                 };
                 args.forEach((arg, argIdx) => {
                     // const inpId = generateInputId();
@@ -2123,7 +2506,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                     argHeader.style.marginRight = '0.25rem';
                     const argType = document.createElement('span');
                     argType.classList.add('syntax-type');
-                    argType.innerText = (0, formatAttr_1.formatAttrType)(arg.type);
+                    argType.innerText = (0, formatAttr_1.formatAttrType)(arg);
                     argHeader.appendChild(argType);
                     // argHeader.appendChild(document.createTextNode(` ${arg.name}`));
                     attrList.appendChild(argHeader);
@@ -2131,8 +2514,9 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                         const inp = document.createElement('input');
                         inp.classList.add('attr-arg-input-text');
                         init(inp);
-                        inp.placeholder = arg.name;
+                        inp.placeholder = `Arg ${argIdx}`;
                         inp.oninput = () => {
+                            // argValues[argIdx] = { type: 'string', value: cleanupValue(inp.value) };
                             argValues[argIdx] = cleanupValue(inp.value);
                         };
                         inp.onkeydown = (e) => {
@@ -2194,134 +2578,136 @@ define("ui/popup/displayArgModal", ["require", "exports", "model/adjustLocator",
                         return inp;
                     };
                     // inp.style.marginLeft = '1rem';
+                    argValues[argIdx] = arg;
                     switch (arg.type) {
-                        case "int": {
-                            argValues[argIdx] = arg.value || '0';
+                        case 'integer': {
+                            // argValues[argIdx] = arg.value || '0';
                             attrList.appendChild(setupTextInput((elem) => {
                                 elem.type = 'number';
-                                elem.value = `${parseInt(`${argValues[argIdx]}`, 10) || ''}`;
-                            }, (val) => `${parseInt(val, 10) || 0}`));
+                                elem.value = `${typeof argValues[argIdx].value === 'number' ? argValues[argIdx].value : ''}`;
+                            }, (val) => ({ type: 'integer', value: parseInt(val, 10) || 0 })));
                             break;
                         }
-                        case "boolean": {
-                            argValues[argIdx] = `${arg.value === 'true'}`;
+                        case 'bool': {
+                            argValues[argIdx] = { type: 'bool', value: arg.value === true };
                             attrList.appendChild(setupTwoPillInput((parent, left, right) => {
                                 left.innerText = 'true';
                                 right.innerText = 'false';
-                            }, () => argValues[argIdx] === 'true' ? 'left' : 'right', (node, updateActive) => {
-                                argValues[argIdx] = `${node === 'left'}`;
+                            }, () => argValues[argIdx].value === true ? 'left' : 'right', (node, updateActive) => {
+                                argValues[argIdx] = { type: 'bool', value: node === 'left' };
                                 updateActive();
                             }));
                             break;
                         }
-                        default:
-                            switch (arg.detail) {
-                                case 'AST_NODE': {
-                                    argValues[argIdx] = arg.value || null;
-                                    let pickedNodePanel = document.createElement('div');
-                                    let pickedNodeHighlighter = () => { };
-                                    (0, registerOnHover_2.default)(pickedNodePanel, (on) => pickedNodeHighlighter(on));
-                                    let state = (argValues[argIdx] && typeof argValues[argIdx] === 'object') ? 'node' : 'null';
-                                    const refreshPickedNode = () => {
-                                        var _a;
-                                        while (pickedNodePanel.firstChild) {
-                                            pickedNodePanel.firstChild.remove();
-                                        }
-                                        pickedNodePanel.style.fontStyle = 'unset';
-                                        pickedNodePanel.classList.remove('clickHighlightOnHover');
-                                        pickedNodeHighlighter = () => { };
-                                        // const state = argValues[argIdx];
-                                        if (state === 'null') {
-                                            pickedNodePanel.style.display = 'hidden';
-                                            pickedNodePanel.style.height = '0px';
-                                            return;
-                                        }
-                                        pickedNodePanel.style.height = '';
-                                        const pickedNode = argValues[argIdx];
-                                        if (!pickedNode || typeof pickedNode !== 'object') {
-                                            pickedNodePanel.style.display = 'block';
-                                            pickedNodePanel.style.fontStyle = 'italic';
-                                            pickedNodePanel.innerText = 'No node picked yet..';
-                                            return;
-                                        }
-                                        // if (typeof state !== 'object') {
-                                        //   console.warn('unknown state', state);
-                                        //   pickedNodePanel.style.display = 'none';
-                                        //   return;
-                                        // }
-                                        const nodeWrapper = document.createElement('div');
-                                        (0, registerNodeSelector_1.default)(nodeWrapper, () => pickedNode);
-                                        nodeWrapper.addEventListener('click', () => {
-                                            (0, displayAttributeModal_1.default)(env, null, pickedNode);
-                                        });
-                                        const span = startEndToSpan(pickedNode.result.start, pickedNode.result.end);
-                                        nodeWrapper.appendChild((0, createTextSpanIndicator_2.default)({
-                                            span,
-                                        }));
-                                        const typeNode = document.createElement('span');
-                                        typeNode.classList.add('syntax-type');
-                                        typeNode.innerText = (_a = pickedNode.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_1.default)(pickedNode.result.type);
-                                        nodeWrapper.appendChild(typeNode);
-                                        pickedNodePanel.appendChild(nodeWrapper);
-                                        pickedNodePanel.classList.add('clickHighlightOnHover');
-                                        pickedNodeHighlighter = (on) => env.updateSpanHighlight(on ? span : null);
-                                    };
-                                    refreshPickedNode();
-                                    attrList.appendChild(setupTwoPillInput((parent, left, right) => {
-                                        left.innerText = 'null';
-                                        // right.innerText = '';
-                                        // right.classList.add('locator-symbol');
-                                        right.style.display = 'flex';
-                                        right.style.flexDirection = 'row';
-                                        right.style.justifyContent = 'space-around';
-                                        const lbl = document.createElement('span');
-                                        lbl.innerText = 'Select node';
-                                        lbl.style.margin = 'auto';
-                                        right.appendChild(lbl);
-                                        const icon = document.createElement('img');
-                                        icon.src = '/icons/my_location_white_24dp.svg';
-                                        icon.style.height = '18px';
-                                        icon.style.alignSelf = 'center';
-                                        icon.style.margin = '0 4px 0 0';
-                                        right.appendChild(icon);
-                                    }, () => state === 'null' ? 'left' : 'right', (node, updateActive) => {
-                                        if (node === 'left') {
-                                            state = 'null';
-                                            argValues[argIdx] = null;
-                                            cancelLocatorRequest();
-                                        }
-                                        else {
-                                            state = 'node';
-                                            lastLocatorRequest = startLocatorRequest(locator => {
-                                                argValues[argIdx] = locator;
-                                                refreshPickedNode();
-                                                updateActive();
-                                            });
-                                        }
-                                        refreshPickedNode();
-                                        updateActive();
-                                    }));
-                                    attrList.appendChild(document.createElement('span')); // <-- for grid alignment
-                                    attrList.appendChild(pickedNodePanel);
-                                    return;
-                                }
-                                case 'OUTPUTSTREAM': {
-                                    argValues[argIdx] = null;
-                                    const node = document.createElement('span');
-                                    node.innerText = '<captured to probe output>';
-                                    node.classList.add('stream-arg-msg');
-                                    attrList.appendChild(node);
-                                    return;
-                                }
-                            }
-                            console.warn('Unknown arg type', arg.type, ', defaulting to string input');
-                        // Fall through
-                        case 'java.lang.String': {
-                            argValues[argIdx] = arg.value || '';
+                        case 'collection': {
+                            console.warn('todo should we support collections?');
                             attrList.appendChild(setupTextInput((elem) => {
                                 elem.type = 'text';
                                 elem.value = `${argValues[argIdx]}`;
-                            }, id => id));
+                            }, id => ({ type: 'string', value: id })));
+                            break;
+                        }
+                        case 'nodeLocator': {
+                            const origLocator = arg.value;
+                            let pickedNodePanel = document.createElement('div');
+                            let pickedNodeHighlighter = () => { };
+                            (0, registerOnHover_2.default)(pickedNodePanel, (on) => pickedNodeHighlighter(on));
+                            let state = arg.value ? 'node' : 'null';
+                            const refreshPickedNode = () => {
+                                var _a;
+                                while (pickedNodePanel.firstChild) {
+                                    pickedNodePanel.firstChild.remove();
+                                }
+                                pickedNodePanel.style.fontStyle = 'unset';
+                                pickedNodePanel.classList.remove('clickHighlightOnHover');
+                                pickedNodeHighlighter = () => { };
+                                // const state = argValues[argIdx];
+                                if (state === 'null') {
+                                    pickedNodePanel.style.display = 'hidden';
+                                    pickedNodePanel.style.height = '0px';
+                                    return;
+                                }
+                                pickedNodePanel.style.height = '';
+                                const pickedNode = argValues[argIdx].value.value;
+                                if (!pickedNode || typeof pickedNode !== 'object') {
+                                    pickedNodePanel.style.display = 'block';
+                                    pickedNodePanel.style.fontStyle = 'italic';
+                                    pickedNodePanel.innerText = 'No node picked yet..';
+                                    return;
+                                }
+                                const nodeWrapper = document.createElement('div');
+                                (0, registerNodeSelector_1.default)(nodeWrapper, () => pickedNode);
+                                nodeWrapper.addEventListener('click', () => {
+                                    (0, displayAttributeModal_1.default)(env, null, (0, UpdatableNodeLocator_1.createMutableLocator)(pickedNode));
+                                });
+                                const span = (0, startEndToSpan_2.default)(pickedNode.result.start, pickedNode.result.end);
+                                nodeWrapper.appendChild((0, createTextSpanIndicator_2.default)({
+                                    span,
+                                }));
+                                const typeNode = document.createElement('span');
+                                typeNode.classList.add('syntax-type');
+                                typeNode.innerText = (_a = pickedNode.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_1.default)(pickedNode.result.type);
+                                nodeWrapper.appendChild(typeNode);
+                                pickedNodePanel.appendChild(nodeWrapper);
+                                pickedNodePanel.classList.add('clickHighlightOnHover');
+                                pickedNodeHighlighter = (on) => env.updateSpanHighlight(on ? span : null);
+                            };
+                            refreshPickedNode();
+                            attrList.appendChild(setupTwoPillInput((parent, left, right) => {
+                                left.innerText = 'null';
+                                // right.innerText = '';
+                                // right.classList.add('locator-symbol');
+                                right.style.display = 'flex';
+                                right.style.flexDirection = 'row';
+                                right.style.justifyContent = 'space-around';
+                                const lbl = document.createElement('span');
+                                lbl.innerText = 'Select node';
+                                lbl.style.margin = 'auto';
+                                right.appendChild(lbl);
+                                const icon = document.createElement('img');
+                                icon.src = '/icons/my_location_white_24dp.svg';
+                                icon.style.height = '18px';
+                                icon.style.alignSelf = 'center';
+                                icon.style.margin = '0 4px 0 0';
+                                right.appendChild(icon);
+                            }, () => state === 'null' ? 'left' : 'right', (node, updateActive) => {
+                                if (node === 'left') {
+                                    state = 'null';
+                                    argValues[argIdx] = { type: 'nodeLocator', value: { type: origLocator.type, value: undefined } };
+                                    cancelLocatorRequest();
+                                }
+                                else {
+                                    state = 'node';
+                                    lastLocatorRequest = startLocatorRequest(locator => {
+                                        argValues[argIdx] = { type: 'nodeLocator', value: { type: origLocator.type, value: locator } };
+                                        refreshPickedNode();
+                                        updateActive();
+                                    });
+                                }
+                                refreshPickedNode();
+                                updateActive();
+                            }));
+                            attrList.appendChild(document.createElement('span')); // <-- for grid alignment
+                            attrList.appendChild(pickedNodePanel);
+                            break;
+                        }
+                        case 'outputstream': {
+                            const node = document.createElement('span');
+                            node.innerText = '<captured to probe output>';
+                            node.classList.add('stream-arg-msg');
+                            attrList.appendChild(node);
+                            break;
+                        }
+                        default: {
+                            (0, hacks_2.assertUnreachable)(arg);
+                            console.warn('Unknown arg type', arg, ', defaulting to string input');
+                            // Fall through
+                        }
+                        case 'string': {
+                            attrList.appendChild(setupTextInput((elem) => {
+                                elem.type = 'text';
+                                elem.value = `${argValues[argIdx].value}`;
+                            }, id => ({ type: 'string', value: id })));
                             break;
                         }
                     }
@@ -2374,9 +2760,10 @@ define("model/cullingTaskSubmitterFactory", ["require", "exports"], function (re
     };
     exports.default = createCullingTaskSubmitterFactory;
 });
-define("ui/create/createStickyHighlightController", ["require", "exports"], function (require, exports) {
+define("ui/create/createStickyHighlightController", ["require", "exports", "ui/startEndToSpan"], function (require, exports, startEndToSpan_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    startEndToSpan_3 = __importDefault(startEndToSpan_3);
     const createStickyHighlightController = (env) => {
         const stickyId = `sticky-highlight-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let activeStickyColorClass = '';
@@ -2390,7 +2777,7 @@ define("ui/create/createStickyHighlightController", ["require", "exports"], func
                     `monaco-rag-highlight-sticky`,
                     activeStickyColorClass,
                 ],
-                span: startEndToSpan(currentLocator.result.start, currentLocator.result.end),
+                span: (0, startEndToSpan_3.default)(currentLocator.get().result.start, currentLocator.get().result.end),
             });
             currentTarget.classList.add(`monaco-rag-highlight-sticky`);
             currentTarget.classList.add(activeStickyColorClass);
@@ -2443,26 +2830,19 @@ define("ui/create/createStickyHighlightController", ["require", "exports"], func
     };
     exports.default = createStickyHighlightController;
 });
-define("rpc/listTree", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_2) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, TextRpc_2.buildTextRpc)();
-});
-define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/popup/displayHelp", "model/adjustLocator", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "rpc/listTree"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, showWindow_4, displayHelp_1, adjustLocator_2, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_2, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, listTree_1) {
+define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_2, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, startEndToSpan_4, UpdatableNodeLocator_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
     createModalTitle_3 = __importDefault(createModalTitle_3);
-    showWindow_4 = __importDefault(showWindow_4);
     displayHelp_1 = __importDefault(displayHelp_1);
-    adjustLocator_2 = __importDefault(adjustLocator_2);
     encodeRpcBodyLines_1 = __importDefault(encodeRpcBodyLines_1);
     attachDragToX_3 = __importDefault(attachDragToX_3);
     displayAttributeModal_2 = __importDefault(displayAttributeModal_2);
     createTextSpanIndicator_3 = __importDefault(createTextSpanIndicator_3);
     cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
     createStickyHighlightController_1 = __importDefault(createStickyHighlightController_1);
-    listTree_1 = __importDefault(listTree_1);
+    startEndToSpan_4 = __importDefault(startEndToSpan_4);
     const displayAstModal = (env, modalPos, locator, listDirection, initialTransform) => {
         var _a, _b, _c, _d, _e;
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -2493,7 +2873,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
             height: (_e = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.height) !== null && _e !== void 0 ? _e : 0,
         };
         let resetTranslationOnRender = !initialTransform;
-        const popup = (0, showWindow_4.default)({
+        const popup = env.showWindow({
             pos: modalPos,
             size: (initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.width) && (initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.height) ? {
                 width: initialTransform.width,
@@ -2504,6 +2884,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
       min-height: 12rem;
       80vh;
     `,
+            onForceClose: cleanup,
             onFinishedMove: () => {
                 bufferingSaver.cancel();
                 env.triggerWindowSave();
@@ -2526,9 +2907,9 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         headType.innerText = `AST`;
                         container.appendChild(headType);
                         const spanIndicator = (0, createTextSpanIndicator_3.default)({
-                            span: startEndToSpan(locator.result.start, locator.result.end),
+                            span: (0, startEndToSpan_4.default)(locator.get().result.start, locator.get().result.end),
                             marginLeft: true,
-                            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
+                            onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_4.default)(locator.get().result.start, locator.get().result.end) : null),
                             onClick: stickyController.onClick,
                         });
                         stickyController.configure(spanIndicator, locator);
@@ -2538,6 +2919,13 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         cleanup();
                     },
                     extraActions: [
+                        ...(env.getGlobalModalEnv() === env ? [] : [{
+                                title: 'Detatch window',
+                                invoke: () => {
+                                    cleanup();
+                                    displayAstModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), listDirection, trn);
+                                }
+                            }]),
                         {
                             title: 'Help',
                             invoke: () => {
@@ -2718,8 +3106,6 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         ctx.resetTransform();
                         ctx.fillStyle = getThemedColor(lightTheme, 'probe-result-area');
                         ctx.fillRect(0, 0, w, h);
-                        // console.log('render', trn.x, ' + ', w,  '|', trn.x * 1920 / w, cv.clientWidth, cv);
-                        // ctx.translate(trn.x * 1920 / cv.clientWidth, trn.y * 1080 / cv.clientHeight);
                         ctx.translate(trn.x, trn.y);
                         ctx.scale(trn.scale, getScaleY());
                         cv.style.cursor = 'default';
@@ -2743,7 +3129,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 }
                                 if (hoverClick === 'yes') {
                                     hoverClick = 'no';
-                                    (0, displayAttributeModal_2.default)(env, null, node.locator);
+                                    (0, displayAttributeModal_2.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_2.createMutableLocator)(node.locator));
                                 }
                             }
                             else {
@@ -2811,7 +3197,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                         cv.style.cursor = 'pointer';
                                         if (hoverClick == 'yes') {
                                             hoverClick = 'no';
-                                            displayAstModal(env, null, node.locator, 'downwards');
+                                            displayAstModal(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_2.createMutableLocator)(node.locator), 'downwards');
                                         }
                                     }
                                     const msgMeasure = ctx.measureText(msg);
@@ -2822,8 +3208,6 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 }
                                 return;
                             }
-                            // const numCh = node.children.length;
-                            // const off = (numCh - 1) * (nodew + nodepad) / 2;
                             let childOffX = 0;
                             const childOffY = nodeh + nodepady;
                             node.children.forEach((child, childIdx) => {
@@ -2855,15 +3239,11 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 env.updateSpanHighlight(null);
                             }
                         }
-                        // ctx.fillStyle = '#FF0';
-                        // ctx.fillRect(lastClick.x - 32, lastClick.y - 32, 64, 64);
                     };
                     renderFrame();
                     onResizePtr.callback = () => {
                         renderFrame();
-                        // console.log('finished:', wrapper.clientWidth, wrapper.clientHeight, wrapper.offsetWidth);
                     };
-                    // root.appendChild(document.createTextNode(JSON.stringify(state.data, null, 2)));
                 }
                 if (fetchState !== 'idle') {
                     const spinner = (0, createLoadingSpinner_1.default)();
@@ -2875,7 +3255,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
         const refresher = env.createCullingTaskSubmitter();
         env.onChangeListeners[queryId] = (adjusters) => {
             if (adjusters) {
-                adjusters.forEach(adj => (0, adjustLocator_2.default)(adj, locator));
+                locator.adjust(adjusters);
             }
             refresher.submit(() => {
                 fetchAttrs();
@@ -2894,21 +3274,18 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                 }
                 case 'queued': return;
             }
-            (0, listTree_1.default)(env, env.wrapTextRpc({
-                query: {
-                    attr: {
-                        name: listDirection === 'upwards' ? 'meta:listTreeUpwards' : 'meta:listTreeDownwards',
-                    },
-                    locator,
-                }
-            }))
+            env.performTypedRpc({
+                locator: locator.get(),
+                src: env.createParsingRequestData(),
+                type: listDirection === 'upwards' ? 'ListTreeUpwards' : 'ListTreeDownwards'
+            })
                 .then((result) => {
                 var _a;
                 const refetch = fetchState == 'queued';
                 fetchState = 'idle';
                 if (refetch)
                     fetchAttrs();
-                const parsed = result.nodes;
+                const parsed = result.node;
                 if (!parsed) {
                     // root.appendChild(createTitle('err'));
                     if ((_a = result.body) === null || _a === void 0 ? void 0 : _a.length) {
@@ -2920,14 +3297,16 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
                 }
                 // Handle resp
-                locator = result.locator;
+                if (result.locator) {
+                    locator.set(result.locator);
+                }
                 const mapNode = (src) => ({
                     type: src.type,
                     locator: src.locator,
                     name: src.name,
-                    children: Array.isArray(src.children)
-                        ? src.children.map(mapNode)
-                        : src.children,
+                    children: src.children.type === 'children'
+                        ? src.children.value.map(mapNode)
+                        : { type: 'placeholder', num: src.children.value },
                 });
                 state = { type: 'ok', data: mapNode(parsed) };
                 popup.refresh();
@@ -2944,7 +3323,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                 modalPos: popup.getPos(),
                 data: {
                     type: 'ast',
-                    locator,
+                    locator: locator.get(),
                     direction: listDirection,
                     transform: { ...trn, },
                 },
@@ -2958,65 +3337,61 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     };
     exports.default = displayAstModal;
 });
-define("rpc/listProperties", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_3) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, TextRpc_3.buildTextRpc)();
-});
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/create/showWindow", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "model/adjustLocator", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "rpc/listProperties"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_2, showWindow_5, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, adjustLocator_3, settings_2, encodeRpcBodyLines_2, trimTypeName_2, displayAstModal_1, listProperties_1) {
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_2, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, settings_2, encodeRpcBodyLines_2, trimTypeName_2, displayAstModal_1, startEndToSpan_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
     createModalTitle_4 = __importDefault(createModalTitle_4);
     displayProbeModal_2 = __importDefault(displayProbeModal_2);
-    showWindow_5 = __importDefault(showWindow_5);
     displayArgModal_1 = __importDefault(displayArgModal_1);
     formatAttr_2 = __importDefault(formatAttr_2);
     createTextSpanIndicator_4 = __importDefault(createTextSpanIndicator_4);
     displayHelp_2 = __importDefault(displayHelp_2);
-    adjustLocator_3 = __importDefault(adjustLocator_3);
     settings_2 = __importDefault(settings_2);
     encodeRpcBodyLines_2 = __importDefault(encodeRpcBodyLines_2);
     trimTypeName_2 = __importDefault(trimTypeName_2);
     displayAstModal_1 = __importDefault(displayAstModal_1);
-    listProperties_1 = __importDefault(listProperties_1);
+    startEndToSpan_5 = __importDefault(startEndToSpan_5);
     const displayAttributeModal = (env, modalPos, locator) => {
-        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const queryId = `attr-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        console.log('dAM');
         let filter = '';
         let state = null;
         let fetchState = 'idle';
         const cleanup = () => {
+            console.log('DAM, cleanup');
             delete env.onChangeListeners[queryId];
             popup.remove();
         };
         let isFirstRender = true;
-        const popup = (0, showWindow_5.default)({
+        const popup = env.showWindow({
             pos: modalPos,
             rootStyle: `
       min-width: 16rem;
       min-height: 8rem;
       80vh;
     `,
+            onForceClose: cleanup,
             render: (root) => {
                 while (root.firstChild)
                     root.firstChild.remove();
-                // root.innerText = 'Loading..';
                 root.appendChild((0, createModalTitle_4.default)({
                     renderLeft: (container) => {
                         var _a;
-                        const headType = document.createElement('span');
-                        headType.classList.add('syntax-type');
-                        headType.innerText = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_2.default)(locator.result.type)}`;
+                        if (env === env.getGlobalModalEnv()) {
+                            const headType = document.createElement('span');
+                            headType.classList.add('syntax-type');
+                            headType.innerText = `${(_a = locator.get().result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_2.default)(locator.get().result.type)}`;
+                            container.appendChild(headType);
+                        }
                         const headAttr = document.createElement('span');
                         headAttr.classList.add('syntax-attr');
                         headAttr.innerText = `.?`;
-                        // headAttr.style.fontStyle= 'italic';
-                        container.appendChild(headType);
                         container.appendChild(headAttr);
                         container.appendChild((0, createTextSpanIndicator_4.default)({
-                            span: startEndToSpan(locator.result.start, locator.result.end),
+                            span: (0, startEndToSpan_5.default)(locator.get().result.start, locator.get().result.end),
                             marginLeft: true,
-                            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
+                            onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_5.default)(locator.get().result.start, locator.get().result.end) : null),
                         }));
                     },
                     onClose: () => {
@@ -3089,7 +3464,6 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                     };
                     filterInput.onkeydown = (e) => {
                         var _a;
-                        // filterInput.scrollIntoView();
                         if (e.key === 'Enter') {
                             submit();
                         }
@@ -3132,27 +3506,15 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                         const showProbe = (attr) => {
                             cleanup();
                             if (!attr.args || attr.args.length === 0) {
-                                (0, displayProbeModal_2.default)(env, popup.getPos(), locator, { name: attr.name });
+                                (0, displayProbeModal_2.default)(env, popup.getPos(), locator, { name: attr.name }, {});
                             }
                             else {
-                                if (attr.args.every(arg => arg.detail === 'OUTPUTSTREAM')) {
+                                if (attr.args.every(arg => arg.type === 'outputstream')) {
                                     // Shortcut directly to probe since there is nothing for user to add in arg modal
-                                    (0, displayProbeModal_2.default)(env, popup.getPos(), locator, {
-                                        name: attr.name,
-                                        args: attr.args.map(arg => ({
-                                            ...arg,
-                                            value: null
-                                        })),
-                                    });
+                                    (0, displayProbeModal_2.default)(env, popup.getPos(), locator, attr, {});
                                 }
                                 else {
-                                    (0, displayArgModal_1.default)(env, popup.getPos(), locator, {
-                                        name: attr.name,
-                                        args: attr.args.map(arg => ({
-                                            ...arg,
-                                            value: ''
-                                        })),
-                                    });
+                                    (0, displayArgModal_1.default)(env, popup.getPos(), locator, attr, {});
                                 }
                             }
                         };
@@ -3221,15 +3583,17 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
             },
         });
         const refresher = env.createCullingTaskSubmitter();
+        console.log('DAM, inserting', queryId);
         env.onChangeListeners[queryId] = (adjusters) => {
             if (adjusters) {
-                adjusters.forEach(adj => (0, adjustLocator_3.default)(adj, locator));
+                locator.adjust(adjusters);
             }
             refresher.submit(() => {
                 fetchAttrs();
                 popup.refresh();
             });
         };
+        console.log('changeListeners:', env.onChangeListeners);
         const fetchAttrs = () => {
             switch (fetchState) {
                 case 'idle': {
@@ -3242,12 +3606,12 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                 }
                 case 'queued': return;
             }
-            (0, listProperties_1.default)(env, env.wrapTextRpc({
-                query: {
-                    attr: { name: settings_2.default.shouldShowAllProperties() ? 'meta:listAllProperties' : 'meta:listProperties' },
-                    locator
-                },
-            }))
+            env.performTypedRpc({
+                locator: locator.get(),
+                src: env.createParsingRequestData(),
+                type: 'ListProperties',
+                all: settings_2.default.shouldShowAllProperties(),
+            })
                 .then((result) => {
                 var _a;
                 const refetch = fetchState == 'queued';
@@ -3256,11 +3620,9 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                     fetchAttrs();
                 const parsed = result.properties;
                 if (!parsed) {
-                    // root.appendChild(createTitle('err'));
                     if ((_a = result.body) === null || _a === void 0 ? void 0 : _a.length) {
                         state = { type: 'err', body: result.body };
                         popup.refresh();
-                        // root.appendChild(encodeRpcBodyLines(env, parsed.body));
                         return;
                     }
                     throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
@@ -3281,7 +3643,6 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                 .catch(err => {
                 console.warn('Error when loading attributes', err);
                 state = { type: 'err', body: [] };
-                // showErr = true;
                 popup.refresh();
             });
         };
@@ -3289,10 +3650,9 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     };
     exports.default = displayAttributeModal;
 });
-define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal"], function (require, exports, createTextSpanIndicator_5, registerNodeSelector_2, registerOnHover_3, trimTypeName_3, displayAttributeModal_3) {
+define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNodeLocator", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal"], function (require, exports, UpdatableNodeLocator_3, createTextSpanIndicator_5, registerNodeSelector_2, registerOnHover_3, trimTypeName_3, displayAttributeModal_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.mapRpcBodyLineDepthFirst = void 0;
     createTextSpanIndicator_5 = __importDefault(createTextSpanIndicator_5);
     registerNodeSelector_2 = __importDefault(registerNodeSelector_2);
     registerOnHover_3 = __importDefault(registerOnHover_3);
@@ -3304,7 +3664,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
         }
         if (line && typeof line === 'object') {
             switch (line.type) {
-                case 'stream-arg': {
+                case 'streamArg': {
                     const v = line.value;
                     return v.length - v.trimStart().length;
                 }
@@ -3314,107 +3674,231 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
     };
     const encodeRpcBodyLines = (env, body, extras = {}) => {
         let needCapturedStreamArgExplanation = false;
+        const appliedDecoratorResultsTrackers = [];
+        const applyDecoratorClass = (target, applyRoot, decoratorResult) => {
+            appliedDecoratorResultsTrackers.forEach(tracker => tracker[decoratorResult] = true);
+            switch (decoratorResult) {
+                case 'error':
+                    target.classList.add('test-diff-error');
+                    if (applyRoot) {
+                        target.classList.add('test-diff-error-root');
+                    }
+                    break;
+                case 'unmatched':
+                    target.classList.add('test-diff-unmatched');
+                    if (applyRoot) {
+                        target.classList.add('test-diff-unmatched-root');
+                    }
+                    break;
+                default:
+                    break;
+            }
+        };
         const streamArgPrefix = Math.min(...body.map(getCommonStreamArgWhitespacePrefix));
-        const encodeLine = (target, line, respectIndent = false) => {
-            if (typeof line === 'string') {
-                const trimmed = line.trimStart();
-                if (trimmed.length !== line.length) {
-                    target.appendChild(document.createTextNode(' '.repeat(line.length - trimmed.length)));
-                }
-                if (line.trim()) {
-                    target.appendChild(document.createTextNode(line.trim()));
-                }
-                target.appendChild(document.createElement('br'));
-            }
-            else if (Array.isArray(line)) {
-                if (!respectIndent) {
-                    // First level indent, 'inline' it
-                    line.forEach(sub => encodeLine(target, sub, true));
-                }
-                else {
-                    // >=2 level indent, respect it
-                    const deeper = document.createElement('pre');
-                    // deeper.style.borderLeft = '1px solid #88888877';
-                    deeper.style.marginLeft = '1rem';
-                    deeper.style.marginTop = '0.125rem';
-                    line.forEach(sub => encodeLine(deeper, sub, true));
-                    target.appendChild(deeper);
-                }
-            }
-            else {
-                switch (line.type) {
-                    case "stdout": {
-                        const span = document.createElement('span');
-                        span.classList.add('captured-stdout');
-                        span.innerText = `> ${line.value}`;
-                        target.appendChild(span);
-                        target.appendChild(document.createElement('br'));
-                        break;
-                    }
-                    case "stderr": {
-                        const span = document.createElement('span');
-                        span.classList.add('captured-stderr');
-                        span.innerText = `> ${line.value}`;
-                        target.appendChild(span);
-                        target.appendChild(document.createElement('br'));
-                        break;
-                    }
-                    case 'stream-arg': {
-                        needCapturedStreamArgExplanation = true;
-                        const span = document.createElement('span');
-                        span.classList.add('stream-arg-msg');
-                        span.innerText = `> ${line.value.slice(streamArgPrefix)}`;
-                        target.appendChild(span);
-                        target.appendChild(document.createElement('br'));
-                        break;
-                    }
-                    case "node": {
-                        const { start, end, type, label } = line.value.result;
-                        const container = document.createElement('div');
-                        const span = {
-                            lineStart: (start >>> 12), colStart: (start & 0xFFF),
-                            lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
-                        };
-                        container.appendChild((0, createTextSpanIndicator_5.default)({
-                            span,
-                            marginLeft: false,
-                        }));
-                        const typeNode = document.createElement('span');
-                        typeNode.classList.add('syntax-type');
-                        typeNode.innerText = label !== null && label !== void 0 ? label : (0, trimTypeName_3.default)(type);
-                        container.appendChild(typeNode);
-                        container.classList.add('clickHighlightOnHover');
-                        container.style.width = 'fit-content';
-                        container.style.display = 'inline';
-                        (0, registerOnHover_3.default)(container, on => {
-                            var _a, _b;
-                            if (!on || ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true)) {
-                                env.updateSpanHighlight(on ? span : null);
-                                container.style.cursor = 'default';
-                                container.classList.add('clickHighlightOnHover');
+        const encodeLine = (target, line, nestingLevel, bodyPath) => {
+            switch (line.type) {
+                case 'plain': {
+                    const trimmed = line.value.trimStart();
+                    if (extras.decorator) {
+                        const decoration = extras.decorator(bodyPath);
+                        if (decoration !== 'default') {
+                            const holder = document.createElement('spawn');
+                            holder.style.whiteSpace = 'pre';
+                            if (trimmed.length !== line.value.length) {
+                                holder.appendChild(document.createTextNode(' '.repeat(line.value.length - trimmed.length)));
                             }
-                            else {
-                                container.style.cursor = 'not-allowed';
-                                container.classList.remove('clickHighlightOnHover');
+                            if (line.value.trim()) {
+                                holder.appendChild(document.createTextNode(line.value.trim()));
+                            }
+                            holder.appendChild(document.createElement('br'));
+                            applyDecoratorClass(holder, nestingLevel <= 1, decoration);
+                            target.appendChild(holder);
+                            break;
+                        }
+                    }
+                    if (trimmed.length !== line.value.length) {
+                        target.appendChild(document.createTextNode(' '.repeat(line.value.length - trimmed.length)));
+                    }
+                    if (line.value.trim()) {
+                        target.appendChild(document.createTextNode(line.value.trim()));
+                    }
+                    target.appendChild(document.createElement('br'));
+                    break;
+                }
+                case 'arr': {
+                    const encodeTo = (arrTarget) => {
+                        let lineIdxBackshift = 0;
+                        line.value.forEach((sub, idx) => {
+                            encodeLine(arrTarget, sub, nestingLevel + 1, [...bodyPath, idx - lineIdxBackshift]);
+                            if (extras.excludeStdIoFromPaths) {
+                                switch (sub.type) {
+                                    case 'stdout':
+                                    case 'stderr':
+                                        ++lineIdxBackshift;
+                                }
                             }
                         });
-                        container.onmousedown = (e) => {
-                            e.stopPropagation();
-                        };
+                    };
+                    if (nestingLevel === 0) {
+                        // First level indent, 'inline' it
+                        encodeTo(target);
+                    }
+                    else {
+                        // >=2 level indent, respect it
+                        if (nestingLevel === 1) {
+                            appliedDecoratorResultsTrackers.push({});
+                        }
+                        const deeper = document.createElement('pre');
+                        deeper.style.marginLeft = '1rem';
+                        deeper.style.marginTop = '0.125rem';
+                        encodeTo(deeper);
+                        if (nestingLevel === 1) {
+                            const wrapper = document.createElement('div');
+                            wrapper.appendChild(deeper);
+                            const tracker = appliedDecoratorResultsTrackers.pop();
+                            if (tracker === null || tracker === void 0 ? void 0 : tracker['error']) {
+                                wrapper.classList.add('test-diff-error-root');
+                            }
+                            else if (tracker === null || tracker === void 0 ? void 0 : tracker['unmatched']) {
+                                wrapper.classList.add('test-diff-unmatched-root');
+                            }
+                            target.appendChild(wrapper);
+                        }
+                        else {
+                            target.appendChild(deeper);
+                        }
+                    }
+                    break;
+                }
+                case 'stdout': {
+                    const span = document.createElement('span');
+                    span.classList.add('captured-stdout');
+                    span.innerText = `> ${line.value}`;
+                    target.appendChild(span);
+                    target.appendChild(document.createElement('br'));
+                    break;
+                }
+                case 'stderr': {
+                    const span = document.createElement('span');
+                    span.classList.add('captured-stderr');
+                    span.innerText = `> ${line.value}`;
+                    target.appendChild(span);
+                    target.appendChild(document.createElement('br'));
+                    break;
+                }
+                case 'streamArg': {
+                    needCapturedStreamArgExplanation = true;
+                    const span = document.createElement('span');
+                    span.classList.add('stream-arg-msg');
+                    span.innerText = `> ${line.value.slice(streamArgPrefix)}`;
+                    target.appendChild(span);
+                    target.appendChild(document.createElement('br'));
+                    break;
+                }
+                case "node": {
+                    const { start, end, type, label } = line.value.result;
+                    const container = document.createElement('div');
+                    if (extras.decorator) {
+                        applyDecoratorClass(container, nestingLevel <= 1, extras.decorator(bodyPath));
+                    }
+                    const span = {
+                        lineStart: (start >>> 12), colStart: (start & 0xFFF),
+                        lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
+                    };
+                    container.appendChild((0, createTextSpanIndicator_5.default)({
+                        span,
+                        marginLeft: false,
+                        autoVerticalMargin: true,
+                    }));
+                    const typeNode = document.createElement('span');
+                    typeNode.classList.add('syntax-type');
+                    typeNode.innerText = label !== null && label !== void 0 ? label : (0, trimTypeName_3.default)(type);
+                    typeNode.style.margin = 'auto 0';
+                    container.appendChild(typeNode);
+                    container.classList.add('clickHighlightOnHover');
+                    container.style.width = 'fit-content';
+                    container.style.display = 'inline';
+                    (0, registerOnHover_3.default)(container, on => {
+                        var _a, _b;
+                        if (!on || ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true)) {
+                            env.updateSpanHighlight(on ? span : null);
+                            container.style.cursor = 'default';
+                            container.classList.add('clickHighlightOnHover');
+                        }
+                        else {
+                            container.style.cursor = 'not-allowed';
+                            container.classList.remove('clickHighlightOnHover');
+                        }
+                    });
+                    container.onmousedown = (e) => {
+                        e.stopPropagation();
+                    };
+                    if (!extras.disableNodeSelectors) {
                         (0, registerNodeSelector_2.default)(container, () => line.value);
-                        container.addEventListener('click', () => {
-                            var _a, _b;
-                            if ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true) {
-                                (0, displayAttributeModal_3.default)(env, null, line.value);
+                    }
+                    container.addEventListener('click', () => {
+                        var _a, _b;
+                        if ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true) {
+                            (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(line.value));
+                        }
+                    });
+                    if (extras.nodeLocatorExpanderHandler) {
+                        // if (existing) {
+                        //   if (existing.parentElement) existing.parentElement.removeChild(existing);
+                        //   target.appendChild(existing);
+                        // } else {
+                        const middleContainer = document.createElement('div');
+                        middleContainer.style.display = 'flex';
+                        middleContainer.style.flexDirection = 'row';
+                        container.style.display = 'flex';
+                        middleContainer.appendChild(container);
+                        if (!extras.disableInlineExpansionButton) {
+                            const expander = document.createElement('div');
+                            expander.innerText = `▼`;
+                            expander.style.marginLeft = '0.25rem';
+                            expander.classList.add('linkedProbeCreator');
+                            expander.onmouseover = e => e.stopPropagation();
+                            expander.onmousedown = (e) => {
+                                e.stopPropagation();
+                            };
+                            middleContainer.appendChild(expander);
+                            const clickHandler = extras.nodeLocatorExpanderHandler.onClick;
+                            expander.onclick = () => clickHandler({
+                                locator: line.value,
+                                locatorRoot: outerContainer,
+                                expansionArea,
+                                path: bodyPath,
+                            });
+                        }
+                        const outerContainer = document.createElement('div');
+                        outerContainer.style.display = 'flex';
+                        outerContainer.style.flexDirection = 'column';
+                        outerContainer.appendChild(middleContainer);
+                        const existingExpansionArea = extras.nodeLocatorExpanderHandler.getReusableExpansionArea(bodyPath);
+                        if (existingExpansionArea) {
+                            if (existingExpansionArea.parentElement) {
+                                existingExpansionArea.parentElement.removeChild(existingExpansionArea);
                             }
+                        }
+                        const expansionArea = existingExpansionArea !== null && existingExpansionArea !== void 0 ? existingExpansionArea : document.createElement('div');
+                        outerContainer.appendChild(expansionArea);
+                        target.appendChild(outerContainer);
+                        extras.nodeLocatorExpanderHandler.onCreate({
+                            locator: line.value,
+                            locatorRoot: outerContainer,
+                            expansionArea,
+                            path: bodyPath,
                         });
+                        // }
+                    }
+                    else {
                         target.appendChild(container);
-                        break;
                     }
-                    default: {
-                        console.warn('Unknown body line type', line);
-                        break;
-                    }
+                    break;
+                }
+                default: {
+                    console.warn('Unknown body line type', line);
+                    break;
                 }
             }
         };
@@ -3423,6 +3907,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
         pre.style.padding = '0.5rem';
         pre.style.fontSize = '0.75rem';
         // pre.innerHtml = lines.slice(outputStart + 1).join('\n').trim();
+        let lineIdxBackshift = 0;
         body
             .filter((line, lineIdx, arr) => {
             // Keep empty lines only if they are followed by a non-empty line
@@ -3437,22 +3922,19 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
                 const holder = document.createElement('pre');
                 holder.style.margin = '0px';
                 holder.style.padding = '0';
-                switch (extras.decorator(lineIdx)) {
-                    case 'error': {
-                        holder.classList.add('test-diff-error');
-                        break;
-                    }
-                    case 'unmatched': {
-                        holder.classList.add('test-diff-unmatched');
-                        break;
-                    }
-                    default: break;
-                }
-                encodeLine(holder, line);
+                applyDecoratorClass(holder, true, extras.decorator([lineIdx - lineIdxBackshift]));
+                encodeLine(holder, line, 0, [lineIdx - lineIdxBackshift]);
                 pre.appendChild(holder);
             }
             else {
-                encodeLine(pre, line);
+                encodeLine(pre, line, 0, [lineIdx - lineIdxBackshift]);
+            }
+            if (extras.excludeStdIoFromPaths) {
+                switch (line.type) {
+                    case 'stdout':
+                    case 'stderr':
+                        ++lineIdxBackshift;
+                }
             }
             // '\n'
         });
@@ -3479,45 +3961,30 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "ui/create/createTe
         }
         return pre;
     };
-    const mapRpcBodyLineDepthFirst = (line, mapper) => {
-        if (typeof line === 'string') {
-            return mapper(line);
-        }
-        if (Array.isArray(line)) {
-            return mapper(line.map(sub => mapRpcBodyLineDepthFirst(sub, mapper)));
-        }
-        return mapper(line);
-    };
-    exports.mapRpcBodyLineDepthFirst = mapRpcBodyLineDepthFirst;
     exports.default = encodeRpcBodyLines;
 });
-define("ui/popup/displayTestAdditionModal", ["require", "exports", "settings", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_3, createLoadingSpinner_3, createModalTitle_5, showWindow_6) {
+define("ui/popup/displayTestAdditionModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, createLoadingSpinner_3, createModalTitle_5, showWindow_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    settings_3 = __importDefault(settings_3);
     createLoadingSpinner_3 = __importDefault(createLoadingSpinner_3);
     createModalTitle_5 = __importDefault(createModalTitle_5);
-    showWindow_6 = __importDefault(showWindow_6);
-    const displayTestAdditionModal = (env, modalPos, locator, attribute, output) => {
-        var _a;
+    showWindow_3 = __importDefault(showWindow_3);
+    const displayTestAdditionModal = (env, modalPos, locator, request) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-        // Capture this immediately, in case the user modifies text while this dialog is open
-        const baseProps = {
-            src: (_a = settings_3.default.getEditorContents()) !== null && _a !== void 0 ? _a : '',
-            posRecovery: settings_3.default.getPositionRecoveryStrategy(),
-            cache: settings_3.default.getAstCacheStrategy(),
-            tmpSuffix: settings_3.default.getCurrentFileSuffix(),
-            mainArgs: settings_3.default.getMainArgsOverride(),
-        };
+        // Capture `baseProps` immediately, in case the user modifies text while this dialog is open
+        const baseProps = env.createParsingRequestData();
         let categories = 'loading';
+        const fullEvaluate = () => env.testManager.fullyEvaluate(baseProps, request.property, locator, request.nested, 'Get reference output');
         const cleanup = () => {
             popup.remove();
         };
-        const popup = (0, showWindow_6.default)({
+        const popup = (0, showWindow_3.default)({
             rootStyle: `
       width: 32rem;
       min-height: 8rem;
     `,
+            pos: modalPos,
+            onForceClose: cleanup,
             resizable: true,
             render: (root) => {
                 while (root.firstChild)
@@ -3627,33 +4094,47 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "settings", "
                         commitButton.innerText = 'Add';
                         row.appendChild(commitButton);
                         commitButton.onclick = () => {
-                            // typeof line === 'string' ? line : { naive: line, robust: line }
-                            env.testManager.addTest(state.category, {
-                                ...baseProps,
-                                type: 'test',
-                                assert: state.assertionType === 'Exact Match' ?
-                                    {
-                                        type: 'identity',
-                                        lines: output, // : rpcLinesToAssertionLines(output),
-                                    } : state.assertionType === 'Set Comparison' ?
-                                    {
-                                        type: 'set',
-                                        lines: output, // rpcLinesToAssertionLines(output),
-                                    } : {
-                                    type: 'smoke'
-                                },
-                                attribute,
-                                locator: { naive: locator, robust: locator },
-                                name: state.name,
-                            }, false).then((result) => {
-                                if (result === 'ok') {
-                                    cleanup();
-                                    return;
+                            commitButton.disabled = true;
+                            fullEvaluate()
+                                .then((evalRes) => {
+                                const convTest = env.testManager.convertTestResponseToTest({
+                                    src: baseProps,
+                                    assertType: state.assertionType === 'Exact Match'
+                                        ? 'IDENTITY'
+                                        : (state.assertionType === 'Set Comparison'
+                                            ? 'SET'
+                                            : 'SMOKE'),
+                                    expectedOutput: [],
+                                    nestedProperties: [],
+                                    property: evalRes.property,
+                                    locator,
+                                    name: state.name,
+                                }, evalRes);
+                                if (convTest === null) {
+                                    throw new Error(`Couldn't locate root test node`);
                                 }
-                                else {
-                                    errMsg.innerText = `Error when adding test. Please try again or check server log for more information.`;
-                                }
+                                env.testManager.addTest(state.category, convTest, false).then((result) => {
+                                    if (result === 'ok') {
+                                        cleanup();
+                                        return;
+                                    }
+                                    else {
+                                        console.warn('Error when adding test:', result);
+                                        commitButton.disabled = false;
+                                        errMsg.innerText = `Error when adding test. Please try again or check server log for more information.`;
+                                    }
+                                }).catch(err => {
+                                    console.warn('Failed adding test:', err);
+                                    commitButton.disabled = false;
+                                    errMsg.innerText = `Failed adding test. Please try again`;
+                                });
+                            })
+                                .catch((err) => {
+                                commitButton.disabled = false;
+                                console.warn('Failed getting test reference data:', err);
+                                errMsg.innerText = `Failed creating test. Please try again`;
                             });
+                            // typeof line === 'string' ? line : { naive: line, robust: line }
                         };
                     });
                     addRow('', (row) => {
@@ -3690,7 +4171,7 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "settings", "
     };
     exports.default = displayTestAdditionModal;
 });
-define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/formatAttr", "ui/trimTypeName"], function (require, exports, createTextSpanIndicator_6, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_4, formatAttr_3, trimTypeName_4) {
+define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, createTextSpanIndicator_6, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_4, formatAttr_3, startEndToSpan_6, trimTypeName_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createTextSpanIndicator_6 = __importDefault(createTextSpanIndicator_6);
@@ -3698,15 +4179,18 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
     displayArgModal_2 = __importDefault(displayArgModal_2);
     displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
     formatAttr_3 = __importStar(formatAttr_3);
+    startEndToSpan_6 = __importDefault(startEndToSpan_6);
     trimTypeName_4 = __importDefault(trimTypeName_4);
-    const renderProbeModalTitleLeft = (env, container, close, getWindowPos, stickyController, locator, attr) => {
+    const renderProbeModalTitleLeft = (env, container, close, getWindowPos, stickyController, locator, attr, nested, typeRenderingStyle) => {
         var _a, _b, _c;
-        const headType = document.createElement('span');
-        headType.classList.add('syntax-type');
-        headType.innerText = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_4.default)(locator.result.type)}`;
+        if (typeRenderingStyle !== 'minimal-nested') {
+            const headType = document.createElement('span');
+            headType.classList.add('syntax-type');
+            headType.innerText = `${(_a = locator.get().result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_4.default)(locator.get().result.type)}`;
+            container.appendChild(headType);
+        }
         const headAttr = document.createElement('span');
         headAttr.classList.add('syntax-attr');
-        headAttr.classList.add('clickHighlightOnHover');
         if (!attr.args || attr.args.length === 0) {
             headAttr.innerText = `.${(0, formatAttr_3.default)(attr)}`;
         }
@@ -3715,72 +4199,205 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
             (0, formatAttr_3.formatAttrArgList)(headAttr, attr);
             headAttr.appendChild(document.createTextNode(`)`));
         }
-        headAttr.onmousedown = (e) => { e.stopPropagation(); };
-        headAttr.onclick = (e) => {
-            if (env.duplicateOnAttr() != e.shiftKey) {
-                (0, displayAttributeModal_4.default)(env, null, JSON.parse(JSON.stringify(locator)));
-            }
-            else {
-                close();
-                (0, displayAttributeModal_4.default)(env, getWindowPos(), locator);
-            }
-            e.stopPropagation();
-        };
-        container.appendChild(headType);
+        if (env) {
+            headAttr.onmousedown = (e) => { e.stopPropagation(); };
+            headAttr.classList.add('clickHighlightOnHover');
+            headAttr.onclick = (e) => {
+                if (env.duplicateOnAttr() != e.shiftKey) {
+                    (0, displayAttributeModal_4.default)(env, null, locator.isMutable() ? locator.createMutableClone() : locator);
+                }
+                else {
+                    close === null || close === void 0 ? void 0 : close();
+                    (0, displayAttributeModal_4.default)(env, getWindowPos(), locator);
+                }
+                e.stopPropagation();
+            };
+        }
         container.appendChild(headAttr);
-        if ((_b = attr.args) === null || _b === void 0 ? void 0 : _b.length) {
+        if (((_b = attr.args) === null || _b === void 0 ? void 0 : _b.length) && env) {
             const editButton = document.createElement('img');
             editButton.src = '/icons/edit_white_24dp.svg';
             editButton.classList.add('modalEditButton');
             editButton.classList.add('clickHighlightOnHover');
             editButton.onmousedown = (e) => { e.stopPropagation(); };
             editButton.onclick = () => {
-                close();
-                (0, displayArgModal_2.default)(env, getWindowPos(), locator, attr);
+                close === null || close === void 0 ? void 0 : close();
+                (0, displayArgModal_2.default)(env, getWindowPos(), locator, attr, nested);
             };
             container.appendChild(editButton);
         }
-        const spanIndicator = (0, createTextSpanIndicator_6.default)({
-            span: startEndToSpan(locator.result.start, locator.result.end),
-            marginLeft: true,
-            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
-            onClick: (_c = stickyController === null || stickyController === void 0 ? void 0 : stickyController.onClick) !== null && _c !== void 0 ? _c : undefined,
-            external: locator.result.external,
-        });
-        stickyController === null || stickyController === void 0 ? void 0 : stickyController.configure(spanIndicator, locator);
-        (0, registerNodeSelector_3.default)(spanIndicator, () => locator);
-        container.appendChild(spanIndicator);
+        if (env) {
+            const spanIndicator = (0, createTextSpanIndicator_6.default)({
+                span: (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end),
+                marginLeft: true,
+                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end) : null),
+                onClick: (_c = stickyController === null || stickyController === void 0 ? void 0 : stickyController.onClick) !== null && _c !== void 0 ? _c : undefined,
+                external: locator.get().result.external,
+            });
+            stickyController === null || stickyController === void 0 ? void 0 : stickyController.configure(spanIndicator, locator);
+            (0, registerNodeSelector_3.default)(spanIndicator, () => locator.get());
+            container.appendChild(spanIndicator);
+        }
     };
     exports.default = renderProbeModalTitleLeft;
 });
-define("rpc/checkJobStatus", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_3) {
+define("ui/create/createInlineWindowManager", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, Rpc_3.buildRpc)();
+    const createInlineArea = (args) => {
+        let { inlineRoot, expansionAreaInsideTheRoot } = args;
+        const applyActiveRootStyling = () => {
+            inlineRoot.style.border = '1px solid black';
+            inlineRoot.style.paddingTop = '0.25rem';
+        };
+        const activeWindowClosers = [];
+        const localChangeListeners = {};
+        // const activeWindowRefreshers: (() => void)[] = [];
+        let activeSubWindowCount = 0;
+        const area = {
+            getNestedModalEnv: (parentEnv) => ({
+                ...parentEnv,
+                showWindow: (args) => area.add(args),
+                onChangeListeners: localChangeListeners,
+                probeWindowStateSavers: args.localWindowStateSaves,
+            }),
+            add: (args) => {
+                if (activeSubWindowCount === 0) {
+                    applyActiveRootStyling();
+                    expansionAreaInsideTheRoot.style.marginTop = '0.25rem';
+                }
+                ++activeSubWindowCount;
+                const closer = () => args.onForceClose();
+                activeWindowClosers.push(closer);
+                // const refresher = () => renderFn();
+                // activeWindowRefreshers.push(refresher);
+                const localDiv = document.createElement('div');
+                if (args.rootStyle) {
+                    localDiv.style = args.rootStyle;
+                }
+                localDiv.style.overflow = 'scroll';
+                localDiv.classList.add('subWindow');
+                expansionAreaInsideTheRoot.prepend(localDiv);
+                let lastCancelToken = {};
+                const renderFn = () => {
+                    lastCancelToken.cancelled = true;
+                    lastCancelToken = {};
+                    args.render(localDiv, {
+                        cancelToken: lastCancelToken,
+                        bringToFront: () => { }, // TODO bring this from somewhere
+                    });
+                };
+                renderFn();
+                return {
+                    getPos: () => ({ x: 0, y: 0 }),
+                    getSize: () => ({ width: localDiv.clientWidth, height: localDiv.clientHeight }),
+                    refresh: () => renderFn(),
+                    remove: () => {
+                        console.log('TODO remove me');
+                        const parent = localDiv.parentElement;
+                        if (parent)
+                            parent.removeChild(localDiv);
+                        --activeSubWindowCount;
+                        if (activeSubWindowCount === 0) {
+                            inlineRoot.style.border = 'none';
+                        }
+                        const idx = activeWindowClosers.findIndex(x => x === closer);
+                        if (idx !== -1) {
+                            activeWindowClosers.splice(idx, 1);
+                            // activeWindowRefreshers.splice(idx, 1);
+                        }
+                    },
+                };
+            },
+            notifyListenersOfChange: () => {
+                Object.values(localChangeListeners).forEach(chl => chl());
+            }
+        };
+        return {
+            area,
+            destroyer: () => {
+                activeWindowClosers.forEach(closer => closer());
+            },
+            updateRoot: (newRoot) => {
+                inlineRoot = newRoot;
+                if (activeSubWindowCount > 0) {
+                    applyActiveRootStyling();
+                }
+            },
+            // refresh: () => {
+            //   activeWindowRefreshers.forEach(closer => closer());
+            // },
+        };
+    };
+    const createInlineWindowManager = () => {
+        const areas = {};
+        const encodeAreaId = (raw) => JSON.stringify(raw);
+        const decodeAreaId = (raw) => JSON.parse(raw);
+        return {
+            getPreviousExpansionArea: (areaId) => { var _a, _b; return (_b = (_a = areas[encodeAreaId(areaId)]) === null || _a === void 0 ? void 0 : _a.expansionArea) !== null && _b !== void 0 ? _b : null; },
+            getPreviouslyAssociatedLocator: (areaId) => { var _a, _b; return (_b = (_a = areas[encodeAreaId(areaId)]) === null || _a === void 0 ? void 0 : _a.locator) !== null && _b !== void 0 ? _b : null; },
+            getArea: (areaId, inlineRoot, expansionAreaInsideTheRoot, locator) => {
+                const encodedId = encodeAreaId(areaId);
+                if (!areas[encodedId]) {
+                    const localWindowStateSaves = {};
+                    // areaToLocalWindowStateSaves[id] =
+                    areas[encodedId] = {
+                        localWindowStateSaves,
+                        expansionArea: expansionAreaInsideTheRoot,
+                        locator,
+                        area: createInlineArea({
+                            inlineRoot,
+                            expansionAreaInsideTheRoot,
+                            localWindowStateSaves,
+                        })
+                    };
+                }
+                else {
+                    areas[encodedId].area.updateRoot(inlineRoot);
+                }
+                return areas[encodedId].area.area;
+            },
+            getWindowStates: () => {
+                const ret = {};
+                Object.entries(areas).forEach(([key, val]) => {
+                    const states = [];
+                    Object.values(val.localWindowStateSaves).forEach(saver => saver(states));
+                    ret[key] = states;
+                });
+                return ret;
+            },
+            destroy: () => Object.values(areas).forEach(area => area.area.destroyer()),
+            conditiionallyDestroyAreas: (predicate) => {
+                Object.entries(areas).forEach(([key, val]) => {
+                    if (predicate(decodeAreaId(key))) {
+                        delete areas[key];
+                        val.area.destroyer();
+                    }
+                });
+            },
+            notifyListenersOfChange: () => Object.values(areas).forEach(area => area.area.area.notifyListenersOfChange()),
+            // refresh: () => Object.values(areas).forEach(area => area.area.refresh()),
+        };
+    };
+    exports.default = createInlineWindowManager;
 });
-define("rpc/stopJob", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_4) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, Rpc_4.buildRpc)();
-});
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "rpc/evaluateProbe", "rpc/checkJobStatus", "rpc/stopJob"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, showWindow_7, adjustLocator_4, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_4, evaluateProbe_2, checkJobStatus_1, stopJob_1) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_2, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_3, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_4 = __importDefault(createLoadingSpinner_4);
     createModalTitle_6 = __importDefault(createModalTitle_6);
-    showWindow_7 = __importDefault(showWindow_7);
-    adjustLocator_4 = __importDefault(adjustLocator_4);
     displayHelp_3 = __importDefault(displayHelp_3);
     encodeRpcBodyLines_3 = __importDefault(encodeRpcBodyLines_3);
     createStickyHighlightController_2 = __importDefault(createStickyHighlightController_2);
     displayTestAdditionModal_1 = __importDefault(displayTestAdditionModal_1);
     renderProbeModalTitleLeft_1 = __importDefault(renderProbeModalTitleLeft_1);
-    settings_4 = __importDefault(settings_4);
-    evaluateProbe_2 = __importDefault(evaluateProbe_2);
-    checkJobStatus_1 = __importDefault(checkJobStatus_1);
-    stopJob_1 = __importDefault(stopJob_1);
-    const displayProbeModal = (env, modalPos, locator, attr) => {
+    settings_3 = __importDefault(settings_3);
+    displayAttributeModal_5 = __importDefault(displayAttributeModal_5);
+    displayAstModal_2 = __importDefault(displayAstModal_2);
+    createInlineWindowManager_1 = __importDefault(createInlineWindowManager_1);
+    const displayProbeModal = (env, modalPos, locator, property, nestedWindows) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        // console.log('displayProbeModal, nested:', nestedWindows, 'attr:', property.name, ', query:', queryId);
         const localErrors = [];
         env.probeMarkers[queryId] = localErrors;
         const stickyController = (0, createStickyHighlightController_2.default)(env);
@@ -3788,12 +4405,27 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         let activelyLoadingJob = null;
         let loading = false;
         let isCleanedUp = false;
-        const doStopJob = (jobId) => (0, stopJob_1.default)(env, {
-            query: { attr: { name: 'meta:stopJob', } },
-            type: 'query',
+        nestedWindows = { ...nestedWindows }; // Make copy so we can locally modify it
+        // const activeNests: {
+        //   [id: string]: {
+        //     getWindowStates: () => WindowState[];
+        //     actives: ActiveNesting[]
+        //   }
+        // } = {};
+        const inlineWindowManager = (0, createInlineWindowManager_1.default)();
+        // const inline
+        const doStopJob = (jobId) => env.performTypedRpc({
+            type: 'Concurrent:StopJob',
             job: jobId,
-        }).then(res => res.result === 'stopped');
+        }).then(res => {
+            if (res.err) {
+                console.warn('Error when stopping job:', res.err);
+                return false;
+            }
+            return true;
+        });
         const cleanup = () => {
+            queryWindow.remove();
             isCleanedUp = true;
             delete env.onChangeListeners[queryId];
             delete env.probeMarkers[queryId];
@@ -3808,22 +4440,45 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             if (loading && activelyLoadingJob !== null) {
                 doStopJob(activelyLoadingJob);
             }
+            inlineWindowManager.destroy();
         };
         let copyBody = [];
+        const getNestedTestRequests = (path, state) => {
+            const nested = [];
+            Object.entries(state.nested).forEach(([path, val]) => {
+                const pathIndexes = JSON.parse(path);
+                val.forEach(v => {
+                    if (v.data.type !== 'probe') {
+                        return;
+                    }
+                    nested.push(getNestedTestRequests(pathIndexes, v.data));
+                });
+            });
+            return { path, property: state.property, nested, };
+        };
         const createTitle = () => {
             return (0, createModalTitle_6.default)({
                 extraActions: [
-                    {
-                        title: 'Duplicate window',
-                        invoke: () => {
-                            const pos = queryWindow.getPos();
-                            displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, JSON.parse(JSON.stringify(locator)), attr);
-                        },
-                    },
+                    ...(env.getGlobalModalEnv() === env
+                        ? [{
+                                title: 'Duplicate window',
+                                invoke: () => {
+                                    const pos = queryWindow.getPos();
+                                    displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator.createMutableClone(), property, nestedWindows);
+                                },
+                            }]
+                        : [{
+                                title: 'Detatch window',
+                                invoke: () => {
+                                    const pos = queryWindow.getPos();
+                                    cleanup();
+                                    displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, nestedWindows);
+                                },
+                            }]),
                     {
                         title: 'Copy input to clipboard',
                         invoke: () => {
-                            navigator.clipboard.writeText(JSON.stringify({ locator, attr }, null, 2));
+                            navigator.clipboard.writeText(JSON.stringify({ locator: locator.get(), property }, null, 2));
                         }
                     },
                     {
@@ -3845,10 +4500,14 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         }
                     },
                     ...[
-                        settings_4.default.shouldEnableTesting() && {
+                        settings_3.default.shouldEnableTesting() && (env === env.getGlobalModalEnv()) && {
                             title: 'Save as test',
                             invoke: () => {
-                                (0, displayTestAdditionModal_1.default)(env, queryWindow.getPos(), locator, attr, lastOutput);
+                                const nestedReq = getNestedTestRequests([], getWindowStateData());
+                                (0, displayTestAdditionModal_1.default)(env, queryWindow.getPos(), locator.get(), {
+                                    property: nestedReq.property,
+                                    nested: nestedReq.nested,
+                                });
                             },
                         }
                     ].filter(Boolean),
@@ -3858,11 +4517,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 //   displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, JSON.parse(JSON.stringify(locator)), attr);
                 // },
                 renderLeft: (container) => (0, renderProbeModalTitleLeft_1.default)(env, container, () => {
-                    queryWindow.remove();
                     cleanup();
-                }, () => queryWindow.getPos(), stickyController, locator, attr),
+                }, () => queryWindow.getPos(), stickyController, locator, property, nestedWindows, env === env.getGlobalModalEnv() ? 'default' : 'minimal-nested'),
                 onClose: () => {
-                    queryWindow.remove();
                     cleanup();
                 },
             });
@@ -3870,7 +4527,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         let lastSpinner = null;
         let isFirstRender = true;
         let refreshOnDone = false;
-        const queryWindow = (0, showWindow_7.default)({
+        const queryWindow = env.showWindow({
             pos: modalPos,
             rootStyle: `
       min-width: 16rem;
@@ -3878,7 +4535,8 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     `,
             resizable: true,
             onFinishedMove: () => env.triggerWindowSave(),
-            render: (root, { cancelToken }) => {
+            onForceClose: cleanup,
+            render: (root, { cancelToken, bringToFront }) => {
                 if (lastSpinner != null) {
                     lastSpinner.style.display = 'inline-block';
                     lastSpinner = null;
@@ -3941,55 +4599,95 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             if (isDone || isCleanedUp) {
                                 return;
                             }
-                            (0, checkJobStatus_1.default)(env, {
-                                query: { attr: { name: 'meta:checkJobStatus', } },
-                                type: 'query',
+                            env.performTypedRpc({
+                                type: 'Concurrent:PollWorkerStatus',
                                 job: jobId,
                             })
                                 .then(res => {
-                                console.log('rpc query for job status:', res);
-                                setTimeout(poll, 1000);
+                                if (res.ok) {
+                                    // Polled OK, async update will be delivered to job monitor below
+                                    // Queue future poll.
+                                    setTimeout(poll, 1000);
+                                }
+                                else {
+                                    console.warn('Error when polling for job status');
+                                    // Don't queue more polling, very unlikely to work anyway.
+                                }
                             });
                         };
                         poll();
                     }, 5000);
                     const jobId = env.createJobId(data => {
                         isConnectedToConcurrentCapableServer = true;
-                        console.log('handleUpdate:', data);
-                        if (data.status == 'done') {
-                            isDone = true;
-                            resolve(data.result);
-                            localConcurrentCleanup();
-                            return;
-                        }
-                        // Status update, ignore
-                        console.log('ignoring status update?', data);
-                        if (statusPre) {
+                        let knownStatus = 'Unknown';
+                        let knownStackTrace = null;
+                        const refreshStatusPre = () => {
+                            if (!statusPre) {
+                                return;
+                            }
                             const lines = [];
                             lines.push(`Property evaluation is taking a while, status below:`);
-                            lines.push(`Status: ${data.status}`);
-                            if (data.stack) {
+                            lines.push(`Status: ${knownStackTrace}`);
+                            if (knownStackTrace) {
                                 lines.push("Stack trace:");
-                                data.stack.forEach((ste) => lines.push(`> ${ste}`));
+                                knownStackTrace.forEach((ste) => lines.push(`> ${ste}`));
                             }
                             statusPre.innerText = lines.join('\n');
+                        };
+                        switch (data.value.type) {
+                            case 'status': {
+                                knownStatus = data.value.value;
+                                refreshStatusPre();
+                                break;
+                            }
+                            case 'workerStackTrace': {
+                                knownStackTrace = data.value.value;
+                                refreshStatusPre();
+                                break;
+                            }
+                            case 'workerTaskDone': {
+                                const res = data.value.value;
+                                isDone = true;
+                                localConcurrentCleanup();
+                                if (res.type === 'normal') {
+                                    const cast = res.value;
+                                    if (cast.response.type == 'job') {
+                                        throw new Error(`Unexpected 'job' result in async update`);
+                                    }
+                                    resolve(cast.response.value);
+                                }
+                                else {
+                                    console.log('Worker task failed. This is likely an internal CodeProber issue. Error message:');
+                                    res.value.forEach(line => console.log(line));
+                                    reject('Worker failed');
+                                }
+                                break;
+                            }
+                            default: {
+                                // Ignore
+                            }
                         }
                     });
                     activelyLoadingJob = jobId;
-                    (0, evaluateProbe_2.default)(env, env.wrapTextRpc({
-                        query: { attr, locator },
-                        jobId,
-                        jobLabel: `Probe: '${`${(_a = locator.result.label) !== null && _a !== void 0 ? _a : locator.result.type}`.split('.').slice(-1)[0]}.${attr.name}'`,
-                    }))
+                    env.performTypedRpc({
+                        type: 'EvaluateProperty',
+                        property,
+                        locator: locator.get(),
+                        src: env.createParsingRequestData(),
+                        captureStdout: settings_3.default.shouldCaptureStdio(),
+                        job: jobId,
+                        jobLabel: `Probe: '${`${(_a = locator.get().result.label) !== null && _a !== void 0 ? _a : locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
+                    })
                         .then(data => {
-                        if (data.job !== undefined) {
+                        if (data.response.type === 'job') {
                             // Async work queued, not done.
+                            isConnectedToConcurrentCapableServer = true;
                         }
                         else {
                             // Sync work executed, done.
                             clearTimeout(initialPollDelayTimer);
                             isDone = true;
-                            resolve(data);
+                            resolve(data.response.value);
                         }
                     })
                         .catch(err => {
@@ -3999,7 +4697,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 });
                 doFetch()
                     .then((parsed) => {
-                    var _a;
+                    var _a, _b;
                     loading = false;
                     if (parsed === 'stopped') {
                         refreshOnDone = false;
@@ -4043,21 +4741,23 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             root.removeChild(root.firstChild);
                         let refreshMarkers = localErrors.length > 0;
                         localErrors.length = 0;
-                        parsed.errors.forEach(({ severity, start: errStart, end: errEnd, msg }) => {
-                            localErrors.push({ severity, errStart, errEnd, msg });
-                        });
+                        localErrors.push(...((_a = parsed.errors) !== null && _a !== void 0 ? _a : []));
+                        // parsed.errors?.forEach(({severity, start: errStart, end: errEnd, msg }) => {
+                        //   localErrors.push({ severity, errStart, errEnd, msg });
+                        // })
                         const updatedArgs = parsed.args;
                         if (updatedArgs) {
                             refreshMarkers = true;
-                            (_a = attr.args) === null || _a === void 0 ? void 0 : _a.forEach((arg, argIdx) => {
+                            (_b = property.args) === null || _b === void 0 ? void 0 : _b.forEach((arg, argIdx) => {
                                 arg.type = updatedArgs[argIdx].type;
-                                arg.detail = updatedArgs[argIdx].detail;
+                                // arg.detail = updatedArgs[argIdx].detail;
                                 arg.value = updatedArgs[argIdx].value;
                             });
                         }
                         if (parsed.locator) {
                             refreshMarkers = true;
-                            locator = parsed.locator;
+                            locator.set(parsed.locator);
+                            // locator = parsed.locator;
                         }
                         if (refreshMarkers || localErrors.length > 0) {
                             env.updateMarkers();
@@ -4065,7 +4765,63 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         const titleRow = createTitle();
                         root.append(titleRow.element);
                         lastOutput = body;
-                        root.appendChild((0, encodeRpcBodyLines_3.default)(env, body));
+                        // TODO, record which lines are used. Clear inline windows that are no longer usable.
+                        const enableExpander = body.length >= 1 && (body[0].type === 'node' || (body[0].type === 'arr' && body[0].value.length >= 1 && body[0].value[0].type === 'node'));
+                        const areasToKeep = new Set();
+                        // const enableExpander = true;
+                        root.appendChild((0, encodeRpcBodyLines_3.default)(env, body, {
+                            nodeLocatorExpanderHandler: enableExpander ? ({
+                                getReusableExpansionArea: (path) => {
+                                    return inlineWindowManager.getPreviousExpansionArea(path);
+                                },
+                                onCreate: ({ locator, locatorRoot, expansionArea, path: nestId }) => {
+                                    var _a;
+                                    areasToKeep.add(JSON.stringify(nestId));
+                                    const updLocator = (_a = inlineWindowManager.getPreviouslyAssociatedLocator(nestId)) !== null && _a !== void 0 ? _a : (0, UpdatableNodeLocator_4.createMutableLocator)(locator);
+                                    updLocator.set(locator);
+                                    const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, updLocator);
+                                    const nestedEnv = area.getNestedModalEnv(env);
+                                    const encodedId = JSON.stringify(nestId);
+                                    const nests = nestedWindows[encodedId];
+                                    if (!nests) {
+                                        return;
+                                    }
+                                    delete nestedWindows[encodedId];
+                                    nests.forEach(nest => {
+                                        // nest.ty
+                                        switch (nest.data.type) {
+                                            case 'probe': {
+                                                const dat = nest.data;
+                                                displayProbeModal(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator), dat.property, dat.nested);
+                                                break;
+                                            }
+                                            case 'ast': {
+                                                const dat = nest.data;
+                                                (0, displayAstModal_2.default)(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator), dat.direction, dat.transform);
+                                                break;
+                                            }
+                                        }
+                                    });
+                                },
+                                onClick: ({ locator, locatorRoot, expansionArea, path: nestId }) => {
+                                    const prevLocator = inlineWindowManager.getPreviouslyAssociatedLocator(nestId);
+                                    if (!prevLocator) {
+                                        console.warn('OnClick on unknown area:', nestId);
+                                        return;
+                                    }
+                                    prevLocator.set(locator);
+                                    const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, prevLocator);
+                                    const nestedEnv = area.getNestedModalEnv(env);
+                                    (0, displayAttributeModal_5.default)(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(prevLocator));
+                                    env.triggerWindowSave();
+                                },
+                            }) : undefined,
+                            // nodeLocatorExpanderHandler: () => {},
+                        }));
+                        inlineWindowManager.conditiionallyDestroyAreas((areaId) => {
+                            return !areasToKeep.has(JSON.stringify(areaId));
+                        });
+                        inlineWindowManager.notifyListenersOfChange();
                     }
                     const spinner = (0, createLoadingSpinner_4.default)();
                     spinner.style.display = 'none';
@@ -4087,7 +4843,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     console.log('ProbeModal RPC catch', err);
                     root.innerHTML = '';
                     root.innerText = 'Failed refreshing probe..';
-                    console.warn('Failed refreshing probe w/ args:', JSON.stringify({ locator, attr }, null, 2));
+                    console.warn('Failed refreshing probe w/ args:', JSON.stringify({ locator, property }, null, 2));
                     setTimeout(() => {
                         queryWindow.remove();
                         cleanup();
@@ -4099,11 +4855,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         env.onChangeListeners[queryId] = (adjusters) => {
             var _a;
             if (adjusters) {
-                adjusters.forEach(adj => (0, adjustLocator_4.default)(adj, locator));
-                (_a = attr.args) === null || _a === void 0 ? void 0 : _a.forEach(({ value }) => {
-                    if (value && typeof value === 'object') {
-                        adjusters.forEach(adj => (0, adjustLocator_4.default)(adj, value));
-                    }
+                locator.adjust(adjusters);
+                (_a = property.args) === null || _a === void 0 ? void 0 : _a.forEach((arg) => {
+                    adjusters.forEach(adj => (0, adjustLocator_2.adjustValue)(adj, arg));
                 });
             }
             if (loading) {
@@ -4113,53 +4867,61 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 refresher.submit(() => queryWindow.refresh());
             }
         };
+        // locator.setUpdateCallback(queryId, () => {
+        //   if (loading) {
+        //     refreshOnDone = true;
+        //   } else {
+        //     refresher.submit(() => queryWindow.refresh());
+        //   }
+        // });
+        const getWindowStateData = () => {
+            return {
+                type: 'probe',
+                locator: locator.get(),
+                property,
+                nested: inlineWindowManager.getWindowStates(),
+            };
+        };
         env.probeWindowStateSavers[queryId] = (target) => {
+            // const nested: NestedWindows = {};
+            // if (env === env.getGlobalModalEnv()) console.log('saving, activeNests:', activeNests);
+            // Object.entries(activeNests).forEach(([key, vals]) => {
+            //   nested[key] = vals.getWindowStates();
+            // });
+            // if (env === env.getGlobalModalEnv()) console.log('...resulting nested:', nested);
             target.push({
                 modalPos: queryWindow.getPos(),
-                data: {
-                    type: 'probe',
-                    locator,
-                    attr,
-                },
+                data: getWindowStateData(),
             });
         };
         env.triggerWindowSave();
     };
     exports.default = displayProbeModal;
 });
-define("rpc/listNodes", ["require", "exports", "rpc/TextRpc"], function (require, exports, TextRpc_4) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, TextRpc_4.buildTextRpc)();
-});
-define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "rpc/listNodes"], function (require, exports, createLoadingSpinner_5, createModalTitle_7, displayAttributeModal_5, registerOnHover_4, showWindow_8, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5, listNodes_1) {
+define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_5, createModalTitle_7, displayAttributeModal_6, registerOnHover_4, showWindow_4, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5, UpdatableNodeLocator_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_5 = __importDefault(createLoadingSpinner_5);
     createModalTitle_7 = __importDefault(createModalTitle_7);
-    displayAttributeModal_5 = __importDefault(displayAttributeModal_5);
+    displayAttributeModal_6 = __importDefault(displayAttributeModal_6);
     registerOnHover_4 = __importDefault(registerOnHover_4);
-    showWindow_8 = __importDefault(showWindow_8);
+    showWindow_4 = __importDefault(showWindow_4);
     registerNodeSelector_4 = __importDefault(registerNodeSelector_4);
     encodeRpcBodyLines_4 = __importDefault(encodeRpcBodyLines_4);
     trimTypeName_5 = __importDefault(trimTypeName_5);
-    listNodes_1 = __importDefault(listNodes_1);
     const displayRagModal = (env, line, col) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const cleanup = () => {
             delete env.onChangeListeners[queryId];
             popup.remove();
         };
-        const popup = (0, showWindow_8.default)({
+        const popup = (0, showWindow_4.default)({
             rootStyle: `
         min-width: 12rem;
         min-height: 4rem;
       `,
+            onForceClose: cleanup,
             render: (root, { cancelToken }) => {
-                // while (root.firstChild) {
-                //   root.firstChild.remove();
-                // }
-                // root.innerText = 'Loading..';
                 root.style.display = 'contents';
                 const spinner = (0, createLoadingSpinner_5.default)();
                 spinner.classList.add('absoluteCenter');
@@ -4175,20 +4937,11 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         cleanup();
                     },
                 }).element;
-                (0, listNodes_1.default)(env, env.wrapTextRpc({
-                    query: {
-                        attr: { name: 'meta:listNodes' },
-                        locator: {
-                            result: {
-                                type: '?',
-                                start: (line << 12) + col,
-                                end: (line << 12) + col,
-                                depth: 0,
-                            },
-                            steps: [],
-                        },
-                    }
-                }))
+                env.performTypedRpc({
+                    src: env.createParsingRequestData(),
+                    pos: (line << 12) + col,
+                    type: 'ListNodes',
+                })
                     .then((parsed) => {
                     var _a;
                     if (cancelToken.cancelled) {
@@ -4225,7 +4978,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         node.onclick = () => {
                             cleanup();
                             env.updateSpanHighlight(null);
-                            (0, displayAttributeModal_5.default)(env, popup.getPos(), locator);
+                            (0, displayAttributeModal_6.default)(env, popup.getPos(), (0, UpdatableNodeLocator_5.createMutableLocator)(locator));
                         };
                         rowsContainer.appendChild(node);
                     });
@@ -4306,11 +5059,11 @@ define("model/StatisticsCollectorImpl", ["require", "exports"], function (requir
     }
     exports.default = StatisticsCollectorImpl;
 });
-define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, createModalTitle_8, showWindow_9) {
+define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, createModalTitle_8, showWindow_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createModalTitle_8 = __importDefault(createModalTitle_8);
-    showWindow_9 = __importDefault(showWindow_9);
+    showWindow_5 = __importDefault(showWindow_5);
     ;
     const displayStatistics = (collector, setStatisticsButtonDisabled, setEditorContentsAndUpdateProbes, anyModalIsLoading) => {
         let simulateTimer = -1;
@@ -4354,28 +5107,10 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
             {
                 title: 'Java - Tiny',
                 contents: generateMethodGenerator(1),
-                // contents: () =>  [
-                //   `class Benchmark${Math.floor(Math.random() * 1_000_000)} {`,
-                //   ` // ${Math.random()}`,
-                //   '}',
-                // ].join('\n')
             },
             {
                 title: 'Java - Medium',
                 contents: generateMethodGenerator(5)
-                // contents: () => {
-                //   const genId = (prefix: string) => `${prefix}${Math.floor(Math.random() * 1_000_000)}`;
-                //   return [
-                //     `${['interface', 'abstract class', 'enum'][Math.floor(Math.random() * 3)]} ${genId('Other')} { /* Empty */ }`,
-                //     `class ${genId('Benchmark')} {`,
-                //     ` static void main(String[] ${genId('args')}) {`,
-                //     `  final long foo = System.currentTimeMillis() % ${genId('')}L;`,
-                //     `  if (foo > ${genId('')}L) { System.out.println(foo); }`,
-                //     `  else { System.out.println(${genId('')}); }`,
-                //     ` }`,
-                //     '}',
-                //   ].join('\n');
-                // }
             },
             {
                 title: 'Java - Large',
@@ -4387,11 +5122,12 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
             },
         ];
         let activeTest = tests[0].title;
-        const helpWindow = (0, showWindow_9.default)({
+        const helpWindow = (0, showWindow_5.default)({
             rootStyle: `
       width: 32rem;
       min-height: 12rem;
     `,
+            onForceClose: onClose,
             resizable: true,
             render: (root) => {
                 const merged = collector.getMergedMeasurements();
@@ -4526,11 +5262,6 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
                                     return;
                                 }
                                 prevChangeCounter = newChangeCounter;
-                                // const newMeasurements = collector.getNumberOfMeasurements();
-                                // if (newMeasurements === expectMeasurements) {
-                                //   return;
-                                // }
-                                // expectMeasurements = newMeasurements;
                                 if (newChangeCounter >= 10000) {
                                     stopSimulation();
                                 }
@@ -4583,23 +5314,20 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
                     apply(statLabels.average, computeAverage());
                     apply(statLabels.mostRecent, computeIndividual(last));
                 }
-                // grid.appendChild(document.createTextNode(''));
-                // grid.appendChild(document.createTextNode('' + collector.getNumberOfMeasurements()));
-                // root.appendChild()
             },
         });
         collector.setOnChange(() => helpWindow.refresh());
     };
     exports.default = displayStatistics;
 });
-define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_5, createModalTitle_9, showWindow_10) {
+define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_4, createModalTitle_9, showWindow_6) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    settings_5 = __importDefault(settings_5);
+    settings_4 = __importDefault(settings_4);
     createModalTitle_9 = __importDefault(createModalTitle_9);
-    showWindow_10 = __importDefault(showWindow_10);
+    showWindow_6 = __importDefault(showWindow_6);
     const getArgs = () => {
-        const re = settings_5.default.getMainArgsOverride();
+        const re = settings_4.default.getMainArgsOverride();
         if (!re) {
             return re;
         }
@@ -4742,10 +5470,11 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
         parseOuter();
         commit();
         // console.log('done parsing @', parsePos)
-        settings_5.default.setMainArgsOverride(args);
+        settings_4.default.setMainArgsOverride(args);
     };
     const displayMainArgsOverrideModal = (onClose, onChange) => {
-        const windowInstance = (0, showWindow_10.default)({
+        const windowInstance = (0, showWindow_6.default)({
+            onForceClose: () => close(),
             render: (root) => {
                 while (root.firstChild) {
                     root.firstChild.remove();
@@ -4785,7 +5514,7 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
                     };
                     // liveView.appendChild(document.createTextNode('tool.main(\n'));
                     addTn('yourtool.main(new String[]{');
-                    [...((_a = settings_5.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : []), '/path/to/file.tmp'].forEach((part, partIdx) => {
+                    [...((_a = settings_4.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : []), '/path/to/file.tmp'].forEach((part, partIdx) => {
                         if (partIdx > 0) {
                             liveView.appendChild(document.createTextNode(', '));
                         }
@@ -4929,6 +5658,7 @@ define("ui/UIElements", ["require", "exports"], function (require, exports) {
         get locationStyleSelector() { return document.getElementById('location-style'); }
         get locationStyleHelpButton() { return document.getElementById('control-location-style-help'); }
         get generalHelpButton() { return document.getElementById('display-help'); }
+        get saveAsUrlButton() { return document.getElementById('saveAsUrl'); }
         get darkModeCheckbox() { return document.getElementById('control-dark-mode'); }
         get displayStatisticsButton() { return document.getElementById('display-statistics'); }
         get displayWorkerStatusButton() { return document.getElementById('display-worker-status'); }
@@ -4942,7 +5672,7 @@ define("ui/UIElements", ["require", "exports"], function (require, exports) {
 define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], function (require, exports, repositoryUrl_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    const showVersionInfo = (elem, ourHash, ourClean, ourBuildTime, wsHandler) => {
+    const showVersionInfo = (elem, ourHash, ourClean, ourBuildTime, sendRequest) => {
         const innerPrefix = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
         if (ourBuildTime !== undefined) {
             const d = new Date(ourBuildTime * 1000);
@@ -4966,8 +5696,8 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
             var _a;
             let fetched;
             try {
-                fetched = (_a = (await wsHandler.sendRpc({
-                    type: 'fetch',
+                fetched = (_a = (await sendRequest({
+                    type: 'Fetch',
                     url: (0, repositoryUrl_2.rawUrl)('VERSION'),
                 }))) === null || _a === void 0 ? void 0 : _a.result;
             }
@@ -5010,11 +5740,11 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
     };
     exports.default = showVersionInfo;
 });
-define("model/runBgProbe", ["require", "exports", "rpc/evaluateProbe"], function (require, exports, evaluateProbe_3) {
+define("model/runBgProbe", ["require", "exports", "settings"], function (require, exports, settings_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    evaluateProbe_3 = __importDefault(evaluateProbe_3);
-    const runInvisibleProbe = (env, locator, attr) => {
+    settings_5 = __importDefault(settings_5);
+    const runInvisibleProbe = (env, locator, property) => {
         const id = `invisible-probe-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
         env.probeMarkers[id] = localErrors;
@@ -5029,16 +5759,22 @@ define("model/runBgProbe", ["require", "exports", "rpc/evaluateProbe"], function
         };
         const performRpc = () => {
             state = 'loading';
-            (0, evaluateProbe_3.default)(env, env.wrapTextRpc({ query: { attr, locator } }))
-                .then((res) => {
-                if (res.job !== undefined) {
+            env.performTypedRpc({
+                type: 'EvaluateProperty',
+                property,
+                locator,
+                src: env.createParsingRequestData(),
+                captureStdout: settings_5.default.shouldCaptureStdio(),
+            })
+                .then((rawResp) => {
+                var _a;
+                if (rawResp.response.type === 'job') {
                     throw new Error(`Got concurrent response for non-concurrent request`);
                 }
+                const res = rawResp.response.value;
                 const prevLen = localErrors.length;
                 localErrors.length = 0;
-                res.errors.forEach(({ severity, start: errStart, end: errEnd, msg }) => {
-                    localErrors.push({ severity, errStart, errEnd, msg });
-                });
+                localErrors.push(...((_a = res.errors) !== null && _a !== void 0 ? _a : []));
                 if (prevLen !== 0 || localErrors.length !== 0) {
                     env.updateMarkers();
                 }
@@ -5062,13 +5798,15 @@ define("model/runBgProbe", ["require", "exports", "rpc/evaluateProbe"], function
     };
     exports.default = runInvisibleProbe;
 });
-define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, settings_6, createLoadingSpinner_6, createModalTitle_10, showWindow_11, UIElements_1, displayHelp_4, displayProbeModal_3, encodeRpcBodyLines_5) {
+define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_6, settings_6, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_1, displayHelp_4, displayProbeModal_3, encodeRpcBodyLines_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     settings_6 = __importDefault(settings_6);
+    createInlineWindowManager_2 = __importDefault(createInlineWindowManager_2);
     createLoadingSpinner_6 = __importDefault(createLoadingSpinner_6);
     createModalTitle_10 = __importDefault(createModalTitle_10);
-    showWindow_11 = __importDefault(showWindow_11);
+    showWindow_7 = __importDefault(showWindow_7);
+    renderProbeModalTitleLeft_2 = __importDefault(renderProbeModalTitleLeft_2);
     UIElements_1 = __importDefault(UIElements_1);
     displayHelp_4 = __importDefault(displayHelp_4);
     displayProbeModal_3 = __importDefault(displayProbeModal_3);
@@ -5079,9 +5817,10 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
             e.preventDefault();
         };
     };
-    const displayTestDiffModal = (env, modalPos, locator, attr, testCategory, testCase) => {
+    const displayTestDiffModal = (env, modalPos, locator, property, testCategory, testCaseName) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let activeTab = 'output';
+        // let lastKnownCapturedStdout;
         let isCleanedUp = false;
         const cleanup = () => {
             isCleanedUp = true;
@@ -5097,6 +5836,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
             // stickyController.cleanup();
         };
         let saveSelfAsProbe = false;
+        let lastLoadedTestCase = null;
         const createTitle = () => {
             const onClose = () => {
                 queryWindow.remove();
@@ -5117,48 +5857,55 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                     head.style.marginRight = '0.5rem';
                     const tail = document.createElement('span');
                     tail.classList.add('stream-arg-msg');
-                    tail.innerText = testCase.name;
+                    tail.innerText = testCaseName;
                     container.appendChild(tail);
                 },
                 onClose,
                 extraActions: [
-                    {
-                        title: 'Load state into editor',
-                        invoke: () => {
-                            settings_6.default.setAstCacheStrategy(testCase.cache);
-                            settings_6.default.setMainArgsOverride(testCase.mainArgs);
-                            settings_6.default.setPositionRecoveryStrategy(testCase.posRecovery);
-                            if (testCase.tmpSuffix && testCase.tmpSuffix !== settings_6.default.getCurrentFileSuffix()) {
-                                settings_6.default.setCustomFileSuffix(testCase.tmpSuffix);
-                            }
-                            settings_6.default.setEditorContents(testCase.src);
-                            saveSelfAsProbe = true;
-                            env.triggerWindowSave();
-                            window.location.reload();
-                        }
-                    },
-                    {
-                        title: 'Delete Test (cannot be undone)',
-                        invoke: () => {
-                            env.testManager.removeTest(testCategory, testCase.name)
-                                .then(onClose)
-                                .catch((err) => {
-                                console.warn('Failed removing test', testCategory, '>', testCase.name, err);
-                            });
-                        }
-                    }
+                    ...(lastLoadedTestCase != null ? (() => {
+                        const tc = lastLoadedTestCase;
+                        return [
+                            {
+                                title: 'Load state into editor',
+                                invoke: () => {
+                                    var _a;
+                                    settings_6.default.setAstCacheStrategy(tc.src.cache);
+                                    settings_6.default.setMainArgsOverride((_a = tc.src.mainArgs) !== null && _a !== void 0 ? _a : null);
+                                    settings_6.default.setPositionRecoveryStrategy(tc.src.posRecovery);
+                                    if (tc.src.tmpSuffix && tc.src.tmpSuffix !== settings_6.default.getCurrentFileSuffix()) {
+                                        settings_6.default.setCustomFileSuffix(tc.src.tmpSuffix);
+                                    }
+                                    settings_6.default.setEditorContents(tc.src.text);
+                                    saveSelfAsProbe = true;
+                                    env.triggerWindowSave();
+                                    window.location.reload();
+                                }
+                            },
+                            {
+                                title: 'Delete Test (cannot be undone)',
+                                invoke: () => {
+                                    env.testManager.removeTest(testCategory, tc.name)
+                                        .then(onClose)
+                                        .catch((err) => {
+                                        console.warn('Failed removing test', testCategory, '>', tc.name, err);
+                                    });
+                                }
+                            },
+                        ];
+                    })() : []),
                 ]
             });
         };
         let lastSpinner = null;
         let isFirstRender = true;
         let refreshOnDone = false;
-        const queryWindow = (0, showWindow_11.default)({
+        const queryWindow = (0, showWindow_7.default)({
             pos: modalPos,
             rootStyle: `
       min-width: 32rem;
       min-height: fit-content;
     `,
+            onForceClose: cleanup,
             resizable: true,
             render: (root, { cancelToken }) => {
                 if (lastSpinner != null) {
@@ -5179,8 +5926,8 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                     spinnerWrapper.appendChild(spinner);
                     root.appendChild(spinnerWrapper);
                 }
-                env.testManager.getTestStatus(testCategory, testCase.name)
-                    .then((testStatus) => {
+                env.testManager.evaluateTest(testCategory, testCaseName)
+                    .then((evaluationResult) => {
                     if (isCleanedUp)
                         return;
                     if (refreshOnDone) {
@@ -5194,14 +5941,27 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                         root.removeChild(root.firstChild);
                     const titleRow = createTitle();
                     root.append(titleRow.element);
-                    const testReport = typeof testStatus === 'object' ? testStatus.report : '';
+                    if (evaluationResult === 'failed-fetching') {
+                        root.appendChild(document.createTextNode(`Failed running test, please check the server log for more information`));
+                        lastLoadedTestCase = null;
+                        return;
+                    }
+                    const testStatus = evaluationResult.status;
+                    const testCase = evaluationResult.test;
+                    lastLoadedTestCase = testCase;
                     let contentUpdater = (tab) => { };
                     const localRefreshListeners = [];
                     env.onChangeListeners[queryId] = () => localRefreshListeners.forEach(lrl => lrl());
-                    const someOutputErr = testReport === 'failed-eval' || typeof testReport == 'object' && testReport.output !== 'pass';
-                    const someLocatorErr = testReport === 'failed-eval' || typeof testReport === 'object' && [
-                        testReport.sourceLocators, testReport.attrArgLocators, testReport.outputLocators
-                    ].some(loc => loc !== 'pass');
+                    const someOutputErr = testStatus.overall === 'error';
+                    // const someLocatorErr = testReport.overall === 'error' || typeof testReport === 'object' && [
+                    //   testReport.sourceLocators, testReport.attrArgLocators, testReport.outputLocators
+                    // ].some(loc => loc !== 'pass');
+                    const captureStdioSetting = settings_6.default.shouldCaptureStdio();
+                    localRefreshListeners.push(() => {
+                        if (settings_6.default.shouldCaptureStdio() !== captureStdioSetting) {
+                            queryWindow.refresh();
+                        }
+                    });
                     (() => {
                         const buttonRow = document.createElement('div');
                         buttonRow.style.display = 'flex';
@@ -5213,7 +5973,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                         buttonRow.append(infoSelector);
                         const infos = [
                             { name: `Output Diff ${someOutputErr ? '❌' : '✅'}`, type: 'output' },
-                            { name: `Node Diff ${someLocatorErr ? '❌' : '✅'}`, type: 'node' },
+                            // { name: `Node Diff ${someLocatorErr ? '❌' : '✅'}`, type: 'node' },
                             { name: 'Source Code', type: 'source' },
                             { name: 'Settings', type: 'settings' },
                         ];
@@ -5241,7 +6001,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                             var _a;
                             const sourceBtn = (_a = infos.find(i => i.type === 'source')) === null || _a === void 0 ? void 0 : _a.btn;
                             if (sourceBtn) {
-                                if (testCase.src === settings_6.default.getEditorContents()) {
+                                if (testCase.src.text === settings_6.default.getEditorContents()) {
                                     sourceBtn.innerText = `Source Code ✅`;
                                 }
                                 else {
@@ -5253,35 +6013,26 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                         localRefreshListeners.push(refreshSourceButtonText);
                         // Add save button
                         (() => {
-                            if (testReport === 'pass') {
+                            if (testStatus.overall === 'ok') {
                                 return;
                             }
+                            const result = evaluationResult.output.result;
+                            const mapped = env.testManager.convertTestResponseToTest(testCase, evaluationResult.output);
+                            if (mapped === null) {
+                                return;
+                            }
+                            // const mapped = nestedTestResponseToTest(evaluationResult.output);
+                            // if (mapped === null) {
+                            //   return;
+                            // }
                             const btn = document.createElement('button');
                             btn.style.margin = 'auto 0';
                             btn.classList.add('tab-button-inactive');
                             btn.innerText = `Save 💾`;
                             preventDragOnClick(btn);
-                            if (testStatus === 'failed-fetching') {
-                                btn.disabled = true;
-                            }
-                            else {
-                                btn.onclick = () => {
-                                    const patchedAssert = (() => {
-                                        switch (testCase.assert.type) {
-                                            case 'identity':
-                                            case 'set':
-                                                return { ...testCase.assert, lines: testStatus.lines };
-                                            case 'smoke':
-                                            default:
-                                                return testCase.assert;
-                                        }
-                                    })();
-                                    env.testManager.addTest(testCategory, {
-                                        ...testCase,
-                                        assert: patchedAssert,
-                                    }, true);
-                                };
-                            }
+                            btn.onclick = () => {
+                                env.testManager.addTest(testCategory, mapped, true);
+                            };
                             buttonRow.appendChild(btn);
                         })();
                         const hr = document.createElement('hr');
@@ -5323,23 +6074,61 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                 const leftPane = document.createElement('div');
                                 addSplitTitle(leftPane, 'Expected');
                                 console.log('tstatus:', testStatus);
-                                switch (testCase.assert.type) {
-                                    case 'identity':
-                                    case 'set': {
-                                        leftPane.appendChild((0, encodeRpcBodyLines_5.default)(env, testCase.assert.lines, {
-                                            lateInteractivityEnabledChecker: () => false,
-                                            decorator: (line) => {
-                                                if (typeof testReport === 'object' && typeof testReport.output === 'object') {
-                                                    if (testReport.output.unmatchedValid.includes(line)) {
+                                const lhsInlineWindowManager = (0, createInlineWindowManager_2.default)();
+                                switch (testCase.assertType) {
+                                    case 'IDENTITY':
+                                    case 'SET': {
+                                        const doEncodeRpcLines = (target, lines, nests, markerPrefix) => {
+                                            if (!captureStdioSetting) {
+                                                lines = (0, rpcBodyToAssertionLine_2.rpcLinesToAssertionLines)(lines);
+                                            }
+                                            target.appendChild((0, encodeRpcBodyLines_5.default)(env, lines, {
+                                                lateInteractivityEnabledChecker: () => false,
+                                                excludeStdIoFromPaths: true,
+                                                decorator: (line) => {
+                                                    const key = JSON.stringify([...markerPrefix, ...line]);
+                                                    const marker = testStatus.expectedMarkers[key];
+                                                    if (marker === 'error') {
                                                         return 'unmatched';
                                                     }
+                                                    return 'default';
+                                                },
+                                                disableNodeSelectors: true,
+                                                disableInlineExpansionButton: true,
+                                                nodeLocatorExpanderHandler: {
+                                                    getReusableExpansionArea: () => null,
+                                                    onCreate: ({ path, locatorRoot, expansionArea, locator }) => {
+                                                        const encodedPath = JSON.stringify(path);
+                                                        const relatedNests = nests.filter(nest => JSON.stringify(nest.path) === encodedPath);
+                                                        if (relatedNests.length === 0) {
+                                                            return;
+                                                        }
+                                                        const wrappedLocator = (0, UpdatableNodeLocator_6.createImmutableLocator)((0, UpdatableNodeLocator_6.createMutableLocator)(locator));
+                                                        const area = lhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator);
+                                                        // const env = area.getNestedModalEnv(modal)
+                                                        relatedNests.forEach((nest, nestIdx) => {
+                                                            const localWindow = area.add({
+                                                                onForceClose: () => { },
+                                                                render: (root) => {
+                                                                    root.style.display = 'flex';
+                                                                    root.style.flexDirection = 'column';
+                                                                    root.appendChild((0, createModalTitle_10.default)({
+                                                                        renderLeft: (target) => (0, renderProbeModalTitleLeft_2.default)(null, target, null, () => localWindow.getPos(), null, wrappedLocator, nest.property, {}, 'minimal-nested'),
+                                                                        onClose: null,
+                                                                    }).element);
+                                                                    doEncodeRpcLines(root, nest.expectedOutput, nest.nestedProperties, [...path, nestIdx]);
+                                                                },
+                                                            });
+                                                        });
+                                                    },
+                                                    onClick: () => { },
                                                 }
-                                                return 'default';
-                                            },
-                                        }));
+                                            }));
+                                        };
+                                        doEncodeRpcLines(leftPane, testCase.expectedOutput, testCase.nestedProperties, []);
                                         break;
                                     }
-                                    case 'smoke': {
+                                    case 'SMOKE': {
                                         leftPane.appendChild(document.createTextNode(`
                         Smoke Test -> expected no error
                       `.trim()));
@@ -5356,24 +6145,74 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                 splitPane.appendChild(divider);
                                 const rightPane = document.createElement('div');
                                 addSplitTitle(rightPane, 'Actual');
-                                if (testStatus === 'failed-fetching') {
-                                    rightPane.appendChild(document.createElement(`
-                    Failed val
-                  `.trim()));
-                                }
-                                else {
-                                    rightPane.appendChild((0, encodeRpcBodyLines_5.default)(env, testStatus.lines, {
-                                        lateInteractivityEnabledChecker: () => testCase.src === env.getLocalState(),
+                                const rhsInlineWindowManager = (0, createInlineWindowManager_2.default)();
+                                const doEncodeRpcLines = (target, lines, nests, markerPrefix) => {
+                                    if (!captureStdioSetting) {
+                                        lines = (0, rpcBodyToAssertionLine_2.rpcLinesToAssertionLines)(lines);
+                                    }
+                                    target.appendChild((0, encodeRpcBodyLines_5.default)(env, lines, {
+                                        lateInteractivityEnabledChecker: () => testCase.src.text === env.getLocalState(),
+                                        excludeStdIoFromPaths: true,
                                         decorator: (line) => {
-                                            if (typeof testReport === 'object' && typeof testReport.output === 'object') {
-                                                if (testReport.output.invalid.includes(line)) {
-                                                    return 'error';
-                                                }
+                                            console.log('in prefix:', markerPrefix, ', line:', line);
+                                            const key = JSON.stringify([...markerPrefix, ...line]);
+                                            const marker = testStatus.actualMarkers[key];
+                                            if (marker === 'error') {
+                                                return 'error';
                                             }
                                             return 'default';
                                         },
+                                        disableNodeSelectors: true,
+                                        disableInlineExpansionButton: true,
+                                        nodeLocatorExpanderHandler: {
+                                            getReusableExpansionArea: () => null,
+                                            onCreate: ({ path, locatorRoot, expansionArea, locator }) => {
+                                                const encodedPath = JSON.stringify(path);
+                                                const relatedNests = nests.filter(nest => JSON.stringify(nest.path) === encodedPath);
+                                                console.log('onCreate', path, '; nests:', nests, 'matches:', relatedNests);
+                                                if (relatedNests.length === 0) {
+                                                    return;
+                                                }
+                                                const wrappedLocator = (0, UpdatableNodeLocator_6.createImmutableLocator)((0, UpdatableNodeLocator_6.createMutableLocator)(locator));
+                                                const area = rhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator);
+                                                // const env = area.getNestedModalEnv(modal)
+                                                relatedNests.forEach((nest, nestIdx) => {
+                                                    const localWindow = area.add({
+                                                        onForceClose: () => { },
+                                                        render: (root) => {
+                                                            root.style.display = 'flex';
+                                                            root.style.flexDirection = 'column';
+                                                            root.appendChild((0, createModalTitle_10.default)({
+                                                                renderLeft: (target) => (0, renderProbeModalTitleLeft_2.default)(null, target, null, () => localWindow.getPos(), null, wrappedLocator, nest.property, {}, 'minimal-nested'),
+                                                                onClose: null,
+                                                            }).element);
+                                                            if (nest.result !== 'could-not-find-node') {
+                                                                doEncodeRpcLines(root, nest.result.body, nest.result.nested, [...path, nestIdx]);
+                                                            }
+                                                        },
+                                                    });
+                                                });
+                                            },
+                                            onClick: () => { },
+                                        }
                                     }));
+                                };
+                                if (evaluationResult.output && evaluationResult.output.result !== 'could-not-find-node') {
+                                    console.log('actualOutput:', evaluationResult.output.result);
+                                    doEncodeRpcLines(rightPane, evaluationResult.output.result.body, evaluationResult.output.result.nested, []);
                                 }
+                                // rightPane.appendChild(encodeRpcBodyLines(env, testStatus.lines, {
+                                //   lateInteractivityEnabledChecker: () => testCase.src.text === env.getLocalState(),
+                                //   decorator: (line) => {
+                                //     if (typeof testReport === 'object' && typeof testReport.output === 'object') {
+                                //       if (testReport.output.invalid.includes(line)) {
+                                //         return 'error';
+                                //       }
+                                //     }
+                                //     return 'default';
+                                //   },
+                                //   disableNodeSelectors: true,
+                                // }));
                                 splitPane.appendChild(rightPane);
                                 contentRoot.appendChild(splitPane);
                                 break;
@@ -5390,15 +6229,14 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                 const addTail = () => {
                                     addP(`You can inspect the difference by opening a probe from 'Source Code' tab. If you are OK with the differences, click 'Save 💾'.`);
                                 };
-                                if (someLocatorErr && someOutputErr) {
-                                    addP(`Both property output and AST node reference(s) involved in property execution differ. This could mean that that both property behavior and AST structure has changed since this test was constructed.`);
-                                    addTail();
-                                }
-                                else if (someLocatorErr) {
-                                    wrapper.appendChild(document.createTextNode(`Property output is the same, but the AST node reference(s) involved in property execution are different. This could be because the AST structure has changed since this test was constructed. This might not be a problem.`));
-                                    addTail();
-                                }
-                                else if (someOutputErr) {
+                                // if (someLocatorErr && someOutputErr) {
+                                //   addP(`Both property output and AST node reference(s) involved in property execution differ. This could mean that that both property behavior and AST structure has changed since this test was constructed.`);
+                                //   addTail();
+                                // }else if (someLocatorErr) {
+                                //   wrapper.appendChild(document.createTextNode(`Property output is the same, but the AST node reference(s) involved in property execution are different. This could be because the AST structure has changed since this test was constructed. This might not be a problem.`));
+                                //   addTail();
+                                // } else
+                                if (someOutputErr) {
                                     wrapper.appendChild(document.createTextNode('Output differs, but the AST node reference(s) involved in property execution are identical. This indicates that a property behaves differently to when the test was constructed.'));
                                     addTail();
                                 }
@@ -5411,7 +6249,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                 const wrapper = document.createElement('div');
                                 wrapper.style.padding = '0.25rem';
                                 contentRoot.appendChild(wrapper);
-                                const same = testCase.src === env.getLocalState();
+                                const same = testCase.src.text === env.getLocalState();
                                 const addText = (msg) => wrapper.appendChild(document.createTextNode(msg));
                                 const addHelp = (type) => {
                                     const btn = document.createElement('button');
@@ -5432,7 +6270,53 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                     btn.style.margin = '0 0.125rem';
                                     btn.innerText = `Open Probe`;
                                     btn.onclick = () => {
-                                        (0, displayProbeModal_3.default)(env, null, locator, attr);
+                                        const nestedTestToProbeData = (test) => {
+                                            const inner = {};
+                                            test.nestedProperties.forEach((nest) => {
+                                                var _a;
+                                                const key = JSON.stringify(nest.path);
+                                                inner[key] = (_a = inner[key]) !== null && _a !== void 0 ? _a : [];
+                                                inner[key].push({
+                                                    data: nestedTestToProbeData(nest),
+                                                    modalPos: { x: 0, y: 0 },
+                                                });
+                                            });
+                                            return {
+                                                type: 'probe',
+                                                locator: testCase.locator,
+                                                property: test.property,
+                                                nested: inner,
+                                            };
+                                        };
+                                        // const windows: NestedWindows = {};
+                                        // testCase.nestedProperties.forEach(nest => {
+                                        //   const key = JSON.stringify(nest.path);
+                                        //   windows[key] = windows[key] ?? [];
+                                        //   windows[key].push({
+                                        //     data: nestedTestToProbeData({
+                                        //       path: [],
+                                        //       expectedOutput: testCase.expectedOutput,
+                                        //       nestedProperties: testCase.nestedProperties,
+                                        //       property: testCase.property,
+                                        //     }),
+                                        //     modalPos: { x: 0, y: 0 },
+                                        //   });
+                                        //   // windows[]
+                                        //   // windows[key].push({
+                                        //   //   modalPos: null,
+                                        //   //   data: {
+                                        //   //     type: 'probe',
+                                        //   //     locator: testCase.locator,
+                                        //   //     nested:
+                                        //   //   }
+                                        //   // })
+                                        //   })
+                                        (0, displayProbeModal_3.default)(env, null, (0, UpdatableNodeLocator_6.createMutableLocator)(locator), property, nestedTestToProbeData({
+                                            path: [],
+                                            expectedOutput: testCase.expectedOutput,
+                                            nestedProperties: testCase.nestedProperties,
+                                            property: testCase.property,
+                                        }).nested);
                                     };
                                     wrapper.appendChild(btn);
                                     wrapper.appendChild(document.createTextNode(`to explore the probe that created this test.`));
@@ -5448,7 +6332,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                     btn.style.margin = '0 0.125rem';
                                     btn.innerText = `Load Source`;
                                     btn.onclick = () => {
-                                        env.setLocalState(testCase.src);
+                                        env.setLocalState(testCase.src.text);
                                     };
                                     wrapper.appendChild(btn);
                                     addText(`to replace CodeProber text with the test source.`);
@@ -5472,7 +6356,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                     wrapper.appendChild(line);
                                 };
                                 addExplanationLine('Node type:', (locator.result.label || locator.result.type).split('.').slice(-1)[0], 'syntax-type');
-                                addExplanationLine('Property:', attr.name, 'syntax-attr');
+                                addExplanationLine('Property:', property.name, 'syntax-attr');
                                 if (locator.result.external) {
                                     addExplanationLine('AST Node:', `${locator.result.label || locator.result.type} in external file`);
                                 }
@@ -5484,7 +6368,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                     // addExplanationLine('AST Node:', `${locator.result.label || locator.result.type} on line${linesTail}`);
                                 }
                                 addExplanationLine('Source Code', '⬇️, related line(s) in green.');
-                                testCase.src.split('\n').forEach((line, lineIdx) => {
+                                testCase.src.text.split('\n').forEach((line, lineIdx) => {
                                     const lineContainer = document.createElement('div');
                                     lineContainer.classList.add('test-case-source-code-line');
                                     if (!locator.result.external) {
@@ -5535,10 +6419,10 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                                 ul.style.margin = '0 0 0.25rem';
                                 const uiElements = new UIElements_1.default();
                                 [
-                                    ['Position Recovery', translateSelectorValToHumanLabel(testCase.posRecovery, uiElements.positionRecoverySelector)],
-                                    ['Cache Strategy', translateSelectorValToHumanLabel(testCase.cache, uiElements.astCacheStrategySelector)],
-                                    ['File suffix', testCase.tmpSuffix],
-                                    ['Main args', testCase.mainArgs ? `[${testCase.mainArgs.join(', ')}]` : 'none'],
+                                    ['Position Recovery', translateSelectorValToHumanLabel(testCase.src.posRecovery, uiElements.positionRecoverySelector)],
+                                    ['Cache Strategy', translateSelectorValToHumanLabel(testCase.src.cache, uiElements.astCacheStrategySelector)],
+                                    ['File suffix', testCase.src.tmpSuffix],
+                                    ['Main args', testCase.src.mainArgs ? `[${testCase.src.mainArgs.join(', ')}]` : 'none'],
                                 ].forEach(([name, val]) => {
                                     const li = document.createElement('li');
                                     li.innerText = `${name} : ${val}`;
@@ -5579,7 +6463,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                     console.log('TestDiffModal RPC catch', err);
                     root.innerHTML = '';
                     root.innerText = 'Failed refreshing test diff..';
-                    console.warn('Failed refreshing test w/ args:', JSON.stringify({ locator, attr }, null, 2));
+                    console.warn('Failed refreshing test w/ args:', JSON.stringify({ locator, property }, null, 2));
                     setTimeout(() => {
                         queryWindow.remove();
                         cleanup();
@@ -5599,7 +6483,8 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
                     data: {
                         type: 'probe',
                         locator,
-                        attr,
+                        property,
+                        nested: {},
                     },
                 });
             }
@@ -5607,12 +6492,12 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "settings", "ui/c
     };
     exports.default = displayTestDiffModal;
 });
-define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/popup/displayTestDiffModal"], function (require, exports, createLoadingSpinner_7, createModalTitle_11, showWindow_12, displayTestDiffModal_1) {
+define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/popup/displayTestDiffModal"], function (require, exports, createLoadingSpinner_7, createModalTitle_11, showWindow_8, displayTestDiffModal_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_7 = __importDefault(createLoadingSpinner_7);
     createModalTitle_11 = __importDefault(createModalTitle_11);
-    showWindow_12 = __importDefault(showWindow_12);
+    showWindow_8 = __importDefault(showWindow_8);
     displayTestDiffModal_1 = __importDefault(displayTestDiffModal_1);
     const displayTestSuiteModal = (env, category) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -5621,11 +6506,12 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
             env.testManager.removeListener(queryId);
         };
         let contents = 'loading';
-        const popup = (0, showWindow_12.default)({
+        const popup = (0, showWindow_8.default)({
             rootStyle: `
       min-width: 16rem;
       min-height: fit-content;
     `,
+            onForceClose: cleanup,
             resizable: true,
             render: (root) => {
                 while (root.firstChild)
@@ -5637,6 +6523,39 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
                         container.appendChild(header);
                     },
                     onClose: cleanup,
+                    extraActions: [
+                        {
+                            title: 'Save all tests as expected behavior',
+                            invoke: () => {
+                                const confirmation = confirm(`Are you sure? This cannot be undone. One or more of the test failures may represent meaningful information, which will be lost if you save it as 'expected' behavior`);
+                                if (!confirmation) {
+                                    return;
+                                }
+                                (async () => {
+                                    const suite = await env.testManager.getTestSuite(category);
+                                    if (suite === 'failed-fetching') {
+                                        return;
+                                    }
+                                    for (let i = 0; i < suite.length; ++i) {
+                                        const tcase = suite[i];
+                                        // if (tcase === '')
+                                        const evalRes = await env.testManager.evaluateTest(category, tcase.name);
+                                        if (evalRes === 'failed-fetching') {
+                                            continue;
+                                        }
+                                        if (evalRes.status.overall === 'ok') {
+                                            continue;
+                                        }
+                                        const mapped = env.testManager.convertTestResponseToTest(tcase, evalRes.output);
+                                        if (mapped === null) {
+                                            continue;
+                                        }
+                                        await env.testManager.addTest(category, mapped, true);
+                                    }
+                                })();
+                            }
+                        }
+                    ],
                 }).element);
                 if (typeof contents === 'string') {
                     if (contents === 'loading') {
@@ -5671,54 +6590,44 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
                         const status = document.createElement('span');
                         status.innerText = `⏳`;
                         row.style.order = '3';
-                        env.testManager.getTestStatus(category, tc.name).then(result => {
+                        env.testManager.evaluateTest(category, tc.name).then(result => {
                             // console.log('tstatus for', category, '>', tc.name, ':', result);
                             if (result == 'failed-fetching') {
                                 status.innerText = `<Evaluation Error>`;
                             }
                             else {
-                                const report = result.report;
-                                if (typeof report === 'string') {
-                                    switch (report) {
-                                        case 'pass': {
-                                            status.innerText = `✅`;
-                                            row.style.order = '5';
-                                            break;
-                                        }
-                                        case 'failed-eval': {
-                                            status.innerText = `❌`;
-                                            row.style.order = '1';
-                                        }
-                                        default: {
-                                            console.warn('Unknown test report string value:', report);
-                                        }
+                                const report = result.status.overall;
+                                // if (typeof report === 'string') {
+                                switch (report) {
+                                    case 'ok': {
+                                        status.innerText = `✅`;
+                                        row.style.order = '5';
+                                        break;
                                     }
-                                }
-                                else {
-                                    if (report.output === 'pass') {
-                                        // "only" locator diff, should be less severe
-                                        console.log('partial test failure?', JSON.stringify(report));
-                                        status.innerText = `⚠️`;
-                                    }
-                                    else {
+                                    case 'error': {
                                         status.innerText = `❌`;
                                         row.style.order = '1';
+                                        break;
+                                    }
+                                    default: {
+                                        console.warn('Unknown test report string value:', report);
                                     }
                                 }
+                                // } else {
+                                //   if (report.output === 'pass') {
+                                //     // "only" locator diff, should be less severe
+                                //     console.log('partial test failure?', JSON.stringify(report))
+                                //     status.innerText = `⚠️`;
+                                //   } else {
+                                //     status.innerText = `❌`;
+                                //     row.style.order = '1';
+                                //   }
+                                // }
                             }
                         });
-                        // env.testManager.getTestSuite(cat).then((res) => {
-                        //   if (res === 'failed-fetching') {
-                        //     status.innerText = `<failed fetching>`;
-                        //   } else if (res.length === 0) {
-                        //     status.innerText = `Empty suite`;
-                        //   } else {
-                        //     status.innerText = `${res.length}/${res.length} ✅`;
-                        //   }
-                        // });
                         icons.appendChild(status);
                         row.onclick = () => {
-                            (0, displayTestDiffModal_1.default)(env, null, tc.locator.robust, tc.attribute, category, tc);
+                            (0, displayTestDiffModal_1.default)(env, null, tc.locator, tc.property, category, tc.name);
                         };
                         rowList.appendChild(row);
                     });
@@ -5737,12 +6646,12 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
     };
     exports.default = displayTestSuiteModal;
 });
-define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/popup/displayTestSuiteModal"], function (require, exports, createLoadingSpinner_8, createModalTitle_12, showWindow_13, displayTestSuiteModal_1) {
+define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/popup/displayTestSuiteModal"], function (require, exports, createLoadingSpinner_8, createModalTitle_12, showWindow_9, displayTestSuiteModal_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_8 = __importDefault(createLoadingSpinner_8);
     createModalTitle_12 = __importDefault(createModalTitle_12);
-    showWindow_13 = __importDefault(showWindow_13);
+    showWindow_9 = __importDefault(showWindow_9);
     displayTestSuiteModal_1 = __importDefault(displayTestSuiteModal_1);
     const displayTestSuiteListModal = (env, onClose, serverSideWorkerProcessCount) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -5759,12 +6668,97 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
         const getLocalKnowledge = (suiteId) => {
             return localTestSuiteKnowledge[suiteId] = localTestSuiteKnowledge[suiteId] || { pass: 0, fail: 0 };
         };
-        const popup = (0, showWindow_13.default)({
+        const runAll = async (kind) => {
+            localTestSuiteKnowledge = {};
+            const suites = await env.testManager.listTestSuiteCategories();
+            if (suites === 'failed-listing') {
+                throw new Error('Failed listing test suites');
+            }
+            for (let i = 0; i < suites.length; ++i) {
+                localTestSuiteKnowledge[suites[i]] = { fail: 0, pass: 0 };
+            }
+            popup.refresh();
+            // Very intentionally evaluate this sequentially (not Promise.all)
+            // Don't want to send a billion requests at once
+            for (let i = 0; i < suites.length; ++i) {
+                const suite = suites[i];
+                let cases = await env.testManager.getTestSuite(suite);
+                if (cases === 'failed-fetching') {
+                    throw new Error(`Failed fetching test suite '${suite}'`);
+                }
+                ;
+                if (isClosed) {
+                    return false;
+                }
+                const sorted = [...cases];
+                // For caching purposes, sort so that all equal-text cases are evaluated next to each other
+                sorted.sort((a, b) => {
+                    if (a.src !== b.src) {
+                        return a.src < b.src ? -1 : 1;
+                    }
+                    if (a.src.cache != b.src.cache) {
+                        return a.src.cache < b.src.cache ? -1 : 1;
+                    }
+                    // Close enough to equal
+                    return 0;
+                });
+                // Eval (process - 1) tests at a time to avoid overlapping with normal CodeProber usage.
+                const sliceSize = (serverSideWorkerProcessCount !== undefined) ? Math.max(1, serverSideWorkerProcessCount * 3) : 1;
+                const numSlices = Math.ceil(sorted.length / sliceSize);
+                const evaluateSlice = async (slice) => {
+                    const relatedCases = sorted.slice(slice * sliceSize, Math.min(sorted.length, (slice + 1) * sliceSize));
+                    let expectedChangeCallback = changeCallbackCounter + relatedCases.length;
+                    ;
+                    await Promise.all(relatedCases.map(async (tcase) => {
+                        const evaluation = await env.testManager.evaluateTest(suite, tcase.name);
+                        // console.log('Ran test', suite, '>', tcase.name, ', status:', status);
+                        if (isClosed) {
+                            return;
+                        }
+                        if (evaluation === 'failed-fetching') {
+                            ++getLocalKnowledge(suite).fail;
+                        }
+                        else if (evaluation.status.overall !== 'ok') {
+                            if (kind !== 'save-if-error') {
+                                ++getLocalKnowledge(suite).fail;
+                            }
+                            else {
+                                const mapped = env.testManager.convertTestResponseToTest(tcase, evaluation.output);
+                                if (mapped === null) {
+                                    ++getLocalKnowledge(suite).fail;
+                                }
+                                else {
+                                    await env.testManager.addTest(suite, mapped, true);
+                                    ++getLocalKnowledge(suite).pass;
+                                }
+                            }
+                        }
+                        else {
+                            ++getLocalKnowledge(suite).pass;
+                        }
+                        expectedChangeCallback = changeCallbackCounter + 1;
+                    }));
+                    if (changeCallbackCounter !== expectedChangeCallback) {
+                        // One or more result was cached, force reload
+                        popup.refresh();
+                    }
+                };
+                for (let i = 0; i < numSlices; ++i) {
+                    if (isClosed) {
+                        return false;
+                    }
+                    await evaluateSlice(i);
+                }
+            }
+            return true;
+        };
+        const popup = (0, showWindow_9.default)({
             rootStyle: `
       width: 16rem;
       min-width: 4rem;
       min-height: 8rem;
     `,
+            onForceClose: cleanup,
             resizable: true,
             render: (root) => {
                 while (root.firstChild)
@@ -5774,83 +6768,29 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
                         const header = document.createElement('span');
                         header.innerText = `Test Suites`;
                         container.appendChild(header);
+                        header.style.minHeight = '1.25rem';
                     },
                     onClose: cleanup,
                     extraActions: (typeof categories === 'string' || categories.length === 0) ? [] : [
                         {
                             title: 'Run all',
                             invoke: () => {
-                                localTestSuiteKnowledge = {};
-                                (async () => {
-                                    const suites = await env.testManager.listTestSuiteCategories();
-                                    if (suites === 'failed-listing') {
-                                        return;
-                                    }
-                                    for (let i = 0; i < suites.length; ++i) {
-                                        localTestSuiteKnowledge[suites[i]] = { fail: 0, pass: 0 };
-                                    }
-                                    popup.refresh();
-                                    // Very intentionally evaluate this sequentially (not Promise.all)
-                                    // Don't want to send a billion requests at once
-                                    for (let i = 0; i < suites.length; ++i) {
-                                        const suite = suites[i];
-                                        let cases = await env.testManager.getTestSuite(suite);
-                                        console.log('Running test', suite, ', list:', cases);
-                                        if (cases === 'failed-fetching') {
-                                            return;
-                                        }
-                                        ;
-                                        if (isClosed) {
-                                            return;
-                                        }
-                                        const sorted = [...cases];
-                                        // For caching purposes, sort so that all equal-text cases are evaluated next to each other
-                                        sorted.sort((a, b) => {
-                                            if (a.src !== b.src) {
-                                                return a.src < b.src ? -1 : 1;
-                                            }
-                                            if (a.cache != b.cache) {
-                                                return a.cache < b.cache ? -1 : 1;
-                                            }
-                                            // Close enough to equal
-                                            return 0;
-                                        });
-                                        // Eval (process - 1) tests at a time to avoid overlapping with normal CodeProber usage.
-                                        const sliceSize = (serverSideWorkerProcessCount !== undefined) ? Math.max(1, serverSideWorkerProcessCount - 1) : 1;
-                                        const numSlices = Math.ceil(sorted.length / sliceSize);
-                                        const evaluateSlice = async (slice) => {
-                                            const relatedCases = sorted.slice(slice * sliceSize, Math.min(sorted.length, (slice + 1) * sliceSize));
-                                            const expectedChangeCallback = changeCallbackCounter + relatedCases.length;
-                                            await Promise.all(relatedCases.map(async (tcase) => {
-                                                const status = await env.testManager.getTestStatus(suite, tcase.name);
-                                                // console.log('Ran test', suite, '>', tcase.name, ', status:', status);
-                                                if (isClosed) {
-                                                    return;
-                                                }
-                                                if (status === 'failed-fetching' || status.report !== 'pass') {
-                                                    ++getLocalKnowledge(suite).fail;
-                                                }
-                                                else if (status.report === 'pass') {
-                                                    ++getLocalKnowledge(suite).pass;
-                                                }
-                                            }));
-                                            if (changeCallbackCounter !== expectedChangeCallback) {
-                                                // One or more result was cached, force reload
-                                                popup.refresh();
-                                            }
-                                        };
-                                        for (let i = 0; i < numSlices; ++i) {
-                                            if (isClosed) {
-                                                return;
-                                            }
-                                            await evaluateSlice(i);
-                                        }
-                                    }
-                                })()
-                                    .catch((asdasd) => {
-                                    console.warn('Error when running all tests');
+                                runAll('just-run').catch((err) => {
+                                    console.warn('Error when running all tests:', err);
                                 });
                             },
+                        },
+                        {
+                            title: 'Save all tests as expected behavior',
+                            invoke: () => {
+                                const confirmation = confirm(`Are you sure? This cannot be undone. One or more of the failures may represent meaningful information, which will be lost if you save it as 'expected' behavior`);
+                                if (!confirmation) {
+                                    return;
+                                }
+                                runAll('save-if-error').catch((err) => {
+                                    console.warn('Error when running all tests:', err);
+                                });
+                            }
                         }
                     ]
                 }).element);
@@ -5868,7 +6808,6 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
                     }
                 }
                 else {
-                    // root.style.display = 'flex';
                     const rowList = document.createElement('div');
                     rowList.style.display = 'flex';
                     rowList.style.flexDirection = 'column';
@@ -5886,6 +6825,8 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
                         const title = document.createElement('span');
                         title.innerText = cat;
                         title.style.marginRight = '1rem';
+                        title.style.maxWidth = '70%';
+                        title.style.wordBreak = 'break-word';
                         row.appendChild(title);
                         const icons = document.createElement('div');
                         row.appendChild(icons);
@@ -5910,7 +6851,6 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
                                     }
                                     else {
                                         // Loading
-                                        console.log('loading, know:', know, '; res.length:', res.length);
                                         const pct = ((know.fail + know.pass) * 100 / res.length) | 0;
                                         status.innerText = `${pct}% ⏳`;
                                     }
@@ -5945,70 +6885,61 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
     };
     exports.default = displayTestSuiteListModal;
 });
-define("rpc/subscribeToWorkerStatus", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_5) {
+define("ui/popup/displayWorkerStatus", ["require", "exports", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, createModalTitle_13, showWindow_10) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, Rpc_5.buildRpc)();
-});
-define("rpc/unsubscribeFromWorkerStatus", ["require", "exports", "rpc/Rpc"], function (require, exports, Rpc_6) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = (0, Rpc_6.buildRpc)();
-});
-define("ui/popup/displayWorkerStatus", ["require", "exports", "rpc/subscribeToWorkerStatus", "rpc/unsubscribeFromWorkerStatus", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, subscribeToWorkerStatus_1, unsubscribeFromWorkerStatus_1, createModalTitle_13, showWindow_14) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    subscribeToWorkerStatus_1 = __importDefault(subscribeToWorkerStatus_1);
-    unsubscribeFromWorkerStatus_1 = __importDefault(unsubscribeFromWorkerStatus_1);
     createModalTitle_13 = __importDefault(createModalTitle_13);
-    showWindow_14 = __importDefault(showWindow_14);
+    showWindow_10 = __importDefault(showWindow_10);
     const displayWorkerStatus = (env, setDisplayButtonDisabled) => {
         let activeSubscription = null;
         const onClose = () => {
             helpWindow.remove();
             setDisplayButtonDisabled(false);
             if (activeSubscription != null) {
-                (0, unsubscribeFromWorkerStatus_1.default)(env, {
-                    query: {
-                        attr: { name: 'meta:unsubscribeFromWorkerStatus', },
-                    },
-                    type: 'query',
+                env.performTypedRpc({
+                    type: 'Concurrent:UnsubscribeFromWorkerStatus',
                     job: activeSubscription.job,
                     subscriberId: activeSubscription.subscriberId,
+                }).then(res => {
+                    if (!res.ok) {
+                        console.warn('Failed unsubscribing from worker status for', activeSubscription);
+                    }
                 });
             }
         };
         setDisplayButtonDisabled(true);
-        const helpWindow = (0, showWindow_14.default)({
+        const helpWindow = (0, showWindow_10.default)({
             rootStyle: `
       width: 32rem;
       min-height: 12rem;
     `,
             resizable: true,
+            onForceClose: onClose,
             render: (root) => {
                 while (root.firstChild)
                     root.removeChild(root.firstChild);
                 root.appendChild((0, createModalTitle_13.default)({
                     renderLeft: (container) => {
-                        container.appendChild(document.createTextNode('Worker status'));
+                        container.appendChild(document.createTextNode('Worker status monitor'));
                     },
                     onClose,
                 }).element);
                 const pre = document.createElement('pre');
+                pre.style.margin = '0.25rem';
                 root.appendChild(pre);
                 pre.innerText = `Requesting worker status..`;
                 const job = env.createJobId(data => {
-                    console.log('worker status data:', data);
-                    if (!data.workers) {
-                        return;
+                    // console.log('worker status data:', data);
+                    switch (data.value.type) {
+                        case 'workerStatuses': {
+                            const workers = data.value.value;
+                            pre.innerText = `Status:\n${workers.map((stat, idx) => `${`${idx + 1}`.padStart(3, ' ')}:${stat}`).join('\n')}`;
+                            break;
+                        }
                     }
-                    // pre.innerText = `status: ${JSON.stringify(data. null, data)}`;
-                    pre.innerText = `Status:\n${data.workers.map((stat, idx) => `${`${idx + 1}`.padStart(3, ' ')}:${stat}`).join('\n')}`;
                 });
-                // activeJob = job;
-                (0, subscribeToWorkerStatus_1.default)(env, {
-                    query: { attr: { name: 'meta:subscribeToWorkerStatus' } },
-                    type: 'query',
+                env.performTypedRpc({
+                    type: 'Concurrent:SubscribeToWorkerStatus',
                     job,
                 }).then(res => {
                     activeSubscription = {
@@ -6021,14 +6952,14 @@ define("ui/popup/displayWorkerStatus", ["require", "exports", "rpc/subscribeToWo
     };
     exports.default = displayWorkerStatus;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_4, displayRagModal_1, displayHelp_5, displayAttributeModal_6, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_2, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_4, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_3, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_7) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
     displayProbeModal_4 = __importDefault(displayProbeModal_4);
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_5 = __importDefault(displayHelp_5);
-    displayAttributeModal_6 = __importDefault(displayAttributeModal_6);
+    displayAttributeModal_7 = __importDefault(displayAttributeModal_7);
     settings_7 = __importDefault(settings_7);
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
     displayStatistics_1 = __importDefault(displayStatistics_1);
@@ -6039,14 +6970,31 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     showVersionInfo_1 = __importDefault(showVersionInfo_1);
     runBgProbe_1 = __importDefault(runBgProbe_1);
     cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
-    displayAstModal_2 = __importDefault(displayAstModal_2);
+    displayAstModal_3 = __importDefault(displayAstModal_3);
     displayTestSuiteListModal_1 = __importDefault(displayTestSuiteListModal_1);
     displayWorkerStatus_1 = __importDefault(displayWorkerStatus_1);
+    showWindow_11 = __importDefault(showWindow_11);
+    const uiElements = new UIElements_2.default();
     window.clearUserSettings = () => {
         settings_7.default.set({});
         location.reload();
     };
-    const uiElements = new UIElements_2.default();
+    const clearHashFromLocation = () => history.replaceState('', document.title, `${window.location.pathname}${window.location.search}`);
+    window.saveStateAsUrl = () => {
+        const encoded = encodeURIComponent(JSON.stringify(settings_7.default.getProbeWindowStates()));
+        clearHashFromLocation();
+        // delete location.hash;'
+        // console.log('loc:', location.toString());
+        navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}${window.location.search}${window.location.search.length === 0 ? '?' : '&'}ws=${encoded}`);
+        const btn = uiElements.saveAsUrlButton;
+        const saveText = btn.textContent;
+        setTimeout(() => {
+            btn.textContent = saveText;
+            delete btn.style.border;
+        }, 1000);
+        btn.textContent = `Copied to clipboard`;
+        btn.style.border = '1px solid green';
+    };
     const doMain = (wsPort) => {
         if (settings_7.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
             document.body.classList.add('hide-settings');
@@ -6065,6 +7013,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             Object.values(probeWindowStateSavers).forEach(v => v(states));
             settings_7.default.setProbeWindowStates(states);
         };
+        // setInterval(() => {
+        //   console.log('listener ids:', JSON.stringify(Object.keys(onChangeListeners)));
+        // }, 1000);
         const notifyLocalChangeListeners = (adjusters, reason) => {
             Object.values(onChangeListeners).forEach(l => l(adjusters, reason));
             triggerWindowSave();
@@ -6094,10 +7045,11 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 return (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:${wsPort}`), addConnectionCloseNotice_1.default);
             })();
             const jobUpdateHandlers = {};
-            wsHandler.on('jobUpdate', (data) => {
-                const { job, result } = data;
-                console.log('jobUpdate for', job, '; result:', result);
-                if (!job || !result) {
+            wsHandler.on('asyncUpdate', (rawData) => {
+                const data = rawData; // Ideally stricly parse this, but this works
+                const { job, isFinalUpdate, value } = data;
+                // console.log('jobUpdate for', job, '; result:', result);
+                if (!job || value === undefined) {
                     console.warn('Invalid job update', data);
                     return;
                 }
@@ -6106,13 +7058,14 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     console.log('Got no handler for job update:', data);
                     return;
                 }
-                if (result.status === 'done') {
+                if (isFinalUpdate) {
                     delete jobUpdateHandlers[data === null || data === void 0 ? void 0 : data.job];
                 }
-                handler(result);
+                handler(data);
             });
             const rootElem = document.getElementById('root');
-            wsHandler.on('init', ({ version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount }) => {
+            const initHandler = (info) => {
+                const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount } = info;
                 console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
                 rootElem.style.display = "grid";
                 const onChange = (newValue, adjusters) => {
@@ -6154,7 +7107,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         location.search.split(/\?|&/g).forEach((kv) => {
                             const needle = `bgProbe=`;
                             if (kv.startsWith(needle)) {
-                                (0, runBgProbe_1.default)(modalEnv, { result: { start: 0, end: 0, type: '<ROOT>' }, steps: [] }, { name: kv.slice(needle.length), });
+                                (0, runBgProbe_1.default)(modalEnv, { result: { start: 0, end: 0, type: '<ROOT>', depth: 0 }, steps: [] }, { name: kv.slice(needle.length), });
                             }
                         });
                     });
@@ -6182,7 +7135,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         const colEnd = end & 0xFFF;
                         activeMarkers.push(markText({ severity, lineStart, colStart, lineEnd, colEnd, message: msg }));
                     };
-                    Object.values(probeMarkers).forEach(arr => arr.forEach(({ severity, errStart, errEnd, msg }) => filteredAddMarker(severity, errStart, errEnd, msg)));
+                    Object.values(probeMarkers).forEach(arr => arr.forEach(({ type, start, end, msg }) => filteredAddMarker(type, start, end, msg)));
                 };
                 const setupSimpleCheckbox = (input, initial, update) => {
                     input.checked = initial;
@@ -6259,19 +7212,19 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 const testManager = (0, TestManager_1.createTestManager)(() => modalEnv, createJobId);
                 let jobIdGenerator = 0;
                 const modalEnv = {
+                    showWindow: showWindow_11.default,
                     performTypedRpc: (req) => wsHandler.sendRpc(req),
-                    wrapTextRpc: (req) => ({
-                        posRecovery: uiElements.positionRecoverySelector.value,
-                        cache: uiElements.astCacheStrategySelector.value,
-                        type: 'query',
-                        text: getLocalState(),
-                        stdout: settings_7.default.shouldCaptureStdio(),
-                        query: req.query,
-                        mainArgs: settings_7.default.getMainArgsOverride(),
-                        tmpSuffix: settings_7.default.getCurrentFileSuffix(),
-                        job: req.jobId,
-                        jobLabel: req.jobLabel,
-                    }),
+                    createParsingRequestData: () => {
+                        var _a;
+                        return ({
+                            posRecovery: uiElements.positionRecoverySelector.value,
+                            cache: uiElements.astCacheStrategySelector.value,
+                            text: getLocalState(),
+                            stdout: settings_7.default.shouldCaptureStdio(),
+                            mainArgs: (_a = settings_7.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : undefined,
+                            tmpSuffix: settings_7.default.getCurrentFileSuffix(),
+                        });
+                    },
                     probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
                     themeIsLight: () => settings_7.default.isLightTheme(),
                     getLocalState: () => getLocalState(),
@@ -6298,6 +7251,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     createCullingTaskSubmitter: (0, cullingTaskSubmitterFactory_2.default)(changeBufferTime),
                     testManager,
                     createJobId,
+                    getGlobalModalEnv: () => modalEnv,
                 };
                 modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {
                     if (reason === 'refresh-from-server') {
@@ -6308,7 +7262,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     uiElements.showTests.disabled = true;
                     (0, displayTestSuiteListModal_1.default)(modalEnv, () => { uiElements.showTests.disabled = false; }, workerProcessCount);
                 };
-                (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, buildTimeSeconds, wsHandler);
+                (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, buildTimeSeconds, modalEnv.performTypedRpc);
                 window.displayHelp = (type) => {
                     const common = (type, button) => (0, displayHelp_5.default)(type, disabled => button.disabled = disabled);
                     switch (type) {
@@ -6329,14 +7283,31 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 setTimeout(() => {
                     try {
-                        settings_7.default.getProbeWindowStates().forEach((state) => {
+                        let windowStates = settings_7.default.getProbeWindowStates();
+                        let wsMatch;
+                        if ((wsMatch = /[?&]?ws=[^?&]+/.exec(location.search)) != null) {
+                            const trimmedSearch = wsMatch.index === 0
+                                ? (wsMatch[0].length < location.search.length
+                                    ? `?${location.search.slice(wsMatch[0].length + 1)}`
+                                    : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`)
+                                : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`;
+                            history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
+                            try {
+                                windowStates = JSON.parse(decodeURIComponent(wsMatch[0].slice('?ws='.length)));
+                                clearHashFromLocation();
+                            }
+                            catch (e) {
+                                console.warn('Invalid windowState in hash', e);
+                            }
+                        }
+                        windowStates.forEach((state) => {
                             switch (state.data.type) {
                                 case 'probe': {
-                                    (0, displayProbeModal_4.default)(modalEnv, state.modalPos, state.data.locator, state.data.attr);
+                                    (0, displayProbeModal_4.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_7.createMutableLocator)(state.data.locator), state.data.property, state.data.nested);
                                     break;
                                 }
                                 case 'ast': {
-                                    (0, displayAstModal_2.default)(modalEnv, state.modalPos, state.data.locator, state.data.direction, state.data.transform);
+                                    (0, displayAstModal_3.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_7.createMutableLocator)(state.data.locator), state.data.direction, state.data.transform);
                                     break;
                                 }
                                 default: {
@@ -6352,14 +7323,16 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 window.RagQuery = (line, col, autoSelectRoot) => {
                     if (autoSelectRoot) {
                         const node = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1, depth: 0 };
-                        (0, displayAttributeModal_6.default)(modalEnv, null, { result: node, steps: [] });
+                        (0, displayAttributeModal_7.default)(modalEnv, null, (0, UpdatableNodeLocator_7.createMutableLocator)({ result: node, steps: [] }));
                     }
                     else {
                         (0, displayRagModal_1.default)(modalEnv, line, col);
                     }
                 };
-            });
+            };
+            wsHandler.on('init', initHandler);
             wsHandler.on('refresh', () => {
+                console.log('notifying of refresh..');
                 notifyLocalChangeListeners(undefined, 'refresh-from-server');
             });
         }
@@ -6425,9 +7398,3 @@ const darkColors = {
 const getThemedColor = (lightTheme, type) => {
     return (lightTheme ? lightColors : darkColors)[type];
 };
-const startEndToSpan = (start, end) => ({
-    lineStart: (start >>> 12),
-    colStart: start & 0xFFF,
-    lineEnd: (end >>> 12),
-    colEnd: end & 0xFFF,
-});

@@ -6,14 +6,14 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 import java.util.jar.JarFile;
 
-import org.json.JSONArray;
-
 import codeprober.metaprogramming.StdIoInterceptor;
+import codeprober.protocol.data.RpcBodyLine;
 import codeprober.toolglue.ParseResult;
 
 /**
@@ -32,8 +32,8 @@ public class ASTProvider {
 		public final Method mainMth;
 		public final Field drAstField;
 
-		public LoadedJar(String jarPath, long jarLastModified, CompilerClassLoader classLoader, Class<?> mainClazz, JarFile jar,
-				Method mainMth, Field drAstField) {
+		public LoadedJar(String jarPath, long jarLastModified, CompilerClassLoader classLoader, Class<?> mainClazz,
+				JarFile jar, Method mainMth, Field drAstField) {
 			this.jarPath = jarPath;
 			this.jarLastModified = jarLastModified;
 			this.classLoader = classLoader;
@@ -78,7 +78,8 @@ public class ASTProvider {
 		Method mainMethod = klass.getMethod("main", String[].class);
 		Field rootField = null;
 
-		// Support two declarations: primarily 'CodeProber_root_node' but fall back to 'DrAST_root_node'.
+		// Support two declarations: primarily 'CodeProber_root_node' but fall back to
+		// 'DrAST_root_node'.
 		try {
 			rootField = klass.getField("CodeProber_root_node");
 		} catch (NoSuchFieldException e) {
@@ -113,7 +114,7 @@ public class ASTProvider {
 			try {
 				long start = System.currentTimeMillis();
 				Object prevRoot = ljar.drAstField.get(ljar.mainClazz);
-				JSONArray captures = null;
+				List<RpcBodyLine> captures = null;
 				try {
 					System.setProperty("java.security.manager", "allow");
 					try {
@@ -122,9 +123,11 @@ public class ASTProvider {
 						uoe.printStackTrace();
 						captures = StdIoInterceptor.performDefaultCapture(() -> {
 							System.err.println("Failed installing System.exit interceptor");
-							System.err.println("Restart code-prober.jar with the system property 'java.security.manager=allow'");
+							System.err.println(
+									"Restart code-prober.jar with the system property 'java.security.manager=allow'");
 							System.err.println("Example:");
-							System.err.println("   java -Djava.security.manager=allow -jar path/to/code-prober.jar path/to/your/analyzer-or-compiler.jar");
+							System.err.println(
+									"   java -Djava.security.manager=allow -jar path/to/code-prober.jar path/to/your/analyzer-or-compiler.jar");
 						});
 						return new ParseResult(null, captures);
 					}
@@ -155,14 +158,36 @@ public class ASTProvider {
 					System.out.printf("Compiler finished after : %d ms%n", (System.currentTimeMillis() - start));
 				}
 				Object root = ljar.drAstField.get(ljar.mainClazz);
-				if (root == prevRoot) {
-					// Parse ended without unexpected error (System.exit is expected), but nothing changed
-					System.out.println("CodeProber_root_node didn't change after main invocation, treating this as a parse failure.");
-					System.out.println("If you perform semantic checks and call System.exit(..) if you get errors, then please do so *after* assigning CodeProber_root_node");
-					System.out.println("I.e do 1: parse. 2: update CodeProber_root_node. 3: perform semantic checks (optional)");
+				if (root == null) {
+					if (captures == null) {
+						captures = new ArrayList<>();
+					}
+					captures.addAll(StdIoInterceptor.performDefaultCapture(() -> {
+						System.err.println("Compiler exited, but no 'CodeProber_root_node' found.");
+						System.err.println(
+								"If parsing failed, you can draw 'red squigglies' in the code to indicate where it failed.");
+						System.err.println("See overflow menu (⠇) -> \"Magic output messages help\".");
+						System.err.println(
+								"If parsing succeeded, make sure you declare and assign the following field in your main class:");
+						System.err.println("'public static Object CodeProber_root_node'");
+					}));
+				} else if (root == prevRoot) {
+					// Parse ended without unexpected error (System.exit is expected), but nothing
+					// changed
+					if (captures == null) {
+						captures = new ArrayList<>();
+					}
+					captures.addAll(StdIoInterceptor.performDefaultCapture(() -> {
+						System.err.println(
+								"CodeProber_root_node didn't change after main invocation, treating this as a parse failure.");
+						System.err.println(
+								"If you perform semantic checks and call System.exit(..) if you get errors, then please do so *after* assigning CodeProber_root_node");
+						System.err.println(
+								"I.e do 1: parse. 2: update CodeProber_root_node. 3: perform semantic checks (optional)");
+					}));
 					return new ParseResult(null, captures);
 				}
-//				rootConsumer.accept(root);
+				// rootConsumer.accept(root);
 				return new ParseResult(root, captures);
 			} catch (IllegalAccessException e) {
 				e.printStackTrace();
@@ -172,7 +197,12 @@ public class ASTProvider {
 		} catch (NoSuchMethodException e) {
 			System.err.println("Could not find the compiler's main method.");
 		} catch (NoSuchFieldException e) {
-			System.err.println("Could not find the compiler's main method.");
+			System.err.println("Could not find the AST root declaration.");
+			final List<RpcBodyLine> userHelp = StdIoInterceptor.performDefaultCapture(() -> {
+				System.err.println("'CodeProber_root_node' not found. Make sure you declare and assign the following field in your main class:");
+				System.err.println("'public static Object CodeProber_root_node'");
+			});
+			return new ParseResult(null, userHelp);
 		} catch (FileNotFoundException e) {
 			System.err.println("Could not find jar file, check path");
 			e.printStackTrace();

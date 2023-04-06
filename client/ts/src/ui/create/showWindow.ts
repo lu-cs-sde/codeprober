@@ -7,6 +7,7 @@ interface CancelToken {
 
 interface ShowWindowArgs {
   render: (container: HTMLElement, info: { cancelToken: CancelToken; bringToFront: () => void; }) => void;
+  onForceClose: () => void,
   pos?: ModalPosition | null;
   size?: { width: number, height: number },
   rootStyle?: string;
@@ -16,7 +17,14 @@ interface ShowWindowArgs {
   resizable?: boolean;
 }
 
-const showWindow = (args: ShowWindowArgs) => {
+interface ShowWindowResult {
+  remove: () => void,
+  refresh: () => void,
+  getPos: () => ModalPosition,
+  getSize: () => ({ width: number, height: number }),
+}
+
+const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
   const { render, pos: initialPos, size: initialSize, rootStyle, resizable } = args;
   const root = document.createElement('div');
   root.tabIndex = 0;
@@ -123,4 +131,6 @@ const showWindow = (args: ShowWindowArgs) => {
   };
 };
 
+
+export { ShowWindowArgs, ShowWindowResult, CancelToken };
 export default showWindow;

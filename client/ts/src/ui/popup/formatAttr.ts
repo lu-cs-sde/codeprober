@@ -1,71 +1,69 @@
+import { Property, PropertyArg } from '../../protocol';
 
-const formatAttrType = (orig: AstAttrArg['type']) => {
-  switch (orig) {
-    case 'java.lang.String': return 'String';
-    default: return orig;
+const formatAttrType = (orig: PropertyArg) => {
+  switch (orig.type) {
+    case 'nodeLocator': return  orig.value.type;
+    case 'integer': return 'int';
+    // case ''
+    // case 'java.lang.String': return 'String';
+    default: return orig.type;
   }
 };
 
-const formatAttr = (attr: AstAttr) => `${attr.name.startsWith('l:') ? attr.name.slice(2) : attr.name}${(
+const formatAttr = (attr: Property) => `${attr.name.startsWith('l:') ? attr.name.slice(2) : attr.name}${(
   attr.args
-    ? `(${attr.args.map(a => formatAttrType(a.type)).join(', ')})`
+    ? `(${attr.args.map(a => formatAttrType(a)).join(', ')})`
     : ''
 )}`;
 
-const formatAttrArgList = (target: HTMLElement, attr: AstAttrWithValue) => {
+const formatAttrArgList = (target: HTMLElement, attr: Property) => {
   attr.args?.forEach((arg, argIdx) => {
     if (argIdx > 0) {
       target.appendChild(document.createTextNode(`,`));
     }
     switch (arg.type) {
-      case 'java.lang.String': {
+      case 'string': {
         const node = document.createElement('span');
         node.classList.add('syntax-string');
         node.innerText = `"${arg.value}"`;
         target.appendChild(node);
         break;
       }
-      case 'int': {
+      case 'integer': {
         const node = document.createElement('span');
         node.classList.add('syntax-int');
         node.innerText = `${arg.value}`;
         target.appendChild(node);
         break;
       }
-      case 'boolean': {
+      case 'bool': {
         const node = document.createElement('span');
         node.classList.add('syntax-modifier');
         node.innerText = `${arg.value}`;
         target.appendChild(node);
         break;
       }
-      default: {
-        switch (arg.detail) {
-          case 'AST_NODE': {
-            const node = document.createElement('span');
-            node.classList.add('syntax-type');
-            if (!arg.value || (typeof arg.value !== 'object')) {
-              // Probably null
-              node.innerText = `${arg.value}`;
-            } else {
-              node.innerText = arg.value.result.type;
-            }
-            target.appendChild(node);
-            break;
-          }
-          case 'OUTPUTSTREAM': {
-            const node = document.createElement('span');
-            node.classList.add('stream-arg-msg');
-            node.innerText = '<stream>';
-            target.appendChild(node);
-            break;
-          }
-          default: {
-            console.warn('Unsure of how to render', arg.type);
-            target.appendChild(document.createTextNode(`${arg.value}`));
-          }
+      case 'nodeLocator': {
+        const node = document.createElement('span');
+        node.classList.add('syntax-type');
+        if (!arg.value || (typeof arg.value !== 'object')) {
+          node.innerText = `null`;
+        } else {
+          node.innerText = arg.value.value?.result?.type ?? arg.value.type; // .split('.')[0];
         }
+        target.appendChild(node);
         break;
+      }
+      case 'outputstream': {
+        const node = document.createElement('span');
+        node.classList.add('stream-arg-msg');
+        node.innerText = '<stream>';
+        target.appendChild(node);
+        break;
+      }
+      default: {
+        console.warn('Unsure of how to render', arg.type);
+        target.appendChild(document.createTextNode(`${arg.value}`));
       }
     }
   });

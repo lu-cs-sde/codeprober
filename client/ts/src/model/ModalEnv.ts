@@ -1,18 +1,20 @@
 import TestManager from './test/TestManager';
-import Rpc from '../rpc/Rpc'
-import { TextRpcRequest } from '../rpc/TextRpc';
+import { AsyncRpcUpdate, Diagnostic, ParsingRequestData } from '../protocol';
+import { ShowWindowArgs, ShowWindowResult } from '../ui/create/showWindow';
+import WindowState from './WindowState';
 
 type JobId = number;
 
 interface ModalEnv {
+  showWindow: (args: ShowWindowArgs) => ShowWindowResult;
   performTypedRpc: <Req, Res>(req: Req) => Promise<Res>;
-  wrapTextRpc: <Query>(req: { query: Query, jobId?: JobId, jobLabel?: string, }) => TextRpcRequest<Query>;
+  createParsingRequestData: () => ParsingRequestData;
   getLocalState: () => string;
   setLocalState: (val: string) => void;
   updateSpanHighlight: (span: Span | null) => void;
   setStickyHighlight: (probeId: string, hl: StickyHighlight) => void;
   clearStickyHighlight: (probeId: string) => void;
-  probeMarkers: { [probeId: string]: ProbeMarker[] };
+  probeMarkers: { [probeId: string]: Diagnostic[] };
   onChangeListeners: { [key: string]: (adjusters?: LocationAdjuster[], reason?: string) => void };
   themeChangeListeners: { [key: string]: (light: boolean) => void };
   themeIsLight: () => boolean,
@@ -26,7 +28,8 @@ interface ModalEnv {
   currentlyLoadingModals: Set<string>;
   createCullingTaskSubmitter: () => CullingTaskSubmitter;
   testManager: TestManager;
-  createJobId: (updateHandler: (data: any) => void) => JobId;
+  createJobId: (updateHandler: (data: AsyncRpcUpdate) => void) => JobId;
+  getGlobalModalEnv: () => ModalEnv;
 }
 
 export { JobId }

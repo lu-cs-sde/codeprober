@@ -1,19 +1,19 @@
 package codeprober.locator;
 
-import java.util.ArrayList;
 import java.util.List;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
-import codeprober.locator.CreateLocator.LocatorMergeMethod;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.metaprogramming.TypeIdentifier;
-import codeprober.protocol.ParameterValue;
-import codeprober.protocol.decode.DecodeValue;
+import codeprober.protocol.data.FNStep;
+import codeprober.protocol.data.NodeLocator;
+import codeprober.protocol.data.NodeLocatorStep;
+import codeprober.protocol.data.PropertyArg;
+import codeprober.protocol.data.TALStep;
+import codeprober.requesthandler.EvaluatePropertyHandler;
+import codeprober.requesthandler.EvaluatePropertyHandler.UnpackedAttrValue;
 import codeprober.util.BenchmarkTimer;
 
 public class ApplyLocator {
@@ -21,9 +21,9 @@ public class ApplyLocator {
 	public static class ResolvedNode {
 		public final AstNode node;
 		public final Span pos;
-		public final JSONObject nodeLocator;
+		public final NodeLocator nodeLocator;
 
-		public ResolvedNode(AstNode node, Span pos, JSONObject nodeLocator) {
+		public ResolvedNode(AstNode node, Span pos, NodeLocator nodeLocator) {
 			this.node = node;
 			this.pos = pos;
 			this.nodeLocator = nodeLocator;
@@ -54,8 +54,8 @@ public class ApplyLocator {
 	public static boolean isFirstPerfectMatchExpected(AstInfo info, AstNode src, TypeAtLoc tal, int depth,
 			AstNode expected) {
 		return getFirstPerfectMatch(info, src,
-				info.typeIdentificationStyle.createIdentifier(info.loadAstClass, tal.type, tal.label), tal.loc.start, tal.loc.end,
-				depth, expected) == expected;
+				info.typeIdentificationStyle.createIdentifier(info.loadAstClass, tal.type, tal.label), tal.loc.start,
+				tal.loc.end, depth, expected) == expected;
 	}
 
 	private static AstNode getFirstPerfectMatch(AstInfo info, AstNode src, TypeIdentifier typeIdentifier, int startPos,
@@ -98,14 +98,15 @@ public class ApplyLocator {
 		return null;
 	}
 
-	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, TypeIdentifier typeIdentifier, int startPos,
-			int endPos, int depth, boolean failOnAmbiguity) {
+	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, TypeIdentifier typeIdentifier,
+			int startPos, int endPos, int depth, boolean failOnAmbiguity) {
 		return bestMatchingNode(info, astNode, typeIdentifier, startPos, endPos, depth, failOnAmbiguity, null,
 				Integer.MIN_VALUE);
 	}
 
-	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, TypeIdentifier typeIdentifier, int startPos,
-			int endPos, int depth, boolean failOnAmbiguity, AstNode ignoreTraversalOn, int failOnDepthBelowLevel) {
+	private static MatchedNode bestMatchingNode(AstInfo info, AstNode astNode, TypeIdentifier typeIdentifier,
+			int startPos, int endPos, int depth, boolean failOnAmbiguity, AstNode ignoreTraversalOn,
+			int failOnDepthBelowLevel) {
 		if (depth < failOnDepthBelowLevel) {
 			return null;
 		}
@@ -150,8 +151,8 @@ public class ApplyLocator {
 			if (ignoreTraversalOn != null && ignoreTraversalOn.underlyingAstNode == child.underlyingAstNode) {
 				continue;
 			}
-			MatchedNode recurse = bestMatchingNode(info, child, typeIdentifier, startPos, endPos, depth - 1, failOnAmbiguity,
-					ignoreTraversalOn, failOnDepthBelowLevel);
+			MatchedNode recurse = bestMatchingNode(info, child, typeIdentifier, startPos, endPos, depth - 1,
+					failOnAmbiguity, ignoreTraversalOn, failOnDepthBelowLevel);
 			if (recurse != null) {
 				final boolean isBetterMatch;
 				// Checking for better matches has three levels of precedence
@@ -186,7 +187,8 @@ public class ApplyLocator {
 	public static boolean isAmbiguousTal(AstInfo info, AstNode sourceNode, TypeAtLoc tal, int depth,
 			AstNode ignoreTraversalOn) {
 		try {
-			final MatchedNode match = bestMatchingNode(info, sourceNode, info.typeIdentificationStyle.createIdentifier(info.loadAstClass, tal.type, tal.label),
+			final MatchedNode match = bestMatchingNode(info, sourceNode,
+					info.typeIdentificationStyle.createIdentifier(info.loadAstClass, tal.type, tal.label),
 					tal.loc.start, tal.loc.end, depth, true, ignoreTraversalOn, Integer.MIN_VALUE);
 			if (ignoreTraversalOn != null) {
 				// Matching anything on the same depth means that there are >=two matches ->
@@ -200,45 +202,44 @@ public class ApplyLocator {
 		}
 	}
 
-	public static ResolvedNode toNode(AstInfo info, JSONObject locator) {
+	public static ResolvedNode toNode(AstInfo info, NodeLocator locator) {
 		AstNode matchedNode = info.ast;
 		Span matchPos = null;
 
 		BenchmarkTimer.APPLY_LOCATOR.enter();
 		try {
 			if (matchedNode != null) {
-				final List<Object> matchSequence = new ArrayList<>();
-				final JSONArray steps = locator.getJSONArray("steps");
-				for (int i = 0; i < steps.length(); i++) {
-					matchSequence.add(matchedNode);
-					final JSONObject step = steps.getJSONObject(i);
-					switch (step.getString("type")) {
-					case "nta": {
-						final JSONObject mth = step.getJSONObject("value");
-						final JSONArray args = mth.getJSONArray("args");
-						final Object[] argsValues = new Object[args.length()];
-						final Class<?>[] argsTypes = new Class<?>[args.length()];
-						final String ntaName = mth.getString("name");
-						for (int j = 0; j < args.length(); ++j) {
-							final ParameterValue param = DecodeValue.decode(info, args.getJSONObject(j),
-									new JSONArray());
-							if (param == null) {
-								System.out.println("Failed decoding parameter " + i + " for NTA '" + ntaName + "'");
-								return null;
-							}
-							argsValues[j] = param.getUnpackedValue();
-							argsTypes[j] = param.paramType;
+				final List<NodeLocatorStep> steps = locator.steps;
+				for (int i = 0; i < steps.size(); i++) {
+					final NodeLocatorStep step = steps.get(i);
+					switch (step.type) {
+					case nta: {
+						final FNStep nta = step.asNta();
+//						final JSONObject mth = step.getJSONObject("value");
+						final List<PropertyArg> args = nta.property.args;
+						final Object[] argsValues = new Object[args != null ? args.size() : 0];
+						final Class<?>[] argsTypes = new Class<?>[argsValues.length];
+						final String ntaName = nta.property.name;
+						for (int j = 0; j < argsValues.length; ++j) {
+//							final ParameterValue param = DecodeValue.decode(info, args.get(j),
+//									new JSONArray());
+							final UnpackedAttrValue uav = EvaluatePropertyHandler.unpackAttrValue(info, args.get(0), System.out::println);
+							argsValues[j] = uav.unpacked;
+							argsTypes[j] = EvaluatePropertyHandler.getValueType(info, uav.response);
 						}
 						Object match = Reflect.invokeN(matchedNode.underlyingAstNode, ntaName, argsTypes, argsValues);
 						matchedNode = match == null ? null : new AstNode(match);
 						break;
 					}
-					case "tal": {
-						final JSONObject tal = step.getJSONObject("value");
-						final int start = tal.getInt("start");
-						final int end = tal.getInt("end");
-						final int depth = tal.getInt("depth");
-						TypeIdentifier typeIdentifier = info.typeIdentificationStyle.createIdentifier(info.loadAstClass, tal.getString("type"), tal.optString("label"));
+					case tal: {
+						final TALStep tal = step.asTal();
+
+//						final JSONObject tal = step.getJSONObject("value");
+						final int start = tal.start;
+						final int end = tal.end;
+						final int depth = tal.depth;
+						TypeIdentifier typeIdentifier = info.typeIdentificationStyle.createIdentifier(info.loadAstClass,
+								tal.type, tal.label);
 						final AstNode parent = matchedNode;
 						MatchedNode result = bestMatchingNode(info, parent, typeIdentifier, start, end, depth, false);
 
@@ -251,8 +252,8 @@ public class ApplyLocator {
 						matchedNode = result != null ? result.matchedNode : null;
 						break;
 					}
-					case "child": {
-						final int childIndex = step.getInt("value");
+					case child: {
+						final int childIndex = step.asChild();
 						if (childIndex < 0 || childIndex >= matchedNode.getNumChildren(info)) {
 							return null;
 						}
@@ -260,11 +261,12 @@ public class ApplyLocator {
 						break;
 					}
 					default: {
-						throw new RuntimeException("Unknown locator step '" + step.toString(0) + "'");
+						throw new RuntimeException("Unknown locator step '" + step.toJSON() + "'");
+
 					}
 					}
 					if (matchedNode == null) {
-						System.out.println("Failed matching after step index " + i +", step = " + step);
+						System.out.println("Failed matching after step index " + i + ", step = " + step);
 						break;
 					}
 				}
@@ -282,47 +284,13 @@ public class ApplyLocator {
 			BenchmarkTimer.APPLY_LOCATOR.exit();
 		}
 
-		JSONObject matchedNodeLocator = null;
+		NodeLocator matchedNodeLocator = null;
 		if (matchedNode != null && matchPos != null) {
 			// Create fresh locator so this node is easier to find in the future
 			matchedNodeLocator = CreateLocator.fromNode(info, matchedNode);
 		}
 		if (matchedNode == null || matchPos == null || matchedNodeLocator == null) {
 			return null;
-		}
-		if (System.getProperty("DEBUG_MERGE_METHODS") != null) {
-			final JSONObject cmp;
-			CreateLocator.setMergeMethod(LocatorMergeMethod.PAPER_VERSION);
-			try {
-				cmp = CreateLocator.fromNode(info, matchedNode);
-			} finally {
-				CreateLocator.setMergeMethod(LocatorMergeMethod.OLD_VERSION);
-			}
-			System.out.println("new: " + cmp.toString(2));
-			if (!matchedNodeLocator.toString().equals(cmp.toString())) {
-				Thread.dumpStack();
-				System.err.println("Diff locator!!");
-				System.err.println("#   opt: " + matchedNodeLocator.toString(2));
-				System.err.println("# paper: " + cmp.toString(2));
-
-				CreateLocator.setMergeMethod(LocatorMergeMethod.OLD_VERSION);
-				try {
-					CreateLocator.fromNode(info, matchedNode);
-				} finally {
-					CreateLocator.setMergeMethod(LocatorMergeMethod.OLD_VERSION);
-				}
-
-				CreateLocator.setMergeMethod(LocatorMergeMethod.PAPER_VERSION);
-				try {
-					CreateLocator.fromNode(info, matchedNode);
-				} finally {
-					CreateLocator.setMergeMethod(LocatorMergeMethod.OLD_VERSION);
-				}
-
-//			System.exit(1);
-			} else {
-//			System.out.println("Same locator");
-			}
 		}
 		return new ResolvedNode(matchedNode, matchPos, matchedNodeLocator);
 	}

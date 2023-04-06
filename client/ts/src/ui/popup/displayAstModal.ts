@@ -10,15 +10,17 @@ import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import createCullingTaskSubmitterFactory from '../../model/cullingTaskSubmitterFactory';
 import createStickyHighlightController from '../create/createStickyHighlightController';
 import ModalEnv from '../../model/ModalEnv';
-import listTree, { ListedTreeNode } from '../../rpc/listTree';
+import { ListedTreeNode, ListTreeReq, ListTreeRes, RpcBodyLine } from '../../protocol';
+import startEndToSpan from '../startEndToSpan';
+import UpdatableNodeLocator, { createImmutableLocator, createMutableLocator } from '../../model/UpdatableNodeLocator';
 
 interface Point { x: number; y: number }
-interface Node extends ListedTreeNode {
+interface Node extends Omit<ListedTreeNode, 'children'> {
   boundingBox?: Point;
   children: (Node[]) | { type: 'placeholder', num: number };
 }
 type AstListDirection = 'downwards' | 'upwards';
-const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator, listDirection: AstListDirection, initialTransform?: { [id: string]: number }) => {
+const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: UpdatableNodeLocator, listDirection: AstListDirection, initialTransform?: { [id: string]: number }) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   let state: { type: 'ok', data: Node } | { type: 'err', body: RpcBodyLine[] } | null = null;
   let lightTheme = env.themeIsLight();
@@ -48,7 +50,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     height: initialTransform?.height ?? 0,
   };
   let resetTranslationOnRender = !initialTransform;
-  const popup = showWindow({
+  const popup = env.showWindow({
     pos: modalPos,
     size: initialTransform?.width && initialTransform?.height ? {
       width: initialTransform.width,
@@ -59,6 +61,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
       min-height: 12rem;
       80vh;
     `,
+    onForceClose: cleanup,
     onFinishedMove: () => {
       bufferingSaver.cancel();
       env.triggerWindowSave()
@@ -82,9 +85,9 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
 
           container.appendChild(headType);
           const spanIndicator = createTextSpanIndicator({
-            span: startEndToSpan(locator.result.start, locator.result.end),
+            span: startEndToSpan(locator.get().result.start, locator.get().result.end),
             marginLeft: true,
-            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.result.start, locator.result.end) : null),
+            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.get().result.start, locator.get().result.end) : null),
             onClick: stickyController.onClick,
           });
           stickyController.configure(spanIndicator, locator);
@@ -94,6 +97,13 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           cleanup();
         },
         extraActions: [
+          ...(env.getGlobalModalEnv() === env ? [] :[{
+            title: 'Detatch window',
+            invoke: () => {
+              cleanup();
+              displayAstModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), listDirection, trn);
+            }
+          }]),
           {
             title: 'Help',
             invoke: () => {
@@ -298,8 +308,6 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           ctx.resetTransform();
           ctx.fillStyle = getThemedColor(lightTheme, 'probe-result-area');
           ctx.fillRect(0, 0, w, h);
-          // console.log('render', trn.x, ' + ', w,  '|', trn.x * 1920 / w, cv.clientWidth, cv);
-          // ctx.translate(trn.x * 1920 / cv.clientWidth, trn.y * 1080 / cv.clientHeight);
           ctx.translate(trn.x, trn.y);
           ctx.scale(trn.scale, getScaleY());
 
@@ -323,7 +331,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               }
               if (hoverClick === 'yes') {
                 hoverClick = 'no';
-                displayAttributeModal(env, null, node.locator);
+                displayAttributeModal(env.getGlobalModalEnv(), null, createMutableLocator(node.locator));
               }
             } else {
               ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
@@ -394,7 +402,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                   cv.style.cursor = 'pointer';
                   if (hoverClick == 'yes') {
                     hoverClick = 'no';
-                    displayAstModal(env, null, node.locator, 'downwards');
+                    displayAstModal(env.getGlobalModalEnv(), null, createMutableLocator(node.locator), 'downwards');
                   }
                 }
                 const msgMeasure = ctx.measureText(msg);
@@ -407,9 +415,6 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               }
               return;
             }
-
-            // const numCh = node.children.length;
-            // const off = (numCh - 1) * (nodew + nodepad) / 2;
 
             let childOffX = 0;
             const childOffY = nodeh + nodepady;
@@ -448,17 +453,11 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               env.updateSpanHighlight(null);
             }
           }
-          // ctx.fillStyle = '#FF0';
-          // ctx.fillRect(lastClick.x - 32, lastClick.y - 32, 64, 64);
-
         };
         renderFrame();
         onResizePtr.callback = () => {
           renderFrame();
-          // console.log('finished:', wrapper.clientWidth, wrapper.clientHeight, wrapper.offsetWidth);
         };
-
-        // root.appendChild(document.createTextNode(JSON.stringify(state.data, null, 2)));
       }
 
       if (fetchState !== 'idle') {
@@ -471,7 +470,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
   const refresher = env.createCullingTaskSubmitter();
   env.onChangeListeners[queryId] = (adjusters) => {
     if (adjusters) {
-      adjusters.forEach(adj => adjustLocator(adj, locator));
+      locator.adjust(adjusters);
     }
     refresher.submit(() => {
       fetchAttrs();
@@ -492,20 +491,17 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     case 'queued': return;
   }
 
-  listTree(env, env.wrapTextRpc({
-    query: {
-      attr: {
-        name: listDirection === 'upwards' ? 'meta:listTreeUpwards' : 'meta:listTreeDownwards',
-      },
-      locator,
-    }
-  }))
+  env.performTypedRpc<ListTreeReq, ListTreeRes>({
+    locator: locator.get(),
+    src: env.createParsingRequestData(),
+    type: listDirection === 'upwards' ? 'ListTreeUpwards' : 'ListTreeDownwards'
+  })
     .then((result) => {
       const refetch = fetchState == 'queued';
       fetchState = 'idle';
       if (refetch) fetchAttrs();
 
-      const parsed = result.nodes;
+      const parsed = result.node;
       if (!parsed) {
         // root.appendChild(createTitle('err'));
         if (result.body?.length) {
@@ -518,14 +514,16 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
       }
 
       // Handle resp
-      locator = result.locator;
+      if (result.locator) {
+        locator.set(result.locator);
+      }
       const mapNode = (src: ListedTreeNode): Node => ({
         type: src.type,
         locator: src.locator,
         name: src.name,
-        children: Array.isArray(src.children)
-          ? src.children.map(mapNode)
-          : src.children,
+        children: src.children.type === 'children'
+          ? src.children.value.map(mapNode)
+          : { type: 'placeholder', num: src.children.value },
       });
       state = { type: 'ok', data: mapNode(parsed) };
       popup.refresh();
@@ -544,7 +542,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     modalPos: popup.getPos(),
     data: {
       type: 'ast',
-      locator,
+      locator: locator.get(),
       direction: listDirection,
       transform: { ...trn, },
     },

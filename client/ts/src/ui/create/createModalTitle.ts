@@ -4,7 +4,11 @@ interface ExtraAction {
   title: string;
   invoke: () => void;
 }
-type CreateModalTitleArgs = { renderLeft: (container: HTMLElement) => void; extraActions?: ExtraAction[]; onClose: () => void; };
+type CreateModalTitleArgs = {
+  renderLeft: (container: HTMLElement) => void;
+  extraActions?: ExtraAction[];
+  onClose: (() => void) | null;
+};
 
 const createModalTitle = (args: CreateModalTitleArgs) => {
   const { renderLeft, extraActions, onClose } = args;
@@ -33,9 +37,7 @@ const createModalTitle = (args: CreateModalTitleArgs) => {
         window.removeEventListener('mousedown', cleanup);
       }
       const contextMenu = showWindow({
-        rootStyle: `
-          // width: 16rem;
-        `,
+        onForceClose: cleanup,
         render: (container) => {
           container.addEventListener('mousedown', (e) => {
             e.stopPropagation();
@@ -75,17 +77,17 @@ const createModalTitle = (args: CreateModalTitleArgs) => {
     buttons.appendChild(overflowButton);
   }
 
-  const closeButton = document.createElement('div');
-  closeButton.classList.add('modalCloseButton');
-
-  const textHolder = document.createElement('span');
-  textHolder.innerText = '𝖷';
-  closeButton.appendChild(textHolder);
-
-  closeButton.classList.add('clickHighlightOnHover');
-  closeButton.onmousedown = (e) => { e.stopPropagation(); }
-  closeButton.onclick = () => onClose();
-  buttons.appendChild(closeButton);
+  if (onClose) {
+    const closeButton = document.createElement('div');
+    closeButton.classList.add('modalCloseButton');
+    const textHolder = document.createElement('span');
+    textHolder.innerText = '𝖷';
+    closeButton.appendChild(textHolder);
+    closeButton.classList.add('clickHighlightOnHover');
+    closeButton.onmousedown = (e) => { e.stopPropagation(); }
+    closeButton.onclick = () => onClose();
+    buttons.appendChild(closeButton);
+  }
 
   titleRowHolder.appendChild(buttons);
 

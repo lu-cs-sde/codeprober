@@ -1,5 +1,6 @@
+import { TopRequestReq, TopRequestRes, TunneledWsPutRequestReq, TunneledWsPutRequestRes, WsPutInitReq, WsPutInitRes, WsPutLongpollReq, WsPutLongpollRes } from './protocol';
 
-type HandlerFn = (data: { [key: string]: any }) => void;
+type HandlerFn = (data: any) => void;
 
 interface  WebsocketHandler {
   sendRpc: (msg: any) => Promise<any>;
@@ -45,19 +46,27 @@ const createWebsocketHandler = (
     on: (id, cb) => messageHandlers[id] = cb,
     sendRpc: (msg) => new Promise(async (res, rej) => {
       const id = rpcIdGenerator++;
-      socket.send(JSON.stringify({
-        ...msg,
-        id,
-      }));
+      const topReq: TopRequestReq = { type: 'rpc', id, data: msg, };
+      socket.send(JSON.stringify(topReq));
 
       const cleanup = () => delete pendingCallbacks[id];
-      pendingCallbacks[id] = ({ error, result }) => {
+      pendingCallbacks[id] = (callback: TopRequestRes) => {
         cleanup();
-        if (error) {
-          console.warn('RPC request failed', error);
-          rej(error);
-        } else {
-          res(result);
+        switch (callback.data.type) {
+          case 'success': {
+            res(callback.data.value);
+            break;
+          }
+          case 'failureMsg': {
+            console.warn('RPC request failed', callback.data.value);
+            rej(callback.data.value);
+            break;
+          }
+          default: {
+            console.error('Unexpected RPC response');
+            rej(JSON.stringify(callback));
+            break;
+          }
         }
       };
 
@@ -87,89 +96,156 @@ const createWebsocketOverHttpHandler = (
 
   let didReceiveAtLeastOneMessage = false;
   const defaultRetryBudget = 3;
-  const session = `cpr_${(Number.MAX_SAFE_INTEGER * Math.random())|0}`
+  const session = `cpr_${(Number.MAX_SAFE_INTEGER * Math.random())|0}`;
+
+
+  const sendRpc = (msg: any, extraArgs?: { timeout: number, }): Promise<any> => new Promise(async (res, rej) => {
+    const id = rpcIdGenerator++;
+    // const body = { ...msg, id };
+    const topReq: TopRequestReq = { type: 'rpc', id, data: msg, };
+    // {...topReq, session}
+
+    // pendingCallbacks[id] = ({ error, result }) => {
+    //   cleanup();
+    //   if (error) {
+    //     console.warn('RPC request failed', error);
+    //     rej(error);
+    //   } else {
+    //     res(result);
+    //   }
+    // };
+    pendingCallbacks[id] = (callback: TopRequestRes) => {
+      cleanup();
+      switch (callback.data.type) {
+        case 'success': {
+          res(callback.data.value);
+          break;
+        }
+        case 'failureMsg': {
+          console.warn('RPC request failed', callback.data.value);
+          rej(callback.data.value);
+          break;
+        }
+        default: {
+          console.error('Unexpected RPC response');
+          rej(JSON.stringify(callback));
+          break;
+        }
+      }
+    }
+
+    const cleanup = () => delete pendingCallbacks[id];
+
+    const attemptFetch = async (remainingTries: number) => {
+      const cleanupTimer = setTimeout(() => {
+        cleanup();
+        rej('Timeout');
+      }, extraArgs?.timeout ?? 30000);
+      try {
+        const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify(topReq) })
+        if (!rawFetchResult.ok) {
+          if (remainingTries > 0) {
+            console.warn('wsput request failed, trying again in 1 second..');
+            clearTimeout(cleanupTimer);
+            setTimeout(() => attemptFetch(remainingTries - 1), 1000);
+            return;
+          }
+        }
+        const fetchResult = await rawFetchResult.json();
+        didReceiveAtLeastOneMessage = true;
+        if (messageHandlers[fetchResult.type]) {
+          messageHandlers[fetchResult.type](fetchResult);
+          cleanup();
+          res(true);
+        } else {
+          console.log('No handler for message', fetchResult, ', got handlers for', Object.keys(messageHandlers));
+          cleanup();
+          rej('Bad response');
+        }
+      } catch (e) {
+        console.warn('Error when performing ws-over-http request', e);
+        cleanup();
+        rej('Unknown error');
+      }
+    };
+    attemptFetch(defaultRetryBudget);
+  });
 
   const wsHandler: WebsocketHandler = {
     on: (id, cb) => messageHandlers[id] = cb,
-    sendRpc: (msg) => new Promise(async (res, rej) => {
-      const id = rpcIdGenerator++;
-      const body = { ...msg, id };
+    // sendRpc: (msg) => {
+    //   console.log('todo send normal rpc messages, wrapped in rpc something something');
+    //   // return Promise.reject('todo');
 
-      pendingCallbacks[id] = ({ error, result }) => {
-        cleanup();
-        if (error) {
-          console.warn('RPC request failed', error);
-          rej(error);
-        } else {
-          res(result);
-        }
+    // },
+    sendRpc: async (msg) => {
+      const wrapped: TunneledWsPutRequestReq = {
+        type: 'wsput:tunnel',
+        session,
+        request: msg,
       };
-      const cleanup = () => delete pendingCallbacks[id];
-
-      const attemptFetch = async (remainingTries: number) => {
-        const cleanupTimer = setTimeout(() => {
-          cleanup();
-          rej('Timeout');
-        }, 30000);
-        try {
-          const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({...body, session}) })
-          if (!rawFetchResult.ok) {
-            if (remainingTries > 0) {
-              console.warn('wsput request failed, trying again in 1 second..');
-              clearTimeout(cleanupTimer);
-              setTimeout(() => attemptFetch(remainingTries - 1), 1000);
-              return;
-            }
-          }
-          const fetchResult = await rawFetchResult.json();
-          didReceiveAtLeastOneMessage = true;
-          if (messageHandlers[fetchResult.type]) {
-            messageHandlers[fetchResult.type](fetchResult);
-            cleanup();
-            res(true);
-          } else {
-            console.log('No handler for message', fetchResult, ', got handlers for', Object.keys(messageHandlers));
-            cleanup();
-            rej('Bad response');
-          }
-        } catch (e) {
-          console.warn('Error when performing ws-over-http request', e);
-          cleanup();
-          rej('Unknown error');
-        }
-      };
-      attemptFetch(defaultRetryBudget);
-    }),
+      const res: TunneledWsPutRequestRes = await sendRpc(wrapped);
+      return res.response;
+    },
   };
-  wsHandler.sendRpc({ type: 'init' });
+
+  const initReq: WsPutInitReq = ({ type: 'wsput:init', session });
+  sendRpc(initReq)
+    .then((init: WsPutInitRes) => {
+      if (messageHandlers['init']) {
+        messageHandlers['init'](init.info);
+      } else {
+        console.warn('Got init message, but no handler for it')
+      }
+    })
+    .catch(err => {
+      console.warn('Failed to get init message', err);
+    })
 
   let prevEtagValue = -1;
   let longPoller = async (retryBudget: number) => {
     try {
-      const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
-        id: -1, type: 'longpoll', etag: prevEtagValue, session
-      }) });
-      if (!rawFetchResult.ok) {
-        throw new Error(`Fetch result: ${rawFetchResult.status}`);
-      }
-      const pollResult = await rawFetchResult.json();
-      if (pollResult.etag) {
-        const { etag } = pollResult;
-        if (prevEtagValue !== etag) {
-          if (prevEtagValue !== -1) {
-            if (messageHandlers.refresh) {
-              messageHandlers.refresh({});
+      const longPollRequest: WsPutLongpollReq = {
+        type: 'wsput:longpoll',
+        session,
+        etag: prevEtagValue,
+      };
+      const result: WsPutLongpollRes = await sendRpc(longPollRequest, { timeout: 10 * 60 * 1000 });
+      // const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
+      //   id: -1, type: 'longpoll', etag: prevEtagValue, session
+      // }) });
+      // if (!rawFetchResult.ok) {
+      //   throw new Error(`Fetch result: ${rawFetchResult.status}`);
+      // }
+      // const pollResult = await rawFetchResult.json();
+      if (result.data) {
+        switch (result.data.type) {
+          case 'etag': {
+            const etag = result.data.value;
+            if (prevEtagValue !== etag) {
+              if (prevEtagValue !== -1) {
+                if (messageHandlers.refresh) {
+                  messageHandlers.refresh({});
+                }
+              }
+              prevEtagValue = etag;
             }
+            break;
           }
-          prevEtagValue = etag;
-        }
-      } else if (pollResult.type === 'push') {
-        const { message } = pollResult;
-        const handler = messageHandlers[message.type];
-        if (handler) {
-          handler(message);
-        } else {
-          console.warn('Got /wsput push message of unknown type', message);
+          case 'push': {
+            const message = result.data.value;
+            const handler = messageHandlers[message.type];
+            if (handler) {
+              handler(message);
+            } else {
+              console.warn('Got /wsput push message of unknown type', message);
+            }
+            break;
+          }
+          default: {
+            console.warn('Unknown longpoll response type:', result.data);
+            break;
+          }
         }
       }
     } catch (e) {

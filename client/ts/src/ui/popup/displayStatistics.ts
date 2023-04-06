@@ -17,7 +17,7 @@ interface StatLabels {
 }
 
 const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButtonDisabled: (disabled: boolean) => void, setEditorContentsAndUpdateProbes: (newContents: string) => void, anyModalIsLoading: () => boolean): void => {
-  let simulateTimer: number | any = -1;
+  let simulateTimer: number | any = -1;
   const onClose = () => {
     collector.setOnChange(null);
     helpWindow.remove();
@@ -60,28 +60,10 @@ const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButt
     {
       title: 'Java - Tiny',
       contents: generateMethodGenerator(1),
-      // contents: () =>  [
-      //   `class Benchmark${Math.floor(Math.random() * 1_000_000)} {`,
-      //   ` // ${Math.random()}`,
-      //   '}',
-      // ].join('\n')
     },
     {
       title: 'Java - Medium',
       contents: generateMethodGenerator(5)
-      // contents: () => {
-      //   const genId = (prefix: string) => `${prefix}${Math.floor(Math.random() * 1_000_000)}`;
-      //   return [
-      //     `${['interface', 'abstract class', 'enum'][Math.floor(Math.random() * 3)]} ${genId('Other')} { /* Empty */ }`,
-      //     `class ${genId('Benchmark')} {`,
-      //     ` static void main(String[] ${genId('args')}) {`,
-      //     `  final long foo = System.currentTimeMillis() % ${genId('')}L;`,
-      //     `  if (foo > ${genId('')}L) { System.out.println(foo); }`,
-      //     `  else { System.out.println(${genId('')}); }`,
-      //     ` }`,
-      //     '}',
-      //   ].join('\n');
-      // }
     },
     {
       title: 'Java - Large',
@@ -99,6 +81,7 @@ const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButt
       width: 32rem;
       min-height: 12rem;
     `,
+    onForceClose: onClose,
     resizable: true,
     render: (root) => {
 
@@ -262,11 +245,6 @@ const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButt
                 return;
               }
               prevChangeCounter = newChangeCounter;
-              // const newMeasurements = collector.getNumberOfMeasurements();
-              // if (newMeasurements === expectMeasurements) {
-              //   return;
-              // }
-              // expectMeasurements = newMeasurements;
               if (newChangeCounter >= 10_000) {
                 stopSimulation();
               } else {
@@ -326,13 +304,6 @@ const displayStatistics = (collector: StatisticsCollectorImpl, setStatisticsButt
         apply(statLabels.average, computeAverage());
         apply(statLabels.mostRecent, computeIndividual(last));
       }
-
-
-
-
-      // grid.appendChild(document.createTextNode(''));
-      // grid.appendChild(document.createTextNode('' + collector.getNumberOfMeasurements()));
-      // root.appendChild()
     },
   });
   collector.setOnChange(() => helpWindow.refresh());

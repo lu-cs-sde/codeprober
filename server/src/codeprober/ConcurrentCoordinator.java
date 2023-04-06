@@ -15,14 +15,30 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import codeprober.protocol.ClientRequest;
-import codeprober.protocol.ProbeProtocol;
+import codeprober.protocol.data.AsyncRpcUpdate;
+import codeprober.protocol.data.AsyncRpcUpdateValue;
+import codeprober.protocol.data.EvaluatePropertyReq;
+import codeprober.protocol.data.EvaluatePropertyRes;
+import codeprober.protocol.data.GetWorkerStatusReq;
+import codeprober.protocol.data.GetWorkerStatusRes;
+import codeprober.protocol.data.PollWorkerStatusReq;
+import codeprober.protocol.data.PollWorkerStatusRes;
+import codeprober.protocol.data.PropertyEvaluationResult;
+import codeprober.protocol.data.RequestAdapter;
+import codeprober.protocol.data.StopJobReq;
+import codeprober.protocol.data.StopJobRes;
+import codeprober.protocol.data.SubmitWorkerTaskReq;
+import codeprober.protocol.data.SubscribeToWorkerStatusReq;
+import codeprober.protocol.data.SubscribeToWorkerStatusRes;
+import codeprober.protocol.data.TopRequestReq;
+import codeprober.protocol.data.TopRequestRes;
+import codeprober.protocol.data.UnsubscribeFromWorkerStatusReq;
+import codeprober.protocol.data.UnsubscribeFromWorkerStatusRes;
 import codeprober.rpc.JsonRequestHandler;
 
 public class ConcurrentCoordinator implements JsonRequestHandler {
@@ -58,22 +74,22 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 			return;
 		}
 
-		final JSONArray workerStatuses = new JSONArray();
+		final List<String> workerStatuses = new ArrayList<>();
 		for (Worker w : workers) {
 			// Normally we synchronize on w, but here it doesn't really matter
 			// Also it can easily cause deadlocks since this is called from the workers
 			// themselves.
 //			synchronized (w) {
 			if (w.destroyed.get()) {
-				workerStatuses.put("Destroyed - failed to replace process");
+				workerStatuses.add("Destroyed - failed to replace process");
 			} else {
 
 				final ActiveJob job = w.job;
 				if (job != null) {
 					final String label = job.request.data.optString("jobLabel");
-					workerStatuses.put("Working" + (label == null ? "" : (": " + label)));
+					workerStatuses.add("Working" + (label == null ? "" : (": " + label)));
 				} else {
-					workerStatuses.put("Idle");
+					workerStatuses.add("Idle");
 				}
 
 			}
@@ -81,15 +97,15 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 //		final JSONObject status = new JSONObject().put(jarPath, false)
 
 		for (ActiveJob subscriber : workerStatusSubscribers) {
-			final JSONObject msg = new JSONObject();
-			msg.put("type", "jobUpdate");
-			msg.put("job", subscriber.jobId);
-			msg.put("result", new JSONObject() //
-					.put("workers", workerStatuses));
-//			try {
-//
-//			}
-			subscriber.request.sendAsyncResponse(msg);
+//			final JSONObject msg = new JSONObject();
+//			msg.put("type", "jobUpdate");
+//			msg.put("job", subscriber.jobId);
+//			msg.put("result", new JSONObject() //
+//					.put("workers", workerStatuses));
+
+			final AsyncRpcUpdate update = new AsyncRpcUpdate(subscriber.jobId, false,
+					AsyncRpcUpdateValue.fromWorkerStatuses(workerStatuses));
+			subscriber.request.sendAsyncResponse(update);
 		}
 
 	}
@@ -131,89 +147,106 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 
 	@Override
 	public JSONObject handleRequest(ClientRequest request) {
-		if (!request.data.has("job")) {
-			return nonConcurrentHandler.handleRequest(request);
-		}
-		final long jobId = request.data.getLong("job");
 
-		if (request.data.has(ProbeProtocol.query.key)) {
-			final JSONObject query = ProbeProtocol.query.get(request.data);
-			if (query.has(ProbeProtocol.Query.attribute.key)) {
-				final JSONObject attr = ProbeProtocol.Query.attribute.get(query);
-				switch (ProbeProtocol.Attribute.name.get(attr)) {
-				case "meta:checkJobStatus": {
-					final JSONObject ret = new JSONObject().put("job", jobId);
-					for (Worker w : workers) {
-						synchronized (w) {
-							if (w.destroyed.get()) {
-								continue;
-							}
-							if (w.job != null && w.job.jobId == jobId) {
-								w.pollStack();
-								return ret.put("result", "accepted");
-							}
-						}
-					}
-					return ret.put("error", "No such active job");
+		try {
+			final JSONObject handled = new RequestAdapter() {
+
+				@Override
+				protected SubscribeToWorkerStatusRes handleSubscribeToWorkerStatus(SubscribeToWorkerStatusReq req) {
+					final int jobId = req.job;
+					final int id = workerStatusSubscriberIdGenerator.getAndIncrement();
+					workerStatusSubscribers.add(new ActiveSubscriber(jobId, request, id));
+					dispatchStatusToSubscribers();
+					return new SubscribeToWorkerStatusRes(id);
 				}
-				case "meta:stopJob": {
-					final JSONObject ret = new JSONObject().put("job", jobId);
+
+				@Override
+				protected UnsubscribeFromWorkerStatusRes handleUnsubscribeFromWorkerStatus(
+						UnsubscribeFromWorkerStatusReq req) {
+					final int prevCount = workerStatusSubscribers.size();
+					final int subscriberId = req.subscriberId;
+					workerStatusSubscribers.removeIf(sub -> sub.subscriberId == subscriberId);
+					return new UnsubscribeFromWorkerStatusRes(prevCount != workerStatusSubscribers.size());
+				}
+
+				@Override
+				protected StopJobRes handleStopJob(StopJobReq req) {
 					for (int i = 0; i < workers.length; i++) {
 						final Worker w = workers[i];
 						synchronized (w) {
 							if (w.destroyed.get()) {
 								continue;
 							}
-							if (w.job != null && w.job.jobId == jobId) {
+							if (w.job != null && w.job.jobId == req.job) {
 								try {
 									workers[i] = new Worker(jarPath, mainArgs);
 								} catch (IOException e) {
 									// TODO Auto-generated catch block
 									e.printStackTrace();
-									return ret.put("error", "Failed initializing replacement worker");
+									return new StopJobRes("Failed initializing replacement worker");
 								}
 								w.destroy();
-								return ret.put("result", "stopped");
+								dispatchStatusToSubscribers();
+								return new StopJobRes(null);
 							}
 						}
 					}
-					return ret.put("result", "error").put("message", "No such active job");
+					return new StopJobRes("No such active job");
 				}
-				case "meta:subscribeToWorkerStatus": {
-					final int id = workerStatusSubscriberIdGenerator.getAndIncrement();
-					workerStatusSubscribers.add(new ActiveSubscriber(jobId, request, id));
-					dispatchStatusToSubscribers();
-					return new JSONObject().put("job", jobId).put("subscriberId", id);
-				}
-				case "meta:unsubscribeFromWorkerStatus": {
-					final int prevCount = workerStatusSubscribers.size();
-					final int subscriberId = request.data.getInt("subscriberId");
-					workerStatusSubscribers.removeIf(sub -> sub.subscriberId == subscriberId);
-					return new JSONObject().put("job", jobId).put("ok", prevCount != workerStatusSubscribers.size());
-				}
-				}
-			}
-		}
 
-		final ActiveJob job = new ActiveJob(jobId, request);
-		final JSONObject result = new JSONObject();
-		result.put("job", job.jobId);
-		result.put("status", "queued");
-		queuedJobs.add(job);
+				@Override
+				protected PollWorkerStatusRes handlePollWorkerStatus(PollWorkerStatusReq req) {
+					for (Worker w : workers) {
+						synchronized (w) {
+							if (w.destroyed.get()) {
+								continue;
+							}
+							if (w.job != null && w.job.jobId == req.job) {
+								w.pollStack();
+								return new PollWorkerStatusRes(true);
+							}
+						}
+					}
+					return new PollWorkerStatusRes(false);
+				}
 
-		// TODO possible optimization: first find a worker with equal 'src'/'text' as
-		// previous request. Would help caching!
-		for (Worker w : workers) {
-			synchronized (w) {
-				if (w.maybeTakeWork()) {
+				@Override
+				protected EvaluatePropertyRes handleEvaluateProperty(EvaluatePropertyReq req) {
+					if (req.job == null) {
+						// 'Fall down' to nonConcurrent handler below
+						throw new JSONException("Synchronous requests not supported");
+					}
+					final ActiveJob job = new ActiveJob(req.job, request);
+//					final JSONObject result = new JSONObject();
+//					result.put("job", job.jobId);
+//					result.put("status", "queued");
+					queuedJobs.add(job);
+
+					final EvaluatePropertyRes result = new EvaluatePropertyRes(
+							PropertyEvaluationResult.fromJob(req.job));
+					// TODO possible optimization: first find a worker with equal 'src'/'text' as
+					// previous request. Would help caching!
+					for (Worker w : workers) {
+						synchronized (w) {
+							if (w.maybeTakeWork()) {
+								return result;
+							}
+						}
+					}
+					CodeProber.flog("Put into queue " + job.jobId);
 					return result;
 				}
-			}
-		}
-		CodeProber.flog("Put into queue " + job.jobId);
-		System.out.println("No free workers, queuing " + job.jobId);
 
-		return result;
+			}.handle(request.data);
+			if (handled != null) {
+				return handled;
+			}
+		} catch (JSONException e) {
+			// Not supported and/or not a typed request, fall down
+		}
+
+//		if (!request.data.has("job")) {
+		return nonConcurrentHandler.handleRequest(request);
 	}
 
 	private static class ActiveJob {
@@ -229,15 +262,11 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 	private static class ActiveSubscriber extends ActiveJob {
 		public final int subscriberId;
 
-		public ActiveSubscriber(long jobId, ClientRequest request, int subscriberId) {
+		public ActiveSubscriber(int jobId, ClientRequest request, int subscriberId) {
 			super(jobId, request);
 			this.subscriberId = subscriberId;
 		}
 
-	}
-
-	private enum CallbackCleanup {
-		REMOVE_CALLBACK, KEEP_CALLBACK;
 	}
 
 	private class Worker {
@@ -245,8 +274,8 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 		public final Process process;
 		private final OutputStream outStream;
 
-		private Map<Long, Consumer<JSONObject>> rpcHandlers = new ConcurrentHashMap<>();
-		private Map<Long, Function<JSONObject, CallbackCleanup>> concurrentUpdateHandlers = new ConcurrentHashMap<>();
+		private Map<Long, Consumer<TopRequestRes>> rpcHandlers = new ConcurrentHashMap<>();
+		private Map<Long, Consumer<AsyncRpcUpdate>> concurrentUpdateHandlers = new ConcurrentHashMap<>();
 
 		private final Consumer<Boolean> destroyer;
 		private final AtomicBoolean destroyed = new AtomicBoolean(); // TODO prevent accepting new jobs when destroyed
@@ -289,31 +318,45 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 					switch (obj.getString("type")) {
 					case "rpc": {
 						final long id = obj.getLong("id");
-						final Consumer<JSONObject> handler = rpcHandlers.remove(id);
+						final Consumer<TopRequestRes> handler = rpcHandlers.remove(id);
 						if (handler == null) {
 							System.err.println("Got response for '" + id + "', for which no handler exists");
 							return;
 						}
-						handler.accept(obj);
+						handler.accept(TopRequestRes.fromJSON(obj));
 						break;
 					}
-					case "concurrent:done": {
-						final long jobId = obj.getLong("job");
-						final Function<JSONObject, CallbackCleanup> handler = concurrentUpdateHandlers.get(jobId);
-						if (handler == null) {
-							System.err.println("Got response for job '" + jobId + "', for which no handler exists");
+
+					case "asyncUpdate": {
+						final AsyncRpcUpdate update;
+						try {
+							update = AsyncRpcUpdate.fromJSON(obj);
+						} catch (JSONException e) {
+							System.out.println("Got non-" + AsyncRpcUpdate.class.getSimpleName()
+									+ " json from worker: '" + obj + "'");
+							e.printStackTrace();
 							return;
 						}
-						final CallbackCleanup cleanup = handler.apply(obj);
-						if (cleanup == CallbackCleanup.REMOVE_CALLBACK) {
-							concurrentUpdateHandlers.remove(jobId);
+
+//						System.out.println("Got asyncUpdate for " + update.job +", type: " + update.value.type);
+						final Consumer<AsyncRpcUpdate> handler = concurrentUpdateHandlers.get(update.job);
+						if (handler == null) {
+							System.err
+									.println("Got response for job '" + update.job + "', for which no handler exists");
+							return;
 						}
+						if (update.isFinalUpdate) {
+							concurrentUpdateHandlers.remove(update.job);
+						}
+						handler.accept(update);
 						break;
 					}
+
 					default: {
 						System.out.println("Got unknown message from worker: " + obj);
 						break;
 					}
+
 					}
 				}
 			};
@@ -363,10 +406,13 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 		public synchronized void pollStack() {
 			final ActiveJob job = this.job;
 			final long msgId = messageIdGenerator.getAndIncrement();
-			rpcHandlers.put(msgId, resp -> dispatchUpdate(job, resp.getJSONObject("result")));
-			write(new JSONObject() //
-					.put("type", "concurrent:pollStatus") //
-					.put("id", msgId));
+			rpcHandlers.put(msgId, rawResp -> {
+				final GetWorkerStatusRes resp = GetWorkerStatusRes.fromJSON(rawResp.data.asSuccess());
+				dispatchUpdate(job, false, //
+						AsyncRpcUpdateValue.fromWorkerStackTrace(resp.stackTrace));
+			});
+			write(new TopRequestReq(msgId, new GetWorkerStatusReq().toJSON()));
+//			write(new GetWorkerStatusReq().toJSON());
 		}
 
 		public synchronized boolean maybeTakeWork() {
@@ -381,12 +427,8 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 			return false;
 		}
 
-		private synchronized void dispatchUpdate(ActiveJob job, JSONObject result) {
-			final JSONObject msg = new JSONObject();
-			msg.put("type", "jobUpdate");
-			msg.put("job", job.jobId);
-			msg.put("result", result);
-			job.request.sendAsyncResponse(msg);
+		private void dispatchUpdate(ActiveJob job, boolean isFinalUpdate, AsyncRpcUpdateValue value) {
+			job.request.sendAsyncResponse(new AsyncRpcUpdate(job.jobId, isFinalUpdate, value));
 		}
 
 		public synchronized void submit(ActiveJob job) {
@@ -395,42 +437,36 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 
 			final long msgId = messageIdGenerator.getAndIncrement();
 			rpcHandlers.put(msgId, resp -> {
-				dispatchUpdate(job, resp.getJSONObject("result"));
+				// TODO check this response?
+//				System.out.println("Task submission res: " + resp.toJSON());
+//				final SubmitWorkerTaskRes res = SubmitWorkerTaskRes.fromJSON(resp.data.asSuccess());
+//				dispatchUpdate(job, false, AsyncRpcUpdateValue.fromJSON(resp));
 			});
 			concurrentUpdateHandlers.put(job.jobId, resp -> {
-				switch (resp.getString("type")) {
-				case "concurrent:done": {
-					dispatchUpdate(job, new JSONObject() //
-							.put("status", "done").put("result", resp.getJSONObject("result")) //
-					);
-
-					synchronized (Worker.this) {
-						this.job = null;
-						maybeTakeWork();
-					}
-					if (this.job == null) {
-						dispatchStatusToSubscribers();
-					}
-					return CallbackCleanup.REMOVE_CALLBACK;
-				}
-
-				default: {
-					System.err.println("Unknown async message from worker: " + resp);
-					return CallbackCleanup.KEEP_CALLBACK;
-				}
+//				System.out.println("Conc update: " + resp.toJSON() +" --- isFinal: " + resp.isFinalUpdate);
+				dispatchUpdate(job, resp.isFinalUpdate, resp.value);
+				if (resp.isFinalUpdate) {
+					this.job = null;
+					maybeTakeWork();
+					dispatchStatusToSubscribers();
 				}
 			});
 
-			final JSONObject jobWrapper = new JSONObject();
-			jobWrapper.put("type", "concurrent:submit");
-			jobWrapper.put("job", job.jobId);
-			jobWrapper.put("id", msgId);
-			jobWrapper.put("data", job.request.data);
-			write(jobWrapper);
+			// BEFORE
+//			final JSONObject jobWrapper = new JSONObject();
+//			jobWrapper.put("type", "concurrent:submit");
+//			jobWrapper.put("job", job.jobId);
+//			jobWrapper.put("id", msgId);
+//			jobWrapper.put("data", job.request.data);
+//			write(jobWrapper.toString());
+
+
+			// NOW
+			write(new TopRequestReq(msgId, new SubmitWorkerTaskReq(job.jobId, job.request.data).toJSON()));
 		}
 
-		private synchronized void write(JSONObject obj) {
-			final byte[] msgData = obj.toString().getBytes(StandardCharsets.UTF_8);
+		private synchronized void write(TopRequestReq obj) {
+			final byte[] msgData = obj.toJSON().toString().getBytes(StandardCharsets.UTF_8);
 			try {
 				outStream.write('\n');
 				outStream.write(("<" + msgData.length + ">").getBytes(StandardCharsets.UTF_8));

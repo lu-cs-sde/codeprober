@@ -1,22 +1,24 @@
 package codeprober.protocol.create;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
+import java.util.List;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.locator.CreateLocator;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
+import codeprober.protocol.data.NodeLocator;
+import codeprober.protocol.data.RpcBodyLine;
 
 public class EncodeResponseValue {
 
-	public static void encode(AstInfo info, JSONArray out, Object value, HashSet<Object> alreadyVisitedNodes) {
+	public static void encodeTyped(AstInfo info, List<RpcBodyLine> out, Object value,
+			HashSet<Object> alreadyVisitedNodes) {
 		if (value == null) {
-			out.put("null");
+			out.add(RpcBodyLine.fromPlain("null"));
 			return;
 		}
 		// Clone to avoid showing 'already visited' when this encoding 'branch' hasn't
@@ -34,7 +36,7 @@ public class EncodeResponseValue {
 				try {
 					Object preferredView = Reflect.invoke0(node.underlyingAstNode, "cpr_getOutput");
 					alreadyVisitedNodes.add(node.underlyingAstNode);
-					encode(info, out, preferredView, alreadyVisitedNodes);
+					encodeTyped(info, out, preferredView, alreadyVisitedNodes);
 					return;
 				} catch (InvokeProblem e) {
 					// Fall down to default view
@@ -42,37 +44,37 @@ public class EncodeResponseValue {
 			}
 
 			try {
-//				final AstNode astNode = new AstNode(value);
-				final JSONObject locator = CreateLocator.fromNode(info, node);
+				final NodeLocator locator = CreateLocator.fromNode(info, node);
 				if (locator != null) {
-					JSONObject wrapper = new JSONObject();
-					wrapper.put("type", "node");
-					wrapper.put("value", locator);
-					out.put(wrapper);
+					out.add(RpcBodyLine.fromNode(locator));
 
-					out.put("\n");
+					out.add(RpcBodyLine.fromPlain("\n"));
 					if (node.isList() && !alreadyVisitedNodes.contains(node.underlyingAstNode)) {
 						final int numEntries = node.getNumChildren(info);
-						out.put("");
+						out.add(RpcBodyLine.fromPlain(""));
 						if (numEntries == 0) {
-							out.put("<empty list>");
+							out.add(RpcBodyLine.fromPlain("<empty list>"));
 						} else {
 							alreadyVisitedNodes.add(node.underlyingAstNode);
-							out.put("List contents [" + numEntries + "]:");
+							out.add(RpcBodyLine.fromPlain("List contents [" + numEntries + "]:"));
 							for (AstNode child : node.getChildren(info)) {
-								encode(info, out, child, alreadyVisitedNodes);
+								encodeTyped(info, out, child, alreadyVisitedNodes);
 							}
 						}
 						return;
 					}
 				} else {
-					out.put("Couldn't create locator for " + node.underlyingAstNode);
-					out.put("This could indicate a caching issue, where a detached AST node is stored ");
-					out.put("somewhere even after a re-parse or flushTreeCache() is called.");
-					out.put("Try setting the 'AST caching strategy' to 'None' or 'Purge'.");
-					out.put("If that helps, then you maybe have a caching problem somewhere in the AST.");
-					out.put("If that doesn't help, then please look at any error messages in the terminal where you started code-prober.jar.");
-					out.put("If that doesn't help either, then you may have found a bug. Please report it!");
+					out.add(RpcBodyLine.fromPlain("Couldn't create locator for " + node.underlyingAstNode));
+					out.add(RpcBodyLine
+							.fromPlain("This could indicate a caching issue, where a detached AST node is stored "));
+					out.add(RpcBodyLine.fromPlain("somewhere even after a re-parse or flushTreeCache() is called."));
+					out.add(RpcBodyLine.fromPlain("Try setting the 'AST caching strategy' to 'None' or 'Purge'."));
+					out.add(RpcBodyLine
+							.fromPlain("If that helps, then you maybe have a caching problem somewhere in the AST."));
+					out.add(RpcBodyLine.fromPlain(
+							"If that doesn't help, then please look at any error messages in the terminal where you started code-prober.jar."));
+					out.add(RpcBodyLine.fromPlain(
+							"If that doesn't help either, then you may have found a bug. Please report it!"));
 				}
 				return;
 			} catch (InvokeProblem e) {
@@ -85,7 +87,7 @@ public class EncodeResponseValue {
 				try {
 					Object preferredView = Reflect.invoke0(value, "cpr_getOutput");
 					alreadyVisitedNodes.add(value);
-					encode(info, out, preferredView, alreadyVisitedNodes);
+					encodeTyped(info, out, preferredView, alreadyVisitedNodes);
 					return;
 				} catch (InvokeProblem e) {
 					// Fall down to default view
@@ -95,48 +97,45 @@ public class EncodeResponseValue {
 
 		if (value instanceof Iterable<?>) {
 			if (alreadyVisitedNodes.contains(value)) {
-				out.put("<< reference loop to already visited value " + value + " >>");
+				out.add(RpcBodyLine.fromPlain("<< reference loop to already visited value " + value + " >>"));
 				return;
 			}
 			alreadyVisitedNodes.add(value);
 
-			JSONArray indent = new JSONArray();
+			final List<RpcBodyLine> indent = new ArrayList<>();
 			Iterable<?> iter = (Iterable<?>) value;
 			for (Object o : iter) {
-				encode(info, indent, o, alreadyVisitedNodes);
+				encodeTyped(info, indent, o, alreadyVisitedNodes);
 			}
-			out.put(indent);
+			out.add(RpcBodyLine.fromArr(indent));
 			return;
 		}
 		if (value instanceof Iterator<?>) {
 			if (alreadyVisitedNodes.contains(value)) {
-				out.put("<< reference loop to already visited value " + value + " >>");
+				out.add(RpcBodyLine.fromPlain("<< reference loop to already visited value " + value + " >>"));
 				return;
 			}
 			alreadyVisitedNodes.add(value);
-			JSONArray indent = new JSONArray();
+			final List<RpcBodyLine> indent = new ArrayList<>();
 			Iterator<?> iter = (Iterator<?>) value;
 			while (iter.hasNext()) {
-				encode(info, indent, iter.next(), alreadyVisitedNodes);
+				encodeTyped(info, indent, iter.next(), alreadyVisitedNodes);
 			}
-			out.put(indent);
+			out.add(RpcBodyLine.fromArr(indent));
 			return;
 		}
 		if (value instanceof Object[]) {
 			if (alreadyVisitedNodes.contains(value)) {
-				out.put("<< reference loop to already visited value " + value + " >>");
+				out.add(RpcBodyLine.fromPlain("<< reference loop to already visited value " + value + " >>"));
 				return;
 			}
 			alreadyVisitedNodes.add(value);
 
-			final JSONArray indent = new JSONArray();
+			final List<RpcBodyLine> indent = new ArrayList<>();
 			for (Object child : (Object[]) value) {
-				encode(info, indent, child, alreadyVisitedNodes);
+				encodeTyped(info, indent, child, alreadyVisitedNodes);
 			}
-//			final JSONObject indentObj = new JSONObject();
-//			indentObj.put("type", "indent");
-//			indentObj.put("value", indent);
-			out.put(indent);
+			out.add(RpcBodyLine.fromArr(indent));
 			return;
 		}
 		try {
@@ -144,14 +143,15 @@ public class EncodeResponseValue {
 //				if (value.getClass().isEnum()) {
 //					out.put(value.toString());
 //				}
-				out.put("No toString() or cpr_getOutput() implementation in " + value.getClass().getName());
+				out.add(RpcBodyLine
+						.fromPlain("No toString() or cpr_getOutput() implementation in " + value.getClass().getName()));
 			}
 		} catch (NoSuchMethodException e) {
 			System.err.println("No toString implementation for " + value.getClass());
 			e.printStackTrace();
 		}
 		for (String line : (value + "").split("\n")) {
-			out.put(line);
+			out.add(RpcBodyLine.fromPlain(line));
 		}
 	}
 }

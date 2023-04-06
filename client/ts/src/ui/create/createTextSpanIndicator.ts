@@ -6,6 +6,7 @@ type TextSpanStyle = 'full' | 'full-compact' | 'lines' | 'lines-compact' | 'star
 interface TextSpanIndicatorArgs {
   span: Span;
   marginLeft?: boolean;
+  autoVerticalMargin?: boolean;
   onHover?: (isHovered: boolean) => void;
   onClick?: () => void;
   styleOverride?: TextSpanStyle;
@@ -18,6 +19,10 @@ const createTextSpanIndicator = (args: TextSpanIndicatorArgs) => {
   indicator.style.color = 'gray';
   if (marginLeft) {
     indicator.style.marginLeft = '0.25rem';
+  }
+  if (args.autoVerticalMargin) {
+    indicator.style.marginTop = 'auto';
+    indicator.style.marginBottom = 'auto';
   }
   indicator.style.marginRight = '0.25rem';
 

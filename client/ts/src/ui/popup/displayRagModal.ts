@@ -7,7 +7,8 @@ import registerNodeSelector from "../create/registerNodeSelector";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import trimTypeName from "../trimTypeName";
 import ModalEnv from '../../model/ModalEnv';
-import listNodes from '../../rpc/listNodes';
+import { ListNodesReq, ListNodesRes } from '../../protocol';
+import { createMutableLocator } from '../../model/UpdatableNodeLocator';
 
 const displayRagModal = (env: ModalEnv, line: number, col: number) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -22,17 +23,14 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
         min-width: 12rem;
         min-height: 4rem;
       `,
+    onForceClose: cleanup,
     render: (root, { cancelToken }) => {
-      // while (root.firstChild) {
-      //   root.firstChild.remove();
-      // }
-      // root.innerText = 'Loading..';
       root.style.display = 'contents';
       const spinner = createLoadingSpinner();
       spinner.classList.add('absoluteCenter');
       root.appendChild(spinner);
 
-      const createTitle = (status: 'ok' | 'err') => createModalTitle({
+      const createTitle = (status: 'ok' | 'err') => createModalTitle({
         renderLeft: (container) => {
           const headType = document.createElement('span');
           headType.classList.add('syntax-stype');
@@ -44,20 +42,11 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
         },
       }).element;
 
-      listNodes(env, env.wrapTextRpc({
-        query: {
-          attr: { name: 'meta:listNodes' },
-          locator: {
-            result: {
-              type: '?',
-              start: (line << 12) + col,
-              end: (line << 12) + col,
-              depth: 0,
-            },
-            steps: [],
-          },
-        }
-      }))
+      env.performTypedRpc<ListNodesReq, ListNodesRes>({
+        src: env.createParsingRequestData(),
+        pos: (line << 12) + col,
+        type: 'ListNodes',
+      })
         .then((parsed) => {
           if (cancelToken.cancelled) { return; }
           while (root.firstChild) root.removeChild(root.firstChild);
@@ -93,7 +82,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
             node.onclick = () => {
               cleanup();
               env.updateSpanHighlight(null);
-              displayAttributeModal(env, popup.getPos(), locator);
+              displayAttributeModal(env, popup.getPos(), createMutableLocator(locator));
             };
             rowsContainer.appendChild(node);
           });

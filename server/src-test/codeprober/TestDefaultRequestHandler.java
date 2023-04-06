@@ -4,25 +4,24 @@ import static org.junit.Assert.assertEquals;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
 import org.junit.Test;
 
-import codeprober.ast.AstNode;
 import codeprober.ast.TestData;
-import codeprober.locator.CreateLocator;
-import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.ClientRequest;
 import codeprober.protocol.PositionRecoveryStrategy;
-import codeprober.protocol.ProbeProtocol;
-import codeprober.protocol.create.CreateType;
+import codeprober.protocol.data.EvaluatePropertyReq;
+import codeprober.protocol.data.EvaluatePropertyRes;
+import codeprober.protocol.data.NodeLocator;
+import codeprober.protocol.data.ParsingRequestData;
+import codeprober.protocol.data.Property;
+import codeprober.protocol.data.TALStep;
 import codeprober.toolglue.ParseResult;
 import codeprober.toolglue.UnderlyingTool;
 
@@ -74,95 +73,14 @@ public class TestDefaultRequestHandler {
 		}
 	}
 
-	@Test
-	public void testHandleSemiComplicatedRequest() {
-		DefaultRequestHandler handler = new DefaultRequestHandler(new DummyTool(), new String[0]);
-
-		final AstNode ast = new AstNode(TestData.getWithSimpleNta());
-		final AstInfo info = TestData.getInfo(ast);
-
-		final JSONObject requestObj = new JSONObject();
-		requestObj.put("posRecovery", info.recoveryStrategy.toString());
-
-		final JSONObject query = new JSONObject();
-		requestObj.put("query", query);
-
-		query.put("locator", CreateLocator.fromNode(info,
-				new AstNode(Reflect.invoke0(ast.underlyingAstNode, "simpleNTA")).getNthChild(info, 1)));
-
-		final JSONObject attr = new JSONObject();
-		query.put("attr", attr);
-
-		attr.put("name", "timesTwo");
-		final JSONArray args = new JSONArray();
-		attr.put("args", args);
-
-		final JSONObject intArg = new JSONObject();
-		intArg.put("type", "int");
-		intArg.put("value", 21);
-		intArg.put("isNodeType", false);
-		args.put(intArg);
-
-		final JSONObject retBuilder = new JSONObject();
-		final JSONArray bodyBuilder = new JSONArray();
-
-		handler.handleParsedAst(ast.underlyingAstNode, requestObj, retBuilder, bodyBuilder);
-
-		assertEquals(1, bodyBuilder.length());
-		assertEquals("42", bodyBuilder.get(0));
-	}
-
-	@Test
-	public void testPrintStreamArg() {
-		DefaultRequestHandler handler = new DefaultRequestHandler(new DummyTool(), new String[0]);
-
-		final AstNode ast = new AstNode(TestData.getWithSimpleNta());
-		final AstInfo info = TestData.getInfo(ast);
-
-		final JSONObject requestObj = new JSONObject();
-		requestObj.put("posRecovery", info.recoveryStrategy.toString());
-		requestObj.put("stdout", true);
-
-		final JSONObject query = new JSONObject();
-		requestObj.put("query", query);
-
-		query.put("locator", CreateLocator.fromNode(info, ast));
-
-		final JSONObject attr = new JSONObject();
-		query.put("attr", attr);
-
-		attr.put("name", "mthWithPrintStreamArg");
-		attr.put("args", new JSONArray().put( //
-				CreateType.fromClass(PrintStream.class, info.baseAstClazz).toJson() //
-						.put("value", JSONObject.NULL)));
-
-		final JSONObject retBuilder = new JSONObject();
-		final JSONArray bodyBuilder = new JSONArray();
-
-		handler.handleParsedAst(ast.underlyingAstNode, requestObj, retBuilder, bodyBuilder);
-
-		assertEquals(2, bodyBuilder.length());
-		assertEquals("First msg with linebreak", bodyBuilder.getJSONObject(0).getString("value"));
-		assertEquals("Second msg without linebreak", bodyBuilder.getJSONObject(1).getString("value"));
-	}
-
 	private ClientRequest constructRequest(String text, String attrName) {
-		final JSONObject requestObj = new JSONObject();
-		requestObj.put("type", ProbeProtocol.type);
-		ProbeProtocol.text.put(requestObj, text);
-		ProbeProtocol.positionRecovery.put(requestObj, PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD.name());
-		ProbeProtocol.cache.put(requestObj, AstCacheStrategy.FULL.name());
-		ProbeProtocol.tmpSuffix.put(requestObj, ".tmp");
-
-		final JSONObject query = new JSONObject();
-		ProbeProtocol.Query.locator.put(query, new JSONObject() //
-				.put("result", new JSONObject()) //
-				.put("steps", new JSONArray()));
-		ProbeProtocol.Query.attribute.put(query, new JSONObject() //
-				.put(ProbeProtocol.Attribute.name.key, attrName) //
-		);
-		ProbeProtocol.query.put(requestObj, query);
-		return new ClientRequest(requestObj, obj -> {
+		final EvaluatePropertyReq req = new EvaluatePropertyReq( //
+				new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD, AstCacheStrategy.FULL, text,
+						null, ".tmp"), //
+				new NodeLocator(new TALStep("", "", 0, 0, 0, false), Collections.emptyList()),
+				new Property(attrName, Collections.emptyList(), null),
+				false, null, null);
+		return new ClientRequest(req.toJSON(), obj -> {
 		}, new AtomicBoolean(true));
 	}
 
@@ -188,23 +106,23 @@ public class TestDefaultRequestHandler {
 		};
 		DefaultRequestHandler handler = new DefaultRequestHandler(countingTool, new String[0]);
 
-		final ClientRequest requestObj = constructRequest("Hello World", "getData");
-
-		final JSONObject initial = handler.handleRequest(requestObj);
+		final EvaluatePropertyRes initial = EvaluatePropertyRes
+				.fromJSON(handler.handleRequest(constructRequest("Hello World", "getData")));
 		assertEquals(1, parseCounter.get());
 		assertEquals(1, getDataCounter.get());
-		assertEquals("Hello World", initial.getJSONArray("body").getString(0));
+		assertEquals("Hello World", initial.response.asSync().body.get(0).asPlain());
 
-		final JSONObject sameTextShouldBeCached = handler.handleRequest(requestObj);
+		final EvaluatePropertyRes sameTextShouldBeCached = EvaluatePropertyRes
+				.fromJSON(handler.handleRequest(constructRequest("Hello World", "getData")));
 		assertEquals(1, parseCounter.get());
 		assertEquals(2, getDataCounter.get());
-		assertEquals("Hello World", sameTextShouldBeCached.getJSONArray("body").getString(0));
+		assertEquals("Hello World", sameTextShouldBeCached.response.asSync().body.get(0).asPlain());
 
-		ProbeProtocol.text.put(requestObj.data, "Changed");
-		final JSONObject changedText = handler.handleRequest(requestObj);
+		final EvaluatePropertyRes changedText = EvaluatePropertyRes
+				.fromJSON(handler.handleRequest(constructRequest("Changed", "getData")));
 		assertEquals(2, parseCounter.get());
 		assertEquals(3, getDataCounter.get());
-		assertEquals("Changed", changedText.getJSONArray("body").getString(0));
+		assertEquals("Changed", changedText.response.asSync().body.get(0).asPlain());
 	}
 
 	@Test
@@ -212,8 +130,9 @@ public class TestDefaultRequestHandler {
 		DefaultRequestHandler handler = new DefaultRequestHandler(
 				args -> new ParseResult(new TestData.WithTwoLineVariants(123, 456)));
 
-		final JSONObject resp = handler.handleRequest(constructRequest("", "toString"));
-		assertEquals((123 << 12) + 123, resp.getJSONObject("locator").getJSONObject("result").getLong("start"));
+		final EvaluatePropertyRes resp = EvaluatePropertyRes
+				.fromJSON(handler.handleRequest(constructRequest("", "toString")));
+		assertEquals((123 << 12) + 123, resp.response.asSync().locator.result.start);
 	}
 
 	@Test
@@ -221,7 +140,8 @@ public class TestDefaultRequestHandler {
 		DefaultRequestHandler handler = new DefaultRequestHandler(
 				args -> new ParseResult(new TestData.WithTwoLineVariants(null, 456)));
 
-		final JSONObject resp = handler.handleRequest(constructRequest("", "toString"));
-		assertEquals((456 << 12) + 456, resp.getJSONObject("locator").getJSONObject("result").getLong("start"));
+		final EvaluatePropertyRes resp = EvaluatePropertyRes
+				.fromJSON(handler.handleRequest(constructRequest("", "toString")));
+		assertEquals((456 << 12) + 456, resp.response.asSync().locator.result.start);
 	}
 }

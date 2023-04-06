@@ -4,23 +4,22 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import org.json.JSONObject;
-
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
+import codeprober.protocol.data.NodeLocator;
 
 public class NodesAtPosition {
 
-	public static List<JSONObject> get(AstInfo info, AstNode astNode, int pos) {
-		List<JSONObject> ret = new ArrayList<>();
+	public static List<NodeLocator> get(AstInfo info, AstNode astNode, int pos) {
+		List<NodeLocator> ret = new ArrayList<>();
 		getTo(ret, info, astNode, pos);
-		Collections.reverse(ret); // Narrowest/smallest node first inthe list
+		Collections.reverse(ret); // Narrowest/smallest node first in the list
 		return ret;
 	}
 
-	private static void getTo(List<JSONObject> out, AstInfo info, AstNode astNode, int pos) {
+	private static void getTo(List<NodeLocator> out, AstInfo info, AstNode astNode, int pos) {
 		final Span nodePos;
 		try {
 			nodePos = astNode.getRecoveredSpan(info);

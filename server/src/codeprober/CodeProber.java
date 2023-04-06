@@ -35,7 +35,7 @@ public class CodeProber {
 				"Usage: java -jar code-prober.jar [--test] path/to/your/analyzer-or-compiler.jar [args-to-forward-to-your-main]");
 	}
 
-	static void flog(String msg) {
+	public static void flog(String msg) {
 		final String flogPath = System.getenv("FLOG_PATH");
 		if (flogPath != null) {
 
@@ -58,13 +58,15 @@ public class CodeProber {
 
 		final ParsedArgs parsedArgs = ParsedArgs.parse(mainArgs);
 
-		final JsonRequestHandler defaultHandler = new DefaultRequestHandler(UnderlyingTool.fromJar(parsedArgs.jarPath), parsedArgs.extraArgs);
+		final JsonRequestHandler defaultHandler = new DefaultRequestHandler(UnderlyingTool.fromJar(parsedArgs.jarPath),
+				parsedArgs.extraArgs);
 		final JsonRequestHandler userFacingHandler;
 		flog(Arrays.toString(mainArgs));
 
 		switch (parsedArgs.concurrencyMode) {
 
 		case COORDINATOR: {
+			StdIoInterceptor.tag = "Coordinator";
 			try {
 				userFacingHandler = new ConcurrentCoordinator(defaultHandler, parsedArgs.jarPath, parsedArgs.extraArgs,
 						parsedArgs.workerProcessCount);
@@ -77,6 +79,7 @@ public class CodeProber {
 		}
 
 		case WORKER: {
+			StdIoInterceptor.tag = "Worker";
 			final PrintStream realOut = System.out;
 			StdIoInterceptor io = new StdIoInterceptor() {
 
@@ -117,7 +120,7 @@ public class CodeProber {
 					// TODO funnel messages to handler
 
 					protected void onMessage(String msg) {
-						flog("worker input: " + msg);
+//						flog("worker input: " + msg);
 						JSONObject obj;
 						try {
 							obj = new JSONObject(msg);
@@ -127,8 +130,8 @@ public class CodeProber {
 							e.printStackTrace();
 							return;
 						}
-						writeToCoordinator.accept(
-								rpcHandler.apply(new ClientRequest(obj, writeToCoordinator, connectionIsAlive)));
+						writeToCoordinator.accept(rpcHandler.apply(new ClientRequest(obj,
+								asyncMsg -> writeToCoordinator.accept(asyncMsg.toJSON()), connectionIsAlive)));
 					}
 				}.runForever();
 			}).start();
@@ -158,9 +161,10 @@ public class CodeProber {
 		final ServerToClientMessagePusher msgPusher = new ServerToClientMessagePusher();
 		final Function<ClientRequest, JSONObject> reqHandler = userFacingHandler.createRpcRequestHandler();
 		final Runnable onSomeClientDisconnected = userFacingHandler::onOneOrMoreClientsDisconnected;
-		new Thread(() -> WebServer.start(parsedArgs, msgPusher, reqHandler, onSomeClientDisconnected)).start();
+		new Thread(() -> WebServer.start(parsedArgs, msgPusher, userFacingHandler::handleRequest, onSomeClientDisconnected)).start();
 		if (!WebSocketServer.shouldDelegateWebsocketToHttp()) {
-			new Thread(() -> WebSocketServer.start(parsedArgs, msgPusher, reqHandler, onSomeClientDisconnected)).start();
+			new Thread(() -> WebSocketServer.start(parsedArgs, msgPusher, reqHandler, onSomeClientDisconnected))
+					.start();
 		} else {
 			System.out.println("Not starting websocket server, running requests over normal HTTP requests instead.");
 		}

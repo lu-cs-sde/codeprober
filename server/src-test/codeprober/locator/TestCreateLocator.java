@@ -2,22 +2,26 @@ package codeprober.locator;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.ast.TestData;
-import codeprober.locator.CreateLocator.LocatorMergeMethod;
 import codeprober.metaprogramming.Reflect;
 import codeprober.metaprogramming.TypeIdentificationStyle;
-import codeprober.protocol.ParameterTypeDetail;
+import codeprober.protocol.data.NodeLocator;
+import codeprober.protocol.data.NodeLocatorStep;
+import codeprober.protocol.data.NullableNodeLocator;
+import codeprober.protocol.data.Property;
+import codeprober.protocol.data.PropertyArg;
+import codeprober.protocol.data.TALStep;
 
 public class TestCreateLocator {
 
@@ -26,8 +30,7 @@ public class TestCreateLocator {
 		assertEquals(expected.end, actualEnd);
 	}
 
-	private JSONObject createLocator(AstInfo info, AstNode node) {
-		CreateLocator.setMergeMethod(LocatorMergeMethod.PAPER_VERSION);
+	private NodeLocator createLocator(AstInfo info, AstNode node) {
 		return CreateLocator.fromNode(info, node);
 	}
 
@@ -36,14 +39,12 @@ public class TestCreateLocator {
 		AstNode root = new AstNode(TestData.getSimple());
 		final AstInfo info = TestData.getInfo(root);
 
-		final JSONObject locator = createLocator(info, root);
+		final NodeLocator locator = createLocator(info, root);
 
-		final JSONObject res = locator.getJSONObject("result");
-		assertSpan(root.getRawSpan(info), res.getInt("start"), res.getInt("end"));
-		assertEquals(TestData.Program.class.getName(), res.getString("type"));
+		assertSpan(root.getRawSpan(info), locator.result.start, locator.result.end);
+		assertEquals(TestData.Program.class.getName(), locator.result.type);
 
-		final JSONArray steps = locator.getJSONArray("steps");
-		assertEquals(0, steps.length());
+		assertEquals(0, locator.steps.size());
 	}
 
 	@Test
@@ -52,20 +53,18 @@ public class TestCreateLocator {
 		final AstInfo info = TestData.getInfo(root);
 		final AstNode foo = root.getNthChild(info, 0);
 
-		final JSONObject locator = createLocator(info, foo);
+		final NodeLocator locator = createLocator(info, foo);
 
-		final Consumer<JSONObject> assertFooLoc = (res) -> {
-			assertSpan(foo.getRawSpan(info), res.getInt("start"), res.getInt("end"));
-			assertEquals(TestData.Foo.class.getName(), res.getString("type"));
+		final Consumer<TALStep> assertFooLoc = (res) -> {
+			assertSpan(foo.getRawSpan(info), res.start, res.end);
+			assertEquals(TestData.Foo.class.getName(), res.type);
 		};
-		assertFooLoc.accept(locator.getJSONObject("result"));
+		assertFooLoc.accept(locator.result);
 
-		final JSONArray steps = locator.getJSONArray("steps");
-		assertEquals(1, steps.length());
+		final List<NodeLocatorStep> steps = locator.steps;
+		assertEquals(1, steps.size());
 
-		final JSONObject step = steps.getJSONObject(0);
-		assertEquals("tal", step.getString("type"));
-		assertFooLoc.accept(step.getJSONObject("value"));
+		assertFooLoc.accept(steps.get(0).asTal());
 	}
 
 	@Test
@@ -74,22 +73,22 @@ public class TestCreateLocator {
 		final AstInfo info = TestData.getInfo(root);
 		final AstNode bar = root.getNthChild(info, 0).getNthChild(info, 0);
 
-		final JSONObject locator = createLocator(info, bar);
+		final NodeLocator locator = createLocator(info, bar);
 
-		final Consumer<JSONObject> assertBarLoc = (res) -> {
-			assertSpan(bar.getRawSpan(info), res.getInt("start"), res.getInt("end"));
-			assertEquals(TestData.Bar.class.getName(), res.getString("type"));
+		final Consumer<TALStep> assertBarLoc = (res) -> {
+			assertSpan(bar.getRawSpan(info), res.start, res.end);
+			assertEquals(TestData.Bar.class.getName(), res.type);
 		};
-		assertBarLoc.accept(locator.getJSONObject("result"));
+		assertBarLoc.accept(locator.result);
 
-		final JSONArray steps = locator.getJSONArray("steps");
+		final List<NodeLocatorStep> steps = locator.steps;
 		// Only 1 because the Program->Foo step is unnecessary.
-		assertEquals(1, steps.length());
+		assertEquals(1, steps.size());
 
-		final JSONObject step = steps.getJSONObject(0);
-		assertEquals("tal", step.getString("type"));
+		final NodeLocatorStep step = steps.get(0);
+		assertTrue(step.isTal());
 
-		assertBarLoc.accept(step.getJSONObject("value"));
+		assertBarLoc.accept(step.asTal());
 	}
 
 	@Test
@@ -99,26 +98,26 @@ public class TestCreateLocator {
 		final AstNode foo = root.getNthChild(info, 0);
 		final AstNode bar = foo.getNthChild(info, 1);
 
-		final JSONObject locator = createLocator(info, bar);
+		final NodeLocator locator = createLocator(info, bar);
 
-		final Consumer<JSONObject> assertBarLoc = (res) -> {
-			assertSpan(bar.getRawSpan(info), res.getInt("start"), res.getInt("end"));
-			assertEquals(TestData.Bar.class.getName(), res.getString("type"));
+		final Consumer<TALStep> assertBarLoc = (res) -> {
+			assertSpan(bar.getRawSpan(info), res.start, res.end);
+			assertEquals(TestData.Bar.class.getName(), res.type);
 		};
-		assertBarLoc.accept(locator.getJSONObject("result"));
+		assertBarLoc.accept(locator.result);
 
-		final JSONArray steps = locator.getJSONArray("steps");
-		assertEquals(2, steps.length());
+		final List<NodeLocatorStep> steps = locator.steps;
+		assertEquals(2, steps.size());
 
-		final JSONObject fooStep = steps.getJSONObject(0);
-		assertEquals("In " + locator, "tal", fooStep.getString("type"));
-		final JSONObject fooLocator = fooStep.getJSONObject("value");
-		assertSpan(foo.getRawSpan(info), fooLocator.getInt("start"), fooLocator.getInt("end"));
-		assertEquals(TestData.Foo.class.getName(), fooLocator.getString("type"));
+		final NodeLocatorStep fooStep = steps.get(0);
+		assertTrue(fooStep.isTal());
+		final TALStep fooLocator = fooStep.asTal();
+		assertSpan(foo.getRawSpan(info), fooLocator.start, fooLocator.end);
+		assertEquals(TestData.Foo.class.getName(), fooLocator.type);
 
-		final JSONObject barStep = steps.getJSONObject(1);
-		assertEquals("child", barStep.getString("type"));
-		assertEquals(1, barStep.getInt("value"));
+		final NodeLocatorStep barStep = steps.get(1);
+		assertTrue(barStep.isChild());
+		assertEquals(1, barStep.asChild());
 	}
 
 	@Test
@@ -127,21 +126,21 @@ public class TestCreateLocator {
 		final AstInfo info = TestData.getInfo(root);
 		final AstNode foo = new AstNode(Reflect.invoke0(info.ast.underlyingAstNode, "simpleNTA"));
 
-		final JSONObject locator = createLocator(info, foo);
+		final NodeLocator locator = createLocator(info, foo);
 
-		final JSONObject res = locator.getJSONObject("result");
-		assertSpan(foo.getRecoveredSpan(info), res.getInt("start"), res.getInt("end"));
-		assertEquals(TestData.Foo.class.getName(), res.getString("type"));
+		final TALStep res = locator.result;
+		assertSpan(foo.getRecoveredSpan(info), res.start, res.end);
+		assertEquals(TestData.Foo.class.getName(), res.type);
 
-		final JSONArray steps = locator.getJSONArray("steps");
-		assertEquals(1, steps.length());
+		final List<NodeLocatorStep> steps = locator.steps;
+		assertEquals(1, steps.size());
 
-		final JSONObject ntaStep = steps.getJSONObject(0);
-		assertEquals("nta", ntaStep.getString("type"));
+		final NodeLocatorStep ntaStep = steps.get(0);
+		assertTrue(ntaStep.isNta());
 
-		final JSONObject nta = ntaStep.getJSONObject("value");
-		assertEquals("simpleNTA", nta.getString("name"));
-		assertEquals(0, nta.getJSONArray("args").length());
+		final Property nta = ntaStep.asNta().property;
+		assertEquals("simpleNTA", nta.name);
+		assertEquals(0, nta.args.size());
 
 	}
 
@@ -153,50 +152,39 @@ public class TestCreateLocator {
 				new Class<?>[] { Integer.TYPE, info.baseAstClazz },
 				new Object[] { 1, info.ast.getNthChild(info, 0).underlyingAstNode })).getNthChild(info, 1);
 
-		final JSONObject locator = createLocator(info, bar);
+		final NodeLocator locator = createLocator(info, bar);
 
-		final JSONObject res = locator.getJSONObject("result");
-		assertSpan(bar.getRecoveredSpan(info), res.getInt("start"), res.getInt("end"));
-		assertEquals(TestData.Bar.class.getName(), res.getString("type"));
+		final TALStep res = locator.result;
+		assertSpan(bar.getRecoveredSpan(info), res.start, res.end);
+		assertEquals(TestData.Bar.class.getName(), res.type);
 
-		final JSONArray steps = locator.getJSONArray("steps");
-		assertEquals(2, steps.length());
+		final List<NodeLocatorStep> steps = locator.steps;
+		assertEquals(2, steps.size());
 
-		final JSONObject ntaStep = steps.getJSONObject(0);
-		assertEquals("nta", ntaStep.getString("type"));
+		final Property nta = steps.get(0).asNta().property;
+		assertEquals("parameterizedNTA", nta.name);
+		final List<PropertyArg> args = nta.args;
+		assertEquals(2, args.size());
 
-		final JSONObject nta = ntaStep.getJSONObject("value");
-		assertEquals("parameterizedNTA", nta.getString("name"));
-		final JSONArray args = nta.getJSONArray("args");
-		assertEquals(2, args.length());
+		assertEquals(1, args.get(0).asInteger());
 
-		final JSONObject intArg = args.getJSONObject(0);
-		assertEquals(ParameterTypeDetail.NORMAL.toString(), intArg.getString("detail"));
-		assertEquals("int", intArg.getString("type"));
-		assertEquals(1, intArg.getInt("value"));
+		final NullableNodeLocator nodeArg = args.get(1).asNodeLocator();
+		assertEquals(info.baseAstClazz.getName(), nodeArg.type);
 
-		final JSONObject nodeArg = args.getJSONObject(1);
-		assertEquals(ParameterTypeDetail.AST_NODE.toString(), nodeArg.getString("detail"));
-		assertEquals(info.baseAstClazz.getName(), nodeArg.getString("type"));
-
-		final JSONObject nodeLocator = nodeArg.getJSONObject("value");
-		Consumer<JSONObject> assertFooLocator = (fooLoc) -> {
-			assertSpan(info.ast.getNthChild(info, 0).getRecoveredSpan(info), fooLoc.getInt("start"),
-					fooLoc.getInt("end"));
-			assertEquals(TestData.Foo.class.getName(), fooLoc.getString("type"));
+		final NodeLocator nodeLocator = nodeArg.value;
+		Consumer<TALStep> assertFooLocator = (fooLoc) -> {
+			assertSpan(info.ast.getNthChild(info, 0).getRecoveredSpan(info), fooLoc.start, fooLoc.end);
+			assertEquals(TestData.Foo.class.getName(), fooLoc.type);
 		};
-		assertFooLocator.accept(nodeLocator.getJSONObject("result"));
+		assertFooLocator.accept(nodeLocator.result);
 
-		final JSONArray nodeLocatorSteps = nodeLocator.getJSONArray("steps");
-		assertEquals(1, nodeLocatorSteps.length());
+		final List<NodeLocatorStep> nodeLocatorSteps = nodeLocator.steps;
+		assertEquals(1, nodeLocatorSteps.size());
+		assertFooLocator.accept(nodeLocatorSteps.get(0).asTal());
 
-		final JSONObject fooStep = nodeLocatorSteps.getJSONObject(0);
-		assertEquals("tal", fooStep.getString("type"));
-		assertFooLocator.accept(fooStep.getJSONObject("value"));
-
-		final JSONObject childStep = steps.getJSONObject(1);
-		assertEquals("child", childStep.getString("type"));
-		assertEquals(1, childStep.getInt("value"));
+//		final JSONObject childStep = steps.getJSONObject(1);
+//		assertEquals("child", childStep.getString("type"));
+		assertEquals(1, steps.get(1).asChild());
 	}
 
 	@Test
@@ -205,21 +193,18 @@ public class TestCreateLocator {
 		final AstInfo info = TestData.getInfo(root);
 		final AstNode bar = root.getNthChild(info, 1).getNthChild(info, 0);
 
-		final JSONObject locator = createLocator(info, bar);
+		final NodeLocator locator = createLocator(info, bar);
 
-		final JSONObject res = locator.getJSONObject("result");
-		assertSpan(bar.getRawSpan(info), res.getInt("start"), res.getInt("end"));
-		assertEquals(TestData.Bar.class.getName(), res.getString("type"));
+		final TALStep res = locator.result;
+		assertSpan(bar.getRawSpan(info), res.start, res.end);
+		assertEquals(TestData.Bar.class.getName(), res.type);
 
-		final JSONArray steps = locator.getJSONArray("steps");
-		assertEquals(1, steps.length());
+		final List<NodeLocatorStep> steps = locator.steps;
+		assertEquals(1, steps.size());
 
-		final JSONObject step = steps.getJSONObject(0);
-		assertEquals("tal", step.getString("type"));
-
-		final JSONObject tal = step.getJSONObject("value");
-		assertSpan(bar.getRawSpan(info), tal.getInt("start"), tal.getInt("end"));
-		assertEquals(TestData.Bar.class.getName(), tal.getString("type"));
+		final TALStep tal = steps.get(0).asTal();
+		assertSpan(bar.getRawSpan(info), tal.start, tal.end);
+		assertEquals(TestData.Bar.class.getName(), tal.type);
 	}
 
 	@Test
@@ -229,29 +214,22 @@ public class TestCreateLocator {
 		final AstNode qux = root.getNthChild(info, 1);
 		final AstNode bar = qux.getNthChild(info, 0).getNthChild(info, 0);
 
-		final JSONObject locator = createLocator(info, bar);
+		final NodeLocator locator = createLocator(info, bar);
 
-		final JSONObject res = locator.getJSONObject("result");
-		assertSpan(bar.getRawSpan(info), res.getInt("start"), res.getInt("end"));
-		assertEquals(TestData.Bar.class.getName(), res.getString("type"));
+		final TALStep res = locator.result;
+		assertSpan(bar.getRawSpan(info), res.start, res.end);
+		assertEquals(TestData.Bar.class.getName(), res.type);
 
-		final JSONArray steps = locator.getJSONArray("steps");
-		assertEquals(2, steps.length());
+		final List<NodeLocatorStep> steps = locator.steps;
+		assertEquals(2, steps.size());
 
-		final JSONObject quxStep = steps.getJSONObject(0);
-		assertEquals("tal", quxStep.getString("type"));
+		final TALStep quxTal = steps.get(0).asTal();
+		assertSpan(qux.getRawSpan(info), quxTal.start, quxTal.end);
+		assertEquals(TestData.Qux.class.getName(), quxTal.type);
 
-		final JSONObject quxTal = quxStep.getJSONObject("value");
-		assertSpan(qux.getRawSpan(info), quxTal.getInt("start"), quxTal.getInt("end"));
-		assertEquals(TestData.Qux.class.getName(), quxTal.getString("type"));
-
-
-		final JSONObject barStep = steps.getJSONObject(1);
-		assertEquals("tal", barStep.getString("type"));
-
-		final JSONObject barTal = barStep.getJSONObject("value");
-		assertSpan(bar.getRawSpan(info), barTal.getInt("start"), barTal.getInt("end"));
-		assertEquals(TestData.Bar.class.getName(), barTal.getString("type"));
+		final TALStep barTal = steps.get(1).asTal();
+		assertSpan(bar.getRawSpan(info), barTal.start, barTal.end);
+		assertEquals(TestData.Bar.class.getName(), barTal.type);
 	}
 
 	@Test
@@ -260,47 +238,51 @@ public class TestCreateLocator {
 		final AstInfo info = TestData.getInfo(root);
 		final AstNode qux = root.getNthChild(info, 1);
 
-		final JSONObject locator = createLocator(info, qux);
+		final NodeLocator locator = createLocator(info, qux);
 
-		assertEquals(true, locator.getJSONObject("result").getBoolean("external"));
+		assertEquals(true, locator.result.external);
 
-		final JSONArray steps = locator.getJSONArray("steps");
-		assertEquals(1, steps.length());
+		final List<NodeLocatorStep> steps = locator.steps;
+		assertEquals(1, steps.size());
 
-		final JSONObject step = steps.getJSONObject(0);
-		assertEquals("tal", step.getString("type"));
+		final NodeLocatorStep step = steps.get(0);
+		assertTrue(step.isTal());
 
-		final JSONObject tal = step.getJSONObject("value");
-		assertSpan(qux.getRawSpan(info), tal.getInt("start"), tal.getInt("end"));
-		assertEquals(TestData.Qux.class.getName(), tal.getString("type"));
-		assertEquals(true, tal.getBoolean("external"));
+		final TALStep tal = step.asTal();
+		assertSpan(qux.getRawSpan(info), tal.start, tal.end);
+		assertEquals(TestData.Qux.class.getName(), tal.type);
+		assertEquals(true, tal.external);
 	}
 
 	@Test
 	public void testCreateLabeled() {
 		final AstNode root = new AstNode(TestData.getWithLabels());
 
-		final BiFunction<JSONObject, String, JSONObject> assertLocator = (locator, expectedSingleStepType) -> {
-			final JSONArray steps = locator.getJSONArray("steps");
-			assertEquals(1, steps.length());
+		final BiFunction<NodeLocator, NodeLocatorStep.Type, NodeLocator> assertLocator = (locator,
+				expectedSingleStepType) -> {
+			final List<NodeLocatorStep> steps = locator.steps;
+			assertEquals(1, steps.size());
 
-			final JSONObject step = steps.getJSONObject(0);
-			assertEquals(expectedSingleStepType, step.getString("type"));
+			final NodeLocatorStep step = steps.get(0);
+			assertEquals(expectedSingleStepType, step.type);
 
 			return locator;
 		};
 
-		final BiConsumer<TypeIdentificationStyle, String> testIdentifications = (style, expectedLbl2Type) -> {
+		final BiConsumer<TypeIdentificationStyle, NodeLocatorStep.Type> testIdentifications = (style,
+				expectedLbl2Type) -> {
 			final AstInfo info = TestData.getInfo(root, style);
 
 			final AstNode lbl1 = root.getNthChild(info, 0);
-			assertSame(lbl1, ApplyLocator.toNode(info, assertLocator.apply(createLocator(info, lbl1), "tal")).node);
+			assertSame(lbl1, ApplyLocator.toNode(info,
+					assertLocator.apply(createLocator(info, lbl1), NodeLocatorStep.Type.tal)).node);
 
 			final AstNode lbl2 = root.getNthChild(info, 1);
-			assertSame(lbl2, ApplyLocator.toNode(info, assertLocator.apply(createLocator(info, lbl2), expectedLbl2Type)).node);
+			assertSame(lbl2,
+					ApplyLocator.toNode(info, assertLocator.apply(createLocator(info, lbl2), expectedLbl2Type)).node);
 		};
 
-		testIdentifications.accept(TypeIdentificationStyle.REFLECTION, "child");
-		testIdentifications.accept(TypeIdentificationStyle.NODE_LABEL, "tal");
+		testIdentifications.accept(TypeIdentificationStyle.REFLECTION, NodeLocatorStep.Type.child);
+		testIdentifications.accept(TypeIdentificationStyle.NODE_LABEL, NodeLocatorStep.Type.tal);
 	}
 }

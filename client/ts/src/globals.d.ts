@@ -38,39 +38,12 @@ type EditorInitializer = (initialValue: string, onChange: (newValue: string, adj
   syntaxHighlightingToggler: (langId: SyntaxHighlightingLanguageId) => void;
 };
 
-type MarkerSeverity = 'error' | 'warning' | 'info' | 'line-pa';
-interface ProbeMarker {
-  severity: MarkerSeverity;
-  errStart: number;
-  errEnd: number;
-  msg: string;
-}
-
 interface StickyMarker {
   getSpan: () => Span;
   remove: () => void;
 }
 
-interface WindowStateDataProbe {
-  type: 'probe';
-  locator: NodeLocator;
-  attr: AstAttrWithValue;
-}
-interface WindowStateDataAst {
-  type: 'ast';
-  locator: NodeLocator;
-  direction: 'upwards' | 'downwards';
-  transform: { [id: string]: number },
-}
-
-type WindowStateData = WindowStateDataProbe | WindowStateDataAst;
-
-interface WindowState {
-  modalPos: ModalPosition;
-  data: WindowStateData;
-  // locator: NodeLocator;
-  // attr: AstAttrWithValue
-}
+// Mapping from lineIndex to probes at that location
 
 interface ProbeMeasurement {
   fullRpcMs: number;
@@ -94,78 +67,6 @@ interface CullingTaskSubmitter {
   cancel: () => void;
 }
 
-type RpcBodyLine =
-    string
-  | { type: ('stdout' | 'stderr' | 'stream-arg'); value: string }
-  | RpcBodyLine[]
-  | { type: 'node'; value: NodeLocator }
-  ;
-
-
-
-interface AstAttrArg {
-  type: string;
-  name: string;
-  detail: 'NORMAL' | 'AST_NODE' | 'OUTPUTSTREAM';
-}
-
-interface AstAttr {
-  name: string;
-  args?: AstAttrArg[];
-  astChildName?: string;
-}
-
-type ArgValue = string | number | boolean | null | NodeLocator;
-
-interface AstAttrWithValue {
-  name: string;
-  args?: (AstAttrArg & { value: ArgValue })[];
-}
-
-type NodeLocatorStep =
-    { type: 'nta', value: { name: string; args: AstAttrWithValue[] } }
-  | { type: 'child', value: number }
-  | { type: 'tal', value: TypeAtLocStep }
-  ;
-
-interface TypeAtLoc {
-  type: string;
-  label?: string;
-  start: number;
-  end: number;
-  external?: boolean;
-}
-
-interface TypeAtLocStep extends TypeAtLoc {
-  depth: number;
-}
-
-interface NodeLocator {
-  // root: TypeAtLoc;
-  result: TypeAtLoc;
-  steps: NodeLocatorStep[];
-}
-
-interface RpcResponse {
-  body: RpcBodyLine[];
-  args?: (Omit<AstAttrArg, 'name'> & { value: ArgValue })[];
-  // args?: AstAttrWithValue['args'],
-  locator: NodeLocator;
-  errors: { severity: ('error' | 'warning' | 'info'); start: number; end: number; msg: string; }[];
-
-  // Expected for request meta:listNodes
-  nodes?: NodeLocator[];
-
-  // Expected for requests meta:listAllProperties and meta:listProperties
-  properties?: AstAttr[];
-
-  totalTime?: number;
-  parseTime?: number;
-  createLocatorTime?: number;
-  applyLocatorTime?: number;
-  attrEvalTime?: number;
-}
-
 interface ModalPosition { x: number, y: number };
 
 interface Window {
@@ -181,6 +82,7 @@ interface Window {
   initCodeProber: () => void;
   MiniEditorMain: () => void;
   clearUserSettings: () => void;
+  saveStateAsUrl: () => void;
   ActiveLocatorRequest?: ActiveNodeLocatorRequest;
 }
 

@@ -14,16 +14,20 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
+import java.util.stream.Collectors;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
-import codeprober.locator.NodeEdge.NodeEdgeType;
 import codeprober.metaprogramming.Reflect;
-import codeprober.protocol.ParameterValue;
 import codeprober.protocol.create.CreateValue;
+import codeprober.protocol.data.FNStep;
+import codeprober.protocol.data.NodeLocator;
+import codeprober.protocol.data.NodeLocatorStep;
+import codeprober.protocol.data.Property;
+import codeprober.protocol.data.PropertyArg;
+import codeprober.protocol.data.TALStep;
 import codeprober.util.BenchmarkTimer;
 
 public class CreateLocator {
@@ -31,9 +35,32 @@ public class CreateLocator {
 //	private static final boolean useFastTrimAlgorithm = true;
 
 	public static enum LocatorMergeMethod {
-		SKIP, PAPER_VERSION, OLD_VERSION;
+		SKIP, PAPER_VERSION;
+//		OLD_VERSION;
 
 		public static LocatorMergeMethod DEFAULT_METHOD = PAPER_VERSION;
+	}
+
+	public static class StepWithTarget {
+		public final NodeLocatorStep step;
+		public final AstNode source;
+		public final AstNode target;
+
+		public StepWithTarget(NodeLocatorStep step, AstNode source, AstNode target) {
+			this.step = step;
+			this.source = source;
+			this.target = target;
+		}
+	}
+
+	public static class Edges {
+		public final int unmergedLength;
+		public final List<StepWithTarget> mergedEdges;
+
+		public Edges(int unmergedLength, List<StepWithTarget> mergedEdges) {
+			this.unmergedLength = unmergedLength;
+			this.mergedEdges = mergedEdges;
+		}
 	}
 
 	private static LocatorMergeMethod mergeMethod = LocatorMergeMethod.DEFAULT_METHOD;
@@ -50,35 +77,50 @@ public class CreateLocator {
 		}
 	}
 
+	public static TALStep createTALStep(AstInfo info, AstNode node, int depth) {
+		final Span pos = node.getRecoveredSpan(info);
+		return createTALStep(node, pos.start, pos.end, depth, node.isInsideExternalFile(info));
+	}
+
+	public static TALStep createTALStep(AstNode node, int start, int end, int depth, boolean isExternal) {
+		final String type = node.underlyingAstNode.getClass().getName();
+		final String lbl = node.getNodeLabel();
+		return new TALStep(type, lbl, start, end, depth, isExternal);
+	}
+
 	private static List<Object> fromNodeCycleDetectorStack = new ArrayList<>();
 
-	public static JSONObject fromNode(AstInfo info, AstNode astNode) {
-		final List<NodeEdge> edges = getEdgesTo(info, astNode);
+	public static NodeLocator fromNode(AstInfo info, AstNode astNode) {
+		final Edges edges = getEdgesTo(info, astNode);
 		if (edges == null) {
 			return null;
 		}
 
-		final JSONObject robustResult = new JSONObject();
+//		final JSONObject robustResult = new JSONObject();
 		final Span astPos = astNode.getRecoveredSpan(info);
-		robustResult.put("start", astPos.start);
-		robustResult.put("end", astPos.end);
-		if (astNode.isInsideExternalFile(info)) {
-			robustResult.put("external", true);
-		}
-		putNodeTypeValues(astNode, robustResult);
+//		robustResult.put("start", astPos.start);
+//		robustResult.put("end", astPos.end);
+//		if (astNode.isInsideExternalFile(info)) {
+//			robustResult.put("external", true);
+//		}
+//		robustResult.put("depth", edges.unmergedLength);
+//		putNodeTypeValues(astNode, robustResult);
 
-		final JSONArray steps = new JSONArray();
-		for (NodeEdge step : edges) {
-			steps.put(step.toJson());
-		}
+//		final JSONArray steps = new JSONArray();
+//		for (NodeLocatorStep step : edges.mergedEdges) {
+//			steps.put(step.toJson());
+//		}
 
-		final JSONObject robust = new JSONObject();
-		robust.put("result", robustResult);
-		robust.put("steps", steps);
-		return robust;
+//		final JSONObject robust = new JSONObject();
+//		robust.put("result", robustResult);
+//		robust.put("steps", steps);
+		return new NodeLocator(
+				createTALStep(astNode, astPos.start, astPos.end, edges.unmergedLength,
+						astNode.isInsideExternalFile(info)),
+				edges.mergedEdges.stream().map(x -> x.step).collect(Collectors.toList()));
 	}
 
-	public static List<NodeEdge> getEdgesTo(AstInfo info, AstNode astNode) {
+	public static Edges getEdgesTo(AstInfo info, AstNode astNode) {
 		if (fromNodeCycleDetectorStack.contains(astNode.underlyingAstNode)) {
 			System.err.println("Illegal cycle in AST parent chain");
 			for (Object n : fromNodeCycleDetectorStack) {
@@ -115,7 +157,7 @@ public class CreateLocator {
 		try {
 
 			try {
-				List<NodeEdge> edges = doGetEdgesTo(info, astNode);
+				Edges edges = doGetEdgesTo(info, astNode);
 				if (edges == null) {
 					System.out.println("Failed creating locator for " + astNode);
 				}
@@ -131,8 +173,8 @@ public class CreateLocator {
 		}
 	}
 
-	private static List<NodeEdge> doGetEdgesTo(AstInfo info, AstNode astNode) {
-		final List<NodeEdge> naive = new ArrayList<>();
+	private static Edges doGetEdgesTo(AstInfo info, AstNode astNode) {
+		final List<StepWithTarget> naive = new ArrayList<>();
 
 		try {
 			extractStepsTo(info, astNode, naive);
@@ -143,11 +185,13 @@ public class CreateLocator {
 			return null;
 		}
 
+		final int unmergedLength = naive.size();
+
 		if (naive.isEmpty()) {
 			// Root node!
-			return Collections.<NodeEdge>emptyList();
+			return new Edges(unmergedLength, Collections.<StepWithTarget>emptyList());
 		}
-		for (NodeEdge edge : naive) {
+		for (StepWithTarget edge : naive) {
 			if (edge == null) {
 				return null;
 			}
@@ -172,9 +216,12 @@ public class CreateLocator {
 				}
 				return depth;
 			};
-			final BiFunction<AstNode, AstNode, TypeAtLocEdge> createTAL = (src, dst) -> {
-				return new TypeAtLocEdge(info, src, dst, distance.apply(src, dst), dst.isInsideExternalFile(info));
-
+			final BiFunction<AstNode, AstNode, StepWithTarget> createTAL = (src, dst) -> {
+				final Span pos = dst.getRecoveredSpan(info);
+				return new StepWithTarget( //
+						NodeLocatorStep.fromTal(createTALStep(dst, pos.start, pos.end, distance.apply(src, dst),
+								dst.isInsideExternalFile(info))), //
+						src, dst);
 			};
 
 			final BiPredicate<AstNode, AstNode> canUseTal = (src, dst) -> ApplyLocator.isFirstPerfectMatchExpected(info,
@@ -182,7 +229,7 @@ public class CreateLocator {
 
 			AstNode src = astNode;
 			AstNode dst = astNode;
-			final List<NodeEdge> ret = new ArrayList<>();
+			final List<StepWithTarget> ret = new ArrayList<>();
 
 			// 'foundTALRoot' differs from naive paper version.
 			// Optimizes performance greatly, especially in a multi-file scenario.
@@ -191,18 +238,19 @@ public class CreateLocator {
 			boolean foundTALRoot = astNode.isLocatorTALRoot(info);
 
 			for (int i = naive.size() - 1; i >= 0; --i) {
-				final NodeEdge step = naive.get(i);
+				final StepWithTarget swt = naive.get(i);
+				final NodeLocatorStep step = swt.step;
 				if (!foundTALRoot) {
 					foundTALRoot = src.isLocatorTALRoot(info);
 				}
 
-				if (src != dst && (step.type == NodeEdgeType.FN || foundTALRoot || !canUseTal.test(src, dst))) {
+				if (src != dst && (step.isNta() || foundTALRoot || !canUseTal.test(src, dst))) {
 					ret.add(createTAL.apply(src, dst));
 					dst = src;
 				}
 
-				if (step.type == NodeEdgeType.FN || foundTALRoot || !canUseTal.test(src, dst)) {
-					ret.add(step);
+				if (step.isNta() || foundTALRoot || !canUseTal.test(src, dst)) {
+					ret.add(swt);
 					dst = src.parent();
 				} else {
 					// Let it grow
@@ -213,64 +261,64 @@ public class CreateLocator {
 				ret.add(createTAL.apply(src, dst));
 			}
 			Collections.reverse(ret);
-			return ret;
+			return new Edges(unmergedLength, ret);
 		}
 
-		case OLD_VERSION: {
+//		case OLD_VERSION: {
+//
+//			int trimPos = naive.size() - 1;
+//			boolean foundTopSubstitutableNode = false;
+//			while (trimPos >= 0 && !foundTopSubstitutableNode) {
+//				int numPotentialRemovals = 0;
+//				NodeEdge disambiguationTarget = naive.get(trimPos);
+//				int disambiguationDepth = 0;
+//				for (int i = trimPos; i >= 0; --i) {
+//					++disambiguationDepth;
+//					final NodeEdge parentEdge = naive.get(i);
+//
+//					if (parentEdge.targetNode.isLocatorTALRoot(info)) {
+//						foundTopSubstitutableNode = true;
+//						break;
+//					}
+//
+//					if (parentEdge.type == NodeEdgeType.ChildIndex
+//							&& (parentEdge.targetNode.isNonOverlappingSibling(info) || //
+//									!ApplyLocator.isAmbiguousTal(info, parentEdge.sourceNode,
+//											disambiguationTarget.targetLoc, disambiguationDepth,
+//											disambiguationTarget.targetNode))) {
+//						++numPotentialRemovals;
+//						if (parentEdge.targetNode.getRawSpan(info).isMeaningful()) {
+//							disambiguationTarget = parentEdge;
+//							disambiguationDepth = 0;
+//						}
+//					} else {
+//						break;
+//					}
+//				}
+//				if (numPotentialRemovals == 0) {
+//					--trimPos;
+//					continue;
+//				}
+//				final NodeEdge top = naive.get(trimPos + 1 - numPotentialRemovals);
+//				final NodeEdge edge = naive.get(trimPos);
+//
+//				naive.set(trimPos, new TypeAtLocEdge(top.sourceNode, top.sourceLoc, edge.targetNode, edge.targetLoc,
+//						numPotentialRemovals, edge.targetNode.isInsideExternalFile(info)));
+//				for (int i = 1; i < numPotentialRemovals; i++) {
+//					naive.remove(trimPos - i);
+//				}
+//				trimPos -= numPotentialRemovals;
+//
+//			}
+//			break;
+//		}
 
-			int trimPos = naive.size() - 1;
-			boolean foundTopSubstitutableNode = false;
-			while (trimPos >= 0 && !foundTopSubstitutableNode) {
-				int numPotentialRemovals = 0;
-				NodeEdge disambiguationTarget = naive.get(trimPos);
-				int disambiguationDepth = 0;
-				for (int i = trimPos; i >= 0; --i) {
-					++disambiguationDepth;
-					final NodeEdge parentEdge = naive.get(i);
-
-					if (parentEdge.targetNode.isLocatorTALRoot(info)) {
-						foundTopSubstitutableNode = true;
-						break;
-					}
-
-					if (parentEdge.type == NodeEdgeType.ChildIndex
-							&& (parentEdge.targetNode.isNonOverlappingSibling(info) || //
-									!ApplyLocator.isAmbiguousTal(info, parentEdge.sourceNode,
-											disambiguationTarget.targetLoc, disambiguationDepth,
-											disambiguationTarget.targetNode))) {
-						++numPotentialRemovals;
-						if (parentEdge.targetNode.getRawSpan(info).isMeaningful()) {
-							disambiguationTarget = parentEdge;
-							disambiguationDepth = 0;
-						}
-					} else {
-						break;
-					}
-				}
-				if (numPotentialRemovals == 0) {
-					--trimPos;
-					continue;
-				}
-				final NodeEdge top = naive.get(trimPos + 1 - numPotentialRemovals);
-				final NodeEdge edge = naive.get(trimPos);
-
-				naive.set(trimPos, new TypeAtLocEdge(top.sourceNode, top.sourceLoc, edge.targetNode,
-						edge.targetLoc, numPotentialRemovals, edge.targetNode.isInsideExternalFile(info)));
-				for (int i = 1; i < numPotentialRemovals; i++) {
-					naive.remove(trimPos - i);
-				}
-				trimPos -= numPotentialRemovals;
-
-			}
-			break;
 		}
 
-		}
-
-		return naive;
+		return new Edges(unmergedLength, naive);
 	}
 
-	private static void extractStepsTo(AstInfo info, AstNode astNode, List<NodeEdge> out)
+	private static void extractStepsTo(AstInfo info, AstNode astNode, List<StepWithTarget> out)
 			throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException,
 			NoSuchMethodException, InvocationTargetException {
 		final AstNode parent = astNode.parent();
@@ -284,7 +332,7 @@ public class CreateLocator {
 		int childIdxCounter = 0;
 		for (AstNode child : parent.getChildren(info)) {
 			if (child.sharesUnderlyingNode(astNode)) {
-				out.add(new ChildIndexEdge(parent, source, astNode, target, childIdxCounter));
+				out.add(new StepWithTarget(NodeLocatorStep.fromChild(childIdxCounter), parent, astNode));
 				extractStepsTo(info, parent, out);
 				return;
 			}
@@ -326,8 +374,8 @@ public class CreateLocator {
 //		}
 	}
 
-	private static boolean extractNtaEdge(AstInfo info, AstNode astNode, List<NodeEdge> out, final TypeAtLoc target,
-			final AstNode parent)
+	private static boolean extractNtaEdge(AstInfo info, AstNode astNode, List<StepWithTarget> out,
+			final TypeAtLoc target, final AstNode parent)
 			throws IllegalAccessException, NoSuchFieldException, NoSuchMethodException, InvocationTargetException {
 		for (Method m : parent.underlyingAstNode.getClass().getMethods()) {
 			if (!MethodKindDetector.isNta(m)) {
@@ -404,8 +452,8 @@ public class CreateLocator {
 				if (cachedNtaValue != astNode.underlyingAstNode) {
 					continue;
 				}
-				out.add(new ParameterizedNtaEdge(parent, TypeAtLoc.from(info, astNode), astNode, target, m.getName(),
-						Collections.<ParameterValue>emptyList()));
+				out.add(new StepWithTarget(NodeLocatorStep
+						.fromNta(new FNStep(new Property(m.getName(), Collections.<PropertyArg>emptyList(), null))), parent, astNode));
 				extractStepsTo(info, parent, out);
 				return true;
 			}
@@ -421,7 +469,7 @@ public class CreateLocator {
 				if (isTheProxyNode || ent.getValue() == astNode.underlyingAstNode) {
 					final Object param = ent.getKey();
 
-					final List<ParameterValue> serializableParams = new ArrayList<>();
+					final List<PropertyArg> serializableParams = new ArrayList<>();
 					if (mParams.length > 1) {
 						if (!(param instanceof List<?>)) {
 							System.out.println("Method " + m.getName() + " has " + mParams.length
@@ -431,7 +479,7 @@ public class CreateLocator {
 						final List<?> argList = (List<?>) param;
 						int paramIdx = 0;
 						for (Object v : argList) {
-							final ParameterValue decoded = CreateValue.fromInstance(info, mParams[paramIdx].getType(),
+							final PropertyArg decoded = CreateValue.fromInstance(info, mParams[paramIdx].getType(),
 									genParams[paramIdx], v);
 							++paramIdx;
 							if (decoded == null) {
@@ -441,8 +489,8 @@ public class CreateLocator {
 							serializableParams.add(decoded);
 						}
 					} else {
-						final ParameterValue decoded = CreateValue.fromInstance(info, mParams[0].getType(),
-								genParams[0], param);
+						final PropertyArg decoded = CreateValue.fromInstance(info, mParams[0].getType(), genParams[0],
+								param);
 						if (decoded == null) {
 							System.out.println(
 									"Unknown parameter " + param + ", class name: " + param.getClass().getName());
@@ -450,19 +498,18 @@ public class CreateLocator {
 						}
 						serializableParams.add(decoded);
 					}
-					final TypeAtLoc realSource = TypeAtLoc.from(info, parent);
+//					final TypeAtLoc realSource = TypeAtLoc.from(info, parent);
 					if (isTheProxyNode) {
 						// "bounce" off the child node for the proxy-reasons listed above.
 						final AstNode bounceChild = new AstNode(ent.getValue());
-						final TypeAtLoc bounceChildLoc = TypeAtLoc.from(info, bounceChild);
 
-						out.add(new ParameterizedNtaEdge(bounceChild, bounceChildLoc, astNode, target, "getParent",
-								new ArrayList<>()));
-						out.add(new ParameterizedNtaEdge(parent, realSource, bounceChild, bounceChildLoc, m.getName(),
-								serializableParams));
+						out.add(new StepWithTarget(NodeLocatorStep.fromNta(
+								new FNStep(new Property("getParent", Collections.<PropertyArg>emptyList(), null))), bounceChild, astNode));
+						out.add(new StepWithTarget(NodeLocatorStep
+								.fromNta(new FNStep(new Property(m.getName(), serializableParams, null))), parent, bounceChild));
 					} else {
-						out.add(new ParameterizedNtaEdge(parent, realSource, astNode, target, m.getName(),
-								serializableParams));
+						out.add(new StepWithTarget(NodeLocatorStep
+								.fromNta(new FNStep(new Property(m.getName(), serializableParams, null))), parent, astNode));
 					}
 					extractStepsTo(info, parent, out);
 					return true;

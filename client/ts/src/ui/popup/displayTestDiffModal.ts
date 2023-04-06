@@ -1,9 +1,15 @@
 import ModalEnv from '../../model/ModalEnv';
-import TestCase from '../../model/test/TestCase';
+import { rpcLinesToAssertionLines } from '../../model/test/rpcBodyToAssertionLine';
+import { NestedTestResponse, nestedTestResponseToTest, TestEvaluation, TestStatus } from '../../model/test/TestManager';
+import { createImmutableLocator, createMutableLocator } from '../../model/UpdatableNodeLocator';
+import WindowState, { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
+import { Property, NodeLocator, TestCase, RpcBodyLine, NestedTest } from '../../protocol';
 import settings from '../../settings';
+import createInlineWindowManager from '../create/createInlineWindowManager';
 import createLoadingSpinner from '../create/createLoadingSpinner';
 import createModalTitle from '../create/createModalTitle';
 import showWindow from '../create/showWindow';
+import renderProbeModalTitleLeft from '../renderProbeModalTitleLeft';
 import UIElements from '../UIElements';
 import displayHelp from './displayHelp';
 import displayProbeModal from './displayProbeModal';
@@ -19,15 +25,16 @@ const displayTestDiffModal = (
   env: ModalEnv,
   modalPos: ModalPosition | null,
   locator: NodeLocator,
-  attr: AstAttrWithValue,
+  property: Property,
   testCategory: string,
-  testCase: TestCase,
+  testCaseName: string,
+  // testCase: TestCase,
 ) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
 
   type TabType = 'output' | 'node' | 'source' | 'settings';
   let activeTab: TabType = 'output';
-
+  // let lastKnownCapturedStdout;
   let isCleanedUp = false;
   const cleanup = () => {
     isCleanedUp = true;
@@ -43,6 +50,8 @@ const displayTestDiffModal = (
     // stickyController.cleanup();
   };
   let saveSelfAsProbe = false;
+
+  let lastLoadedTestCase: TestCase | null = null;
 
   const createTitle = () => {
     const onClose = () => {
@@ -65,36 +74,43 @@ const displayTestDiffModal = (
 
         const tail = document.createElement('span');
         tail.classList.add('stream-arg-msg');
-        tail.innerText = testCase.name;
+        tail.innerText = testCaseName;
         container.appendChild(tail);
       },
       onClose,
       extraActions: [
-        {
-          title: 'Load state into editor',
-          invoke: () => {
-            settings.setAstCacheStrategy(testCase.cache);
-            settings.setMainArgsOverride(testCase.mainArgs);
-            settings.setPositionRecoveryStrategy(testCase.posRecovery);
-            if (testCase.tmpSuffix && testCase.tmpSuffix !== settings.getCurrentFileSuffix()) {
-              settings.setCustomFileSuffix(testCase.tmpSuffix);
-            }
-            settings.setEditorContents(testCase.src);
-            saveSelfAsProbe = true;
-            env.triggerWindowSave();
-            window.location.reload();
-          }
-        },
-        {
-          title: 'Delete Test (cannot be undone)',
-          invoke: () => {
-            env.testManager.removeTest(testCategory, testCase.name)
-              .then(onClose)
-              .catch((err) => {
-                console.warn('Failed removing test', testCategory, '>', testCase.name, err);
-              });
-          }
-        }
+        ...(
+          lastLoadedTestCase != null ? (() => {
+            const tc = lastLoadedTestCase;
+            return [
+              {
+                title: 'Load state into editor',
+                invoke: () => {
+                  settings.setAstCacheStrategy(tc.src.cache);
+                  settings.setMainArgsOverride(tc.src.mainArgs ?? null);
+                  settings.setPositionRecoveryStrategy(tc.src.posRecovery);
+                  if (tc.src.tmpSuffix && tc.src.tmpSuffix !== settings.getCurrentFileSuffix()) {
+                    settings.setCustomFileSuffix(tc.src.tmpSuffix);
+                  }
+                  settings.setEditorContents(tc.src.text);
+                  saveSelfAsProbe = true;
+                  env.triggerWindowSave();
+                  window.location.reload();
+                }
+              },
+              {
+                title: 'Delete Test (cannot be undone)',
+                invoke: () => {
+                  env.testManager.removeTest(testCategory, tc.name)
+                    .then(onClose)
+                    .catch((err) => {
+                      console.warn('Failed removing test', testCategory, '>', tc.name, err);
+                    });
+                }
+              },
+            ]
+          })() : []
+        ),
       ]
     });
   };
@@ -109,6 +125,7 @@ const displayTestDiffModal = (
       min-width: 32rem;
       min-height: fit-content;
     `,
+    onForceClose: cleanup,
     resizable: true,
     render: (root, { cancelToken }) => {
       if (lastSpinner != null) {
@@ -128,8 +145,8 @@ const displayTestDiffModal = (
         root.appendChild(spinnerWrapper);
       }
 
-      env.testManager.getTestStatus(testCategory, testCase.name)
-        .then((testStatus) => {
+      env.testManager.evaluateTest(testCategory, testCaseName)
+        .then((evaluationResult) => {
           if (isCleanedUp) return;
 
           if (refreshOnDone) {
@@ -142,16 +159,31 @@ const displayTestDiffModal = (
           const titleRow = createTitle();
           root.append(titleRow.element);
 
-          const testReport = typeof testStatus === 'object' ? testStatus.report : '';
+
+          if (evaluationResult === 'failed-fetching') {
+            root.appendChild(document.createTextNode(`Failed running test, please check the server log for more information`));
+            lastLoadedTestCase = null;
+            return;
+          }
+
+          const testStatus = evaluationResult.status;
+          const testCase = evaluationResult.test;
+          lastLoadedTestCase = testCase;
 
           let contentUpdater = (tab: TabType) => {};
 
           const localRefreshListeners: (() => void)[] = [];
           env.onChangeListeners[queryId] = () => localRefreshListeners.forEach(lrl => lrl());
-          const someOutputErr = testReport === 'failed-eval' || typeof testReport == 'object' && testReport.output !== 'pass';
-          const someLocatorErr = testReport === 'failed-eval' || typeof testReport === 'object' && [
-            testReport.sourceLocators, testReport.attrArgLocators, testReport.outputLocators
-          ].some(loc => loc !== 'pass');
+          const someOutputErr = testStatus.overall === 'error';
+          // const someLocatorErr = testReport.overall === 'error' || typeof testReport === 'object' && [
+            //   testReport.sourceLocators, testReport.attrArgLocators, testReport.outputLocators
+            // ].some(loc => loc !== 'pass');
+          const captureStdioSetting = settings.shouldCaptureStdio();
+          localRefreshListeners.push(() => {
+            if (settings.shouldCaptureStdio() !== captureStdioSetting) {
+              queryWindow.refresh();
+            }
+          });
           (() => {
 
             const buttonRow = document.createElement('div');
@@ -166,7 +198,7 @@ const displayTestDiffModal = (
 
             const infos: { name: string, type: TabType, btn?: HTMLButtonElement }[] = [
               { name: `Output Diff ${someOutputErr ? '❌' : '✅'}`, type: 'output' },
-              { name: `Node Diff ${someLocatorErr ? '❌' : '✅'}`, type: 'node' },
+              // { name: `Node Diff ${someLocatorErr ? '❌' : '✅'}`, type: 'node' },
               { name: 'Source Code', type: 'source' },
               { name: 'Settings', type: 'settings' },
             ];
@@ -194,7 +226,7 @@ const displayTestDiffModal = (
             const refreshSourceButtonText = () => {
               const sourceBtn = infos.find(i => i.type === 'source')?.btn;
               if (sourceBtn) {
-                if (testCase.src === settings.getEditorContents()) {
+                if (testCase.src.text === settings.getEditorContents()) {
                   sourceBtn.innerText = `Source Code ✅`;
                 } else {
                   sourceBtn.innerText = `Source Code ⚠️`;
@@ -207,32 +239,25 @@ const displayTestDiffModal = (
 
             // Add save button
             (() => {
-              if (testReport === 'pass') { return; }
+              if (testStatus.overall === 'ok') { return; }
+              const result = evaluationResult.output.result;
+              const mapped = env.testManager.convertTestResponseToTest(testCase, evaluationResult.output);
+              if (mapped === null) {
+                return;
+              }
+              // const mapped = nestedTestResponseToTest(evaluationResult.output);
+              // if (mapped === null) {
+              //   return;
+              // }
+
               const btn = document.createElement('button');
               btn.style.margin = 'auto 0';
               btn.classList.add('tab-button-inactive');
               btn.innerText = `Save 💾`;
               preventDragOnClick(btn);
-              if (testStatus === 'failed-fetching') {
-                btn.disabled = true;
-              } else {
                 btn.onclick = () => {
-                  const patchedAssert = ((): TestCase['assert'] => {
-                    switch (testCase.assert.type) {
-                      case 'identity':
-                      case 'set':
-                        return { ...testCase.assert, lines: testStatus.lines };
-                      case 'smoke':
-                        default:
-                          return testCase.assert;
-                    }
-                  })();
-                  env.testManager.addTest(testCategory, {
-                    ...testCase,
-                    assert: patchedAssert,
-                  }, true);
-                };
-              }
+                  env.testManager.addTest(testCategory, mapped, true)
+                }
               buttonRow.appendChild(btn);
             })();
 
@@ -279,23 +304,64 @@ const displayTestDiffModal = (
                 const leftPane = document.createElement('div');
                 addSplitTitle(leftPane, 'Expected');
                 console.log('tstatus:', testStatus);
-                switch (testCase.assert.type) {
-                  case 'identity':
-                    case 'set': {
-                      leftPane.appendChild(encodeRpcBodyLines(env, testCase.assert.lines, {
-                        lateInteractivityEnabledChecker: () => false,
-                        decorator: (line) => {
-                          if (typeof testReport === 'object' && typeof testReport.output === 'object') {
-                            if (testReport.output.unmatchedValid.includes(line)) {
+                const lhsInlineWindowManager = createInlineWindowManager();
+                switch (testCase.assertType) {
+                  case 'IDENTITY':
+                    case 'SET': {
+                      const doEncodeRpcLines = (target: HTMLElement, lines: RpcBodyLine[], nests: NestedTest[], markerPrefix: number[]) => {
+                        if (!captureStdioSetting) {
+                          lines = rpcLinesToAssertionLines(lines);
+                        }
+                        target.appendChild(encodeRpcBodyLines(env, lines, {
+                          lateInteractivityEnabledChecker: () => false,
+                          excludeStdIoFromPaths: true,
+                          decorator: (line) => {
+                            const key = JSON.stringify([...markerPrefix, ...line]);
+                            const marker = testStatus.expectedMarkers[key];
+                            if (marker === 'error') {
                               return 'unmatched';
                             }
+                            return 'default';
+                          },
+                          disableNodeSelectors: true,
+                          disableInlineExpansionButton: true,
+                          nodeLocatorExpanderHandler: {
+                            getReusableExpansionArea: () => null,
+                            onCreate: ({ path, locatorRoot, expansionArea, locator }) => {
+                              const encodedPath = JSON.stringify(path);
+                              const relatedNests = nests.filter(nest => JSON.stringify(nest.path) === encodedPath);
+                              if (relatedNests.length === 0) {
+                                return;
+                              }
+                              const wrappedLocator = createImmutableLocator(createMutableLocator(locator));
+                              const area = lhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator);
+                              // const env = area.getNestedModalEnv(modal)
+                              relatedNests.forEach((nest, nestIdx) => {
+                                const localWindow = area.add({
+                                  onForceClose: () => { },
+                                  render: (root, ) => {
+                                    root.style.display = 'flex';
+                                    root.style.flexDirection = 'column';
+                                    root.appendChild(createModalTitle({
+                                      renderLeft: (target) => renderProbeModalTitleLeft(null, target, null, () => localWindow.getPos(), null, wrappedLocator, nest.property, {}, 'minimal-nested'),
+                                      onClose: null,
+                                    }).element);
+
+
+                                    doEncodeRpcLines(root, nest.expectedOutput, nest.nestedProperties, [...path, nestIdx]);
+                                  },
+                                })
+                              });
+                            },
+                            onClick: () => {},
                           }
-                          return 'default';
-                        },
-                      }));
+                        }));
+                      };
+
+                      doEncodeRpcLines(leftPane,  testCase.expectedOutput, testCase.nestedProperties, []);
                       break;
                     }
-                    case 'smoke': {
+                    case 'SMOKE': {
                       leftPane.appendChild(document.createTextNode(`
                         Smoke Test -> expected no error
                       `.trim()));
@@ -315,23 +381,77 @@ const displayTestDiffModal = (
                 const rightPane = document.createElement('div');
                 addSplitTitle(rightPane, 'Actual');
 
-                if (testStatus === 'failed-fetching') {
-                  rightPane.appendChild(document.createElement(`
-                    Failed val
-                  `.trim()));
-                } else {
-                  rightPane.appendChild(encodeRpcBodyLines(env, testStatus.lines, {
-                    lateInteractivityEnabledChecker: () => testCase.src === env.getLocalState(),
+                const rhsInlineWindowManager = createInlineWindowManager();
+                const doEncodeRpcLines = (target: HTMLElement, lines: RpcBodyLine[], nests: NestedTestResponse[], markerPrefix: number[]) => {
+                  if (!captureStdioSetting) {
+                    lines = rpcLinesToAssertionLines(lines);
+                  }
+                  target.appendChild(encodeRpcBodyLines(env, lines, {
+                    lateInteractivityEnabledChecker: () => testCase.src.text === env.getLocalState(),
+                    excludeStdIoFromPaths: true,
                     decorator: (line) => {
-                      if (typeof testReport === 'object' && typeof testReport.output === 'object') {
-                        if (testReport.output.invalid.includes(line)) {
-                          return 'error';
-                        }
+                      console.log('in prefix:', markerPrefix, ', line:', line);
+                      const key = JSON.stringify([...markerPrefix, ...line]);
+                      const marker = testStatus.actualMarkers[key];
+                      if (marker === 'error') {
+                        return 'error';
                       }
                       return 'default';
                     },
+                    disableNodeSelectors: true,
+                    disableInlineExpansionButton: true,
+                    nodeLocatorExpanderHandler: {
+                      getReusableExpansionArea: () => null,
+                      onCreate: ({ path, locatorRoot, expansionArea, locator }) => {
+                        const encodedPath = JSON.stringify(path);
+                        const relatedNests = nests.filter(nest => JSON.stringify(nest.path) === encodedPath);
+                        console.log('onCreate', path, '; nests:', nests, 'matches:', relatedNests);
+                        if (relatedNests.length === 0) {
+                          return;
+                        }
+                        const wrappedLocator = createImmutableLocator(createMutableLocator(locator));
+                        const area = rhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator);
+                        // const env = area.getNestedModalEnv(modal)
+                        relatedNests.forEach((nest, nestIdx) => {
+                          const localWindow = area.add({
+                            onForceClose: () => { },
+                            render: (root, ) => {
+                              root.style.display = 'flex';
+                              root.style.flexDirection = 'column';
+                              root.appendChild(createModalTitle({
+                                renderLeft: (target) => renderProbeModalTitleLeft(null, target, null, () => localWindow.getPos(), null, wrappedLocator, nest.property, {}, 'minimal-nested'),
+                                onClose: null,
+                              }).element);
+
+                              if (nest.result !== 'could-not-find-node') {
+                                doEncodeRpcLines(root, nest.result.body, nest.result.nested, [...path, nestIdx]);
+                              }
+                            },
+                          })
+                        });
+                      },
+                      onClick: () => {},
+                    }
                   }));
                 }
+
+                if (evaluationResult.output && evaluationResult.output.result !== 'could-not-find-node') {
+                  console.log('actualOutput:', evaluationResult.output.result);
+                  doEncodeRpcLines(rightPane, evaluationResult.output.result.body, evaluationResult.output.result.nested, []);
+                }
+
+                  // rightPane.appendChild(encodeRpcBodyLines(env, testStatus.lines, {
+                  //   lateInteractivityEnabledChecker: () => testCase.src.text === env.getLocalState(),
+                  //   decorator: (line) => {
+                  //     if (typeof testReport === 'object' && typeof testReport.output === 'object') {
+                  //       if (testReport.output.invalid.includes(line)) {
+                  //         return 'error';
+                  //       }
+                  //     }
+                  //     return 'default';
+                  //   },
+                  //   disableNodeSelectors: true,
+                  // }));
                 splitPane.appendChild(rightPane);
 
                 contentRoot.appendChild(splitPane);
@@ -351,15 +471,16 @@ const displayTestDiffModal = (
                   addP( `You can inspect the difference by opening a probe from 'Source Code' tab. If you are OK with the differences, click 'Save 💾'.`);
                 };
 
-                if (someLocatorErr && someOutputErr) {
-                  addP(`Both property output and AST node reference(s) involved in property execution differ. This could mean that that both property behavior and AST structure has changed since this test was constructed.`);
-                  addTail();
+                // if (someLocatorErr && someOutputErr) {
+                //   addP(`Both property output and AST node reference(s) involved in property execution differ. This could mean that that both property behavior and AST structure has changed since this test was constructed.`);
+                //   addTail();
 
-                }else if (someLocatorErr) {
-                  wrapper.appendChild(document.createTextNode(`Property output is the same, but the AST node reference(s) involved in property execution are different. This could be because the AST structure has changed since this test was constructed. This might not be a problem.`));
-                  addTail();
+                // }else if (someLocatorErr) {
+                //   wrapper.appendChild(document.createTextNode(`Property output is the same, but the AST node reference(s) involved in property execution are different. This could be because the AST structure has changed since this test was constructed. This might not be a problem.`));
+                //   addTail();
 
-                } else if (someOutputErr) {
+                // } else
+                if (someOutputErr) {
                   wrapper.appendChild(document.createTextNode('Output differs, but the AST node reference(s) involved in property execution are identical. This indicates that a property behaves differently to when the test was constructed.'));
                   addTail();
 
@@ -374,7 +495,7 @@ const displayTestDiffModal = (
                 wrapper.style.padding = '0.25rem';
                 contentRoot.appendChild(wrapper);
 
-                const same = testCase.src === env.getLocalState();
+                const same = testCase.src.text === env.getLocalState();
                 const addText = (msg: string) => wrapper.appendChild(document.createTextNode(msg));
                 const addHelp = (type: HelpType) => {
                   const btn = document.createElement('button');
@@ -396,7 +517,54 @@ const displayTestDiffModal = (
                   btn.style.margin = '0 0.125rem';
                   btn.innerText = `Open Probe`;
                   btn.onclick = () => {
-                    displayProbeModal(env, null, locator, attr);
+                    const nestedTestToProbeData = (test: NestedTest): WindowStateDataProbe => {
+                      const inner: NestedWindows = {};
+                      test.nestedProperties.forEach((nest) => {
+                        const key = JSON.stringify(nest.path);
+                        inner[key] = inner[key] ?? [];
+                        inner[key].push({
+                          data: nestedTestToProbeData(nest),
+                          modalPos: { x: 0, y: 0 },
+                        });
+                      });
+                      return {
+                        type: 'probe',
+                        locator: testCase.locator,
+                        property: test.property,
+                        nested: inner,
+                      };
+                    }
+                    // const windows: NestedWindows = {};
+
+                    // testCase.nestedProperties.forEach(nest => {
+                    //   const key = JSON.stringify(nest.path);
+                    //   windows[key] = windows[key] ?? [];
+                    //   windows[key].push({
+                    //     data: nestedTestToProbeData({
+                    //       path: [],
+                    //       expectedOutput: testCase.expectedOutput,
+                    //       nestedProperties: testCase.nestedProperties,
+                    //       property: testCase.property,
+                    //     }),
+                    //     modalPos: { x: 0, y: 0 },
+                    //   });
+                    //   // windows[]
+                    //   // windows[key].push({
+                    //   //   modalPos: null,
+                    //   //   data: {
+                    //   //     type: 'probe',
+                    //   //     locator: testCase.locator,
+                    //   //     nested:
+                    //   //   }
+                    //   // })
+
+                    //   })
+                    displayProbeModal(env, null, createMutableLocator(locator), property, nestedTestToProbeData({
+                      path: [],
+                      expectedOutput: testCase.expectedOutput,
+                      nestedProperties: testCase.nestedProperties,
+                      property: testCase.property,
+                    }).nested);
                   };
                   wrapper.appendChild(btn);
                   wrapper.appendChild(document.createTextNode(`to explore the probe that created this test.`));
@@ -411,7 +579,7 @@ const displayTestDiffModal = (
                   btn.style.margin = '0 0.125rem';
                   btn.innerText = `Load Source`;
                   btn.onclick = () => {
-                    env.setLocalState(testCase.src);
+                    env.setLocalState(testCase.src.text);
                   };
                   wrapper.appendChild(btn);
                   addText(`to replace CodeProber text with the test source.`);
@@ -439,7 +607,7 @@ const displayTestDiffModal = (
                   wrapper.appendChild(line);
                 }
                 addExplanationLine('Node type:', (locator.result.label || locator.result.type).split('.').slice(-1)[0], 'syntax-type');
-                addExplanationLine('Property:', attr.name, 'syntax-attr');
+                addExplanationLine('Property:', property.name, 'syntax-attr');
                 if (locator.result.external) {
                   addExplanationLine('AST Node:', `${locator.result.label || locator.result.type} in external file`);
                 } else {
@@ -451,7 +619,7 @@ const displayTestDiffModal = (
                 }
                 addExplanationLine('Source Code', '⬇️, related line(s) in green.');
 
-                testCase.src.split('\n').forEach((line, lineIdx) => {
+                testCase.src.text.split('\n').forEach((line, lineIdx) => {
 
 
                   const lineContainer = document.createElement('div');
@@ -509,10 +677,10 @@ const displayTestDiffModal = (
                 ul.style.margin = '0 0 0.25rem';
                 const uiElements = new UIElements();
                 [
-                  ['Position Recovery', translateSelectorValToHumanLabel(testCase.posRecovery, uiElements.positionRecoverySelector)],
-                  ['Cache Strategy', translateSelectorValToHumanLabel(testCase.cache, uiElements.astCacheStrategySelector)],
-                  ['File suffix', testCase.tmpSuffix],
-                  ['Main args', testCase.mainArgs ? `[${testCase.mainArgs.join(', ')}]` : 'none'],
+                  ['Position Recovery', translateSelectorValToHumanLabel(testCase.src.posRecovery, uiElements.positionRecoverySelector)],
+                  ['Cache Strategy', translateSelectorValToHumanLabel(testCase.src.cache, uiElements.astCacheStrategySelector)],
+                  ['File suffix', testCase.src.tmpSuffix],
+                  ['Main args', testCase.src.mainArgs ? `[${testCase.src.mainArgs.join(', ')}]` : 'none'],
                 ].forEach(([name, val]) => {
                   const li = document.createElement('li');
                   li.innerText = `${name} : ${val}`;
@@ -555,7 +723,7 @@ const displayTestDiffModal = (
           console.log('TestDiffModal RPC catch', err);
           root.innerHTML = '';
           root.innerText = 'Failed refreshing test diff..';
-          console.warn('Failed refreshing test w/ args:', JSON.stringify({ locator, attr }, null, 2));
+          console.warn('Failed refreshing test w/ args:', JSON.stringify({ locator, property }, null, 2));
           setTimeout(() => { // TODO remove this again, once the title bar is added so we can close it
             queryWindow.remove();
             cleanup();
@@ -576,7 +744,8 @@ const displayTestDiffModal = (
         data: {
           type: 'probe',
           locator,
-          attr,
+          property,
+          nested: {},
         },
       });
     }

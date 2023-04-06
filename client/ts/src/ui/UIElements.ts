@@ -32,6 +32,7 @@ class UIElements {
   get locationStyleHelpButton() { return document.getElementById('control-location-style-help') as HTMLButtonElement; }
 
   get generalHelpButton() { return document.getElementById('display-help') as HTMLButtonElement; }
+  get saveAsUrlButton() { return document.getElementById('saveAsUrl') as HTMLButtonElement; }
   get darkModeCheckbox() { return document.getElementById('control-dark-mode') as HTMLInputElement; }
   get displayStatisticsButton() { return document.getElementById('display-statistics') as HTMLButtonElement; }
   get displayWorkerStatusButton() { return document.getElementById('display-worker-status') as HTMLButtonElement; }

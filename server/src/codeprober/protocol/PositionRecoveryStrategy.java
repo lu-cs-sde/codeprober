@@ -42,11 +42,11 @@ public enum PositionRecoveryStrategy {
 	 * Zigzag up and down until position information is found. Assume going left is
 	 * the same as following 'getParent', and going right is 'child(0)' in this
 	 * "AST":
-	 * 
+	 *
 	 * <pre>
 	 * 	Root--Foo--Bar--Baz
 	 * </pre>
-	 * 
+	 *
 	 * If we use {@link #ALTERNATE_PARENT_CHILD} on 'Bar', then we will search the
 	 * following in order:
 	 * <ol>
@@ -64,5 +64,9 @@ public enum PositionRecoveryStrategy {
 			System.out.println("Got invalid position recovery argument: " + paramValue);
 			return FAIL;
 		}
+	}
+
+	public static PositionRecoveryStrategy parseFromJson(String string) {
+		return fallbackParse(string);
 	}
 }

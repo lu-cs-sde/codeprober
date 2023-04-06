@@ -155,6 +155,7 @@ const displayMainArgsOverrideModal = (
   onChange: () => void,
 ) => {
   const windowInstance = showWindow({
+    onForceClose: () => close(),
     render: (root) => {
       while (root.firstChild) {
         root.firstChild.remove();

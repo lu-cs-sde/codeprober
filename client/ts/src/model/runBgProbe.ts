@@ -1,9 +1,10 @@
-import evaluateProbe from '../rpc/evaluateProbe';
+import { Property, Diagnostic, EvaluatePropertyReq, EvaluatePropertyRes, NodeLocator } from '../protocol';
+import settings from '../settings';
 import ModalEnv from './ModalEnv';
 
-const runInvisibleProbe = (env: ModalEnv, locator: NodeLocator, attr: AstAttrWithValue) => {
+const runInvisibleProbe = (env: ModalEnv, locator: NodeLocator, property: Property) => {
   const id = `invisible-probe-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-  const localErrors: ProbeMarker[] = [];
+  const localErrors: Diagnostic[] = [];
   env.probeMarkers[id] = localErrors;
 
   let state: 'loading' | 'idle' = 'idle';
@@ -17,16 +18,22 @@ const runInvisibleProbe = (env: ModalEnv, locator: NodeLocator, attr: AstAttrWit
   }
   const performRpc = () => {
     state = 'loading';
-    evaluateProbe(env, env.wrapTextRpc({ query: { attr, locator } }))
-      .then((res) => {
-        if (res.job !== undefined) {
+    env.performTypedRpc<EvaluatePropertyReq, EvaluatePropertyRes>({
+      type: 'EvaluateProperty',
+      property,
+      locator,
+      src: env.createParsingRequestData(),
+      captureStdout: settings.shouldCaptureStdio(),
+    })
+      .then((rawResp) => {
+        if (rawResp.response.type === 'job') {
           throw new Error(`Got concurrent response for non-concurrent request`);
         }
+        const res = rawResp.response.value;
+
         const prevLen = localErrors.length;
         localErrors.length = 0;
-        res.errors.forEach(({severity, start: errStart, end: errEnd, msg }) => {
-          localErrors.push({ severity, errStart, errEnd, msg });
-        })
+        localErrors.push(...(res.errors ?? []));
         if (prevLen !== 0 || localErrors.length !== 0) {
           env.updateMarkers();
         }

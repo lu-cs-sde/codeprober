@@ -1,29 +1,82 @@
-import evaluateProbe from '../../rpc/evaluateProbe';
-import getTestSuite from '../../rpc/getTestSuite';
-import listTestSuites from '../../rpc/listTestSuites';
-import putTestSuite from '../../rpc/putTestSuite';
+import { AsyncRpcUpdate, EvaluatePropertyReq, EvaluatePropertyRes, GetTestSuiteReq, GetTestSuiteRes, ListTestSuitesReq, ListTestSuitesRes, NestedTest, NodeLocator, ParsingRequestData, Property, PutTestSuiteReq, PutTestSuiteRes, RpcBodyLine, SynchronousEvaluationResult, TestCase, WorkerTaskDone } from '../../protocol';
+import settings from '../../settings';
+import findLocatorWithNestingPath from '../findLocatorWithNestingPath';
 import ModalEnv from '../ModalEnv';
-import compareTestResult, { TestComparisonReport } from './compareTestResult';
-import { rpcLinesToAssertionLines } from './rpcBodyToAssertionLine';
-import TestCase from './TestCase';
+import compareTestResult from './compareTestResult';
 
-
-type ChangeType = 'added-test' | 'removed-test' | 'test-status-update';
+type ChangeType = 'added-test' | 'updated-test' | 'removed-test' | 'test-status-update';
 type ChangeListener = (type: ChangeType) => void;
 
+// interface TestStatusSide {
+//   line: RpcBodyLine;
+//   statuse: ('ok' | 'different');
+//   nested: NestedTestStatus[];
+// }
+
+// interface NestedTestStatus {
+//   path: number[];
+//   expected: TestStatusSide[];
+//   actual: TestStatusSide[];
+// }
+// interface TestStatus extends Omit<NestedTestStatus, 'path'> {
+//   overall: 'ok' | 'warn' | 'error';
+// };
+
+type TestProblemMarker =
+      'error'
+      // 'warn'
+    // | 'error'
+    ;
+
+interface TestMarkers {
+  [id: string]: TestProblemMarker;
+}
+// interface LineMarkers {
+//   [id: number]: TestProblemMarker,
+// };
+
+// interface NestedMarkers {
+//   [id: string]: TestStatus[],
+// };
+
 interface TestStatus {
-  report: TestComparisonReport;
-  lines: RpcBodyLine[];
-};
+  overall: 'ok' | 'error';
+  expectedMarkers: TestMarkers;
+  actualMarkers: TestMarkers;
+}
+
+interface NestedTestRequest {
+  path: number[];
+  property: Property;
+  nested: NestedTestRequest[];
+}
+type NestedTestResponse = {
+  path: number[];
+  property: Property;
+  result: 'could-not-find-node' | {
+    body: RpcBodyLine[];
+    nested: NestedTestResponse[];
+  };
+}
+
+interface TestEvaluation {
+  test: TestCase;
+  output: NestedTestResponse;
+  status: TestStatus;
+
+}
+
 interface TestManager {
   listTestSuiteCategories: () => Promise<string[] | 'failed-listing'>,
   getTestSuite: (category: string) => Promise<TestCase[] | 'failed-fetching'>;
-  getTestStatus: (category: string, name: string) => Promise<TestStatus | 'failed-fetching'>;
+  evaluateTest: (category: string, name: string) => Promise<TestEvaluation | 'failed-fetching'>;
   addTest: (category: string, test: TestCase, overwriteIfExisting: boolean) => Promise<'ok' | 'already-exists-with-that-name' | 'failed-fetching'>,
   removeTest: (category: string, name: string) => Promise<'ok' | 'no-such-test' | 'failed-fetching'>,
   addListener: (uid: string, callback: ChangeListener) => void,
   removeListener: (uid: string) => void,
   flushTestCaseData: () => void;
+  fullyEvaluate: (src: ParsingRequestData, property: Property, locator: NodeLocator, nested: NestedTestRequest[], debugLabel: string) => Promise<NestedTestResponse>;
+  convertTestResponseToTest: (tcase: TestCase, resopnse: NestedTestResponse) => TestCase | null;
 };
 
 const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['createJobId']): TestManager =>{
@@ -32,18 +85,24 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
   const saveCategoryState: (category: string, cases: TestCase[]) => Promise<boolean>  = async (category, cases) => {
     console.log('save', category, '-->', cases);
     console.log('expected bytelen:', JSON.stringify(cases).length);
-    // const newState = [...(repo[category] || {}),
+    const prev = suiteListRepo[category];
     suiteListRepo[category] = cases;
-    const resp = await putTestSuite(getEnv(), {
-      query: {
-        type: "meta:putTestSuite",
+    let resp;
+    try {
+      resp = await getEnv().performTypedRpc<PutTestSuiteReq, PutTestSuiteRes>({
+        type: "Test:PutTestSuite",
         suite: `${category}.json`,
-        contents: JSON.stringify(cases),
-      },
-      type: 'testMeta',
-    });
-    if (resp.ok) return true;
-    console.warn(`Failed saving cases for ${category}`);
+        contents: {
+          v: 1,
+          cases
+        },
+      });
+    } catch (e) {
+      suiteListRepo[category] = prev;
+      throw e;
+    }
+    if (!resp.err) return true;
+    console.warn(`Failed saving cases for ${category}, error:`, resp.err);
     return false;
   };
 
@@ -58,17 +117,21 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
     // console.log('todo add', category, '/', test.name);
 
     const existing = await doGetTestSuite(category);
+    let alreadyExisted = false;
     if (existing == 'failed-fetching') {
       // Doesn't exist yet, this is OK
-    } else if (existing.some(tc => tc.name == test.name) && !overwriteIfExisting) {
-      return 'already-exists-with-that-name';
+    } else if (existing.some(tc => tc.name == test.name) ) {
+      if (!overwriteIfExisting) {
+        return 'already-exists-with-that-name';
+      }
+      alreadyExisted = true;
     }
     await saveCategoryState(category, [...(suiteListRepo[category] || []).filter(tc => tc.name !== test.name), test]);
     ++categoryInvalidationCount;
     if (overwriteIfExisting && testStatusRepo[category]) {
       delete testStatusRepo[category][test.name];
     }
-    notifyListeners('added-test');
+    notifyListeners(alreadyExisted ? 'updated-test' : 'added-test');
     return 'ok';
   };
   const removeTest: TestManager['removeTest'] = async (category, name) => {
@@ -91,15 +154,15 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
     return () => {
       if (!categoryLister || categoryInvalidationCount !== categoryListingVersion) {
         categoryListingVersion = categoryInvalidationCount;
-        categoryLister = listTestSuites(getEnv(), {
-          query: { type: 'meta:listTestSuites', },
-          type: 'testMeta',
+        categoryLister = getEnv().performTypedRpc<ListTestSuitesReq, ListTestSuitesRes>({
+          type: 'Test:ListTestSuites',
         })
-          .then(({ suites }) => {
-            if (!suites) {
+          .then(({ result }) => {
+            if (result.type == 'err') {
+              console.warn('Failed listing test suites. Error code:', result.value);
               return 'failed-listing';
             }
-            return (suites as string[])
+            return result.value
               .map((suite) => {
                 if (!suite.endsWith('.json')) {
                   console.warn(`Unexpected suite file name ${suite}`);
@@ -116,31 +179,21 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
 
   const doGetTestSuite: TestManager['getTestSuite'] = async (id) => {
     if (suiteListRepo[id]) { return suiteListRepo[id]; }
-    const { contents } = await getTestSuite(getEnv(), {
-      query: {
-        type: 'meta:getTestSuite',
-        suite: `${id}.json`,
-      },
-      type: 'testMeta',
+    const { result } = await getEnv().performTypedRpc<GetTestSuiteReq, GetTestSuiteRes>({
+      type: 'Test:GetTestSuite',
+      suite: `${id}.json`,
     });
-    if (contents) {
-      try {
-        const ret = JSON.parse(contents.trim());
-        suiteListRepo[id] = ret;
-        return ret;
-      } catch (e) {
-        console.warn(e);
-        console.warn(`Suite contents for ${id} is not a valid json string`);
-        console.warn('-->', contents);
-        return 'failed-fetching';
-      }
+    if (result.type === 'contents') {
+      const cases = result.value.cases;
+      suiteListRepo[id] = cases;
+      return cases;
     }
-    console.warn(`Failed to get test suite '${id}'`);
+    console.warn(`Failed to get test suite '${id}'. Error code: ${result.value}`);
     return 'failed-fetching';
   };
 
-  const testStatusRepo: { [category: string]: { [name: string]: Promise<TestStatus | 'failed-fetching'> | undefined } } = {};
-  const getTestStatus: TestManager['getTestStatus'] = (category, name) => {
+  const testStatusRepo: { [category: string]: { [name: string]: Promise<TestEvaluation | 'failed-fetching'> | undefined } } = {};
+  const evaluateTest: TestManager['evaluateTest'] = (category, name) => {
     const categoryStatus = testStatusRepo[category] || {};
     testStatusRepo[category] = categoryStatus;
 
@@ -148,8 +201,7 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
     if (!!existing) {
       return existing;
     }
-
-    const fresh: Promise<TestStatus | 'failed-fetching'> = (async () => {
+    const fresh = (async (): Promise<TestEvaluation | 'failed-fetching'> => {
       const suite = await doGetTestSuite(category);
       if (suite === 'failed-fetching') {
         return 'failed-fetching';
@@ -160,60 +212,49 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
         return 'failed-fetching';
       }
 
-      const res = await new Promise<any>(async (resolve, reject) => {
-        const handleUpdate = (data: any) => {
-          if (data.status === 'done') {
-            resolve(data.result);
-          }
-        };
-
-        const jobId = createJobId(handleUpdate);
-        try {
-          const res = await evaluateProbe(getEnv(), {
-            type: 'query',
-            posRecovery: tcase.posRecovery,
-            cache: tcase.cache,
-            text: tcase.src,
-            stdout: false,
-            query: {
-              attr: tcase.attribute,
-              locator: tcase.locator.robust,
-            },
-            mainArgs: tcase.mainArgs,
-            tmpSuffix: tcase.tmpSuffix,
-            job: jobId,
-            jobLabel: `Test ${category} > '${tcase.name}'`,
-          })
-          if (!res.job) {
-            // Non-concurrent server, handle request synchronously
-            resolve(res);
-          }
-        } catch (e) {
-          reject(e);
-        }
+      const nestedTestToRequest = (test: NestedTest): NestedTestRequest => ({
+        path: test.path,
+        property: test.property,
+        nested: test.nestedProperties.map(nestedTestToRequest),
       });
-      let report: TestComparisonReport;
-      if (!res.locator) {
-        report = 'failed-eval';
-      } else {
-        report = compareTestResult(tcase, { locator: res.locator, lines: rpcLinesToAssertionLines(res.body) })
+
+      const res = await fullyEvaluate(
+        tcase.src,
+        tcase.property,
+        tcase.locator,
+        tcase.nestedProperties.map(nestedTestToRequest),
+        `${tcase.name}`
+      );
+      if (tcase.assertType === 'SMOKE') {
+        return {
+          test: tcase,
+          output: res,
+          status: {
+            overall: 'ok',
+            expectedMarkers: {},
+            actualMarkers: {},
+          },
+        };
       }
-      notifyListeners('test-status-update');
       return {
-        report,
-        lines: res.body,
+        test: tcase,
+        output: res,
+        status: compareTestResult(
+          tcase.assertType,
+          testToNestedTestResponse({
+            expectedOutput: tcase.expectedOutput,
+            nestedProperties: tcase.nestedProperties,
+            path: [],
+            property: tcase.property,
+          }),
+          res
+        ),
       }
-      // await new Promise(res => setTimeout(res, 1000));
-      // return 'pass';
     })();
     categoryStatus[name] = fresh;
+    notifyListeners('test-status-update');
     return fresh;
   };
-
-  // env.onChangeListeners[`test-manager-${(Math.random() * Number.MAX_SAFE_INTEGER)|0}`] = () => {
-  //   Object.keys(testStatusRepo).forEach(id => delete testStatusRepo[id]);
-  //   notifyListeners('test-status-update');
-  // };
 
   const addListener: TestManager['addListener'] = (uid, callback) => {
     listeners[uid] = callback;
@@ -222,21 +263,153 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
     delete listeners[uid];
   };
 
+  const fullyEvaluate: TestManager['fullyEvaluate'] = async (src, property, locator, nested, debugLabel) => {
+    // let ret: NestedTestResponse = {
+    //   path: '',
+    //   property,
+    //   body: [],
+    //   nested: [],
+    // };
+
+    const rootRes = await new Promise<SynchronousEvaluationResult>(async (resolve, reject) => {
+      const handleUpdate = (data: AsyncRpcUpdate) => {
+        switch (data.value.type) {
+          case 'workerTaskDone': {
+            const res = data.value.value;
+            if (res.type === 'normal') {
+              const cast = res.value as EvaluatePropertyRes;
+              if (cast.response.type == 'job') {
+                throw new Error(`Unexpected 'job' result in async test update`);
+              }
+              resolve(cast.response.value);
+            } else {
+              reject(res.value);
+            }
+          }
+        }
+        // if (data.status === 'done') {
+        //   resolve(data.result.response.value);
+        // }
+      };
+
+      const jobId = createJobId(handleUpdate);
+      try {
+        const env = getEnv();
+        const res = await env.performTypedRpc<EvaluatePropertyReq, EvaluatePropertyRes>({
+          type: 'EvaluateProperty',
+          property,
+          locator,
+          src,
+          captureStdout: true, // settings.shouldCaptureStdio(),
+          job: jobId,
+          jobLabel: `Test > ${debugLabel}`,
+        });
+        if (res.response.type === 'sync') {
+          // Non-concurrent server, handle request synchronously
+          resolve(res.response.value);
+        }
+      } catch (e) {
+        reject(e);
+      }
+    });
+
+    const nestedTestResponses = await Promise.all(nested.map(async (nest): Promise<NestedTestResponse> => {
+      const nestPathParts = nest.path;
+      const nestLocator = findLocatorWithNestingPath(nestPathParts, rootRes.body);
+      if (!nestLocator) {
+        return {
+          path: nest.path,
+          property: nest.property,
+          result: 'could-not-find-node',
+        }
+      }
+      const nestRes = await fullyEvaluate(src, nest.property, nestLocator, nest.nested, debugLabel);
+      return {
+        ...nestRes,
+        path: nest.path,
+      };
+    }));
+
+    return {
+      path: [],
+      property,
+      result: {
+        body: rootRes.body,
+        nested: nestedTestResponses,
+      },
+    };
+  };
+
+  const convertTestResponseToTest: TestManager['convertTestResponseToTest'] = (tcase, response) => {
+    if (response.result === 'could-not-find-node') {
+      return null;
+    }
+    const convertResToTest = (res: NestedTestResponse): NestedTest => {
+      if (res.result === 'could-not-find-node') {
+        return { path: res.path, property: res.property, expectedOutput: [{
+          type: 'plain', value: 'Could not find',
+        }], nestedProperties: []}
+      }
+      return {
+        path: res.path,
+        property: res.property,
+        expectedOutput: res.result.body,
+        nestedProperties: res.result.nested.map(convertResToTest),
+      };
+    };
+    return {
+      src: tcase.src,
+      assertType: tcase.assertType,
+      expectedOutput: response.result.body,
+      nestedProperties: response.result.nested.map(convertResToTest),
+      property: tcase.property,
+      locator: tcase.locator,
+      name: tcase.name,
+    };
+  }
+
   return {
     addTest,
     removeTest,
     listTestSuiteCategories,
     getTestSuite: doGetTestSuite,
-    getTestStatus,
+    evaluateTest,
     addListener,
     removeListener,
     flushTestCaseData: () => {
       Object.keys(testStatusRepo).forEach(id => delete testStatusRepo[id]);
       notifyListeners('test-status-update');
     },
-    // onSourceTextChange,
+    fullyEvaluate,
+    convertTestResponseToTest,
   };
 };
 
-export { createTestManager, ChangeType };
+const testToNestedTestResponse = (src: NestedTest): NestedTestResponse => ({
+  path: src.path,
+  property: src.property,
+  result: {
+    body: src.expectedOutput,
+    nested: src.nestedProperties.map(testToNestedTestResponse),
+  },
+});
+const nestedTestResponseToTest = (src: NestedTestResponse): NestedTest | null => {
+  if (src.result === 'could-not-find-node') {
+    return null;
+  }
+  const nestedProperties: NestedTest[] = [];
+  src.result.nested.forEach(nest => {
+    const res = nestedTestResponseToTest(nest);
+    if (res) {
+      nestedProperties.push(res);
+    }
+  });
+  return {
+    path: src.path,
+    property: src.property,
+    expectedOutput: src.result.body,
+    nestedProperties,
+  }
+}
+export { createTestManager, ChangeType, NestedTestRequest, NestedTestResponse, TestStatus, TestMarkers, TestProblemMarker, TestEvaluation, nestedTestResponseToTest };
 export default TestManager

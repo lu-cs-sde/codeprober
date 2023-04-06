@@ -1,16 +1,14 @@
 package codeprober;
 
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
 import codeprober.TestClient.TestResult;
-import codeprober.protocol.TestProtocol;
+import codeprober.metaprogramming.StdIoInterceptor;
+import codeprober.protocol.data.TestCase;
+import codeprober.protocol.data.TestSuite;
 
 public class RunAllTests {
 
@@ -19,25 +17,26 @@ public class RunAllTests {
 	}
 
 	public static MergedResult run(TestClient client, boolean runConcurrently) {
-		final JSONArray suites = client.getTestSuites();
+		final List<String> suites = client.getTestSuites();
 		if (suites == null) {
 			System.err.println("Error when listing test suites - is '-Dcpr.testDir' set?");
 			System.exit(1);
 		}
 
 		final AtomicBoolean anyErr = new AtomicBoolean();
-		final ExecutorService executor = runConcurrently ? Executors.newFixedThreadPool(4) : null;
-		for (int i = 0; i < suites.length(); ++i) {
-			final String suite = suites.getString(i);
-			final JSONObject request = new JSONObject() //
-					.put("type", TestProtocol.GetTestSuite.type);
-			TestProtocol.GetTestSuite.suite.put(request, suite);
+//		final ExecutorService executor = runConcurrently ? Executors.newFixedThreadPool(4) : null;
+		for (int i = 0; i < suites.size(); ++i) {
+			final String suiteName = suites.get(i);
+//			final JSONObject request = new JSONObject() //
+//					.put("type", TestProtocol.GetTestSuite.type);
+//			TestProtocol.GetTestSuite.suite.put(request, suite);
 
-			System.out.println(": " + suite);
+			CodeProber.flog("Start suite " + suiteName +", to " + System.out +" on thread " + Thread.currentThread() +" ;; intercept count: " + StdIoInterceptor.installCount.get());
+			System.out.println(": " + suiteName);
 			// BEGIN: Thing that will break when JSON format is updated
-			final JSONArray cases = client.getTestSuiteContents(suite);
+			final TestSuite suite = client.getTestSuiteContents(suiteName);
 
-			final CountDownLatch cdl = executor != null ? new CountDownLatch(cases.length()) : null;
+			final CountDownLatch cdl = runConcurrently ? new CountDownLatch(suite.cases.size()) : null;
 
 			final BiConsumer<String, TestResult> handleResult = (name, result) -> {
 				if (result.pass) {
@@ -50,23 +49,23 @@ public class RunAllTests {
 					cdl.countDown();
 				}
 			};
-			for (int j = 0; j < cases.length(); ++j) {
-				final JSONObject tcase = cases.getJSONObject(j);
+			for (int j = 0; j < suite.cases.size(); ++j) {
+				final TestCase tcase = suite.cases.get(j);
 
-				final String name = tcase.getString("name");
-				if (executor != null) {
+//				final String name = tcase.getString("name");
+				if (runConcurrently) {
 					try {
-						CodeProber.flog("\n\nstart rAT " + name);
+						CodeProber.flog("\n\nstart rAT " + tcase.name);
 						client.runTestAsync(tcase, tr -> {
 							try {
-								handleResult.accept(name, tr);
+								handleResult.accept(tcase.name, tr);
 							} catch (Throwable t) {
 								System.out.println("Error while handling callback");
 								t.printStackTrace();
 							}
 						});
 					} catch (Throwable t) {
-						System.out.println("Exception thrown while running test " + name);
+						System.out.println("Exception thrown while running test " + tcase.name);
 						t.printStackTrace();
 						System.exit(1);
 //							anyErr.set(true);
@@ -74,10 +73,8 @@ public class RunAllTests {
 //							cdl.countDown();
 //							cdl.notifyAll();
 					}
-					executor.submit(() -> {
-					});
 				} else {
-					handleResult.accept(name, client.runTest(tcase));
+					handleResult.accept(tcase.name, client.runTest(tcase));
 				}
 			}
 			if (cdl != null) {
@@ -91,9 +88,9 @@ public class RunAllTests {
 			// END: Thing that will break when JSON format is updated
 		}
 
-		if (executor != null) {
-			executor.shutdown();
-		}
+//		if (executor != null) {
+//			executor.shutdown();
+//		}
 		return anyErr.get() ? MergedResult.SOME_FAIL : MergedResult.ALL_PASS;
 	}
 }

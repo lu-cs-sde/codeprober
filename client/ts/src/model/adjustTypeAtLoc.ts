@@ -1,6 +1,7 @@
+import { TALStep } from '../protocol';
+import startEndToSpan from '../ui/startEndToSpan';
 
-
-const adjustTypeAtLoc = (adjuster: LocationAdjuster, tal: TypeAtLoc) => {
+const adjustTypeAtLoc = (adjuster: LocationAdjuster, tal: TALStep) => {
   if (tal.external) {
     // Refuse to adjust things in external files.
     // CodeProber is only expected to get change events for our own "internal" file.
@@ -17,8 +18,6 @@ const adjustTypeAtLoc = (adjuster: LocationAdjuster, tal: TypeAtLoc) => {
       // Instead of accepting change to zero-width span, take same line/col diff as before
       le = ls + (span.lineEnd - span.lineStart);
       ce = cs + (span.colEnd - span.colStart);
-      // console.log('Ignoring adjustmpent from', span, 'to', { lineStart: ls, colStart: cs, lineEnd: le, colEnd: ce }, 'because it looks very improbable');
-      // return;
     }
   }
   tal.start = (ls << 12) + Math.max(0, cs);

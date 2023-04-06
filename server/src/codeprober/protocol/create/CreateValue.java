@@ -7,9 +7,10 @@ import java.util.Collection;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
-import codeprober.protocol.ParameterType;
-import codeprober.protocol.ParameterTypeDetail;
-import codeprober.protocol.ParameterValue;
+import codeprober.locator.CreateLocator;
+import codeprober.protocol.data.NullableNodeLocator;
+import codeprober.protocol.data.PropertyArg;
+import codeprober.protocol.data.PropertyArgCollection;
 
 public abstract class CreateValue {
 
@@ -24,12 +25,13 @@ public abstract class CreateValue {
 		return null;
 	}
 
-	public static ParameterValue fromInstance(AstInfo info, Class<?> valueClazz, Type valueType, Object value) {
-		final ParameterType type = CreateType.fromClass(valueClazz, info.baseAstClazz);
-		if (type == null) {
+	public static PropertyArg fromInstance(AstInfo info, Class<?> valueClazz, Type valueType, Object value) {
+		final PropertyArg arg = CreateType.fromClass(valueClazz, info.baseAstClazz);
+		if (arg == null) {
 			return null;
 		}
-		if (type.paramType == Collection.class) {
+		switch (arg.type) {
+		case collection: {
 			if (!(valueType instanceof ParameterizedType)) {
 				System.err.println("Expected Collection argument to be parameterized, got " + valueType);
 				return null;
@@ -41,8 +43,7 @@ public abstract class CreateValue {
 				return null;
 			}
 			final Type childType = pt.getActualTypeArguments()[0];
-
-			final ArrayList<ParameterValue> remapped = new ArrayList<>();
+			final ArrayList<PropertyArg> remapped = new ArrayList<>();
 			for (Object child : ((Collection<?>) value)) {
 				// No no no
 				// Just pass the Type from outside instead
@@ -53,18 +54,26 @@ public abstract class CreateValue {
 				if (childClazz == null) {
 					return null;
 				}
-				final ParameterValue childVal = CreateValue.fromInstance(info, childClazz, childType, child);
+				final PropertyArg childVal = CreateValue.fromInstance(info, childClazz, childType, child);
 				if (childVal == null) {
 					return null;
 				}
 				remapped.add(childVal);
 			}
-			return new ParameterValue(type.paramType, type.detail, info, remapped);
+			return PropertyArg.fromCollection(new PropertyArgCollection(arg.asCollection().type, remapped));
 		}
-		if (type.detail == ParameterTypeDetail.NORMAL) {
-			return new ParameterValue(type.paramType, type.detail, info, value);
+		case nodeLocator:
+			return PropertyArg.fromNodeLocator(new NullableNodeLocator(valueClazz.getName(), CreateLocator.fromNode(info, new AstNode(value))));
+		case bool:
+			return PropertyArg.fromBool((boolean) value);
+		case integer:
+			return PropertyArg.fromInteger((int) value);
+		case outputstream:
+			return PropertyArg.fromOutputstream(value.getClass().getName());
+		case string:
+			return PropertyArg.fromString((String) value);
+		default:
+			throw new RuntimeException("Unknown arg type " + arg.type);
 		}
-
-		return new ParameterValue(type.paramType, type.detail, info, new AstNode(value));
 	}
 }

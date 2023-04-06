@@ -24,6 +24,10 @@ import java.util.regex.Pattern;
 import org.json.JSONObject;
 
 import codeprober.protocol.ClientRequest;
+import codeprober.protocol.data.AsyncRpcUpdate;
+import codeprober.protocol.data.InitInfo;
+import codeprober.protocol.data.Refresh;
+import codeprober.protocol.data.protocolgen_spec_InitInfo_1;
 import codeprober.util.ParsedArgs;
 import codeprober.util.VersionInfo;
 
@@ -112,34 +116,38 @@ public class WebSocketServer {
 		}
 	}
 
-	static JSONObject getInitMsg(ParsedArgs args) {
-		final JSONObject initMsg = new JSONObject();
-		initMsg.put("type", "init");
-
-		final JSONObject versionMsg = new JSONObject();
+	static InitInfo getInitMsg(ParsedArgs args) {
+//		final JSONObject initMsg = new JSONObject();
+//		initMsg.put("type", "init");
+//
+//		final JSONObject versionMsg = new JSONObject();
 		final VersionInfo vinfo = VersionInfo.getInstance();
-		versionMsg.put("hash", vinfo.revision);
-		versionMsg.put("clean", vinfo.clean);
+//		versionMsg.put("hash", vinfo.revision);
+//		versionMsg.put("clean", vinfo.clean);
 		final Integer buildTimeSeconds = vinfo.buildTimeSeconds;
-		if (buildTimeSeconds != null) {
-			versionMsg.put("buildTimeSeconds", buildTimeSeconds.intValue());
-		}
-		initMsg.put("version", versionMsg);
-
+//		if (buildTimeSeconds != null) {
+//			versionMsg.put("buildTimeSeconds", buildTimeSeconds.intValue());
+//		}
+//		initMsg.put("version", versionMsg);
+//
 		int bufferTime = CodespacesCompat.getChangeBufferTime();
-		if (bufferTime > 0) {
-			initMsg.put("changeBufferTime", bufferTime);
-		}
+//		if (bufferTime > 0) {
+//			initMsg.put("changeBufferTime", bufferTime);
+//		}
+//
+//		if (args.workerProcessCount != null) {
+//			initMsg.put("workerProcessCount", args.workerProcessCount.intValue());
+//		}
 
-		if (args.workerProcessCount != null) {
-			initMsg.put("workerProcessCount", args.workerProcessCount.intValue());
-		}
-
-		return initMsg;
+		return new InitInfo( //
+				new protocolgen_spec_InitInfo_1(vinfo.revision, vinfo.clean, buildTimeSeconds), //
+				bufferTime > 0 ? bufferTime : null, //
+				args.workerProcessCount);
 	}
 
 	private static void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
-			Function<ClientRequest, JSONObject> onQuery, AtomicBoolean connectionIsAlive) throws IOException, NoSuchAlgorithmException {
+			Function<ClientRequest, JSONObject> onQuery, AtomicBoolean connectionIsAlive)
+			throws IOException, NoSuchAlgorithmException {
 		InputStream in = socket.getInputStream();
 		OutputStream out = socket.getOutputStream();
 		@SuppressWarnings("resource")
@@ -160,9 +168,10 @@ public class WebSocketServer {
 				out.flush();
 
 				final Runnable onJarChange = () -> {
+					final Refresh refreshMsg = new Refresh();
 					try {
 						// No synchronized() needed, it is done in the write method
-						writeWsMessage(out, "{\"type\":\"refresh\"}");
+						writeWsMessage(out, refreshMsg.toJSON().toString());
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
@@ -172,11 +181,11 @@ public class WebSocketServer {
 				msgPusher.addJarChangeListener(onJarChange);
 				Runnable cleanup = () -> msgPusher.removeJarChangeListener(onJarChange);
 
-				writeWsMessage(out, getInitMsg(args).toString());
+				writeWsMessage(out, getInitMsg(args).toJSON().toString());
 
-				final Consumer<JSONObject> asyncMessageWriter = asyncMsg -> {
+				final Consumer<AsyncRpcUpdate> asyncMessageWriter = asyncMsg -> {
 					try {
-						writeWsMessage(out, asyncMsg.toString());
+						writeWsMessage(out, asyncMsg.toJSON().toString());
 					} catch (IOException e) {
 						System.err.println("Failed sending async message");
 						e.printStackTrace();
@@ -235,7 +244,9 @@ public class WebSocketServer {
 								// Only a single frame
 								final JSONObject jobj = new JSONObject(new String(reqData, StandardCharsets.UTF_8));
 
-								writeWsMessage(out, onQuery.apply(new ClientRequest(jobj, asyncMessageWriter, connectionIsAlive)).toString());
+								writeWsMessage(out,
+										onQuery.apply(new ClientRequest(jobj, asyncMessageWriter, connectionIsAlive))
+												.toString());
 								break readFrame;
 							} else {
 								if (frameBuffer == null) {
@@ -245,7 +256,10 @@ public class WebSocketServer {
 								if (isFin) {
 									final JSONObject jobj = new JSONObject(
 											new String(frameBuffer.toByteArray(), StandardCharsets.UTF_8));
-									writeWsMessage(out, onQuery.apply(new ClientRequest(jobj, asyncMessageWriter, connectionIsAlive)).toString());
+									writeWsMessage(out,
+											onQuery.apply(
+													new ClientRequest(jobj, asyncMessageWriter, connectionIsAlive))
+													.toString());
 									break readFrame;
 								} else {
 									first = in.read();

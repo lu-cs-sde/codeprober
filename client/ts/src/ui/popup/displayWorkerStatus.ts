@@ -1,7 +1,5 @@
 import ModalEnv, { JobId } from '../../model/ModalEnv';
-import StatisticsCollectorImpl from "../../model/StatisticsCollectorImpl";
-import subscribeToWorkerStatus from '../../rpc/subscribeToWorkerStatus';
-import unsubscribeFromWorkerStatus from '../../rpc/unsubscribeFromWorkerStatus';
+import { SubscribeToWorkerStatusReq, SubscribeToWorkerStatusRes, UnsubscribeFromWorkerStatusReq, UnsubscribeFromWorkerStatusRes } from '../../protocol';
 import createModalTitle from "../create/createModalTitle";
 import showWindow from "../create/showWindow";
 
@@ -16,14 +14,15 @@ const displayWorkerStatus = (
     setDisplayButtonDisabled(false);
 
     if (activeSubscription != null) {
-      unsubscribeFromWorkerStatus(env, {
-        query: {
-          attr: { name: 'meta:unsubscribeFromWorkerStatus', },
-        },
-        type: 'query',
+      env.performTypedRpc<UnsubscribeFromWorkerStatusReq, UnsubscribeFromWorkerStatusRes>({
+        type: 'Concurrent:UnsubscribeFromWorkerStatus',
         job: activeSubscription.job,
         subscriberId: activeSubscription.subscriberId,
-      });
+      }).then(res => {
+        if (!res.ok) {
+          console.warn('Failed unsubscribing from worker status for', activeSubscription);
+        }
+      })
     }
   };
   setDisplayButtonDisabled(true);
@@ -34,33 +33,35 @@ const displayWorkerStatus = (
       min-height: 12rem;
     `,
     resizable: true,
+    onForceClose: onClose,
     render: (root) => {
       while (root.firstChild) root.removeChild(root.firstChild);
 
       root.appendChild(createModalTitle({
         renderLeft: (container) => {
-          container.appendChild(document.createTextNode('Worker status'));
+          container.appendChild(document.createTextNode('Worker status monitor'));
         },
         onClose,
       }).element);
 
       const pre = document.createElement('pre');
+      pre.style.margin = '0.25rem';
       root.appendChild(pre);
       pre.innerText = `Requesting worker status..`;
 
       const job = env.createJobId(data => {
-        console.log('worker status data:', data);
-        if (!data.workers) {
-          return;
+        // console.log('worker status data:', data);
+        switch (data.value.type) {
+          case 'workerStatuses': {
+            const workers = data.value.value
+            pre.innerText = `Status:\n${workers.map((stat, idx) => `${`${idx + 1}`.padStart(3, ' ')}:${stat}`).join('\n')}`
+            break;
+          }
         }
-        // pre.innerText = `status: ${JSON.stringify(data. null, data)}`;
-        pre.innerText = `Status:\n${(data.workers as string[]).map((stat, idx) => `${`${idx + 1}`.padStart(3, ' ')}:${stat}`).join('\n')}`
       });
-      // activeJob = job;
 
-      subscribeToWorkerStatus(env, {
-        query: { attr: { name: 'meta:subscribeToWorkerStatus' } },
-        type: 'query',
+      env.performTypedRpc<SubscribeToWorkerStatusReq, SubscribeToWorkerStatusRes>({
+        type: 'Concurrent:SubscribeToWorkerStatus',
         job,
       }).then(res => {
         activeSubscription = {

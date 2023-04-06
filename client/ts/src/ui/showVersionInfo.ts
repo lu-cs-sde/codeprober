@@ -1,7 +1,8 @@
-import { WebsocketHandler } from "../createWebsocketHandler";
+import ModalEnv from '../model/ModalEnv';
 import { repositoryUrl, rawUrl } from "../model/repositoryUrl";
+import { FetchReq, FetchRes } from '../protocol';
 
-const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolean, ourBuildTime: number | undefined, wsHandler: WebsocketHandler) => {
+const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolean, ourBuildTime: number | undefined, sendRequest: ModalEnv['performTypedRpc']) => {
 
   const innerPrefix = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
   if (ourBuildTime !== undefined) {
@@ -23,11 +24,11 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
     return;
   }
 
-  const pollNewVersion = async (): Promise<'done' | 'again'> => {
-    let fetched: string;
+  const pollNewVersion = async (): Promise<'done' | 'again'> => {
+    let fetched: string | undefined;
     try {
-      fetched = (await wsHandler.sendRpc({
-        type: 'fetch',
+      fetched = (await sendRequest<FetchReq, FetchRes>({
+        type: 'Fetch',
         url: rawUrl('VERSION'),
       }))?.result;
     } catch (e) {
@@ -58,7 +59,7 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
   (async () => {
     while (true) {
       const status = await pollNewVersion();
-      if (status === 'done') { return; }
+      if (status === 'done') { return; }
 
       // Sleep for 12 hours..
       // In the unlikely (but flattering!) scenario that somebody keeps the tool

@@ -1,7 +1,6 @@
 import createLoadingSpinner from "../create/createLoadingSpinner";
 import createModalTitle from "../create/createModalTitle";
-import showWindow from "../create/showWindow";
-import adjustLocator from "../../model/adjustLocator";
+import { adjustValue } from "../../model/adjustLocator";
 import displayHelp from "./displayHelp";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import createStickyHighlightController from '../create/createStickyHighlightController';
@@ -9,27 +8,53 @@ import ModalEnv, { JobId } from '../../model/ModalEnv';
 import displayTestAdditionModal from './displayTestAdditionModal';
 import renderProbeModalTitleLeft from '../renderProbeModalTitleLeft';
 import settings from '../../settings';
-import evaluateProbe, { ProbeResponse } from '../../rpc/evaluateProbe';
-import checkJobStatus from '../../rpc/checkJobStatus';
-import stopJob from '../../rpc/stopJob';
+import { Property, Diagnostic, EvaluatePropertyReq, EvaluatePropertyRes, RpcBodyLine, StopJobReq, StopJobRes, SynchronousEvaluationResult, PollWorkerStatusReq, PollWorkerStatusRes } from '../../protocol';
+import displayAttributeModal from './displayAttributeModal';
+import displayAstModal from './displayAstModal';
+import createInlineWindowManager from '../create/createInlineWindowManager';
+import UpdatableNodeLocator, { createImmutableLocator, createMutableLocator } from '../../model/UpdatableNodeLocator';
+import { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
+import { NestedTestRequest } from '../../model/test/TestManager';
 
-const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator, attr: AstAttrWithValue) => {
+const displayProbeModal = (
+  env: ModalEnv,
+  modalPos: ModalPosition | null,
+  locator: UpdatableNodeLocator,
+  property: Property,
+  nestedWindows: NestedWindows,
+) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-  const localErrors: ProbeMarker[] = [];
+  // console.log('displayProbeModal, nested:', nestedWindows, 'attr:', property.name, ', query:', queryId);
+  const localErrors: Diagnostic[] = [];
   env.probeMarkers[queryId] = localErrors;
   const stickyController = createStickyHighlightController(env);
   let lastOutput: RpcBodyLine[] = [];
   let activelyLoadingJob: JobId | null = null;
   let loading = false;
   let isCleanedUp = false;
+  nestedWindows = {...nestedWindows}; // Make copy so we can locally modify it
+  // const activeNests: {
+  //   [id: string]: {
+  //     getWindowStates: () => WindowState[];
+  //     actives: ActiveNesting[]
+  //   }
+  // } = {};
+  const inlineWindowManager = createInlineWindowManager();
+  // const inline
 
-  const doStopJob = (jobId: JobId) => stopJob(env, {
-    query: { attr: { name: 'meta:stopJob', } },
-    type: 'query',
+  const doStopJob = (jobId: JobId) => env.performTypedRpc<StopJobReq, StopJobRes>({
+    type: 'Concurrent:StopJob',
     job: jobId,
-  }).then(res => res.result === 'stopped');
+  }).then(res => {
+    if (res.err) {
+      console.warn('Error when stopping job:', res.err);
+      return false;
+    }
+    return true;
+  });
 
   const cleanup = () => {
+    queryWindow.remove();
     isCleanedUp = true;
     delete env.onChangeListeners[queryId];
     delete env.probeMarkers[queryId];
@@ -44,24 +69,47 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
     if (loading && activelyLoadingJob !== null) {
       doStopJob(activelyLoadingJob);
     }
+    inlineWindowManager.destroy();
   };
 
   let copyBody: RpcBodyLine[] = [];
 
+  const getNestedTestRequests = (path: number[], state: WindowStateDataProbe): NestedTestRequest => {
+    const nested: NestedTestRequest[] = [];
+    Object.entries(state.nested).forEach(([path, val]) => {
+      const pathIndexes: number[] = JSON.parse(path);
+      val.forEach(v => {
+        if (v.data.type !== 'probe') { return; }
+        nested.push(getNestedTestRequests(pathIndexes, v.data));
+      });
+    });
+    return { path, property: state.property, nested, }
+  };
   const createTitle = () => {
     return createModalTitle({
       extraActions: [
-        {
-          title: 'Duplicate window',
-          invoke: () => {
-            const pos = queryWindow.getPos();
-            displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, JSON.parse(JSON.stringify(locator)), attr);
-          },
-        },
+        ...(
+          env.getGlobalModalEnv() === env
+            ? [{
+              title: 'Duplicate window',
+              invoke: () => {
+                const pos = queryWindow.getPos();
+                displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator.createMutableClone(), property, nestedWindows);
+              },
+            }]
+            : [{
+              title: 'Detatch window',
+              invoke: () => {
+                const pos = queryWindow.getPos();
+                cleanup();
+                displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, nestedWindows);
+              },
+            }]
+        ),
         {
           title: 'Copy input to clipboard',
           invoke: () => {
-            navigator.clipboard.writeText(JSON.stringify({ locator, attr }, null, 2));
+            navigator.clipboard.writeText(JSON.stringify({ locator: locator.get(), property }, null, 2));
           }
         },
         {
@@ -83,10 +131,14 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
           }
         },
         ...[
-          settings.shouldEnableTesting() && {
+          settings.shouldEnableTesting() && (env === env.getGlobalModalEnv()) && {
             title: 'Save as test',
             invoke: () => {
-              displayTestAdditionModal(env, queryWindow.getPos(), locator, attr, lastOutput);
+              const nestedReq = getNestedTestRequests([], getWindowStateData());
+              displayTestAdditionModal(env, queryWindow.getPos(), locator.get(), {
+                property: nestedReq.property,
+                nested: nestedReq.nested,
+              });
             },
           }
         ].filter(Boolean) as any
@@ -99,14 +151,13 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
       renderLeft: (container) => renderProbeModalTitleLeft(
         env, container,
         () => {
-          queryWindow.remove();
           cleanup();
         },
         () => queryWindow.getPos(),
-        stickyController, locator, attr,
+        stickyController, locator, property, nestedWindows,
+        env === env.getGlobalModalEnv() ? 'default' : 'minimal-nested',
       ),
       onClose: () => {
-        queryWindow.remove();
         cleanup();
       },
     });
@@ -115,7 +166,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
   let isFirstRender = true;
   let refreshOnDone = false;
 
-  const queryWindow = showWindow({
+  const queryWindow = env.showWindow({
     pos: modalPos,
     rootStyle: `
       min-width: 16rem;
@@ -123,7 +174,8 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
     `,
     resizable: true,
     onFinishedMove: () => env.triggerWindowSave(),
-    render: (root, { cancelToken }) => {
+    onForceClose: cleanup,
+    render: (root, { cancelToken, bringToFront }) => {
       if (lastSpinner != null) {
         lastSpinner.style.display = 'inline-block';
         lastSpinner = null;
@@ -150,7 +202,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
       env.currentlyLoadingModals.add(queryId);
       const rpcQueryStart = performance.now();
 
-      const doFetch = () => new Promise<ProbeResponse | 'stopped'>(async (resolve, reject) => {
+      const doFetch = () => new Promise<SynchronousEvaluationResult | 'stopped'>(async (resolve, reject) => {
         let isDone = false;
         let isConnectedToConcurrentCapableServer = false;
         let statusPre: HTMLElement | null = null;
@@ -186,54 +238,93 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
             if (isDone || isCleanedUp) {
               return;
             }
-            checkJobStatus(env, {
-              query: { attr: { name: 'meta:checkJobStatus', } },
-              type: 'query',
+            env.performTypedRpc<PollWorkerStatusReq, PollWorkerStatusRes>({
+              type: 'Concurrent:PollWorkerStatus',
               job: jobId,
             })
               .then(res => {
-                console.log('rpc query for job status:', res)
-                setTimeout(poll, 1000);
+                if (res.ok) {
+                  // Polled OK, async update will be delivered to job monitor below
+                  // Queue future poll.
+                  setTimeout(poll, 1000);
+                } else {
+                  console.warn('Error when polling for job status');
+                  // Don't queue more polling, very unlikely to work anyway.
+                }
               });
           };
           poll();
         }, 5000);
         const jobId = env.createJobId(data => {
           isConnectedToConcurrentCapableServer = true;
-          console.log('handleUpdate:', data);
-          if (data.status == 'done') {
-            isDone = true;
-            resolve(data.result);
-            localConcurrentCleanup();
-            return;
-          }
-          // Status update, ignore
-          console.log('ignoring status update?', data);
-          if (statusPre) {
+          let knownStatus = 'Unknown';
+          let knownStackTrace: string[] | null = null;
+          const refreshStatusPre = () => {
+            if (!statusPre) { return; }
             const lines = [];
             lines.push(`Property evaluation is taking a while, status below:`);
-            lines.push(`Status: ${data.status}`);
-            if (data.stack) {
+            lines.push(`Status: ${knownStackTrace}`);
+            if (knownStackTrace) {
               lines.push("Stack trace:");
-              data.stack.forEach((ste: string) => lines.push(`> ${ste}`));
+              knownStackTrace.forEach((ste) => lines.push(`> ${ste}`));
             }
             statusPre.innerText = lines.join('\n');
           }
+          switch (data.value.type) {
+
+            case 'status': {
+              knownStatus = data.value.value;
+              refreshStatusPre();
+              break;
+            }
+            case 'workerStackTrace': {
+              knownStackTrace = data.value.value;
+              refreshStatusPre();
+              break;
+            }
+
+            case 'workerTaskDone': {
+              const res = data.value.value;
+              isDone = true;
+              localConcurrentCleanup();
+              if (res.type === 'normal') {
+                const cast = res.value as EvaluatePropertyRes;
+                if (cast.response.type == 'job') {
+                  throw new Error(`Unexpected 'job' result in async update`);
+                }
+                resolve(cast.response.value);
+              } else {
+                console.log('Worker task failed. This is likely an internal CodeProber issue. Error message:');
+                res.value.forEach(line => console.log(line));
+                reject('Worker failed');
+              }
+              break;
+            }
+
+            default: {
+              // Ignore
+            }
+          }
         });
         activelyLoadingJob = jobId;
-        evaluateProbe(env, env.wrapTextRpc({
-          query: { attr, locator },
-          jobId,
-          jobLabel: `Probe: '${`${locator.result.label ?? locator.result.type}`.split('.').slice(-1)[0]}.${attr.name}'`,
-        }))
+        env.performTypedRpc<EvaluatePropertyReq, EvaluatePropertyRes>({
+          type: 'EvaluateProperty',
+          property,
+          locator: locator.get(),
+          src: env.createParsingRequestData(),
+          captureStdout: settings.shouldCaptureStdio(),
+          job: jobId,
+          jobLabel: `Probe: '${`${locator.get().result.label ?? locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
+        })
           .then(data => {
-            if (data.job !== undefined) {
+            if (data.response.type === 'job') {
               // Async work queued, not done.
+              isConnectedToConcurrentCapableServer = true;
             } else {
               // Sync work executed, done.
               clearTimeout(initialPollDelayTimer);
               isDone = true;
-              resolve(data);
+              resolve(data.response.value);
             }
           })
           .catch(err => {
@@ -283,21 +374,23 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
             let refreshMarkers = localErrors.length > 0;
             localErrors.length = 0;
 
-            parsed.errors.forEach(({severity, start: errStart, end: errEnd, msg }) => {
-              localErrors.push({ severity, errStart, errEnd, msg });
-            })
+            localErrors.push(...(parsed.errors ?? []));
+            // parsed.errors?.forEach(({severity, start: errStart, end: errEnd, msg }) => {
+            //   localErrors.push({ severity, errStart, errEnd, msg });
+            // })
             const updatedArgs = parsed.args;
             if (updatedArgs) {
               refreshMarkers = true;
-              attr.args?.forEach((arg, argIdx) => {
+              property.args?.forEach((arg, argIdx) => {
                 arg.type = updatedArgs[argIdx].type;
-                arg.detail = updatedArgs[argIdx].detail;
+                // arg.detail = updatedArgs[argIdx].detail;
                 arg.value = updatedArgs[argIdx].value;
               })
             }
             if (parsed.locator) {
               refreshMarkers = true;
-              locator = parsed.locator;
+              locator.set(parsed.locator);
+              // locator = parsed.locator;
             }
             if (refreshMarkers || localErrors.length > 0) {
               env.updateMarkers();
@@ -306,7 +399,69 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
             root.append(titleRow.element);
 
             lastOutput = body;
-            root.appendChild(encodeRpcBodyLines(env, body));
+
+            // TODO, record which lines are used. Clear inline windows that are no longer usable.
+            const enableExpander = body.length >= 1 && (body[0].type === 'node' || (
+              body[0].type === 'arr' && body[0].value.length >= 1 && body[0].value[0].type === 'node'
+            ));
+
+            const areasToKeep = new Set<string>();
+            // const enableExpander = true;
+            root.appendChild(encodeRpcBodyLines(env, body, {
+              nodeLocatorExpanderHandler: enableExpander ? ({
+                getReusableExpansionArea: (path) => {
+                  return inlineWindowManager.getPreviousExpansionArea(path);
+                },
+                onCreate: ({ locator, locatorRoot, expansionArea, path: nestId }) => {
+                  areasToKeep.add(JSON.stringify(nestId));
+                  const updLocator = inlineWindowManager.getPreviouslyAssociatedLocator(nestId) ?? createMutableLocator(locator);
+                  updLocator.set(locator);
+                  const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, updLocator);
+                  const nestedEnv = area.getNestedModalEnv(env);
+
+                  const encodedId = JSON.stringify(nestId);
+                  const nests = nestedWindows[encodedId];
+                  if (!nests) {
+                    return;
+                  }
+                  delete nestedWindows[encodedId];
+                  nests.forEach(nest => {
+                    // nest.ty
+                    switch (nest.data.type) {
+                      case 'probe': {
+                        const dat = nest.data;
+                        displayProbeModal(nestedEnv, null, createImmutableLocator(updLocator), dat.property, dat.nested);
+                        break;
+                      }
+                      case 'ast': {
+                        const dat = nest.data;
+                        displayAstModal(nestedEnv, null, createImmutableLocator(updLocator), dat.direction, dat.transform);
+                        break;
+                      }
+                    }
+                  });
+                },
+                onClick: ({ locator, locatorRoot, expansionArea, path: nestId }) => {
+                  const prevLocator = inlineWindowManager.getPreviouslyAssociatedLocator(nestId);
+                  if (!prevLocator) {
+                    console.warn('OnClick on unknown area:', nestId);
+                    return;
+                  }
+                  prevLocator.set(locator);
+                  const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, prevLocator);
+                  const nestedEnv = area.getNestedModalEnv(env);
+                  displayAttributeModal(nestedEnv, null, createImmutableLocator(prevLocator));
+                  env.triggerWindowSave();
+
+                },
+
+              }): undefined,
+              // nodeLocatorExpanderHandler: () => {},
+            }));
+            inlineWindowManager.conditiionallyDestroyAreas((areaId) => {
+              return !areasToKeep.has(JSON.stringify(areaId));
+            });
+            inlineWindowManager.notifyListenersOfChange();
           }
           const spinner = createLoadingSpinner();
           spinner.style.display = 'none';
@@ -326,7 +481,7 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
           console.log('ProbeModal RPC catch', err);
           root.innerHTML = '';
           root.innerText = 'Failed refreshing probe..';
-          console.warn('Failed refreshing probe w/ args:', JSON.stringify({ locator, attr }, null, 2));
+          console.warn('Failed refreshing probe w/ args:', JSON.stringify({ locator, property }, null, 2));
           setTimeout(() => { // TODO remove this again, once the title bar is added so we can close it
             queryWindow.remove();
             cleanup();
@@ -337,12 +492,9 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
   const refresher = env.createCullingTaskSubmitter();
   env.onChangeListeners[queryId] = (adjusters) => {
     if (adjusters) {
-
-      adjusters.forEach(adj => adjustLocator(adj, locator));
-      attr.args?.forEach(({ value }) => {
-        if (value && typeof value === 'object') {
-          adjusters.forEach(adj => adjustLocator(adj, value));
-        }
+      locator.adjust(adjusters);
+      property.args?.forEach((arg) => {
+        adjusters.forEach(adj => adjustValue(adj, arg));
       })
     }
     if (loading) {
@@ -351,15 +503,32 @@ const displayProbeModal = (env: ModalEnv, modalPos: ModalPosition | null, locato
       refresher.submit(() => queryWindow.refresh());
     }
   }
+  // locator.setUpdateCallback(queryId, () => {
+  //   if (loading) {
+  //     refreshOnDone = true;
+  //   } else {
+  //     refresher.submit(() => queryWindow.refresh());
+  //   }
+  // });
 
+  const getWindowStateData = (): WindowStateDataProbe => {
+    return {
+      type: 'probe',
+      locator: locator.get(),
+      property,
+      nested: inlineWindowManager.getWindowStates(),
+    };
+  };
   env.probeWindowStateSavers[queryId] = (target) => {
+    // const nested: NestedWindows = {};
+    // if (env === env.getGlobalModalEnv()) console.log('saving, activeNests:', activeNests);
+    // Object.entries(activeNests).forEach(([key, vals]) => {
+    //   nested[key] = vals.getWindowStates();
+    // });
+    // if (env === env.getGlobalModalEnv()) console.log('...resulting nested:', nested);
     target.push({
       modalPos: queryWindow.getPos(),
-      data: {
-        type: 'probe',
-        locator,
-        attr,
-      },
+      data: getWindowStateData(),
     });
   };
   env.triggerWindowSave();

@@ -1,9 +1,12 @@
 import ModalEnv from '../../model/ModalEnv';
+import UpdatableNodeLocator from '../../model/UpdatableNodeLocator';
+import { NodeLocator } from '../../protocol';
+import startEndToSpan from '../startEndToSpan';
 
 interface StickyHighlightController {
   onClick: () => void;
   cleanup: () => void;
-  configure: (target: HTMLElement, locator: NodeLocator) => void;
+  configure: (target: HTMLElement, locator: UpdatableNodeLocator) => void;
 }
 
 const createStickyHighlightController = (env: ModalEnv): StickyHighlightController => {
@@ -11,7 +14,7 @@ const createStickyHighlightController = (env: ModalEnv): StickyHighlightControll
   let activeStickyColorClass = '';
 
   let currentTarget: HTMLElement | null = null;
-  let currentLocator: NodeLocator | null = null;
+  let currentLocator: UpdatableNodeLocator | null = null;
 
   const applySticky = () => {
     if (!currentTarget || !currentLocator) return;
@@ -21,7 +24,7 @@ const createStickyHighlightController = (env: ModalEnv): StickyHighlightControll
         `monaco-rag-highlight-sticky`,
         activeStickyColorClass,
       ],
-      span: startEndToSpan(currentLocator.result.start, currentLocator.result.end),
+      span: startEndToSpan(currentLocator.get().result.start, currentLocator.get().result.end),
     });
     currentTarget.classList.add(`monaco-rag-highlight-sticky`);
     currentTarget.classList.add(activeStickyColorClass);
@@ -58,7 +61,7 @@ const createStickyHighlightController = (env: ModalEnv): StickyHighlightControll
         env.clearStickyHighlight(stickyId);
       }
     },
-    configure: (target: HTMLElement, locator: NodeLocator) => {
+    configure: (target, locator) => {
       currentTarget = target;
       currentLocator = locator;
       if (activeStickyColorClass) {
