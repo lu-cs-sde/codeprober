@@ -11,7 +11,7 @@ fi
 rm DUMMY_FILE_TO_FORCE_DEV_BUILD
 
 echo "Build success"
-echo "Running ßerver unit tests"
+echo "Running server unit tests"
 cd server
 sh test.sh
 if [ "$?" -ne "0" ]; then
@@ -22,7 +22,7 @@ cd -
 echo "Server unit tests succeeded"
 
 
-function check_expected_outcome {
+check_expected_outcome () {
   # The test suite is intentionally constructed with 1 failure so that
   # we can detect that assertions actually are performed.
   if grep -q "Pass 6/7 tests" test_log; then

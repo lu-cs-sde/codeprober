@@ -15,7 +15,7 @@ javac @sources.txt -cp $LIBS -d test_tmp -source 8 -target 8
 
 ## TEST
 TEST_CLASSES=""
-function addTest {
+addTest () {
   CLS=$(echo $1 \
       | sed 's/^src-test\///' \
       | sed 's/\//\./g' \
