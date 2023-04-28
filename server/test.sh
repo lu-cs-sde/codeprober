@@ -25,7 +25,7 @@ function addTest {
   case $CLS in
     codeprober\.ast\.TestData|\
     codeprober\.ast\.ASTNodeAnnotation|\
-    codeprober\.*FooTests)
+    codeprober\.*RunDemoTests)
       # Exclude from tests
       ;;
 
