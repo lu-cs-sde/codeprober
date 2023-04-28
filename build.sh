@@ -8,6 +8,7 @@ cd -
 
 echo "Building client"
 cd client/ts
+npm ci
 npm run build
 cd -
 
