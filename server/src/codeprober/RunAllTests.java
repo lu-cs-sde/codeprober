@@ -3,6 +3,7 @@ package codeprober;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 
 import codeprober.TestClient.TestResult;
@@ -23,7 +24,8 @@ public class RunAllTests {
 			System.exit(1);
 		}
 
-		final AtomicBoolean anyErr = new AtomicBoolean();
+		final AtomicInteger errCounter = new AtomicInteger();
+		final AtomicInteger successCounter = new AtomicInteger();
 //		final ExecutorService executor = runConcurrently ? Executors.newFixedThreadPool(4) : null;
 		for (int i = 0; i < suites.size(); ++i) {
 			final String suiteName = suites.get(i);
@@ -31,7 +33,8 @@ public class RunAllTests {
 //					.put("type", TestProtocol.GetTestSuite.type);
 //			TestProtocol.GetTestSuite.suite.put(request, suite);
 
-			CodeProber.flog("Start suite " + suiteName +", to " + System.out +" on thread " + Thread.currentThread() +" ;; intercept count: " + StdIoInterceptor.installCount.get());
+			CodeProber.flog("Start suite " + suiteName + ", to " + System.out + " on thread " + Thread.currentThread()
+					+ " ;; intercept count: " + StdIoInterceptor.installCount.get());
 			System.out.println(": " + suiteName);
 			// BEGIN: Thing that will break when JSON format is updated
 			final TestSuite suite = client.getTestSuiteContents(suiteName);
@@ -41,9 +44,10 @@ public class RunAllTests {
 			final BiConsumer<String, TestResult> handleResult = (name, result) -> {
 				if (result.pass) {
 					System.out.println("  ✅ " + name);
+					successCounter.incrementAndGet();
 				} else {
 					System.out.println("  ❌ " + name);
-					anyErr.set(true);
+					errCounter.incrementAndGet();
 				}
 				if (cdl != null) {
 					cdl.countDown();
@@ -91,6 +95,36 @@ public class RunAllTests {
 //		if (executor != null) {
 //			executor.shutdown();
 //		}
-		return anyErr.get() ? MergedResult.SOME_FAIL : MergedResult.ALL_PASS;
+		final int numErr = errCounter.get();
+		final int numSuccess = successCounter.get();
+		if (numErr == 0) {
+			switch (numSuccess) {
+			case 0: {
+				System.out.println("No tests found..");
+				break;
+			}
+			case 1: {
+				System.out.println("Pass 1 test");
+				break;
+			}
+			default: {
+				System.out.println("Pass " + numSuccess + " tests");
+				break;
+			}
+			}
+			return MergedResult.ALL_PASS;
+		}
+
+		if (numSuccess == 0) {
+			if (numErr == 0) {
+				System.out.println("Fail 1 test");
+			} else {
+				System.out.println("Fail all " + numErr + " tests");
+			}
+		} else {
+			System.out.println("Pass " + numSuccess + "/" + (numErr + numSuccess) + " tests");
+		}
+
+		return MergedResult.SOME_FAIL;
 	}
 }

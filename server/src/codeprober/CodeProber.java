@@ -51,7 +51,7 @@ public class CodeProber {
 
 	public static void main(String[] mainArgs) throws IOException {
 		System.out.println("Starting server, version: " + VersionInfo.getInstance().toString() + "..");
-		if (mainArgs.length == 0) {
+		if (mainArgs.length == 0 || (mainArgs.length == 1 && mainArgs[0].equals("--help"))) {
 			printUsage();
 			System.exit(1);
 		}

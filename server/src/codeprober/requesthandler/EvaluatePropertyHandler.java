@@ -140,10 +140,31 @@ public class EvaluatePropertyHandler {
 		final AtomicReference<NodeLocator> newLocator = new AtomicReference<>(null);
 		final AtomicReference<List<PropertyArg>> updatedArgsPtr = new AtomicReference<>();
 		if (parsed.info == null) {
+			errors = new ArrayList<>();
 			for (RpcBodyLine line : parsed.captures) {
 				body.add(line);
+
+				switch (line.type) {
+				case stdout: {
+					final Diagnostic diagnostic = MagicStdoutMessageParser.parse(line.asStdout());
+					if (diagnostic != null) {
+						errors.add(diagnostic);
+					}
+					break;
+				}
+
+				case stderr:
+					final Diagnostic diagnostic = MagicStdoutMessageParser.parse(line.asStderr());
+					if (diagnostic != null) {
+						errors.add(diagnostic);
+					}
+					break;
+
+				default:
+					break;
+				}
 			}
-			errors = null;
+
 //			return new EvaluatePropertyRes(PropertyEvaluationResult.fromSync(new SynchronousEvaluationResult(parsed.captures, 0, 0, 0, 0, 0, null, null, null)))
 		} else {
 			final Consumer<ResolvedNode> evaluateAttr = (match) -> {
@@ -244,7 +265,7 @@ public class EvaluatePropertyHandler {
 				}
 			};
 
-			errors = StdIoInterceptor.performCaptured(MagicStdoutMessageParser::parse, () -> {
+			errors = StdIoInterceptor.performCaptured((stdout, line) -> MagicStdoutMessageParser.parse(line), () -> {
 				final ResolvedNode match = ApplyLocator.toNode(parsed.info, req.locator);
 				if (match == null) {
 					body.add(RpcBodyLine

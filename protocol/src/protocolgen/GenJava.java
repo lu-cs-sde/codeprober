@@ -469,9 +469,13 @@ public class GenJava {
 	private Set<RequestedType> requestedTypes = new HashSet<>();
 
 	private File getDstDir() throws Exception {
-		final File dstDir = new File(System.getProperty("JAVA_DST_DIR"));
+    final String dstDirStr = System.getProperty("JAVA_DST_DIR");
+    if (dstDirStr == null) {
+      throw new Exception("Missing value for system property JAVA_DST_DIR");
+    }
+		final File dstDir = new File(dstDirStr);
 		if (!dstDir.exists()) {
-			throw new Exception("Bad/missing value for system property JAVA_DST_DIR");
+			throw new Exception("Bad value for system property JAVA_DST_DIR");
 		}
 		return dstDir;
 	}

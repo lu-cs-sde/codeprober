@@ -574,6 +574,11 @@ public class WebServer {
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
+      if (e.getMessage().contains("Address already in use")) {
+				System.out.println(
+						"You can run parallell CodeProber instances, but each instance must have unique WEB_SERVER_PORT and WEBSOCKET_SERVER_PORT");
+				System.exit(1);
+			}
 			throw new RuntimeException(e);
 		}
 	}

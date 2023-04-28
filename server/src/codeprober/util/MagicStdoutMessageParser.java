@@ -8,7 +8,7 @@ import codeprober.protocol.data.Diagnostic;
 
 public class MagicStdoutMessageParser {
 
-	public static Diagnostic parse(boolean stdout, String line) {
+	public static Diagnostic parse(String line) {
 		// Ignore whether the message is stdout or stderr, capture everything!
 
 		final Matcher matcher = Pattern.compile("(ERR|WARN|INFO|LINE-PP|LINE-AA|LINE-AP|LINE-PA)@(\\d+);(\\d+);(.*)")

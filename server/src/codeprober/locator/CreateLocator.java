@@ -357,7 +357,7 @@ public class CreateLocator {
 		out.add(null);
 		System.out.println("Unknown edge " + parent + " -->" + astNode);
 		System.out.println("other way: " + source + " --> " + target);
-		System.out.println("Parent pretty : " + Reflect.invoke0(parent.underlyingAstNode, "prettyPrint"));
+//		System.out.println("Parent pretty : " + Reflect.invoke0(parent.underlyingAstNode, "prettyPrint"));
 		System.out.println("child type " + astNode.getClass());
 //		final Field childIndex = astNode.underlyingAstNode.getClass().getDeclaredField("childIndex");
 //		childIndex.setAccessible(true);

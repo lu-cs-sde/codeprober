@@ -143,24 +143,6 @@ interface SubmitWorkerTaskReq {
 interface SubmitWorkerTaskRes {
   ok: boolean;
 }
-type TopRequestResponseData = (
-    { type: 'success'; value: { [key: string]: any }; }
-  | { type: 'failureMsg'; value: string; }
-);
-interface TestSuite {
-  v: number;
-  cases: TestCase[];
-}
-interface ListedTreeNode {
-  type: "node";
-  locator: NodeLocator;
-  name?: string;
-  children: ListedTreeChildNode;
-}
-type TestSuiteOrError = (
-    { type: 'err'; value: ('NO_TEST_DIR_SET'| 'NO_SUCH_TEST_SUITE'| 'ERROR_WHEN_READING_FILE'); }
-  | { type: 'contents'; value: TestSuite; }
-);
 interface ParsingRequestData {
   posRecovery: ('FAIL'| 'SEQUENCE_PARENT_CHILD'| 'SEQUENCE_CHILD_PARENT'| 'PARENT'| 'CHILD'| 'ALTERNATE_PARENT_CHILD');
   cache: ('FULL'| 'PARTIAL'| 'NONE'| 'PURGE');
@@ -168,35 +150,9 @@ interface ParsingRequestData {
   mainArgs?: string[];
   tmpSuffix: string;
 }
-type PropertyEvaluationResult = (
-    { type: 'job'; value: number; }
-  | { type: 'sync'; value: SynchronousEvaluationResult; }
-);
-interface InitInfo {
-  type: "init";
-  version: {
-    hash: string;
-    clean: boolean;
-    buildTimeSeconds?: number;
-  };
-  changeBufferTime?: number;
-  workerProcessCount?: number;
-}
-type TestSuiteListOrError = (
-    { type: 'err'; value: ('NO_TEST_DIR_SET'| 'ERROR_WHEN_LISTING_TEST_DIR'); }
-  | { type: 'suites'; value: string[]; }
-);
 interface NodeLocator {
   result: TALStep;
   steps: NodeLocatorStep[];
-}
-interface Property {
-  name: string;
-  args?: PropertyArg[];
-  astChildName?: string;
-}
-interface Refresh {
-  type: "refresh";
 }
 interface AsyncRpcUpdate {
   type: "asyncUpdate";
@@ -204,6 +160,10 @@ interface AsyncRpcUpdate {
   isFinalUpdate: boolean;
   value: AsyncRpcUpdateValue;
 }
+type TestSuiteListOrError = (
+    { type: 'err'; value: ('NO_TEST_DIR_SET'| 'ERROR_WHEN_LISTING_TEST_DIR'); }
+  | { type: 'suites'; value: string[]; }
+);
 type LongPollResponse = (
     { type: 'etag'; value: number; }
   | { type: 'push'; value: { [key: string]: any }; }
@@ -216,20 +176,46 @@ type RpcBodyLine = (
   | { type: 'arr'; value: RpcBodyLine[]; }
   | { type: 'node'; value: NodeLocator; }
 );
-type AsyncRpcUpdateValue = (
-    { type: 'status'; value: string; }
-  | { type: 'workerStackTrace'; value: string[]; }
-  | { type: 'workerStatuses'; value: string[]; }
-  | { type: 'workerTaskDone'; value: WorkerTaskDone; }
+type TopRequestResponseData = (
+    { type: 'success'; value: { [key: string]: any }; }
+  | { type: 'failureMsg'; value: string; }
 );
-type PropertyArg = (
-    { type: 'string'; value: string; }
-  | { type: 'integer'; value: number; }
-  | { type: 'bool'; value: boolean; }
-  | { type: 'collection'; value: PropertyArgCollection; }
-  | { type: 'outputstream'; value: string; }
-  | { type: 'nodeLocator'; value: NullableNodeLocator; }
+interface TestSuite {
+  v: number;
+  cases: TestCase[];
+}
+interface Refresh {
+  type: "refresh";
+}
+interface Property {
+  name: string;
+  args?: PropertyArg[];
+  astChildName?: string;
+}
+type TestSuiteOrError = (
+    { type: 'err'; value: ('NO_TEST_DIR_SET'| 'NO_SUCH_TEST_SUITE'| 'ERROR_WHEN_READING_FILE'); }
+  | { type: 'contents'; value: TestSuite; }
 );
+type PropertyEvaluationResult = (
+    { type: 'job'; value: number; }
+  | { type: 'sync'; value: SynchronousEvaluationResult; }
+);
+interface ListedTreeNode {
+  type: "node";
+  locator: NodeLocator;
+  name?: string;
+  children: ListedTreeChildNode;
+}
+interface InitInfo {
+  type: "init";
+  version: {
+    hash: string;
+    clean: boolean;
+    buildTimeSeconds?: number;
+  };
+  changeBufferTime?: number;
+  workerProcessCount?: number;
+}
 interface SynchronousEvaluationResult {
   body: RpcBodyLine[];
   totalTime: number;
@@ -248,6 +234,14 @@ type NodeLocatorStep = (
   | { type: 'nta'; value: FNStep; }
   | { type: 'tal'; value: TALStep; }
 );
+type PropertyArg = (
+    { type: 'string'; value: string; }
+  | { type: 'integer'; value: number; }
+  | { type: 'bool'; value: boolean; }
+  | { type: 'collection'; value: PropertyArgCollection; }
+  | { type: 'outputstream'; value: string; }
+  | { type: 'nodeLocator'; value: NullableNodeLocator; }
+);
 interface TALStep {
   type: string;
   label?: string;
@@ -256,6 +250,12 @@ interface TALStep {
   depth: number;
   external?: boolean;
 }
+type AsyncRpcUpdateValue = (
+    { type: 'status'; value: string; }
+  | { type: 'workerStackTrace'; value: string[]; }
+  | { type: 'workerStatuses'; value: string[]; }
+  | { type: 'workerTaskDone'; value: WorkerTaskDone; }
+);
 type ListedTreeChildNode = (
     { type: 'children'; value: ListedTreeNode[]; }
   | { type: 'placeholder'; value: number; }
@@ -272,6 +272,20 @@ interface TestCase {
 interface FNStep {
   property: Property;
 }
+interface PropertyArgCollection {
+  type: string;
+  entries: PropertyArg[];
+}
+type WorkerTaskDone = (
+    { type: 'normal'; value: { [key: string]: any }; }
+  | { type: 'unexpectedError'; value: string[]; }
+);
+interface NestedTest {
+  path: number[];
+  property: Property;
+  expectedOutput: RpcBodyLine[];
+  nestedProperties: NestedTest[];
+}
 interface NullableNodeLocator {
   type: string;
   value?: NodeLocator;
@@ -281,20 +295,6 @@ interface Diagnostic {
   start: number;
   end: number;
   msg: string;
-}
-interface NestedTest {
-  path: number[];
-  property: Property;
-  expectedOutput: RpcBodyLine[];
-  nestedProperties: NestedTest[];
-}
-type WorkerTaskDone = (
-    { type: 'normal'; value: { [key: string]: any }; }
-  | { type: 'unexpectedError'; value: string[]; }
-);
-interface PropertyArgCollection {
-  type: string;
-  entries: PropertyArg[];
 }
 
 
