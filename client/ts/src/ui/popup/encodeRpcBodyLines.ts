@@ -42,6 +42,7 @@ interface ExtraEncodingArgs {
     onClick: ExpanderCallback;
   };
   excludeStdIoFromPaths?: true;
+  capWidths?: true;
 }
 const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEncodingArgs = {}): HTMLElement => {
   let needCapturedStreamArgExplanation = false;
@@ -79,7 +80,11 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
           const decoration = extras.decorator(bodyPath);
           if (decoration !== 'default') {
             const holder = document.createElement('spawn');
-            holder.style.whiteSpace = 'pre';
+            if (extras.capWidths) {
+              holder.style.whiteSpace = 'normal';
+            } else {
+              holder.style.whiteSpace = 'pre';
+            }
             if (trimmed.length !== line.value.length) {
               holder.appendChild(document.createTextNode(' '.repeat(line.value.length - trimmed.length)));
             }
@@ -126,6 +131,9 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
           const deeper = document.createElement('pre');
           deeper.style.marginLeft = '1rem';
           deeper.style.marginTop = '0.125rem';
+          if (extras.capWidths) {
+            deeper.style.whiteSpace = 'normal';
+          }
           encodeTo(deeper);
           if (nestingLevel === 1) {
             const wrapper = document.createElement('div');
@@ -287,6 +295,10 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
   pre.style.margin = '0px';
   pre.style.padding = '0.5rem';
   pre.style.fontSize = '0.75rem';
+  if (extras.capWidths) {
+    pre.style.wordBreak = 'break-word';
+    pre.style.whiteSpace = 'normal';
+  }
   // pre.innerHtml = lines.slice(outputStart + 1).join('\n').trim();
   let lineIdxBackshift = 0;
   body
@@ -302,6 +314,10 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
         const holder = document.createElement('pre');
         holder.style.margin = '0px';
         holder.style.padding = '0';
+        if (extras.capWidths) {
+          holder.style.wordBreak = 'break-word';
+          holder.style.whiteSpace = 'normal';
+        }
         applyDecoratorClass(holder, true, extras.decorator([lineIdx - lineIdxBackshift]));
         encodeLine(holder, line, 0, [lineIdx - lineIdxBackshift]);
         pre.appendChild(holder);

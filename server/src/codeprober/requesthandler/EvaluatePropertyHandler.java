@@ -21,13 +21,13 @@ import codeprober.metaprogramming.Reflect;
 import codeprober.metaprogramming.StdIoInterceptor;
 import codeprober.metaprogramming.StreamInterceptor;
 import codeprober.protocol.create.EncodeResponseValue;
-import codeprober.protocol.data.PropertyArg;
-import codeprober.protocol.data.PropertyArgCollection;
 import codeprober.protocol.data.Diagnostic;
 import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.NullableNodeLocator;
+import codeprober.protocol.data.PropertyArg;
+import codeprober.protocol.data.PropertyArgCollection;
 import codeprober.protocol.data.PropertyEvaluationResult;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.SynchronousEvaluationResult;
@@ -266,24 +266,35 @@ public class EvaluatePropertyHandler {
 			};
 
 			errors = StdIoInterceptor.performCaptured((stdout, line) -> MagicStdoutMessageParser.parse(line), () -> {
-				final ResolvedNode match = ApplyLocator.toNode(parsed.info, req.locator);
-				if (match == null) {
-					body.add(RpcBodyLine
-							.fromPlain("No matching node found\n\nTry remaking the probe\nat a different line/column"));
-					return;
-				}
+				try {
+					final ResolvedNode match = ApplyLocator.toNode(parsed.info, req.locator);
+					if (match == null) {
+						body.add(RpcBodyLine
+								.fromPlain("No matching node found\n\nTry remaking the probe\nat a different line/column"));
+						return;
+					}
 
-				newLocator.set(match.nodeLocator);
+					newLocator.set(match.nodeLocator);
 
-				if (req.captureStdout) {
-					// TODO add messages live instead of after everything finishes
-					final BiFunction<Boolean, String, RpcBodyLine> encoder = StdIoInterceptor
-							.createDefaultLineEncoder();
-					StdIoInterceptor.performLiveCaptured((stdout, line) -> {
-						body.add(encoder.apply(stdout, line));
-					}, () -> evaluateAttr.accept(match));
-				} else {
-					evaluateAttr.accept(match);
+					if (req.captureStdout) {
+						// TODO add messages live instead of after everything finishes
+						final BiFunction<Boolean, String, RpcBodyLine> encoder = StdIoInterceptor
+								.createDefaultLineEncoder();
+						StdIoInterceptor.performLiveCaptured((stdout, line) -> {
+							body.add(encoder.apply(stdout, line));
+						}, () -> evaluateAttr.accept(match));
+					} else {
+						evaluateAttr.accept(match);
+					}
+				} catch (RuntimeException e) {
+					if (e.getCause() instanceof ClassNotFoundException) {
+						final ClassNotFoundException cce = (ClassNotFoundException) e.getCause();
+//						System.err.println();
+						body.add(RpcBodyLine.fromPlain("Bad type reference: " + cce.getMessage()));
+						body.add(RpcBodyLine.fromPlain("Either an AST node type definition was removed, or this probe may have been created for another tool"));
+						return;
+					}
+					throw e;
 				}
 			});
 //			final List<RpcBodyLine> caps = StdIoInterceptor

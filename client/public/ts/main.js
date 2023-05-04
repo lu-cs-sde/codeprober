@@ -3703,7 +3703,12 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                         const decoration = extras.decorator(bodyPath);
                         if (decoration !== 'default') {
                             const holder = document.createElement('spawn');
-                            holder.style.whiteSpace = 'pre';
+                            if (extras.capWidths) {
+                                holder.style.whiteSpace = 'normal';
+                            }
+                            else {
+                                holder.style.whiteSpace = 'pre';
+                            }
                             if (trimmed.length !== line.value.length) {
                                 holder.appendChild(document.createTextNode(' '.repeat(line.value.length - trimmed.length)));
                             }
@@ -3751,6 +3756,9 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                         const deeper = document.createElement('pre');
                         deeper.style.marginLeft = '1rem';
                         deeper.style.marginTop = '0.125rem';
+                        if (extras.capWidths) {
+                            deeper.style.whiteSpace = 'normal';
+                        }
                         encodeTo(deeper);
                         if (nestingLevel === 1) {
                             const wrapper = document.createElement('div');
@@ -3906,6 +3914,10 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
         pre.style.margin = '0px';
         pre.style.padding = '0.5rem';
         pre.style.fontSize = '0.75rem';
+        if (extras.capWidths) {
+            pre.style.wordBreak = 'break-word';
+            pre.style.whiteSpace = 'normal';
+        }
         // pre.innerHtml = lines.slice(outputStart + 1).join('\n').trim();
         let lineIdxBackshift = 0;
         body
@@ -3922,6 +3934,10 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                 const holder = document.createElement('pre');
                 holder.style.margin = '0px';
                 holder.style.padding = '0';
+                if (extras.capWidths) {
+                    holder.style.wordBreak = 'break-word';
+                    holder.style.whiteSpace = 'normal';
+                }
                 applyDecoratorClass(holder, true, extras.decorator([lineIdx - lineIdxBackshift]));
                 encodeLine(holder, line, 0, [lineIdx - lineIdxBackshift]);
                 pre.appendChild(holder);
@@ -6085,6 +6101,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                             target.appendChild((0, encodeRpcBodyLines_5.default)(env, lines, {
                                                 lateInteractivityEnabledChecker: () => false,
                                                 excludeStdIoFromPaths: true,
+                                                capWidths: true,
                                                 decorator: (line) => {
                                                     const key = JSON.stringify([...markerPrefix, ...line]);
                                                     const marker = testStatus.expectedMarkers[key];
@@ -6153,6 +6170,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                     target.appendChild((0, encodeRpcBodyLines_5.default)(env, lines, {
                                         lateInteractivityEnabledChecker: () => testCase.src.text === env.getLocalState(),
                                         excludeStdIoFromPaths: true,
+                                        capWidths: true,
                                         decorator: (line) => {
                                             console.log('in prefix:', markerPrefix, ', line:', line);
                                             const key = JSON.stringify([...markerPrefix, ...line]);
@@ -6589,7 +6607,7 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
                         row.appendChild(icons);
                         const status = document.createElement('span');
                         status.innerText = `⏳`;
-                        row.style.order = '3';
+                        row.style.order = '1';
                         env.testManager.evaluateTest(category, tc.name).then(result => {
                             // console.log('tstatus for', category, '>', tc.name, ':', result);
                             if (result == 'failed-fetching') {
@@ -6606,7 +6624,7 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
                                     }
                                     case 'error': {
                                         status.innerText = `❌`;
-                                        row.style.order = '1';
+                                        row.style.order = '3';
                                         break;
                                     }
                                     default: {

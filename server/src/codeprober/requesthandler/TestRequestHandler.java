@@ -43,6 +43,7 @@ public class TestRequestHandler {
 							names.add(name);
 						}
 					}
+					names.sort(String::compareTo);
 					return new ListTestSuitesRes(TestSuiteListOrError.fromSuites(names));
 				} else {
 					System.err

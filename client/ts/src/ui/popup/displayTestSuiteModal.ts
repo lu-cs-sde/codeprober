@@ -103,7 +103,7 @@ const displayTestSuiteModal = (
 
           const status = document.createElement('span');
           status.innerText = `⏳`;
-          row.style.order = '3';
+          row.style.order = '1';
           env.testManager.evaluateTest(category, tc.name).then(result => {
             // console.log('tstatus for', category, '>', tc.name, ':', result);
             if (result == 'failed-fetching') {
@@ -119,7 +119,7 @@ const displayTestSuiteModal = (
                   }
                   case 'error': {
                     status.innerText = `❌`;
-                    row.style.order = '1';
+                    row.style.order = '3';
                     break;
                   }
                   default: {

@@ -315,6 +315,7 @@ const displayTestDiffModal = (
                         target.appendChild(encodeRpcBodyLines(env, lines, {
                           lateInteractivityEnabledChecker: () => false,
                           excludeStdIoFromPaths: true,
+                          capWidths: true,
                           decorator: (line) => {
                             const key = JSON.stringify([...markerPrefix, ...line]);
                             const marker = testStatus.expectedMarkers[key];
@@ -389,6 +390,7 @@ const displayTestDiffModal = (
                   target.appendChild(encodeRpcBodyLines(env, lines, {
                     lateInteractivityEnabledChecker: () => testCase.src.text === env.getLocalState(),
                     excludeStdIoFromPaths: true,
+                    capWidths: true,
                     decorator: (line) => {
                       console.log('in prefix:', markerPrefix, ', line:', line);
                       const key = JSON.stringify([...markerPrefix, ...line]);
