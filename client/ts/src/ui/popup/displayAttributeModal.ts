@@ -1,6 +1,6 @@
 import createLoadingSpinner from "../create/createLoadingSpinner";
 import createModalTitle from "../create/createModalTitle";
-import displayProbeModal from "./displayProbeModal";
+import displayProbeModal, { metaNodesWithPropertyName } from "./displayProbeModal";
 import displayArgModal from "./displayArgModal";
 import formatAttr from "./formatAttr";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
@@ -20,19 +20,18 @@ const displayAttributeModal = (
   locator: UpdatableNodeLocator,
 ) => {
   const queryId = `attr-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-  console.log('dAM');
   let filter: string = '';
   let state: { type: 'attrs', attrs: Property[] } | { type: 'err', body: RpcBodyLine[] } | null = null;
 
  let fetchState: 'idle' | 'fetching' | 'queued' = 'idle';
   const cleanup = () => {
-    console.log('DAM, cleanup');
     delete env.onChangeListeners[queryId];
     popup.remove();
   };
   let isFirstRender = true;
   const popup = env.showWindow({
     pos: modalPos,
+    debugLabel: `attr:${locator.get().result.type}`,
     rootStyle: `
       min-width: 16rem;
       min-height: 8rem;
@@ -196,6 +195,9 @@ const displayAttributeModal = (
             nodesList.push(node);
             node.tabIndex = 0;
             node.onmousedown = (e) => { e.stopPropagation(); }
+            node.style.whiteSpace = 'break-spaces';
+            node.style.maxWidth = '100%';
+            node.style.wordBreak = 'break-all';
             node.classList.add('syntax-attr-dim-focus');
             node.classList.add('clickHighlightOnHover');
             node.style.padding = '0 0.25rem';
@@ -226,17 +228,34 @@ const displayAttributeModal = (
             sortedAttrs.appendChild(node);
           };
 
+          const addSubmitExplanation = (msg: string) => {
+            const submitExpl = document.createElement('p');
+            submitExpl.classList.add('syntax-attr');
+            submitExpl.style.textAlign = 'center';
+            submitExpl.innerText = msg;
+            sortedAttrs.appendChild(submitExpl);
+          };
 
+          /**
+           * TODO if the user has typed "*.foo", allow them to press enter even if no matches exist.
+           * This will be a semi-hidden convenient shortcut for creating metaprobes
+           */
           matches.forEach((attr, idx) => buildNode(attr, idx > 0, matches.length === 1));
           if (matches.length && misses.length) {
             if (matches.length === 1) {
-              const submitExpl = document.createElement('p');
-              submitExpl.classList.add('syntax-attr');
-              submitExpl.style.textAlign = 'center';
-              submitExpl.innerText = 'Press enter to select';
-              sortedAttrs.appendChild(submitExpl);
+              addSubmitExplanation('Press enter to select');
               submit = () => showProbe(matches[0]);
             }
+            const sep = document.createElement('div');
+            sep.classList.add('search-list-separator')
+            sortedAttrs.appendChild(sep);
+          } else if (!matches.length && filter.startsWith('*.') && filter.length >= 3) {
+            addSubmitExplanation('Press enter to create meta probe');
+            submit = () => {
+              const prop: Property = { name: metaNodesWithPropertyName, args: [{ type: 'string', value: filter.slice('*.'.length)}] };
+              cleanup();
+              displayProbeModal(env, popup.getPos(), locator, prop, {});
+            };
             const sep = document.createElement('div');
             sep.classList.add('search-list-separator')
             sortedAttrs.appendChild(sep);
@@ -255,7 +274,6 @@ const displayAttributeModal = (
     },
   });
   const refresher = env.createCullingTaskSubmitter();
-  console.log('DAM, inserting', queryId);
   env.onChangeListeners[queryId] = (adjusters) => {
     if (adjusters) {
       locator.adjust(adjusters);
@@ -265,7 +283,6 @@ const displayAttributeModal = (
       popup.refresh();
     });
   };
-  console.log('changeListeners:', env.onChangeListeners);
 
  const fetchAttrs = () => {
   switch (fetchState) {

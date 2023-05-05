@@ -435,7 +435,11 @@ define("ui/create/attachDragToMove", ["require", "exports", "ui/create/attachDra
         const cleanup = (0, attachDragToX_1.default)(element, onBegin, onUpdate, onFinishedMove).cleanup;
         return {
             cleanup,
-            getPos: () => elemPos
+            getPos: () => elemPos,
+            bumpIntoScreen: () => {
+                onBegin();
+                onUpdate(0, 0);
+            },
         };
     };
     exports.default = attachDragToMove;
@@ -489,6 +493,7 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
             resizePositioner.style.width = 'fit-contents';
             resizePositioner.style.height = '0px';
             resizePositioner.style.position = 'sticky';
+            resizePositioner.style.zIndex = '99';
             const resizeButton = document.createElement('div');
             resizeButton.style.position = 'absolute';
             resizeButton.style.right = '0px';
@@ -537,6 +542,7 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
             },
             getPos: dragToMove.getPos,
             getSize: () => ({ width: root.clientWidth, height: root.clientHeight }),
+            bumpIntoScreen: dragToMove.bumpIntoScreen,
         };
     };
     exports.default = showWindow;
@@ -1521,7 +1527,25 @@ define("model/findLocatorWithNestingPath", ["require", "exports"], function (req
     Object.defineProperty(exports, "__esModule", { value: true });
     const findLocatorWithNestingPath = (path, rootLines) => {
         const step = (index, from) => {
-            const line = rootLines[path[index]];
+            let position = path[index];
+            // We want something at index `position`, but stdio messages don't contribute to indexes (see 'excludeStdIoFromPaths' in encodeRpcBodyLines).
+            // Iterate until we have seen `position` number of non-stdio elements.
+            for (let i = 0; i < from.length; ++i) {
+                switch (from[i].type) {
+                    case 'stdout':
+                    case 'stderr':
+                        break;
+                    default:
+                        if (position <= 0) {
+                            position = i;
+                            i = from.length;
+                            break;
+                        }
+                        --position;
+                        break;
+                }
+            }
+            const line = from[position];
             if (!line) {
                 return null;
             }
@@ -1977,7 +2001,7 @@ define("model/test/TestManager", ["require", "exports", "model/findLocatorWithNe
                 }
                 alreadyExisted = true;
             }
-            await saveCategoryState(category, [...(suiteListRepo[category] || []).filter(tc => tc.name !== test.name), test]);
+            await saveCategoryState(category, [...(suiteListRepo[category] || []).filter(tc => tc.name !== test.name), test].sort((a, b) => a.name < b.name ? -1 : 1));
             ++categoryInvalidationCount;
             if (overwriteIfExisting && testStatusRepo[category]) {
                 delete testStatusRepo[category][test.name];
@@ -2037,6 +2061,7 @@ define("model/test/TestManager", ["require", "exports", "model/findLocatorWithNe
             });
             if (result.type === 'contents') {
                 const cases = result.value.cases;
+                cases.sort((a, b) => a.name < b.name ? -1 : 1);
                 suiteListRepo[id] = cases;
                 return cases;
             }
@@ -2152,6 +2177,7 @@ define("model/test/TestManager", ["require", "exports", "model/findLocatorWithNe
                 const nestPathParts = nest.path;
                 const nestLocator = (0, findLocatorWithNestingPath_1.default)(nestPathParts, rootRes.body);
                 if (!nestLocator) {
+                    console.warn('Could not find node', nest.path, 'in ', rootRes.body);
                     return {
                         path: nest.path,
                         property: nest.property,
@@ -2180,7 +2206,7 @@ define("model/test/TestManager", ["require", "exports", "model/findLocatorWithNe
             const convertResToTest = (res) => {
                 if (res.result === 'could-not-find-node') {
                     return { path: res.path, property: res.property, expectedOutput: [{
-                                type: 'plain', value: 'Could not find',
+                                type: 'plain', value: 'Error: could not find node',
                             }], nestedProperties: [] };
                 }
                 return {
@@ -2431,7 +2457,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
         return callback;
     };
     const displayArgModal = (env, modalPos, locator, attr, nested) => {
-        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const queryId = `arg-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let lastLocatorRequest = null;
         const cleanup = () => {
             if (window.ActiveLocatorRequest === lastLocatorRequest) {
@@ -2478,6 +2504,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
         };
         const popup = env.showWindow({
             pos: modalPos,
+            debugLabel: `arg:${attr.name}`,
             rootStyle: `
       min-width: 16rem;
       min-height: 4rem;
@@ -2845,7 +2872,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     startEndToSpan_4 = __importDefault(startEndToSpan_4);
     const displayAstModal = (env, modalPos, locator, listDirection, initialTransform) => {
         var _a, _b, _c, _d, _e;
-        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const queryId = `ast-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let state = null;
         let lightTheme = env.themeIsLight();
         const stickyController = (0, createStickyHighlightController_1.default)(env);
@@ -2879,6 +2906,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                 width: initialTransform.width,
                 height: initialTransform.height,
             } : undefined,
+            debugLabel: `ast:${locator.get().result.type}`,
             rootStyle: `
       min-width: 24rem;
       min-height: 12rem;
@@ -3342,7 +3370,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
     createModalTitle_4 = __importDefault(createModalTitle_4);
-    displayProbeModal_2 = __importDefault(displayProbeModal_2);
+    displayProbeModal_2 = __importStar(displayProbeModal_2);
     displayArgModal_1 = __importDefault(displayArgModal_1);
     formatAttr_2 = __importDefault(formatAttr_2);
     createTextSpanIndicator_4 = __importDefault(createTextSpanIndicator_4);
@@ -3354,18 +3382,17 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     startEndToSpan_5 = __importDefault(startEndToSpan_5);
     const displayAttributeModal = (env, modalPos, locator) => {
         const queryId = `attr-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-        console.log('dAM');
         let filter = '';
         let state = null;
         let fetchState = 'idle';
         const cleanup = () => {
-            console.log('DAM, cleanup');
             delete env.onChangeListeners[queryId];
             popup.remove();
         };
         let isFirstRender = true;
         const popup = env.showWindow({
             pos: modalPos,
+            debugLabel: `attr:${locator.get().result.type}`,
             rootStyle: `
       min-width: 16rem;
       min-height: 8rem;
@@ -3524,6 +3551,9 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                             nodesList.push(node);
                             node.tabIndex = 0;
                             node.onmousedown = (e) => { e.stopPropagation(); };
+                            node.style.whiteSpace = 'break-spaces';
+                            node.style.maxWidth = '100%';
+                            node.style.wordBreak = 'break-all';
                             node.classList.add('syntax-attr-dim-focus');
                             node.classList.add('clickHighlightOnHover');
                             node.style.padding = '0 0.25rem';
@@ -3556,16 +3586,34 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                             };
                             sortedAttrs.appendChild(node);
                         };
+                        const addSubmitExplanation = (msg) => {
+                            const submitExpl = document.createElement('p');
+                            submitExpl.classList.add('syntax-attr');
+                            submitExpl.style.textAlign = 'center';
+                            submitExpl.innerText = msg;
+                            sortedAttrs.appendChild(submitExpl);
+                        };
+                        /**
+                         * TODO if the user has typed "*.foo", allow them to press enter even if no matches exist.
+                         * This will be a semi-hidden convenient shortcut for creating metaprobes
+                         */
                         matches.forEach((attr, idx) => buildNode(attr, idx > 0, matches.length === 1));
                         if (matches.length && misses.length) {
                             if (matches.length === 1) {
-                                const submitExpl = document.createElement('p');
-                                submitExpl.classList.add('syntax-attr');
-                                submitExpl.style.textAlign = 'center';
-                                submitExpl.innerText = 'Press enter to select';
-                                sortedAttrs.appendChild(submitExpl);
+                                addSubmitExplanation('Press enter to select');
                                 submit = () => showProbe(matches[0]);
                             }
+                            const sep = document.createElement('div');
+                            sep.classList.add('search-list-separator');
+                            sortedAttrs.appendChild(sep);
+                        }
+                        else if (!matches.length && filter.startsWith('*.') && filter.length >= 3) {
+                            addSubmitExplanation('Press enter to create meta probe');
+                            submit = () => {
+                                const prop = { name: displayProbeModal_2.metaNodesWithPropertyName, args: [{ type: 'string', value: filter.slice('*.'.length) }] };
+                                cleanup();
+                                (0, displayProbeModal_2.default)(env, popup.getPos(), locator, prop, {});
+                            };
                             const sep = document.createElement('div');
                             sep.classList.add('search-list-separator');
                             sortedAttrs.appendChild(sep);
@@ -3583,7 +3631,6 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
             },
         });
         const refresher = env.createCullingTaskSubmitter();
-        console.log('DAM, inserting', queryId);
         env.onChangeListeners[queryId] = (adjusters) => {
             if (adjusters) {
                 locator.adjust(adjusters);
@@ -3593,7 +3640,6 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                 popup.refresh();
             });
         };
-        console.log('changeListeners:', env.onChangeListeners);
         const fetchAttrs = () => {
             switch (fetchState) {
                 case 'idle': {
@@ -3809,6 +3855,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                     if (extras.decorator) {
                         applyDecoratorClass(container, nestingLevel <= 1, extras.decorator(bodyPath));
                     }
+                    // container.appendChild(document.createTextNode(`area:${JSON.stringify(bodyPath)}`));
                     const span = {
                         lineStart: (start >>> 12), colStart: (start & 0xFFF),
                         lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
@@ -3879,7 +3926,8 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                             });
                         }
                         const outerContainer = document.createElement('div');
-                        outerContainer.style.display = 'flex';
+                        outerContainer.style.display = 'inline-flex';
+                        // outerContainer.style.marginBottom = '0.125rem';
                         outerContainer.style.flexDirection = 'column';
                         outerContainer.appendChild(middleContainer);
                         const existingExpansionArea = extras.nodeLocatorExpanderHandler.getReusableExpansionArea(bodyPath);
@@ -3896,8 +3944,8 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                             locatorRoot: outerContainer,
                             expansionArea,
                             path: bodyPath,
+                            isFresh: !existingExpansionArea,
                         });
-                        // }
                     }
                     else {
                         target.appendChild(container);
@@ -3986,7 +4034,7 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "ui/create/cr
     createModalTitle_5 = __importDefault(createModalTitle_5);
     showWindow_3 = __importDefault(showWindow_3);
     const displayTestAdditionModal = (env, modalPos, locator, request) => {
-        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const queryId = `tadd-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         // Capture `baseProps` immediately, in case the user modifies text while this dialog is open
         const baseProps = env.createParsingRequestData();
         let categories = 'loading';
@@ -4070,11 +4118,8 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "ui/create/cr
                             datalist.appendChild(opt);
                         });
                         row.appendChild(datalist);
-                        console.log('cat:', category);
                         category.oninput = () => {
-                            console.log('change???');
                             state.category = category.value;
-                            console.log('cat: ', state.category);
                             update();
                         };
                         root.appendChild(row);
@@ -4187,7 +4232,7 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "ui/create/cr
     };
     exports.default = displayTestAdditionModal;
 });
-define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, createTextSpanIndicator_6, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_4, formatAttr_3, startEndToSpan_6, trimTypeName_4) {
+define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, createTextSpanIndicator_6, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_4, displayProbeModal_3, formatAttr_3, startEndToSpan_6, trimTypeName_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createTextSpanIndicator_6 = __importDefault(createTextSpanIndicator_6);
@@ -4198,7 +4243,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
     startEndToSpan_6 = __importDefault(startEndToSpan_6);
     trimTypeName_4 = __importDefault(trimTypeName_4);
     const renderProbeModalTitleLeft = (env, container, close, getWindowPos, stickyController, locator, attr, nested, typeRenderingStyle) => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e;
         if (typeRenderingStyle !== 'minimal-nested') {
             const headType = document.createElement('span');
             headType.classList.add('syntax-type');
@@ -4207,7 +4252,10 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
         }
         const headAttr = document.createElement('span');
         headAttr.classList.add('syntax-attr');
-        if (!attr.args || attr.args.length === 0) {
+        if (attr.name === displayProbeModal_3.metaNodesWithPropertyName) {
+            headAttr.innerText = `.*.${(_c = (_b = attr.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value}`;
+        }
+        else if (!attr.args || attr.args.length === 0) {
             headAttr.innerText = `.${(0, formatAttr_3.default)(attr)}`;
         }
         else {
@@ -4230,7 +4278,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
             };
         }
         container.appendChild(headAttr);
-        if (((_b = attr.args) === null || _b === void 0 ? void 0 : _b.length) && env) {
+        if (((_d = attr.args) === null || _d === void 0 ? void 0 : _d.length) && env && attr.name !== displayProbeModal_3.metaNodesWithPropertyName) {
             const editButton = document.createElement('img');
             editButton.src = '/icons/edit_white_24dp.svg';
             editButton.classList.add('modalEditButton');
@@ -4247,8 +4295,9 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
                 span: (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end),
                 marginLeft: true,
                 onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end) : null),
-                onClick: (_c = stickyController === null || stickyController === void 0 ? void 0 : stickyController.onClick) !== null && _c !== void 0 ? _c : undefined,
+                onClick: (_e = stickyController === null || stickyController === void 0 ? void 0 : stickyController.onClick) !== null && _e !== void 0 ? _e : undefined,
                 external: locator.get().result.external,
+                styleOverride: typeRenderingStyle === 'minimal-nested' ? 'lines-compact' : undefined,
             });
             stickyController === null || stickyController === void 0 ? void 0 : stickyController.configure(spanIndicator, locator);
             (0, registerNodeSelector_3.default)(spanIndicator, () => locator.get());
@@ -4262,9 +4311,11 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
     Object.defineProperty(exports, "__esModule", { value: true });
     const createInlineArea = (args) => {
         let { inlineRoot, expansionAreaInsideTheRoot } = args;
-        const applyActiveRootStyling = () => {
+        const applyActiveRootStyling = (from) => {
             inlineRoot.style.border = '1px solid black';
             inlineRoot.style.paddingTop = '0.25rem';
+            inlineRoot.style.marginTop = '0.25rem';
+            inlineRoot.style.marginBottom = '0.25rem';
         };
         const activeWindowClosers = [];
         const localChangeListeners = {};
@@ -4279,7 +4330,7 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
             }),
             add: (args) => {
                 if (activeSubWindowCount === 0) {
-                    applyActiveRootStyling();
+                    applyActiveRootStyling('add');
                     expansionAreaInsideTheRoot.style.marginTop = '0.25rem';
                 }
                 ++activeSubWindowCount;
@@ -4309,20 +4360,25 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
                     getSize: () => ({ width: localDiv.clientWidth, height: localDiv.clientHeight }),
                     refresh: () => renderFn(),
                     remove: () => {
-                        console.log('TODO remove me');
                         const parent = localDiv.parentElement;
                         if (parent)
                             parent.removeChild(localDiv);
                         --activeSubWindowCount;
                         if (activeSubWindowCount === 0) {
                             inlineRoot.style.border = 'none';
+                            inlineRoot.style.paddingTop = '0';
+                            inlineRoot.style.marginTop = '0';
+                            inlineRoot.style.marginBottom = '0';
                         }
                         const idx = activeWindowClosers.findIndex(x => x === closer);
                         if (idx !== -1) {
                             activeWindowClosers.splice(idx, 1);
-                            // activeWindowRefreshers.splice(idx, 1);
+                        }
+                        else {
+                            console.log('could not find index of closer in remove');
                         }
                     },
+                    bumpIntoScreen: () => { }
                 };
             },
             notifyListenersOfChange: () => {
@@ -4332,12 +4388,14 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
         return {
             area,
             destroyer: () => {
-                activeWindowClosers.forEach(closer => closer());
+                [...activeWindowClosers].forEach((closer, idx) => {
+                    closer();
+                });
             },
             updateRoot: (newRoot) => {
                 inlineRoot = newRoot;
                 if (activeSubWindowCount > 0) {
-                    applyActiveRootStyling();
+                    applyActiveRootStyling(`update:${activeSubWindowCount}`);
                 }
             },
             // refresh: () => {
@@ -4400,6 +4458,7 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
 define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_2, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_3, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.metaNodesWithPropertyName = void 0;
     createLoadingSpinner_4 = __importDefault(createLoadingSpinner_4);
     createModalTitle_6 = __importDefault(createModalTitle_6);
     displayHelp_3 = __importDefault(displayHelp_3);
@@ -4411,6 +4470,8 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     displayAttributeModal_5 = __importDefault(displayAttributeModal_5);
     displayAstModal_2 = __importDefault(displayAstModal_2);
     createInlineWindowManager_1 = __importDefault(createInlineWindowManager_1);
+    const metaNodesWithPropertyName = `m:NodesWithProperty`;
+    exports.metaNodesWithPropertyName = metaNodesWithPropertyName;
     const displayProbeModal = (env, modalPos, locator, property, nestedWindows) => {
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         // console.log('displayProbeModal, nested:', nestedWindows, 'attr:', property.name, ', query:', queryId);
@@ -4447,16 +4508,16 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             delete env.probeMarkers[queryId];
             delete env.probeWindowStateSavers[queryId];
             env.currentlyLoadingModals.delete(queryId);
-            env.triggerWindowSave();
-            if (localErrors.length > 0) {
-                env.updateMarkers();
-            }
             stickyController.cleanup();
-            console.log('cleanup: ', { loading, activelyLoadingJob });
             if (loading && activelyLoadingJob !== null) {
                 doStopJob(activelyLoadingJob);
             }
+            // console.log('cleanup: ', queryId, 'inline state:', inlineWindowManager.getWindowStates());
             inlineWindowManager.destroy();
+            if (localErrors.length > 0) {
+                env.updateMarkers();
+            }
+            env.triggerWindowSave();
         };
         let copyBody = [];
         const getNestedTestRequests = (path, state) => {
@@ -4473,22 +4534,23 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             return { path, property: state.property, nested, };
         };
         const createTitle = () => {
-            return (0, createModalTitle_6.default)({
+            var _a, _b;
+            const titleNode = (0, createModalTitle_6.default)({
                 extraActions: [
                     ...(env.getGlobalModalEnv() === env
                         ? [{
                                 title: 'Duplicate window',
                                 invoke: () => {
                                     const pos = queryWindow.getPos();
-                                    displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator.createMutableClone(), property, nestedWindows);
+                                    displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator.createMutableClone(), property, inlineWindowManager.getWindowStates());
                                 },
                             }]
                         : [{
                                 title: 'Detatch window',
                                 invoke: () => {
-                                    const pos = queryWindow.getPos();
+                                    const states = inlineWindowManager.getWindowStates();
                                     cleanup();
-                                    displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, nestedWindows);
+                                    displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, states);
                                 },
                             }]),
                     {
@@ -4503,6 +4565,14 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             navigator.clipboard.writeText(copyBody.map(line => typeof line === 'string' ? line : JSON.stringify(line, null, 2)).join('\n'));
                         }
                     },
+                    ...(((_b = (_a = property.args) === null || _a === void 0 ? void 0 : _a.length) !== null && _b !== void 0 ? _b : 0) === 0 ? [
+                        {
+                            title: 'Create metaProbe',
+                            invoke: () => {
+                                displayProbeModal(env, null, locator, { name: metaNodesWithPropertyName, args: [{ type: 'string', value: property.name }] }, {});
+                            }
+                        },
+                    ] : []),
                     {
                         title: 'General probe help',
                         invoke: () => {
@@ -4538,13 +4608,18 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 onClose: () => {
                     cleanup();
                 },
-            });
+            }).element;
+            if (env === env.getGlobalModalEnv()) {
+                titleNode.style.zIndex = `1`;
+            }
+            return titleNode;
         };
         let lastSpinner = null;
         let isFirstRender = true;
         let refreshOnDone = false;
         const queryWindow = env.showWindow({
             pos: modalPos,
+            debugLabel: `probe:${property.name}`,
             rootStyle: `
       min-width: 16rem;
       min-height: fit-content;
@@ -4561,7 +4636,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     isFirstRender = false;
                     while (root.firstChild)
                         root.removeChild(root.firstChild);
-                    root.appendChild(createTitle().element);
+                    root.appendChild(createTitle());
                     const spinner = (0, createLoadingSpinner_4.default)();
                     spinner.classList.add('absoluteCenter');
                     const spinnerWrapper = document.createElement('div');
@@ -4713,7 +4788,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 });
                 doFetch()
                     .then((parsed) => {
-                    var _a, _b;
+                    var _a, _b, _c, _d;
                     loading = false;
                     if (parsed === 'stopped') {
                         refreshOnDone = false;
@@ -4728,7 +4803,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     if (parsed === 'stopped') {
                         while (root.firstChild)
                             root.removeChild(root.firstChild);
-                        root.append(createTitle().element);
+                        root.append(createTitle());
                         const p = document.createElement('p');
                         p.innerText = `Property evaluation stopped. If any update happens (e.g text or setting changed within CodeProber), evaluation will be attempted again.`;
                         root.appendChild(p);
@@ -4779,19 +4854,28 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             env.updateMarkers();
                         }
                         const titleRow = createTitle();
-                        root.append(titleRow.element);
+                        root.append(titleRow);
                         lastOutput = body;
-                        // TODO, record which lines are used. Clear inline windows that are no longer usable.
-                        const enableExpander = body.length >= 1 && (body[0].type === 'node' || (body[0].type === 'arr' && body[0].value.length >= 1 && body[0].value[0].type === 'node'));
+                        const enableExpander = true;
+                        // const enableExpander = body.length >= 1 && (body[0].type === 'node' || (
+                        //   body[0].type === 'arr' && body[0].value.length >= 1 && body[0].value[0].type === 'node'
+                        // ));
+                        if (property.name === metaNodesWithPropertyName && body.length === 1 && body[0].type === 'arr' && body[0].value.length === 0) {
+                            const message = document.createElement('div');
+                            message.style.padding = '0.25rem';
+                            message.innerText = `Found no nodes implementing '${(_d = (_c = property.args) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.value}'`;
+                            message.style.fontStyle = 'italic';
+                            root.appendChild(message);
+                        }
                         const areasToKeep = new Set();
-                        // const enableExpander = true;
                         root.appendChild((0, encodeRpcBodyLines_3.default)(env, body, {
+                            excludeStdIoFromPaths: true,
                             nodeLocatorExpanderHandler: enableExpander ? ({
                                 getReusableExpansionArea: (path) => {
                                     return inlineWindowManager.getPreviousExpansionArea(path);
                                 },
-                                onCreate: ({ locator, locatorRoot, expansionArea, path: nestId }) => {
-                                    var _a;
+                                onCreate: ({ locator, locatorRoot, expansionArea, path: nestId, isFresh }) => {
+                                    var _a, _b, _c;
                                     areasToKeep.add(JSON.stringify(nestId));
                                     const updLocator = (_a = inlineWindowManager.getPreviouslyAssociatedLocator(nestId)) !== null && _a !== void 0 ? _a : (0, UpdatableNodeLocator_4.createMutableLocator)(locator);
                                     updLocator.set(locator);
@@ -4799,25 +4883,29 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     const nestedEnv = area.getNestedModalEnv(env);
                                     const encodedId = JSON.stringify(nestId);
                                     const nests = nestedWindows[encodedId];
-                                    if (!nests) {
-                                        return;
+                                    if (nests) {
+                                        delete nestedWindows[encodedId];
+                                        nests.forEach(nest => {
+                                            switch (nest.data.type) {
+                                                case 'probe': {
+                                                    const dat = nest.data;
+                                                    displayProbeModal(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator), dat.property, dat.nested);
+                                                    break;
+                                                }
+                                                case 'ast': {
+                                                    const dat = nest.data;
+                                                    (0, displayAstModal_2.default)(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator), dat.direction, dat.transform);
+                                                    break;
+                                                }
+                                            }
+                                        });
                                     }
-                                    delete nestedWindows[encodedId];
-                                    nests.forEach(nest => {
-                                        // nest.ty
-                                        switch (nest.data.type) {
-                                            case 'probe': {
-                                                const dat = nest.data;
-                                                displayProbeModal(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator), dat.property, dat.nested);
-                                                break;
-                                            }
-                                            case 'ast': {
-                                                const dat = nest.data;
-                                                (0, displayAstModal_2.default)(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator), dat.direction, dat.transform);
-                                                break;
-                                            }
+                                    if (isFresh && property.name === metaNodesWithPropertyName) {
+                                        const nestedPropName = (_c = (_b = property.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value;
+                                        if (!(nests === null || nests === void 0 ? void 0 : nests.some((nest) => nest.data.type === 'probe' && nest.data.property.name === nestedPropName))) {
+                                            displayProbeModal(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator), { name: nestedPropName }, {});
                                         }
-                                    });
+                                    }
                                 },
                                 onClick: ({ locator, locatorRoot, expansionArea, path: nestId }) => {
                                     const prevLocator = inlineWindowManager.getPreviouslyAssociatedLocator(nestId);
@@ -4844,6 +4932,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     spinner.classList.add('absoluteCenter');
                     lastSpinner = spinner;
                     root.appendChild(spinner);
+                    queryWindow.bumpIntoScreen();
                 })
                     .catch(err => {
                     loading = false;
@@ -4883,13 +4972,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 refresher.submit(() => queryWindow.refresh());
             }
         };
-        // locator.setUpdateCallback(queryId, () => {
-        //   if (loading) {
-        //     refreshOnDone = true;
-        //   } else {
-        //     refresher.submit(() => queryWindow.refresh());
-        //   }
-        // });
         const getWindowStateData = () => {
             return {
                 type: 'probe',
@@ -4898,19 +4980,15 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 nested: inlineWindowManager.getWindowStates(),
             };
         };
+        // if (saveWindowState) {
         env.probeWindowStateSavers[queryId] = (target) => {
-            // const nested: NestedWindows = {};
-            // if (env === env.getGlobalModalEnv()) console.log('saving, activeNests:', activeNests);
-            // Object.entries(activeNests).forEach(([key, vals]) => {
-            //   nested[key] = vals.getWindowStates();
-            // });
-            // if (env === env.getGlobalModalEnv()) console.log('...resulting nested:', nested);
             target.push({
                 modalPos: queryWindow.getPos(),
                 data: getWindowStateData(),
             });
         };
         env.triggerWindowSave();
+        // }
     };
     exports.default = displayProbeModal;
 });
@@ -4926,7 +5004,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
     encodeRpcBodyLines_4 = __importDefault(encodeRpcBodyLines_4);
     trimTypeName_5 = __importDefault(trimTypeName_5);
     const displayRagModal = (env, line, col) => {
-        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const queryId = `rag-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const cleanup = () => {
             delete env.onChangeListeners[queryId];
             popup.remove();
@@ -5814,7 +5892,7 @@ define("model/runBgProbe", ["require", "exports", "settings"], function (require
     };
     exports.default = runInvisibleProbe;
 });
-define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_6, settings_6, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_1, displayHelp_4, displayProbeModal_3, encodeRpcBodyLines_5) {
+define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_6, settings_6, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_1, displayHelp_4, displayProbeModal_4, encodeRpcBodyLines_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     settings_6 = __importDefault(settings_6);
@@ -5825,7 +5903,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
     renderProbeModalTitleLeft_2 = __importDefault(renderProbeModalTitleLeft_2);
     UIElements_1 = __importDefault(UIElements_1);
     displayHelp_4 = __importDefault(displayHelp_4);
-    displayProbeModal_3 = __importDefault(displayProbeModal_3);
+    displayProbeModal_4 = __importDefault(displayProbeModal_4);
     encodeRpcBodyLines_5 = __importDefault(encodeRpcBodyLines_5);
     const preventDragOnClick = (elem) => {
         elem.onmousedown = (e) => {
@@ -5834,7 +5912,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
         };
     };
     const displayTestDiffModal = (env, modalPos, locator, property, testCategory, testCaseName) => {
-        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const queryId = `tcdiff-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let activeTab = 'output';
         // let lastKnownCapturedStdout;
         let isCleanedUp = false;
@@ -6089,12 +6167,11 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                 splitPane.style.gridTemplateColumns = '1fr 1px 1fr';
                                 const leftPane = document.createElement('div');
                                 addSplitTitle(leftPane, 'Expected');
-                                console.log('tstatus:', testStatus);
-                                const lhsInlineWindowManager = (0, createInlineWindowManager_2.default)();
                                 switch (testCase.assertType) {
                                     case 'IDENTITY':
                                     case 'SET': {
                                         const doEncodeRpcLines = (target, lines, nests, markerPrefix) => {
+                                            const lhsInlineWindowManager = (0, createInlineWindowManager_2.default)();
                                             if (!captureStdioSetting) {
                                                 lines = (0, rpcBodyToAssertionLine_2.rpcLinesToAssertionLines)(lines);
                                             }
@@ -6162,8 +6239,8 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                 splitPane.appendChild(divider);
                                 const rightPane = document.createElement('div');
                                 addSplitTitle(rightPane, 'Actual');
-                                const rhsInlineWindowManager = (0, createInlineWindowManager_2.default)();
                                 const doEncodeRpcLines = (target, lines, nests, markerPrefix) => {
+                                    const rhsInlineWindowManager = (0, createInlineWindowManager_2.default)();
                                     if (!captureStdioSetting) {
                                         lines = (0, rpcBodyToAssertionLine_2.rpcLinesToAssertionLines)(lines);
                                     }
@@ -6172,7 +6249,6 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                         excludeStdIoFromPaths: true,
                                         capWidths: true,
                                         decorator: (line) => {
-                                            console.log('in prefix:', markerPrefix, ', line:', line);
                                             const key = JSON.stringify([...markerPrefix, ...line]);
                                             const marker = testStatus.actualMarkers[key];
                                             if (marker === 'error') {
@@ -6184,10 +6260,14 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                         disableInlineExpansionButton: true,
                                         nodeLocatorExpanderHandler: {
                                             getReusableExpansionArea: () => null,
-                                            onCreate: ({ path, locatorRoot, expansionArea, locator }) => {
+                                            onCreate: ({ path, locatorRoot, expansionArea, locator, isFresh }) => {
+                                                // if (isFresh) {
+                                                //   if (testCase.property.name === metaNodesWithPropertyName) {
+                                                // TODO force expand meta/query properties here?
+                                                //   }
+                                                // }
                                                 const encodedPath = JSON.stringify(path);
                                                 const relatedNests = nests.filter(nest => JSON.stringify(nest.path) === encodedPath);
-                                                console.log('onCreate', path, '; nests:', nests, 'matches:', relatedNests);
                                                 if (relatedNests.length === 0) {
                                                     return;
                                                 }
@@ -6197,6 +6277,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                                 relatedNests.forEach((nest, nestIdx) => {
                                                     const localWindow = area.add({
                                                         onForceClose: () => { },
+                                                        debugLabel: `testdiff:right:${JSON.stringify(markerPrefix)}:nest:${nestIdx}`,
                                                         render: (root) => {
                                                             root.style.display = 'flex';
                                                             root.style.flexDirection = 'column';
@@ -6216,7 +6297,6 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                     }));
                                 };
                                 if (evaluationResult.output && evaluationResult.output.result !== 'could-not-find-node') {
-                                    console.log('actualOutput:', evaluationResult.output.result);
                                     doEncodeRpcLines(rightPane, evaluationResult.output.result.body, evaluationResult.output.result.nested, []);
                                 }
                                 // rightPane.appendChild(encodeRpcBodyLines(env, testStatus.lines, {
@@ -6329,7 +6409,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                         //   //   }
                                         //   // })
                                         //   })
-                                        (0, displayProbeModal_3.default)(env, null, (0, UpdatableNodeLocator_6.createMutableLocator)(locator), property, nestedTestToProbeData({
+                                        (0, displayProbeModal_4.default)(env, null, (0, UpdatableNodeLocator_6.createMutableLocator)(locator), property, nestedTestToProbeData({
                                             path: [],
                                             expectedOutput: testCase.expectedOutput,
                                             nestedProperties: testCase.nestedProperties,
@@ -6468,6 +6548,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                     spinner.classList.add('absoluteCenter');
                     lastSpinner = spinner;
                     root.appendChild(spinner);
+                    queryWindow.bumpIntoScreen();
                 })
                     .catch(err => {
                     if (refreshOnDone) {
@@ -6518,7 +6599,7 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
     showWindow_8 = __importDefault(showWindow_8);
     displayTestDiffModal_1 = __importDefault(displayTestDiffModal_1);
     const displayTestSuiteModal = (env, category) => {
-        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const queryId = `ts-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const cleanup = () => {
             popup.remove();
             env.testManager.removeListener(queryId);
@@ -6649,6 +6730,7 @@ define("ui/popup/displayTestSuiteModal", ["require", "exports", "ui/create/creat
                         };
                         rowList.appendChild(row);
                     });
+                    popup.bumpIntoScreen();
                 }
             }
         });
@@ -6672,7 +6754,7 @@ define("ui/popup/displayTestSuiteListModal", ["require", "exports", "ui/create/c
     showWindow_9 = __importDefault(showWindow_9);
     displayTestSuiteModal_1 = __importDefault(displayTestSuiteModal_1);
     const displayTestSuiteListModal = (env, onClose, serverSideWorkerProcessCount) => {
-        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const queryId = `tsl-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let isClosed = false;
         const cleanup = () => {
             isClosed = true;
@@ -6970,11 +7052,11 @@ define("ui/popup/displayWorkerStatus", ["require", "exports", "ui/create/createM
     };
     exports.default = displayWorkerStatus;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_4, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_3, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_7) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_5, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_3, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_7) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
-    displayProbeModal_4 = __importDefault(displayProbeModal_4);
+    displayProbeModal_5 = __importDefault(displayProbeModal_5);
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_5 = __importDefault(displayHelp_5);
     displayAttributeModal_7 = __importDefault(displayAttributeModal_7);
@@ -7026,14 +7108,14 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         let updateSpanHighlight = (span, stickies) => { };
         const onChangeListeners = {};
         const probeWindowStateSavers = {};
+        const windowSaveDebouncer = (0, cullingTaskSubmitterFactory_2.default)(10)();
         const triggerWindowSave = () => {
+            // windowSaveDebouncer.submit(() => {
             const states = [];
             Object.values(probeWindowStateSavers).forEach(v => v(states));
             settings_7.default.setProbeWindowStates(states);
+            // });
         };
-        // setInterval(() => {
-        //   console.log('listener ids:', JSON.stringify(Object.keys(onChangeListeners)));
-        // }, 1000);
         const notifyLocalChangeListeners = (adjusters, reason) => {
             Object.values(onChangeListeners).forEach(l => l(adjusters, reason));
             triggerWindowSave();
@@ -7271,6 +7353,13 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     createJobId,
                     getGlobalModalEnv: () => modalEnv,
                 };
+                // Faulty cleanup debugger code below
+                // setInterval(() => {
+                //   console.log('save ids:', JSON.stringify(Object.keys(modalEnv.probeWindowStateSavers)));
+                //   console.log('marker ids:', JSON.stringify(Object.keys(modalEnv.probeMarkers)));
+                //   console.log('onChange ids:', JSON.stringify(Object.keys(modalEnv.onChangeListeners)));
+                //   console.log('saver ids:', JSON.stringify(Object.keys(modalEnv.probeWindowStateSavers)));
+                // }, 5000);
                 modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {
                     if (reason === 'refresh-from-server') {
                         testManager.flushTestCaseData();
@@ -7321,7 +7410,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         windowStates.forEach((state) => {
                             switch (state.data.type) {
                                 case 'probe': {
-                                    (0, displayProbeModal_4.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_7.createMutableLocator)(state.data.locator), state.data.property, state.data.nested);
+                                    (0, displayProbeModal_5.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_7.createMutableLocator)(state.data.locator), state.data.property, state.data.nested);
                                     break;
                                 }
                                 case 'ast': {

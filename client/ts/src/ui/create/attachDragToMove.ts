@@ -34,7 +34,11 @@ const attachDragToMove = (element: HTMLElement, initialPos?: ModalPosition | nu
   ).cleanup;
   return {
     cleanup,
-    getPos: () => elemPos
+    getPos: () => elemPos,
+    bumpIntoScreen: () => {
+      onBegin();
+      onUpdate(0, 0);
+    },
   }
 }
 

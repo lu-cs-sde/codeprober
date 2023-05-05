@@ -9,7 +9,7 @@ const displayTestSuiteModal = (
   env: ModalEnv,
   category: string,
 ) => {
-  const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+  const queryId = `ts-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
 
   const cleanup = () => {
     popup.remove();
@@ -147,6 +147,7 @@ const displayTestSuiteModal = (
 
           rowList.appendChild(row);
         });
+        popup.bumpIntoScreen();
       }
     }
   });

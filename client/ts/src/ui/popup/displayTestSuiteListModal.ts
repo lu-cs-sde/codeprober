@@ -9,7 +9,7 @@ const displayTestSuiteListModal = (
   onClose: () => void,
   serverSideWorkerProcessCount: number | undefined,
 ) => {
-  const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+  const queryId = `tsl-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
 
   let isClosed = false;
   const cleanup = () => {

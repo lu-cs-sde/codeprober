@@ -7,7 +7,7 @@ import { NestedTestRequest, NestedTestResponse } from '../../model/test/TestMana
 
 
 const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: NodeLocator, request: Omit<NestedTestRequest, 'path'>) => {
-  const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+  const queryId = `tadd-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
 
   // Capture `baseProps` immediately, in case the user modifies text while this dialog is open
   const baseProps = env.createParsingRequestData();
@@ -98,11 +98,8 @@ const displayTestAdditionModal = (env: ModalEnv, modalPos: ModalPosition | null,
           })
           row.appendChild(datalist);
 
-          console.log('cat:', category);
           category.oninput = () => {
-            console.log('change???');
             state.category = category.value;
-            console.log('cat: ', state.category);
             update();
           }
           root.appendChild(row);

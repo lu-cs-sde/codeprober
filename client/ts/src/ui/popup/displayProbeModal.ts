@@ -16,6 +16,8 @@ import UpdatableNodeLocator, { createImmutableLocator, createMutableLocator } fr
 import { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
 import { NestedTestRequest } from '../../model/test/TestManager';
 
+const metaNodesWithPropertyName = `m:NodesWithProperty`;
+
 const displayProbeModal = (
   env: ModalEnv,
   modalPos: ModalPosition | null,
@@ -60,16 +62,16 @@ const displayProbeModal = (
     delete env.probeMarkers[queryId];
     delete env.probeWindowStateSavers[queryId];
     env.currentlyLoadingModals.delete(queryId);
-    env.triggerWindowSave();
-    if (localErrors.length > 0) {
-      env.updateMarkers();
-    }
     stickyController.cleanup();
-    console.log('cleanup: ', { loading, activelyLoadingJob});
     if (loading && activelyLoadingJob !== null) {
       doStopJob(activelyLoadingJob);
     }
+    // console.log('cleanup: ', queryId, 'inline state:', inlineWindowManager.getWindowStates());
     inlineWindowManager.destroy();
+    if (localErrors.length > 0) {
+      env.updateMarkers();
+    }
+    env.triggerWindowSave();
   };
 
   let copyBody: RpcBodyLine[] = [];
@@ -86,7 +88,7 @@ const displayProbeModal = (
     return { path, property: state.property, nested, }
   };
   const createTitle = () => {
-    return createModalTitle({
+    const titleNode = createModalTitle({
       extraActions: [
         ...(
           env.getGlobalModalEnv() === env
@@ -94,15 +96,15 @@ const displayProbeModal = (
               title: 'Duplicate window',
               invoke: () => {
                 const pos = queryWindow.getPos();
-                displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator.createMutableClone(), property, nestedWindows);
+                displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator.createMutableClone(), property, inlineWindowManager.getWindowStates());
               },
             }]
             : [{
               title: 'Detatch window',
               invoke: () => {
-                const pos = queryWindow.getPos();
+                const states = inlineWindowManager.getWindowStates();
                 cleanup();
-                displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, nestedWindows);
+                displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, states);
               },
             }]
         ),
@@ -118,6 +120,14 @@ const displayProbeModal = (
             navigator.clipboard.writeText(copyBody.map(line => typeof line === 'string' ? line : JSON.stringify(line, null, 2)).join('\n'));
           }
         },
+        ...((property.args?.length ?? 0) === 0 ? [
+          {
+            title: 'Create metaProbe',
+            invoke: () => {
+              displayProbeModal(env, null, locator, { name: metaNodesWithPropertyName, args: [{ type: 'string', value: property.name }] }, {});
+            }
+          },
+        ] : []),
         {
           title: 'General probe help',
           invoke: () => {
@@ -160,7 +170,11 @@ const displayProbeModal = (
       onClose: () => {
         cleanup();
       },
-    });
+    }).element;
+    if (env === env.getGlobalModalEnv()) {
+      titleNode.style.zIndex = `1`;
+    }
+    return titleNode;
   };
   let lastSpinner: HTMLElement | null = null;
   let isFirstRender = true;
@@ -168,6 +182,7 @@ const displayProbeModal = (
 
   const queryWindow = env.showWindow({
     pos: modalPos,
+    debugLabel: `probe:${property.name}`,
     rootStyle: `
       min-width: 16rem;
       min-height: fit-content;
@@ -182,7 +197,7 @@ const displayProbeModal = (
       } else if (isFirstRender) {
         isFirstRender = false;
         while (root.firstChild) root.removeChild(root.firstChild);
-        root.appendChild(createTitle().element);
+        root.appendChild(createTitle());
         const spinner = createLoadingSpinner();
         spinner.classList.add('absoluteCenter');
         const spinnerWrapper = document.createElement('div');
@@ -345,7 +360,7 @@ const displayProbeModal = (
           if (cancelToken.cancelled) { return; }
           if (parsed === 'stopped') {
             while (root.firstChild) root.removeChild(root.firstChild);
-            root.append(createTitle().element);
+            root.append(createTitle());
             const p = document.createElement('p');
             p.innerText = `Property evaluation stopped. If any update happens (e.g text or setting changed within CodeProber), evaluation will be attempted again.`;
             root.appendChild(p);
@@ -396,23 +411,29 @@ const displayProbeModal = (
               env.updateMarkers();
             }
             const titleRow = createTitle();
-            root.append(titleRow.element);
+            root.append(titleRow);
 
             lastOutput = body;
 
-            // TODO, record which lines are used. Clear inline windows that are no longer usable.
-            const enableExpander = body.length >= 1 && (body[0].type === 'node' || (
-              body[0].type === 'arr' && body[0].value.length >= 1 && body[0].value[0].type === 'node'
-            ));
-
+            const enableExpander = true;
+            // const enableExpander = body.length >= 1 && (body[0].type === 'node' || (
+            //   body[0].type === 'arr' && body[0].value.length >= 1 && body[0].value[0].type === 'node'
+            // ));
+            if (property.name === metaNodesWithPropertyName && body.length === 1 && body[0].type === 'arr' && body[0].value.length === 0) {
+              const message = document.createElement('div');
+              message.style.padding = '0.25rem';
+              message.innerText = `Found no nodes implementing '${property.args?.[0]?.value}'`;
+              message.style.fontStyle = 'italic';
+              root.appendChild(message);
+            }
             const areasToKeep = new Set<string>();
-            // const enableExpander = true;
             root.appendChild(encodeRpcBodyLines(env, body, {
+              excludeStdIoFromPaths: true,
               nodeLocatorExpanderHandler: enableExpander ? ({
                 getReusableExpansionArea: (path) => {
                   return inlineWindowManager.getPreviousExpansionArea(path);
                 },
-                onCreate: ({ locator, locatorRoot, expansionArea, path: nestId }) => {
+                onCreate: ({ locator, locatorRoot, expansionArea, path: nestId, isFresh }) => {
                   areasToKeep.add(JSON.stringify(nestId));
                   const updLocator = inlineWindowManager.getPreviouslyAssociatedLocator(nestId) ?? createMutableLocator(locator);
                   updLocator.set(locator);
@@ -421,25 +442,29 @@ const displayProbeModal = (
 
                   const encodedId = JSON.stringify(nestId);
                   const nests = nestedWindows[encodedId];
-                  if (!nests) {
-                    return;
+                  if (nests) {
+                    delete nestedWindows[encodedId];
+                    nests.forEach(nest => {
+                      switch (nest.data.type) {
+                        case 'probe': {
+                          const dat = nest.data;
+                          displayProbeModal(nestedEnv, null, createImmutableLocator(updLocator), dat.property, dat.nested);
+                          break;
+                        }
+                        case 'ast': {
+                          const dat = nest.data;
+                          displayAstModal(nestedEnv, null, createImmutableLocator(updLocator), dat.direction, dat.transform);
+                          break;
+                        }
+                      }
+                    });
                   }
-                  delete nestedWindows[encodedId];
-                  nests.forEach(nest => {
-                    // nest.ty
-                    switch (nest.data.type) {
-                      case 'probe': {
-                        const dat = nest.data;
-                        displayProbeModal(nestedEnv, null, createImmutableLocator(updLocator), dat.property, dat.nested);
-                        break;
-                      }
-                      case 'ast': {
-                        const dat = nest.data;
-                        displayAstModal(nestedEnv, null, createImmutableLocator(updLocator), dat.direction, dat.transform);
-                        break;
-                      }
+                  if (isFresh && property.name === metaNodesWithPropertyName) {
+                    const nestedPropName = property.args?.[0]?.value as string;
+                    if (!nests?.some((nest) => nest.data.type === 'probe' && nest.data.property.name === nestedPropName)) {
+                      displayProbeModal(nestedEnv , null, createImmutableLocator(updLocator), { name: nestedPropName }, {});
                     }
-                  });
+                  }
                 },
                 onClick: ({ locator, locatorRoot, expansionArea, path: nestId }) => {
                   const prevLocator = inlineWindowManager.getPreviouslyAssociatedLocator(nestId);
@@ -468,6 +493,7 @@ const displayProbeModal = (
           spinner.classList.add('absoluteCenter');
           lastSpinner = spinner;
           root.appendChild(spinner);
+          queryWindow.bumpIntoScreen();
         })
         .catch(err => {
           loading = false;
@@ -503,13 +529,6 @@ const displayProbeModal = (
       refresher.submit(() => queryWindow.refresh());
     }
   }
-  // locator.setUpdateCallback(queryId, () => {
-  //   if (loading) {
-  //     refreshOnDone = true;
-  //   } else {
-  //     refresher.submit(() => queryWindow.refresh());
-  //   }
-  // });
 
   const getWindowStateData = (): WindowStateDataProbe => {
     return {
@@ -519,19 +538,16 @@ const displayProbeModal = (
       nested: inlineWindowManager.getWindowStates(),
     };
   };
-  env.probeWindowStateSavers[queryId] = (target) => {
-    // const nested: NestedWindows = {};
-    // if (env === env.getGlobalModalEnv()) console.log('saving, activeNests:', activeNests);
-    // Object.entries(activeNests).forEach(([key, vals]) => {
-    //   nested[key] = vals.getWindowStates();
-    // });
-    // if (env === env.getGlobalModalEnv()) console.log('...resulting nested:', nested);
-    target.push({
-      modalPos: queryWindow.getPos(),
-      data: getWindowStateData(),
-    });
-  };
-  env.triggerWindowSave();
+  // if (saveWindowState) {
+    env.probeWindowStateSavers[queryId] = (target) => {
+      target.push({
+        modalPos: queryWindow.getPos(),
+        data: getWindowStateData(),
+      });
+    };
+    env.triggerWindowSave();
+  // }
 }
 
+export { metaNodesWithPropertyName }
 export default displayProbeModal;

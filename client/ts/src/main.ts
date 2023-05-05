@@ -66,15 +66,14 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
     const onChangeListeners: ModalEnv['onChangeListeners'] = {};
 
     const probeWindowStateSavers: { [key: string]: (target: WindowState[]) => void } = {};
+    const windowSaveDebouncer = createCullingTaskSubmitterFactory(10)();
     const triggerWindowSave = () => {
-      const states: WindowState[] = [];
-      Object.values(probeWindowStateSavers).forEach(v => v(states));
-      settings.setProbeWindowStates(states);
+      // windowSaveDebouncer.submit(() => {
+        const states: WindowState[] = [];
+        Object.values(probeWindowStateSavers).forEach(v => v(states));
+        settings.setProbeWindowStates(states);
+      // });
     };
-
-    // setInterval(() => {
-    //   console.log('listener ids:', JSON.stringify(Object.keys(onChangeListeners)));
-    // }, 1000);
 
     const notifyLocalChangeListeners = (adjusters?: LocationAdjuster[], reason?: string) => {
       Object.values(onChangeListeners).forEach(l => l(adjusters, reason));
@@ -346,6 +345,15 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         createJobId,
         getGlobalModalEnv: () => modalEnv,
        };
+
+       // Faulty cleanup debugger code below
+    // setInterval(() => {
+    //   console.log('save ids:', JSON.stringify(Object.keys(modalEnv.probeWindowStateSavers)));
+    //   console.log('marker ids:', JSON.stringify(Object.keys(modalEnv.probeMarkers)));
+    //   console.log('onChange ids:', JSON.stringify(Object.keys(modalEnv.onChangeListeners)));
+    //   console.log('saver ids:', JSON.stringify(Object.keys(modalEnv.probeWindowStateSavers)));
+    // }, 5000);
+
 
        modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {
         if (reason === 'refresh-from-server') {

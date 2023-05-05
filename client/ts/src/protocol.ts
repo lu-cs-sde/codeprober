@@ -143,6 +143,24 @@ interface SubmitWorkerTaskReq {
 interface SubmitWorkerTaskRes {
   ok: boolean;
 }
+interface AsyncRpcUpdate {
+  type: "asyncUpdate";
+  job: number;
+  isFinalUpdate: boolean;
+  value: AsyncRpcUpdateValue;
+}
+interface TestSuite {
+  v: number;
+  cases: TestCase[];
+}
+interface NodeLocator {
+  result: TALStep;
+  steps: NodeLocatorStep[];
+}
+type LongPollResponse = (
+    { type: 'etag'; value: number; }
+  | { type: 'push'; value: { [key: string]: any }; }
+);
 interface ParsingRequestData {
   posRecovery: ('FAIL'| 'SEQUENCE_PARENT_CHILD'| 'SEQUENCE_CHILD_PARENT'| 'PARENT'| 'CHILD'| 'ALTERNATE_PARENT_CHILD');
   cache: ('FULL'| 'PARTIAL'| 'NONE'| 'PURGE');
@@ -150,23 +168,9 @@ interface ParsingRequestData {
   mainArgs?: string[];
   tmpSuffix: string;
 }
-interface NodeLocator {
-  result: TALStep;
-  steps: NodeLocatorStep[];
-}
-interface AsyncRpcUpdate {
-  type: "asyncUpdate";
-  job: number;
-  isFinalUpdate: boolean;
-  value: AsyncRpcUpdateValue;
-}
-type TestSuiteListOrError = (
-    { type: 'err'; value: ('NO_TEST_DIR_SET'| 'ERROR_WHEN_LISTING_TEST_DIR'); }
-  | { type: 'suites'; value: string[]; }
-);
-type LongPollResponse = (
-    { type: 'etag'; value: number; }
-  | { type: 'push'; value: { [key: string]: any }; }
+type TestSuiteOrError = (
+    { type: 'err'; value: ('NO_TEST_DIR_SET'| 'NO_SUCH_TEST_SUITE'| 'ERROR_WHEN_READING_FILE'); }
+  | { type: 'contents'; value: TestSuite; }
 );
 type RpcBodyLine = (
     { type: 'plain'; value: string; }
@@ -180,32 +184,22 @@ type TopRequestResponseData = (
     { type: 'success'; value: { [key: string]: any }; }
   | { type: 'failureMsg'; value: string; }
 );
-interface TestSuite {
-  v: number;
-  cases: TestCase[];
-}
-interface Refresh {
-  type: "refresh";
-}
 interface Property {
   name: string;
   args?: PropertyArg[];
   astChildName?: string;
 }
-type TestSuiteOrError = (
-    { type: 'err'; value: ('NO_TEST_DIR_SET'| 'NO_SUCH_TEST_SUITE'| 'ERROR_WHEN_READING_FILE'); }
-  | { type: 'contents'; value: TestSuite; }
+interface Refresh {
+  type: "refresh";
+}
+type TestSuiteListOrError = (
+    { type: 'err'; value: ('NO_TEST_DIR_SET'| 'ERROR_WHEN_LISTING_TEST_DIR'); }
+  | { type: 'suites'; value: string[]; }
 );
 type PropertyEvaluationResult = (
     { type: 'job'; value: number; }
   | { type: 'sync'; value: SynchronousEvaluationResult; }
 );
-interface ListedTreeNode {
-  type: "node";
-  locator: NodeLocator;
-  name?: string;
-  children: ListedTreeChildNode;
-}
 interface InitInfo {
   type: "init";
   version: {
@@ -216,18 +210,20 @@ interface InitInfo {
   changeBufferTime?: number;
   workerProcessCount?: number;
 }
-interface SynchronousEvaluationResult {
-  body: RpcBodyLine[];
-  totalTime: number;
-  parseTime: number;
-  createLocatorTime: number;
-  applyLocatorTime: number;
-  attrEvalTime: number;
-  listNodesTime: number;
-  listPropertiesTime: number;
-  errors?: Diagnostic[];
-  args?: PropertyArg[];
-  locator?: NodeLocator;
+interface ListedTreeNode {
+  type: "node";
+  locator: NodeLocator;
+  name?: string;
+  children: ListedTreeChildNode;
+}
+interface TestCase {
+  name: string;
+  src: ParsingRequestData;
+  property: Property;
+  locator: NodeLocator;
+  assertType: ('IDENTITY'| 'SET'| 'SMOKE');
+  expectedOutput: RpcBodyLine[];
+  nestedProperties: NestedTest[];
 }
 type NodeLocatorStep = (
     { type: 'child'; value: number; }
@@ -242,6 +238,29 @@ type PropertyArg = (
   | { type: 'outputstream'; value: string; }
   | { type: 'nodeLocator'; value: NullableNodeLocator; }
 );
+type ListedTreeChildNode = (
+    { type: 'children'; value: ListedTreeNode[]; }
+  | { type: 'placeholder'; value: number; }
+);
+interface SynchronousEvaluationResult {
+  body: RpcBodyLine[];
+  totalTime: number;
+  parseTime: number;
+  createLocatorTime: number;
+  applyLocatorTime: number;
+  attrEvalTime: number;
+  listNodesTime: number;
+  listPropertiesTime: number;
+  errors?: Diagnostic[];
+  args?: PropertyArg[];
+  locator?: NodeLocator;
+}
+type AsyncRpcUpdateValue = (
+    { type: 'status'; value: string; }
+  | { type: 'workerStackTrace'; value: string[]; }
+  | { type: 'workerStatuses'; value: string[]; }
+  | { type: 'workerTaskDone'; value: WorkerTaskDone; }
+);
 interface TALStep {
   type: string;
   label?: string;
@@ -250,36 +269,13 @@ interface TALStep {
   depth: number;
   external?: boolean;
 }
-type AsyncRpcUpdateValue = (
-    { type: 'status'; value: string; }
-  | { type: 'workerStackTrace'; value: string[]; }
-  | { type: 'workerStatuses'; value: string[]; }
-  | { type: 'workerTaskDone'; value: WorkerTaskDone; }
-);
-type ListedTreeChildNode = (
-    { type: 'children'; value: ListedTreeNode[]; }
-  | { type: 'placeholder'; value: number; }
-);
-interface TestCase {
-  name: string;
-  src: ParsingRequestData;
-  property: Property;
-  locator: NodeLocator;
-  assertType: ('IDENTITY'| 'SET'| 'SMOKE');
-  expectedOutput: RpcBodyLine[];
-  nestedProperties: NestedTest[];
-}
-interface FNStep {
-  property: Property;
-}
 interface PropertyArgCollection {
   type: string;
   entries: PropertyArg[];
 }
-type WorkerTaskDone = (
-    { type: 'normal'; value: { [key: string]: any }; }
-  | { type: 'unexpectedError'; value: string[]; }
-);
+interface FNStep {
+  property: Property;
+}
 interface NestedTest {
   path: number[];
   property: Property;
@@ -296,6 +292,10 @@ interface Diagnostic {
   end: number;
   msg: string;
 }
+type WorkerTaskDone = (
+    { type: 'normal'; value: { [key: string]: any }; }
+  | { type: 'unexpectedError'; value: string[]; }
+);
 
 
-export { PutTestSuiteRes, TestSuiteOrError, PutTestSuiteReq, PollWorkerStatusReq, ParsingRequestData, PollWorkerStatusRes, ListedTreeNode, TestSuite, TestSuiteListOrError, NestedTest, ListTreeRes, AsyncRpcUpdateValue, ListTreeReq, TopRequestResponseData, TALStep, GetTestSuiteRes, PropertyArgCollection, WsPutLongpollReq, WsPutLongpollRes, InitInfo, TunneledWsPutRequestReq, TunneledWsPutRequestRes, GetTestSuiteReq, RpcBodyLine, GetWorkerStatusRes, ListTestSuitesReq, GetWorkerStatusReq, TopRequestRes, EvaluatePropertyReq, ListTestSuitesRes, SynchronousEvaluationResult, TopRequestReq, EvaluatePropertyRes, AsyncRpcUpdate, PropertyEvaluationResult, Diagnostic, WsPutInitRes, WsPutInitReq, Refresh, WorkerTaskDone, FNStep, LongPollResponse, SubscribeToWorkerStatusRes, FetchReq, SubscribeToWorkerStatusReq, SubmitWorkerTaskRes, StopJobRes, FetchRes, SubmitWorkerTaskReq, StopJobReq, Property, NullableNodeLocator, UnsubscribeFromWorkerStatusReq, UnsubscribeFromWorkerStatusRes, ListNodesReq, NodeLocator, ListNodesRes, PropertyArg, ListedTreeChildNode, TestCase, ListPropertiesReq, NodeLocatorStep, ListPropertiesRes }
+export { PutTestSuiteRes, TestSuiteOrError, PutTestSuiteReq, PollWorkerStatusReq, ParsingRequestData, PollWorkerStatusRes, ListedTreeNode, TestSuite, TestSuiteListOrError, NestedTest, ListTreeRes, AsyncRpcUpdateValue, ListTreeReq, TopRequestResponseData, TALStep, GetTestSuiteRes, PropertyArgCollection, WsPutLongpollReq, WsPutLongpollRes, InitInfo, TunneledWsPutRequestReq, TunneledWsPutRequestRes, GetTestSuiteReq, RpcBodyLine, GetWorkerStatusRes, ListTestSuitesReq, GetWorkerStatusReq, TopRequestRes, EvaluatePropertyReq, ListTestSuitesRes, SynchronousEvaluationResult, TopRequestReq, EvaluatePropertyRes, AsyncRpcUpdate, PropertyEvaluationResult, Diagnostic, WsPutInitRes, WsPutInitReq, Refresh, WorkerTaskDone, FNStep, LongPollResponse, SubscribeToWorkerStatusRes, FetchReq, SubscribeToWorkerStatusReq, SubmitWorkerTaskRes, StopJobRes, FetchRes, SubmitWorkerTaskReq, StopJobReq, Property, NullableNodeLocator, UnsubscribeFromWorkerStatusReq, UnsubscribeFromWorkerStatusRes, ListNodesReq, NodeLocator, ListNodesRes, TestCase, PropertyArg, ListedTreeChildNode, ListPropertiesReq, NodeLocatorStep, ListPropertiesRes }

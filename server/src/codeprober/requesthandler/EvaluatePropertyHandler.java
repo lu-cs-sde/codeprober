@@ -15,6 +15,7 @@ import codeprober.AstInfo;
 import codeprober.locator.ApplyLocator;
 import codeprober.locator.ApplyLocator.ResolvedNode;
 import codeprober.locator.CreateLocator;
+import codeprober.locator.NodesWithProperty;
 import codeprober.locator.CreateLocator.LocatorMergeMethod;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
@@ -196,7 +197,19 @@ public class EvaluatePropertyHandler {
 						} finally {
 							BenchmarkTimer.EVALUATE_ATTR.exit();
 						}
-
+					} else if (queryAttrName.startsWith("m:")) {
+						// Meta-attr, not actually in target AST
+						switch (queryAttrName) {
+						case "m:NodesWithProperty": {
+							final String propName = req.property.args.get(0).asString();
+							value = NodesWithProperty.get(parsed.info, match.node, propName);
+							break;
+						}
+						default: {
+							value = "Invalid meta-attribute '" + queryAttrName +"'";
+							break;
+						}
+						}
 					} else if (req.property.args == null || req.property.args.isEmpty()) {
 						BenchmarkTimer.EVALUATE_ATTR.enter();
 						try {
@@ -297,6 +310,7 @@ public class EvaluatePropertyHandler {
 					throw e;
 				}
 			});
+			System.out.println("cap errors: " + errors);
 //			final List<RpcBodyLine> caps = StdIoInterceptor
 //					.performDefaultCapture(() -> handleParsedAst(res.rootNode, queryObj, retBuilder, bodyBuilder));
 //

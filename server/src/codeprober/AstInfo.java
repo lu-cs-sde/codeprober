@@ -23,7 +23,8 @@ public class AstInfo {
 	private Class<?> locatorTALRoot;
 	private boolean loadedLocatorTALRoot;
 
-	private final Map<Class<?>, Map<String, Boolean>> hasOverrides = new HashMap<>();
+	private final Map<Class<?>, Map<String, Boolean>> hasOverride0Cache = new HashMap<>();
+	private final Map<Class<?>, Map<String, Map<Class<?>, Boolean>>> hasOverride1Cache = new HashMap<>();
 
 	public AstInfo(AstNode ast, PositionRecoveryStrategy recoveryStrategy,
 			AstNodeApiStyle astApiStyle, TypeIdentificationStyle typeIdentificationStyle) {
@@ -76,10 +77,10 @@ public class AstInfo {
 	}
 
 	public boolean hasOverride0(Class<?> cls, String mthName) {
-		Map<String, Boolean> inner = hasOverrides.get(cls);
+		Map<String, Boolean> inner = hasOverride0Cache.get(cls);
 		if (inner == null) {
 			inner = new HashMap<>();
-			hasOverrides.put(cls, inner);
+			hasOverride0Cache.put(cls, inner);
 		}
 
 		Boolean ex = inner.get(mthName);
@@ -95,4 +96,32 @@ public class AstInfo {
 		inner.put(mthName, fresh);
 		return fresh;
 	}
+
+	public boolean hasOverride1(Class<?> cls, String mthName, Class<?> argType) {
+		Map<String, Map<Class<?>, Boolean>> inner = hasOverride1Cache.get(cls);
+		if (inner == null) {
+			inner = new HashMap<>();
+			hasOverride1Cache.put(cls, inner);
+		}
+
+		Map<Class<?>, Boolean> innerer = inner.get(mthName);
+		if (innerer == null) {
+			innerer = new HashMap<>();
+			inner.put(mthName, innerer);
+		}
+
+		Boolean ex = innerer.get(argType);
+		if (ex != null) { return ex; }
+
+		boolean fresh;
+		try {
+			cls.getMethod(mthName, argType);
+			fresh = true;
+		} catch (NoSuchMethodException e) {
+			fresh = false;
+		}
+		innerer.put(argType, fresh);
+		return fresh;
+	}
+
 }

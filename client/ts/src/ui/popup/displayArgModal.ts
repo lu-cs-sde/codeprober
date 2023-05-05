@@ -36,7 +36,7 @@ const startLocatorRequest = (onSelected: (locator: NodeLocator) => void) => {
 }
 
 const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: UpdatableNodeLocator, attr: Property, nested: NestedWindows) => {
-  const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+  const queryId = `arg-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
 
   let lastLocatorRequest: ActiveNodeLocatorRequest | null = null;
   const cleanup = () => {
@@ -87,6 +87,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: Updata
   };
   const popup = env.showWindow({
     pos: modalPos,
+    debugLabel: `arg:${attr.name}`,
     rootStyle: `
       min-width: 16rem;
       min-height: 4rem;

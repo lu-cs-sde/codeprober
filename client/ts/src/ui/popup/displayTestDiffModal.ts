@@ -1,8 +1,8 @@
 import ModalEnv from '../../model/ModalEnv';
 import { rpcLinesToAssertionLines } from '../../model/test/rpcBodyToAssertionLine';
-import { NestedTestResponse, nestedTestResponseToTest, TestEvaluation, TestStatus } from '../../model/test/TestManager';
+import { NestedTestResponse } from '../../model/test/TestManager';
 import { createImmutableLocator, createMutableLocator } from '../../model/UpdatableNodeLocator';
-import WindowState, { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
+import { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
 import { Property, NodeLocator, TestCase, RpcBodyLine, NestedTest } from '../../protocol';
 import settings from '../../settings';
 import createInlineWindowManager from '../create/createInlineWindowManager';
@@ -12,7 +12,7 @@ import showWindow from '../create/showWindow';
 import renderProbeModalTitleLeft from '../renderProbeModalTitleLeft';
 import UIElements from '../UIElements';
 import displayHelp from './displayHelp';
-import displayProbeModal from './displayProbeModal';
+import displayProbeModal, { metaNodesWithPropertyName } from './displayProbeModal';
 import encodeRpcBodyLines from './encodeRpcBodyLines';
 
 const preventDragOnClick = (elem: HTMLElement) => {
@@ -30,7 +30,7 @@ const displayTestDiffModal = (
   testCaseName: string,
   // testCase: TestCase,
 ) => {
-  const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+  const queryId = `tcdiff-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
 
   type TabType = 'output' | 'node' | 'source' | 'settings';
   let activeTab: TabType = 'output';
@@ -303,12 +303,11 @@ const displayTestDiffModal = (
 
                 const leftPane = document.createElement('div');
                 addSplitTitle(leftPane, 'Expected');
-                console.log('tstatus:', testStatus);
-                const lhsInlineWindowManager = createInlineWindowManager();
                 switch (testCase.assertType) {
                   case 'IDENTITY':
                     case 'SET': {
                       const doEncodeRpcLines = (target: HTMLElement, lines: RpcBodyLine[], nests: NestedTest[], markerPrefix: number[]) => {
+                        const lhsInlineWindowManager = createInlineWindowManager();
                         if (!captureStdioSetting) {
                           lines = rpcLinesToAssertionLines(lines);
                         }
@@ -382,8 +381,8 @@ const displayTestDiffModal = (
                 const rightPane = document.createElement('div');
                 addSplitTitle(rightPane, 'Actual');
 
-                const rhsInlineWindowManager = createInlineWindowManager();
                 const doEncodeRpcLines = (target: HTMLElement, lines: RpcBodyLine[], nests: NestedTestResponse[], markerPrefix: number[]) => {
+                  const rhsInlineWindowManager = createInlineWindowManager();
                   if (!captureStdioSetting) {
                     lines = rpcLinesToAssertionLines(lines);
                   }
@@ -392,7 +391,6 @@ const displayTestDiffModal = (
                     excludeStdIoFromPaths: true,
                     capWidths: true,
                     decorator: (line) => {
-                      console.log('in prefix:', markerPrefix, ', line:', line);
                       const key = JSON.stringify([...markerPrefix, ...line]);
                       const marker = testStatus.actualMarkers[key];
                       if (marker === 'error') {
@@ -404,10 +402,15 @@ const displayTestDiffModal = (
                     disableInlineExpansionButton: true,
                     nodeLocatorExpanderHandler: {
                       getReusableExpansionArea: () => null,
-                      onCreate: ({ path, locatorRoot, expansionArea, locator }) => {
+                      onCreate: ({ path, locatorRoot, expansionArea, locator, isFresh }) => {
+                        // if (isFresh) {
+                        //   if (testCase.property.name === metaNodesWithPropertyName) {
+                            // TODO force expand meta/query properties here?
+                        //   }
+                        // }
+
                         const encodedPath = JSON.stringify(path);
                         const relatedNests = nests.filter(nest => JSON.stringify(nest.path) === encodedPath);
-                        console.log('onCreate', path, '; nests:', nests, 'matches:', relatedNests);
                         if (relatedNests.length === 0) {
                           return;
                         }
@@ -417,6 +420,7 @@ const displayTestDiffModal = (
                         relatedNests.forEach((nest, nestIdx) => {
                           const localWindow = area.add({
                             onForceClose: () => { },
+                            debugLabel: `testdiff:right:${JSON.stringify(markerPrefix)}:nest:${nestIdx}`,
                             render: (root, ) => {
                               root.style.display = 'flex';
                               root.style.flexDirection = 'column';
@@ -437,8 +441,8 @@ const displayTestDiffModal = (
                   }));
                 }
 
+
                 if (evaluationResult.output && evaluationResult.output.result !== 'could-not-find-node') {
-                  console.log('actualOutput:', evaluationResult.output.result);
                   doEncodeRpcLines(rightPane, evaluationResult.output.result.body, evaluationResult.output.result.nested, []);
                 }
 
@@ -714,6 +718,8 @@ const displayTestDiffModal = (
           spinner.classList.add('absoluteCenter');
           lastSpinner = spinner;
           root.appendChild(spinner);
+
+          queryWindow.bumpIntoScreen();
         })
         .catch(err => {
           if (refreshOnDone) {

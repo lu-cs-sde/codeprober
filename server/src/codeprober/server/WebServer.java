@@ -566,6 +566,7 @@ public class WebServer {
 								e.printStackTrace();
 							}
 						}
+						System.out.println("Req handled for thread " + Thread.currentThread());
 					}).start();
 				}
 			} catch (Throwable t) {

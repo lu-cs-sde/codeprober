@@ -24,12 +24,12 @@ const getCommonStreamArgWhitespacePrefix = (line: RpcBodyLine): number => {
 
 type LineDecorator = (linePath: number[]) => 'default' | 'error' | 'unmatched';
 
-type ExpanderCallback = (args: {
+type ExpanderCallback<T = {}> = (args: {
   path: number[];
   locator: NodeLocator;
   locatorRoot: HTMLElement;
   expansionArea: HTMLElement;
-}) => void;
+} & T) => void;
 
 interface ExtraEncodingArgs {
   decorator?: LineDecorator;
@@ -38,7 +38,9 @@ interface ExtraEncodingArgs {
   disableInlineExpansionButton?: true;
   nodeLocatorExpanderHandler?: {
     getReusableExpansionArea: (path: number[]) => HTMLElement | null;
-    onCreate: ExpanderCallback;
+    onCreate: ExpanderCallback<{
+      isFresh: boolean;
+    }>;
     onClick: ExpanderCallback;
   };
   excludeStdIoFromPaths?: true;
@@ -184,6 +186,7 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
         if (extras.decorator) {
           applyDecoratorClass(container, nestingLevel <= 1, extras.decorator(bodyPath));
         }
+        // container.appendChild(document.createTextNode(`area:${JSON.stringify(bodyPath)}`));
         const span: Span = {
           lineStart: (start >>> 12), colStart: (start & 0xFFF),
           lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
@@ -256,7 +259,8 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
 
 
           const outerContainer = document.createElement('div');
-          outerContainer.style.display = 'flex';
+          outerContainer.style.display = 'inline-flex';
+          // outerContainer.style.marginBottom = '0.125rem';
           outerContainer.style.flexDirection = 'column';
           outerContainer.appendChild(middleContainer);
 
@@ -276,8 +280,8 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
             locatorRoot: outerContainer,
             expansionArea,
             path: bodyPath,
+            isFresh: !existingExpansionArea,
           });
-          // }
 
         } else {
           target.appendChild(container);

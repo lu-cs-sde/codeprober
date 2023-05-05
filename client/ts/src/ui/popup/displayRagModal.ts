@@ -11,7 +11,7 @@ import { ListNodesReq, ListNodesRes } from '../../protocol';
 import { createMutableLocator } from '../../model/UpdatableNodeLocator';
 
 const displayRagModal = (env: ModalEnv, line: number, col: number) => {
-  const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+  const queryId = `rag-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
 
   const cleanup = () => {
     delete env.onChangeListeners[queryId];

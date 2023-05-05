@@ -126,7 +126,7 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
       }
       alreadyExisted = true;
     }
-    await saveCategoryState(category, [...(suiteListRepo[category] || []).filter(tc => tc.name !== test.name), test]);
+    await saveCategoryState(category, [...(suiteListRepo[category] || []).filter(tc => tc.name !== test.name), test].sort((a, b) => a.name < b.name ? -1 : 1));
     ++categoryInvalidationCount;
     if (overwriteIfExisting && testStatusRepo[category]) {
       delete testStatusRepo[category][test.name];
@@ -185,6 +185,7 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
     });
     if (result.type === 'contents') {
       const cases = result.value.cases;
+      cases.sort((a, b) => a.name < b.name ? -1 : 1);
       suiteListRepo[id] = cases;
       return cases;
     }
@@ -317,6 +318,7 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
       const nestPathParts = nest.path;
       const nestLocator = findLocatorWithNestingPath(nestPathParts, rootRes.body);
       if (!nestLocator) {
+        console.warn('Could not find node', nest.path, 'in ', rootRes.body);
         return {
           path: nest.path,
           property: nest.property,
@@ -347,7 +349,7 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
     const convertResToTest = (res: NestedTestResponse): NestedTest => {
       if (res.result === 'could-not-find-node') {
         return { path: res.path, property: res.property, expectedOutput: [{
-          type: 'plain', value: 'Could not find',
+          type: 'plain', value: 'Error: could not find node',
         }], nestedProperties: []}
       }
       return {

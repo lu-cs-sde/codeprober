@@ -15,13 +15,15 @@ interface ShowWindowArgs {
   onOngoingResize?: () => void;
   onFinishedResize?: () => void;
   resizable?: boolean;
+  debugLabel?: string;
 }
 
 interface ShowWindowResult {
-  remove: () => void,
-  refresh: () => void,
-  getPos: () => ModalPosition,
-  getSize: () => ({ width: number, height: number }),
+  remove: () => void;
+  refresh: () => void;
+  getPos: () => ModalPosition;
+  getSize: () => ({ width: number, height: number });
+  bumpIntoScreen: () => void;
 }
 
 const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
@@ -74,6 +76,7 @@ const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
     resizePositioner.style.width = 'fit-contents';
     resizePositioner.style.height = '0px';
     resizePositioner.style.position = 'sticky';
+    resizePositioner.style.zIndex = '99';
 
     const resizeButton = document.createElement('div');
     resizeButton.style.position = 'absolute';
@@ -128,6 +131,7 @@ const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
     },
     getPos: dragToMove.getPos,
     getSize: () => ({ width: root.clientWidth, height: root.clientHeight }),
+    bumpIntoScreen: dragToMove.bumpIntoScreen,
   };
 };
 

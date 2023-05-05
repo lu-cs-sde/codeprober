@@ -8,6 +8,7 @@ import codeprober.protocol.ClientRequest;
 import codeprober.protocol.data.TopRequestReq;
 import codeprober.protocol.data.TopRequestRes;
 import codeprober.protocol.data.TopRequestResponseData;
+import codeprober.requesthandler.RequestHandlerMonitor;
 
 @FunctionalInterface
 public interface JsonRequestHandler {
@@ -24,7 +25,39 @@ public interface JsonRequestHandler {
 		 */
 	}
 
-	default Function<ClientRequest, JSONObject> createRpcRequestHandler() {
+//	default Function<ClientRequest, JSONObject> createRpcRequestHandler() {
+//		return (request) -> {
+//			final long start = System.nanoTime();
+//
+//			final TopRequestReq parsed = TopRequestReq.fromJSON(request.data);
+//
+//			TopRequestResponseData response;
+//			try {
+//				final JSONObject encoded;
+//				synchronized (lock) {
+//					encoded = handleRequest(
+//							// Strip away data wrapper
+//							new ClientRequest(parsed.data, //
+//									request::sendAsyncResponse, request.connectionIsAlive));
+//				}
+//				response = TopRequestResponseData.fromSuccess(encoded);
+//			} catch (RuntimeException e) {
+//				System.out.println("Request threw an error");
+//				e.printStackTrace();
+//				response = TopRequestResponseData
+//						.fromFailureMsg("Error while processing request. See server for more info");
+//			}
+//
+//			System.out.printf("Handled request in %.2fms\n", (System.nanoTime() - start) / 1_000_000.0);
+//			return new TopRequestRes(parsed.id, response).toJSON();
+////			JSONObject rpcResponse = new JSONObject();
+////			rpcResponse.put("type", "rpc");
+////			rpcResponse.put("id", request.data.getLong("id"));
+////			return rpcResponse;
+//		};
+//	}
+
+	static Function<ClientRequest, JSONObject> createTopRequestHandler(Function<ClientRequest, JSONObject> unwrappedHandler) {
 		return (request) -> {
 			final long start = System.nanoTime();
 
@@ -32,13 +65,10 @@ public interface JsonRequestHandler {
 
 			TopRequestResponseData response;
 			try {
-				final JSONObject encoded;
-				synchronized (lock) {
-					encoded = handleRequest(
-							// Strip away data wraooer
-							new ClientRequest(parsed.data, //
-									request::sendAsyncResponse, request.connectionIsAlive));
-				}
+				final JSONObject encoded = unwrappedHandler.apply(
+						// Strip away data wrapper
+						new ClientRequest(parsed.data, //
+								request::sendAsyncResponse, request.connectionIsAlive));
 				response = TopRequestResponseData.fromSuccess(encoded);
 			} catch (RuntimeException e) {
 				System.out.println("Request threw an error");
@@ -53,6 +83,7 @@ public interface JsonRequestHandler {
 //			rpcResponse.put("type", "rpc");
 //			rpcResponse.put("id", request.data.getLong("id"));
 //			return rpcResponse;
+
 		};
 	}
 }

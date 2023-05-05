@@ -7,6 +7,7 @@ import createTextSpanIndicator from './create/createTextSpanIndicator';
 import registerNodeSelector from './create/registerNodeSelector';
 import displayArgModal from './popup/displayArgModal';
 import displayAttributeModal from './popup/displayAttributeModal';
+import { metaNodesWithPropertyName } from './popup/displayProbeModal';
 import formatAttr, { formatAttrArgList } from './popup/formatAttr';
 import startEndToSpan from './startEndToSpan';
 import trimTypeName from './trimTypeName';
@@ -31,7 +32,9 @@ const renderProbeModalTitleLeft = (
 
   const headAttr = document.createElement('span');
   headAttr.classList.add('syntax-attr');
-  if (!attr.args || attr.args.length === 0) {
+  if (attr.name === metaNodesWithPropertyName) {
+    headAttr.innerText = `.*.${attr.args?.[0]?.value}`;
+  } else if (!attr.args || attr.args.length === 0) {
     headAttr.innerText = `.${formatAttr(attr)}`;
   } else {
     headAttr.appendChild(document.createTextNode(`.${attr.name}(`));
@@ -54,7 +57,7 @@ const renderProbeModalTitleLeft = (
 
   container.appendChild(headAttr);
 
-  if (attr.args?.length && env) {
+  if (attr.args?.length && env && attr.name !== metaNodesWithPropertyName) {
     const editButton = document.createElement('img');
     editButton.src = '/icons/edit_white_24dp.svg';
     editButton.classList.add('modalEditButton');
@@ -75,6 +78,7 @@ const renderProbeModalTitleLeft = (
       onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.get().result.start, locator.get().result.end) : null),
       onClick: stickyController?.onClick ?? undefined,
       external: locator.get().result.external,
+      styleOverride: typeRenderingStyle === 'minimal-nested' ? 'lines-compact' : undefined,
     });
     stickyController?.configure(spanIndicator, locator);
     registerNodeSelector(spanIndicator, () => locator.get());

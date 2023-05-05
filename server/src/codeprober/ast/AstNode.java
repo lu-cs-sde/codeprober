@@ -1,7 +1,13 @@
 package codeprober.ast;
 
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 
 import codeprober.AstInfo;
@@ -76,6 +82,25 @@ public class AstNode {
 			// Perfectly fine to not override this, ignore the error
 			return null;
 		}
+	}
+
+	public Boolean showInPropertySearchProbe(AstInfo info, String propName) {
+		if (info.hasOverride0(underlyingAstNode.getClass(), "cpr_propSearchVisible")) {
+			try {
+				return (Boolean) Reflect.invoke0(underlyingAstNode, "cpr_propSearchVisible");
+			} catch (InvokeProblem e) {
+				// Perfectly fine to not override this, ignore the error
+			}
+		}
+		if (info.hasOverride1(underlyingAstNode.getClass(), "cpr_propSearchVisible", String.class)) {
+			try {
+				return (Boolean) Reflect.invokeN(underlyingAstNode, "cpr_propSearchVisible", new Class[] { String.class },
+						new Object[] { propName });
+			} catch (InvokeProblem e) {
+				// Perfectly fine to not override this, ignore the error
+			}
+		}
+		return null;
 	}
 
 	public Boolean cutoffNodeListTree(AstInfo info) {
@@ -421,5 +446,41 @@ public class AstNode {
 			// OK, nodeLabel is optional
 			return null;
 		}
+	}
+
+	public List<String> propertyListShow(AstInfo info) {
+		final String mth = "cpr_propertyListShow";
+		if (!info.hasOverride0(underlyingAstNode.getClass(), mth)) {
+			try {
+				final Object override = Reflect.invoke0(underlyingAstNode, mth);
+				if (override instanceof Collection<?>) {
+					@SuppressWarnings("unchecked")
+					final Collection<String> cast = (Collection<String>) override;
+					return new ArrayList<String>(cast);
+				} else if (override instanceof Object[]) {
+					final String[] cast = (String[]) override;
+					return Arrays.asList(cast);
+				} else {
+					System.out.println("'" + mth + "' is expected to be a collection or String array, got " + override);
+				}
+			} catch (InvokeProblem e) {
+				System.out.println("Error when evaluating " + mth);
+				e.printStackTrace();
+			}
+		}
+		return Collections.emptyList();
+
+	}
+
+	public boolean hasProperty(AstInfo info, String propName) {
+		if (info.hasOverride0(underlyingAstNode.getClass(), propName)) {
+			return true;
+		}
+		for (String prop : propertyListShow(info)) {
+			if (prop.equals(propName)) {
+				return true;
+			}
+		}
+		return false;
 	}
 }

@@ -24,9 +24,11 @@ const createInlineArea = (args: {
 }): InlineAreaWithHiddenProperties => {
   let { inlineRoot, expansionAreaInsideTheRoot } = args;
 
-  const applyActiveRootStyling = () => {
+  const applyActiveRootStyling = (from: string) => {
     inlineRoot.style.border = '1px solid black';
     inlineRoot.style.paddingTop = '0.25rem';
+    inlineRoot.style.marginTop = '0.25rem';
+    inlineRoot.style.marginBottom = '0.25rem';
   }
   const activeWindowClosers: (() => void)[] = [];
   const localChangeListeners: ModalEnv['onChangeListeners'] = {};
@@ -41,7 +43,7 @@ const createInlineArea = (args: {
     }),
     add: (args) => {
       if (activeSubWindowCount === 0) {
-        applyActiveRootStyling();
+        applyActiveRootStyling('add');
         expansionAreaInsideTheRoot.style.marginTop = '0.25rem';
       }
       ++activeSubWindowCount;
@@ -73,19 +75,23 @@ const createInlineArea = (args: {
         getSize: () => ({ width: localDiv.clientWidth, height: localDiv.clientHeight }),
         refresh: () => renderFn(),
         remove: () => {
-          console.log('TODO remove me');
           const parent = localDiv.parentElement;
           if (parent) parent.removeChild(localDiv);
           --activeSubWindowCount;
           if (activeSubWindowCount === 0) {
             inlineRoot.style.border = 'none';
+            inlineRoot.style.paddingTop = '0';
+            inlineRoot.style.marginTop = '0';
+            inlineRoot.style.marginBottom = '0';
           }
           const idx =  activeWindowClosers.findIndex(x => x === closer);
           if (idx !== -1) {
             activeWindowClosers.splice(idx, 1);
-            // activeWindowRefreshers.splice(idx, 1);
+          } else {
+            console.log('could not find index of closer in remove')
           }
         },
+        bumpIntoScreen: () => { /* noop */ }
       }
     },
     notifyListenersOfChange: () => {
@@ -95,12 +101,14 @@ const createInlineArea = (args: {
   return {
     area,
     destroyer: () => {
-      activeWindowClosers.forEach(closer => closer());
+      [...activeWindowClosers].forEach((closer, idx) => {
+        closer()
+      });
     },
     updateRoot: (newRoot) => {
       inlineRoot = newRoot;
       if (activeSubWindowCount > 0) {
-        applyActiveRootStyling();
+        applyActiveRootStyling(`update:${activeSubWindowCount}`);
       }
     },
     // refresh: () => {

@@ -21,7 +21,7 @@ interface Node extends Omit<ListedTreeNode, 'children'> {
 }
 type AstListDirection = 'downwards' | 'upwards';
 const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: UpdatableNodeLocator, listDirection: AstListDirection, initialTransform?: { [id: string]: number }) => {
-  const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+  const queryId = `ast-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   let state: { type: 'ok', data: Node } | { type: 'err', body: RpcBodyLine[] } | null = null;
   let lightTheme = env.themeIsLight();
   const stickyController = createStickyHighlightController(env);
@@ -56,6 +56,8 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
       width: initialTransform.width,
       height: initialTransform.height,
     } : undefined,
+
+    debugLabel: `ast:${locator.get().result.type}`,
     rootStyle: `
       min-width: 24rem;
       min-height: 12rem;

@@ -17,6 +17,7 @@ import org.json.JSONObject;
 import codeprober.RunAllTests.MergedResult;
 import codeprober.metaprogramming.StdIoInterceptor;
 import codeprober.protocol.ClientRequest;
+import codeprober.requesthandler.RequestHandlerMonitor;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.server.CodespacesCompat;
 import codeprober.server.ServerToClientMessagePusher;
@@ -108,7 +109,7 @@ public class CodeProber {
 
 			};
 			userFacingHandler = new ConcurrentWorker(defaultHandler);
-			final Function<ClientRequest, JSONObject> rpcHandler = userFacingHandler.createRpcRequestHandler();
+			final Function<ClientRequest, JSONObject> rpcHandler = JsonRequestHandler.createTopRequestHandler(userFacingHandler::handleRequest);
 			new Thread(() -> {
 				final AtomicBoolean connectionIsAlive = new AtomicBoolean(true);
 				new IpcReader(System.in) {
@@ -159,11 +160,15 @@ public class CodeProber {
 		CodespacesCompat.getChangeBufferTime();
 
 		final ServerToClientMessagePusher msgPusher = new ServerToClientMessagePusher();
-		final Function<ClientRequest, JSONObject> reqHandler = userFacingHandler.createRpcRequestHandler();
+//		final Function<ClientRequest, JSONObject> reqHandler = userFacingHandler.createRpcRequestHandler();
+		final RequestHandlerMonitor monitor = new RequestHandlerMonitor(userFacingHandler::handleRequest);
+		final Function<ClientRequest, JSONObject> unwrappedHandler = monitor::submit;
+		final Function<ClientRequest, JSONObject> topHandler = JsonRequestHandler.createTopRequestHandler(unwrappedHandler);
+
 		final Runnable onSomeClientDisconnected = userFacingHandler::onOneOrMoreClientsDisconnected;
-		new Thread(() -> WebServer.start(parsedArgs, msgPusher, userFacingHandler::handleRequest, onSomeClientDisconnected)).start();
+		new Thread(() -> WebServer.start(parsedArgs, msgPusher, unwrappedHandler, onSomeClientDisconnected)).start();
 		if (!WebSocketServer.shouldDelegateWebsocketToHttp()) {
-			new Thread(() -> WebSocketServer.start(parsedArgs, msgPusher, reqHandler, onSomeClientDisconnected))
+			new Thread(() -> WebSocketServer.start(parsedArgs, msgPusher, topHandler, onSomeClientDisconnected))
 					.start();
 		} else {
 			System.out.println("Not starting websocket server, running requests over normal HTTP requests instead.");
