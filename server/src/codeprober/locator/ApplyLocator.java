@@ -203,6 +203,10 @@ public class ApplyLocator {
 	}
 
 	public static ResolvedNode toNode(AstInfo info, NodeLocator locator) {
+		return toNode(info, locator, true);
+	}
+
+	public static ResolvedNode toNode(AstInfo info, NodeLocator locator, boolean createFreshLocator) {
 		AstNode matchedNode = info.ast;
 		Span matchPos = null;
 
@@ -223,7 +227,8 @@ public class ApplyLocator {
 						for (int j = 0; j < argsValues.length; ++j) {
 //							final ParameterValue param = DecodeValue.decode(info, args.get(j),
 //									new JSONArray());
-							final UnpackedAttrValue uav = EvaluatePropertyHandler.unpackAttrValue(info, args.get(0), System.out::println);
+							final UnpackedAttrValue uav = EvaluatePropertyHandler.unpackAttrValue(info, args.get(0),
+									System.out::println);
 							argsValues[j] = uav.unpacked;
 							argsTypes[j] = EvaluatePropertyHandler.getValueType(info, uav.response);
 						}
@@ -284,13 +289,17 @@ public class ApplyLocator {
 			BenchmarkTimer.APPLY_LOCATOR.exit();
 		}
 
+		if (matchedNode == null || matchPos == null) {
+			return null;
+		}
+
 		NodeLocator matchedNodeLocator = null;
-		if (matchedNode != null && matchPos != null) {
+		if (createFreshLocator) {
 			// Create fresh locator so this node is easier to find in the future
 			matchedNodeLocator = CreateLocator.fromNode(info, matchedNode);
-		}
-		if (matchedNode == null || matchPos == null || matchedNodeLocator == null) {
-			return null;
+			if (matchedNodeLocator == null) {
+				return null;
+			}
 		}
 		return new ResolvedNode(matchedNode, matchPos, matchedNodeLocator);
 	}

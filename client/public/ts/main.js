@@ -394,7 +394,8 @@ define("ui/create/attachDragToX", ["require", "exports"], function (require, exp
         return {
             cleanup: () => {
                 document.removeEventListener('mousemove', onMouseMove);
-            }
+            },
+            hasMouseDown: () => mouse.down,
         };
     };
     exports.default = attachDragToX;
@@ -432,13 +433,15 @@ define("ui/create/attachDragToMove", ["require", "exports", "ui/create/attachDra
             elemPos.y = newY;
         };
         onUpdate(0, 0);
-        const cleanup = (0, attachDragToX_1.default)(element, onBegin, onUpdate, onFinishedMove).cleanup;
+        const { cleanup, hasMouseDown } = (0, attachDragToX_1.default)(element, onBegin, onUpdate, onFinishedMove);
         return {
             cleanup,
             getPos: () => elemPos,
             bumpIntoScreen: () => {
-                onBegin();
-                onUpdate(0, 0);
+                if (!hasMouseDown()) {
+                    onBegin();
+                    onUpdate(0, 0);
+                }
             },
         };
     };
@@ -4768,6 +4771,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         captureStdout: settings_3.default.shouldCaptureStdio(),
                         job: jobId,
                         jobLabel: `Probe: '${`${(_a = locator.get().result.label) !== null && _a !== void 0 ? _a : locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
+                        skipResultLocator: env !== env.getGlobalModalEnv(),
                     })
                         .then(data => {
                         if (data.response.type === 'job') {
@@ -4856,6 +4860,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         const titleRow = createTitle();
                         root.append(titleRow);
                         lastOutput = body;
+                        const dolog = env === env.getGlobalModalEnv();
                         const enableExpander = true;
                         // const enableExpander = body.length >= 1 && (body[0].type === 'node' || (
                         //   body[0].type === 'arr' && body[0].value.length >= 1 && body[0].value[0].type === 'node'
@@ -4867,6 +4872,13 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             message.style.fontStyle = 'italic';
                             root.appendChild(message);
                         }
+                        let onCreateCounter = 0;
+                        let onCreateTimeCounter = 0;
+                        let partialOnCreateTimeCounter = 0;
+                        if (dolog) {
+                            console.log('begin encode');
+                            console.time('encodeRpcBodyLines');
+                        }
                         const areasToKeep = new Set();
                         root.appendChild((0, encodeRpcBodyLines_3.default)(env, body, {
                             excludeStdIoFromPaths: true,
@@ -4876,6 +4888,8 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                 },
                                 onCreate: ({ locator, locatorRoot, expansionArea, path: nestId, isFresh }) => {
                                     var _a, _b, _c;
+                                    const createStart = Date.now();
+                                    ++onCreateCounter;
                                     areasToKeep.add(JSON.stringify(nestId));
                                     const updLocator = (_a = inlineWindowManager.getPreviouslyAssociatedLocator(nestId)) !== null && _a !== void 0 ? _a : (0, UpdatableNodeLocator_4.createMutableLocator)(locator);
                                     updLocator.set(locator);
@@ -4885,20 +4899,23 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     const nests = nestedWindows[encodedId];
                                     if (nests) {
                                         delete nestedWindows[encodedId];
+                                        const innerCreateStart = Date.now();
+                                        const immutLoc = (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator);
                                         nests.forEach(nest => {
                                             switch (nest.data.type) {
                                                 case 'probe': {
                                                     const dat = nest.data;
-                                                    displayProbeModal(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator), dat.property, dat.nested);
+                                                    displayProbeModal(nestedEnv, null, immutLoc, dat.property, dat.nested);
                                                     break;
                                                 }
                                                 case 'ast': {
                                                     const dat = nest.data;
-                                                    (0, displayAstModal_2.default)(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator), dat.direction, dat.transform);
+                                                    (0, displayAstModal_2.default)(nestedEnv, null, immutLoc, dat.direction, dat.transform);
                                                     break;
                                                 }
                                             }
                                         });
+                                        partialOnCreateTimeCounter += Date.now() - innerCreateStart;
                                     }
                                     if (isFresh && property.name === metaNodesWithPropertyName) {
                                         const nestedPropName = (_c = (_b = property.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value;
@@ -4906,6 +4923,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                             displayProbeModal(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator), { name: nestedPropName }, {});
                                         }
                                     }
+                                    onCreateTimeCounter += Date.now() - createStart;
                                 },
                                 onClick: ({ locator, locatorRoot, expansionArea, path: nestId }) => {
                                     const prevLocator = inlineWindowManager.getPreviouslyAssociatedLocator(nestId);
@@ -4922,9 +4940,16 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             }) : undefined,
                             // nodeLocatorExpanderHandler: () => {},
                         }));
+                        if (dolog) {
+                            console.log('mid encode');
+                        }
                         inlineWindowManager.conditiionallyDestroyAreas((areaId) => {
                             return !areasToKeep.has(JSON.stringify(areaId));
                         });
+                        if (dolog) {
+                            console.log('done encode, count:', onCreateCounter, ', createTime:', onCreateTimeCounter, 'partialOnCreate:', partialOnCreateTimeCounter);
+                            console.timeEnd('encodeRpcBodyLines');
+                        }
                         inlineWindowManager.notifyListenersOfChange();
                     }
                     const spinner = (0, createLoadingSpinner_4.default)();
@@ -7108,13 +7133,14 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         let updateSpanHighlight = (span, stickies) => { };
         const onChangeListeners = {};
         const probeWindowStateSavers = {};
-        const windowSaveDebouncer = (0, cullingTaskSubmitterFactory_2.default)(10)();
+        const spammyOperationDebouncer = (0, cullingTaskSubmitterFactory_2.default)(10);
+        const windowSaveDebouncer = spammyOperationDebouncer();
         const triggerWindowSave = () => {
-            // windowSaveDebouncer.submit(() => {
-            const states = [];
-            Object.values(probeWindowStateSavers).forEach(v => v(states));
-            settings_7.default.setProbeWindowStates(states);
-            // });
+            windowSaveDebouncer.submit(() => {
+                const states = [];
+                Object.values(probeWindowStateSavers).forEach(v => v(states));
+                settings_7.default.setProbeWindowStates(states);
+            });
         };
         const notifyLocalChangeListeners = (adjusters, reason) => {
             Object.values(onChangeListeners).forEach(l => l(adjusters, reason));
@@ -7218,24 +7244,27 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 }
                 const activeMarkers = [];
                 const probeMarkers = {};
+                const updateMarkerDebouncer = spammyOperationDebouncer();
                 const updateMarkers = () => {
-                    activeMarkers.forEach(m => { var _a; return (_a = m === null || m === void 0 ? void 0 : m.clear) === null || _a === void 0 ? void 0 : _a.call(m); });
-                    activeMarkers.length = 0;
-                    const deduplicator = new Set();
-                    const filteredAddMarker = (severity, start, end, msg) => {
-                        const uniqId = [severity, start, end, msg].join(' | ');
-                        ;
-                        if (deduplicator.has(uniqId)) {
-                            return;
-                        }
-                        deduplicator.add(uniqId);
-                        const lineStart = (start >>> 12);
-                        const colStart = start & 0xFFF;
-                        const lineEnd = (end >>> 12);
-                        const colEnd = end & 0xFFF;
-                        activeMarkers.push(markText({ severity, lineStart, colStart, lineEnd, colEnd, message: msg }));
-                    };
-                    Object.values(probeMarkers).forEach(arr => arr.forEach(({ type, start, end, msg }) => filteredAddMarker(type, start, end, msg)));
+                    updateMarkerDebouncer.submit(() => {
+                        activeMarkers.forEach(m => { var _a; return (_a = m === null || m === void 0 ? void 0 : m.clear) === null || _a === void 0 ? void 0 : _a.call(m); });
+                        activeMarkers.length = 0;
+                        const deduplicator = new Set();
+                        const filteredAddMarker = (severity, start, end, msg) => {
+                            const uniqId = [severity, start, end, msg].join(' | ');
+                            ;
+                            if (deduplicator.has(uniqId)) {
+                                return;
+                            }
+                            deduplicator.add(uniqId);
+                            const lineStart = (start >>> 12);
+                            const colStart = start & 0xFFF;
+                            const lineEnd = (end >>> 12);
+                            const colEnd = end & 0xFFF;
+                            activeMarkers.push(markText({ severity, lineStart, colStart, lineEnd, colEnd, message: msg }));
+                        };
+                        Object.values(probeMarkers).forEach(arr => arr.forEach(({ type, start, end, msg }) => filteredAddMarker(type, start, end, msg)));
+                    });
                 };
                 const setupSimpleCheckbox = (input, initial, update) => {
                     input.checked = initial;
@@ -7311,6 +7340,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 const testManager = (0, TestManager_1.createTestManager)(() => modalEnv, createJobId);
                 let jobIdGenerator = 0;
+                const createCullingTaskSubmitter = (0, cullingTaskSubmitterFactory_2.default)(changeBufferTime);
                 const modalEnv = {
                     showWindow: showWindow_11.default,
                     performTypedRpc: (req) => wsHandler.sendRpc(req),
@@ -7348,7 +7378,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     triggerWindowSave,
                     statisticsCollector: statCollectorImpl,
                     currentlyLoadingModals: new Set(),
-                    createCullingTaskSubmitter: (0, cullingTaskSubmitterFactory_2.default)(changeBufferTime),
+                    createCullingTaskSubmitter,
                     testManager,
                     createJobId,
                     getGlobalModalEnv: () => modalEnv,

@@ -79,7 +79,7 @@ public class TestDefaultRequestHandler {
 						null, ".tmp"), //
 				new NodeLocator(new TALStep("", "", 0, 0, 0, false), Collections.emptyList()),
 				new Property(attrName, Collections.emptyList(), null),
-				false, null, null);
+				false, null, null, null);
 		return new ClientRequest(req.toJSON(), obj -> {
 		}, new AtomicBoolean(true));
 	}

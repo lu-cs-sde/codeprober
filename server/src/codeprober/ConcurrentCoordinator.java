@@ -446,7 +446,9 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 //				System.out.println("Conc update: " + resp.toJSON() +" --- isFinal: " + resp.isFinalUpdate);
 				dispatchUpdate(job, resp.isFinalUpdate, resp.value);
 				if (resp.isFinalUpdate) {
-					this.job = null;
+					synchronized (this) {
+						this.job = null;
+					}
 					maybeTakeWork();
 					dispatchStatusToSubscribers();
 				}
@@ -472,7 +474,7 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 				outStream.write(("<" + msgData.length + ">").getBytes(StandardCharsets.UTF_8));
 				outStream.write(msgData);
 				outStream.flush();
-				CodeProber.flog("Wrote to worker for " + job.jobId);
+//				CodeProber.flog("Wrote to worker for " + job.jobId);
 			} catch (IOException e) {
 				CodeProber.flog("error while writing to worker: " + e);
 				e.printStackTrace();

@@ -27,17 +27,19 @@ const attachDragToMove = (element: HTMLElement, initialPos?: ModalPosition | nu
     elemPos.y = newY;
   };
   onUpdate(0, 0);
-  const cleanup = attachDragToX(element,
+  const { cleanup, hasMouseDown } = attachDragToX(element,
     onBegin,
     onUpdate,
     onFinishedMove
-  ).cleanup;
+  );
   return {
     cleanup,
     getPos: () => elemPos,
     bumpIntoScreen: () => {
-      onBegin();
-      onUpdate(0, 0);
+      if (!hasMouseDown()) {
+        onBegin();
+        onUpdate(0, 0);
+      }
     },
   }
 }

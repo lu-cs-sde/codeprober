@@ -62,7 +62,8 @@ const attachDragToX = (
   return {
     cleanup: () => {
       document.removeEventListener('mousemove', onMouseMove);
-    }
+    },
+    hasMouseDown: () => mouse.down,
   };
 };
 

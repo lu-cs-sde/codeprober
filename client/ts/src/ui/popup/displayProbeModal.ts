@@ -329,7 +329,9 @@ const displayProbeModal = (
           src: env.createParsingRequestData(),
           captureStdout: settings.shouldCaptureStdio(),
           job: jobId,
+
           jobLabel: `Probe: '${`${locator.get().result.label ?? locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
+          skipResultLocator: env !== env.getGlobalModalEnv(),
         })
           .then(data => {
             if (data.response.type === 'job') {
@@ -415,6 +417,7 @@ const displayProbeModal = (
 
             lastOutput = body;
 
+            const dolog = env === env.getGlobalModalEnv();
             const enableExpander = true;
             // const enableExpander = body.length >= 1 && (body[0].type === 'node' || (
             //   body[0].type === 'arr' && body[0].value.length >= 1 && body[0].value[0].type === 'node'
@@ -426,6 +429,14 @@ const displayProbeModal = (
               message.style.fontStyle = 'italic';
               root.appendChild(message);
             }
+
+            let onCreateCounter = 0;
+            let onCreateTimeCounter = 0;
+            let partialOnCreateTimeCounter = 0;
+            if (dolog) {
+              console.log('begin encode');
+              console.time('encodeRpcBodyLines');
+            }
             const areasToKeep = new Set<string>();
             root.appendChild(encodeRpcBodyLines(env, body, {
               excludeStdIoFromPaths: true,
@@ -434,6 +445,8 @@ const displayProbeModal = (
                   return inlineWindowManager.getPreviousExpansionArea(path);
                 },
                 onCreate: ({ locator, locatorRoot, expansionArea, path: nestId, isFresh }) => {
+                  const createStart = Date.now();
+                  ++onCreateCounter;
                   areasToKeep.add(JSON.stringify(nestId));
                   const updLocator = inlineWindowManager.getPreviouslyAssociatedLocator(nestId) ?? createMutableLocator(locator);
                   updLocator.set(locator);
@@ -444,20 +457,23 @@ const displayProbeModal = (
                   const nests = nestedWindows[encodedId];
                   if (nests) {
                     delete nestedWindows[encodedId];
+                    const innerCreateStart = Date.now();
+                    const immutLoc = createImmutableLocator(updLocator);
                     nests.forEach(nest => {
                       switch (nest.data.type) {
                         case 'probe': {
                           const dat = nest.data;
-                          displayProbeModal(nestedEnv, null, createImmutableLocator(updLocator), dat.property, dat.nested);
+                          displayProbeModal(nestedEnv, null, immutLoc, dat.property, dat.nested);
                           break;
                         }
                         case 'ast': {
                           const dat = nest.data;
-                          displayAstModal(nestedEnv, null, createImmutableLocator(updLocator), dat.direction, dat.transform);
+                          displayAstModal(nestedEnv, null, immutLoc, dat.direction, dat.transform);
                           break;
                         }
                       }
                     });
+                    partialOnCreateTimeCounter += Date.now() - innerCreateStart;
                   }
                   if (isFresh && property.name === metaNodesWithPropertyName) {
                     const nestedPropName = property.args?.[0]?.value as string;
@@ -465,6 +481,7 @@ const displayProbeModal = (
                       displayProbeModal(nestedEnv , null, createImmutableLocator(updLocator), { name: nestedPropName }, {});
                     }
                   }
+                  onCreateTimeCounter += Date.now() - createStart;
                 },
                 onClick: ({ locator, locatorRoot, expansionArea, path: nestId }) => {
                   const prevLocator = inlineWindowManager.getPreviouslyAssociatedLocator(nestId);
@@ -483,9 +500,16 @@ const displayProbeModal = (
               }): undefined,
               // nodeLocatorExpanderHandler: () => {},
             }));
+            if (dolog) {
+              console.log('mid encode');
+            }
             inlineWindowManager.conditiionallyDestroyAreas((areaId) => {
               return !areasToKeep.has(JSON.stringify(areaId));
             });
+            if (dolog) {
+              console.log('done encode, count:', onCreateCounter, ', createTime:', onCreateTimeCounter, 'partialOnCreate:', partialOnCreateTimeCounter);
+              console.timeEnd('encodeRpcBodyLines');
+            }
             inlineWindowManager.notifyListenersOfChange();
           }
           const spinner = createLoadingSpinner();

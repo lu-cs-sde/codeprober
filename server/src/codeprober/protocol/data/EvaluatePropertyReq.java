@@ -10,7 +10,8 @@ public class EvaluatePropertyReq implements codeprober.util.JsonUtil.ToJsonable 
   public final boolean captureStdout;
   public final Long job;
   public final String jobLabel;
-  public EvaluatePropertyReq(ParsingRequestData src, NodeLocator locator, Property property, boolean captureStdout, Long job, String jobLabel) {
+  public final Boolean skipResultLocator;
+  public EvaluatePropertyReq(ParsingRequestData src, NodeLocator locator, Property property, boolean captureStdout, Long job, String jobLabel, Boolean skipResultLocator) {
     this.type = "EvaluateProperty";
     this.src = src;
     this.locator = locator;
@@ -18,6 +19,7 @@ public class EvaluatePropertyReq implements codeprober.util.JsonUtil.ToJsonable 
     this.captureStdout = captureStdout;
     this.job = job;
     this.jobLabel = jobLabel;
+    this.skipResultLocator = skipResultLocator;
   }
 
   public static EvaluatePropertyReq fromJSON(JSONObject obj) {
@@ -29,6 +31,7 @@ public class EvaluatePropertyReq implements codeprober.util.JsonUtil.ToJsonable 
     , obj.getBoolean("captureStdout")
     , obj.has("job") ? (obj.getLong("job")) : null
     , obj.has("jobLabel") ? (obj.getString("jobLabel")) : null
+    , obj.has("skipResultLocator") ? (obj.getBoolean("skipResultLocator")) : null
     );
   }
   public JSONObject toJSON() {
@@ -40,6 +43,7 @@ public class EvaluatePropertyReq implements codeprober.util.JsonUtil.ToJsonable 
     _ret.put("captureStdout", captureStdout);
     if (job != null) _ret.put("job", job);
     if (jobLabel != null) _ret.put("jobLabel", jobLabel);
+    if (skipResultLocator != null) _ret.put("skipResultLocator", skipResultLocator);
     return _ret;
   }
 }

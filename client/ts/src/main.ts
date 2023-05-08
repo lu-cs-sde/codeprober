@@ -66,13 +66,14 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
     const onChangeListeners: ModalEnv['onChangeListeners'] = {};
 
     const probeWindowStateSavers: { [key: string]: (target: WindowState[]) => void } = {};
-    const windowSaveDebouncer = createCullingTaskSubmitterFactory(10)();
+    const spammyOperationDebouncer = createCullingTaskSubmitterFactory(10);
+    const windowSaveDebouncer = spammyOperationDebouncer();
     const triggerWindowSave = () => {
-      // windowSaveDebouncer.submit(() => {
+      windowSaveDebouncer.submit(() => {
         const states: WindowState[] = [];
         Object.values(probeWindowStateSavers).forEach(v => v(states));
         settings.setProbeWindowStates(states);
-      // });
+      });
     };
 
     const notifyLocalChangeListeners = (adjusters?: LocationAdjuster[], reason?: string) => {
@@ -196,25 +197,28 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
 
       const activeMarkers: TextMarker[] = [];
       const probeMarkers: ModalEnv['probeMarkers'] = {};
+      const updateMarkerDebouncer = spammyOperationDebouncer();
       const updateMarkers = () => {
-        activeMarkers.forEach(m => m?.clear?.());
-        activeMarkers.length = 0;
+        updateMarkerDebouncer.submit(() => {
+          activeMarkers.forEach(m => m?.clear?.());
+          activeMarkers.length = 0;
 
-        const deduplicator = new Set();
-        const filteredAddMarker = (severity: Diagnostic['type'], start: number, end: number, msg: string) => {
-          const uniqId = [severity, start, end, msg].join(' | ');;
-          if (deduplicator.has(uniqId)) {
-            return;
+          const deduplicator = new Set();
+          const filteredAddMarker = (severity: Diagnostic['type'], start: number, end: number, msg: string) => {
+            const uniqId = [severity, start, end, msg].join(' | ');;
+            if (deduplicator.has(uniqId)) {
+              return;
+            }
+            deduplicator.add(uniqId);
+
+            const lineStart = (start >>> 12);
+            const colStart = start & 0xFFF;
+            const lineEnd = (end >>> 12);
+            const colEnd = end & 0xFFF;
+            activeMarkers.push(markText({ severity, lineStart, colStart, lineEnd, colEnd, message: msg }));
           }
-          deduplicator.add(uniqId);
-
-          const lineStart = (start >>> 12);
-          const colStart = start & 0xFFF;
-          const lineEnd = (end >>> 12);
-          const colEnd = end & 0xFFF;
-          activeMarkers.push(markText({ severity, lineStart, colStart, lineEnd, colEnd, message: msg }));
-        }
-        Object.values(probeMarkers).forEach(arr => arr.forEach(({ type, start, end, msg }) => filteredAddMarker(type, start, end, msg)));
+          Object.values(probeMarkers).forEach(arr => arr.forEach(({ type, start, end, msg }) => filteredAddMarker(type, start, end, msg)));
+        });
       };
 
       const setupSimpleCheckbox = (input: HTMLInputElement, initial: boolean, update: (checked: boolean) => void) => {
@@ -306,6 +310,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       };
       const testManager = createTestManager(() => modalEnv, createJobId);
       let jobIdGenerator = 0;
+      const createCullingTaskSubmitter = createCullingTaskSubmitterFactory(changeBufferTime);
       const modalEnv: ModalEnv = {
         showWindow,
         performTypedRpc: (req) => wsHandler.sendRpc(req),
@@ -340,7 +345,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         triggerWindowSave,
         statisticsCollector: statCollectorImpl,
         currentlyLoadingModals: new Set<string>(),
-        createCullingTaskSubmitter: createCullingTaskSubmitterFactory(changeBufferTime),
+        createCullingTaskSubmitter,
         testManager,
         createJobId,
         getGlobalModalEnv: () => modalEnv,

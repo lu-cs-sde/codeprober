@@ -201,12 +201,22 @@ public class EvaluatePropertyHandler {
 						// Meta-attr, not actually in target AST
 						switch (queryAttrName) {
 						case "m:NodesWithProperty": {
+							int limit = 100;
+							final String limitStr = System.getenv("QUERY_PROBE_OUTPUT_LIMIT");
+							if (limitStr != null) {
+								try {
+									limit = Integer.parseInt(limitStr);
+								} catch (NumberFormatException e) {
+									System.err.println("Invalid value for QUERY_PROBE_OUTPUT_LIMIT");
+									e.printStackTrace();
+								}
+							}
 							final String propName = req.property.args.get(0).asString();
-							value = NodesWithProperty.get(parsed.info, match.node, propName);
+							value = NodesWithProperty.get(parsed.info, match.node, propName, limit);
 							break;
 						}
 						default: {
-							value = "Invalid meta-attribute '" + queryAttrName +"'";
+							value = "Invalid meta-attribute '" + queryAttrName + "'";
 							break;
 						}
 						}
@@ -280,10 +290,11 @@ public class EvaluatePropertyHandler {
 
 			errors = StdIoInterceptor.performCaptured((stdout, line) -> MagicStdoutMessageParser.parse(line), () -> {
 				try {
-					final ResolvedNode match = ApplyLocator.toNode(parsed.info, req.locator);
+					final ResolvedNode match = ApplyLocator.toNode(parsed.info, req.locator,
+							req.skipResultLocator == null ? true : !req.skipResultLocator);
 					if (match == null) {
-						body.add(RpcBodyLine
-								.fromPlain("No matching node found\n\nTry remaking the probe\nat a different line/column"));
+						body.add(RpcBodyLine.fromPlain(
+								"No matching node found\n\nTry remaking the probe\nat a different line/column"));
 						return;
 					}
 
@@ -304,7 +315,8 @@ public class EvaluatePropertyHandler {
 						final ClassNotFoundException cce = (ClassNotFoundException) e.getCause();
 //						System.err.println();
 						body.add(RpcBodyLine.fromPlain("Bad type reference: " + cce.getMessage()));
-						body.add(RpcBodyLine.fromPlain("Either an AST node type definition was removed, or this probe may have been created for another tool"));
+						body.add(RpcBodyLine.fromPlain(
+								"Either an AST node type definition was removed, or this probe may have been created for another tool"));
 						return;
 					}
 					throw e;
