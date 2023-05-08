@@ -4,10 +4,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import protocolgen.spec.AsyncRpcUpdate;
+import protocolgen.spec.Complete;
 import protocolgen.spec.EvaluateProperty;
 import protocolgen.spec.Fetch;
 import protocolgen.spec.GetTestSuite;
 import protocolgen.spec.GetWorkerStatus;
+import protocolgen.spec.Hover;
 import protocolgen.spec.ListNodes;
 import protocolgen.spec.ListProperties;
 import protocolgen.spec.ListTestSuites;
@@ -48,6 +50,10 @@ public class GenAll {
 		rpcs.add(StopJob.class);
 		rpcs.add(PollWorkerStatus.class);
 		rpcs.add(Fetch.class);
+
+		// Client->Server, 'LSP'
+		rpcs.add(Hover.class);
+		rpcs.add(Complete.class);
 
 		// Client->Server, wsput
 		rpcs.add(WsPutInit.class);

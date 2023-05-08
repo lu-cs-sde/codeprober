@@ -24,6 +24,26 @@ window.defineEditor(
         enabled: !window.location.search.includes('fullscreen=true'),
       },
     });
+    if (location.search.includes('debug=true')) {
+      monaco.languages.getLanguages().forEach(({ id: languageId }) => {
+        monaco.languages.registerHoverProvider(languageId, {
+          provideHover: async (model, position, token) => {
+            return window.HandleLspLikeInteraction?.(
+              'hover',
+              { line: position.lineNumber, column: position.column }
+            );
+          }
+        })
+        monaco.languages.registerCompletionItemProvider(languageId, {
+          provideCompletionItems: async (model, position, token) => {
+            return window.HandleLspLikeInteraction?.(
+              'complete',
+              { line: position.lineNumber, column: position.column }
+            );
+          }
+        })
+      });
+    }
 
     const coolMarkerDescriptors = {};
     let activeCoolMarkers = {};

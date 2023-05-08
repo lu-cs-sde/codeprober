@@ -50,6 +50,12 @@ public abstract class RequestAdapter {
       case "Fetch": {
         return handleFetch(FetchReq.fromJSON(request)).toJSON();
       }
+      case "ide:hover": {
+        return handleHover(HoverReq.fromJSON(request)).toJSON();
+      }
+      case "ide:complete": {
+        return handleComplete(CompleteReq.fromJSON(request)).toJSON();
+      }
       case "wsput:init": {
         return handleWsPutInit(WsPutInitReq.fromJSON(request)).toJSON();
       }
@@ -119,6 +125,14 @@ public abstract class RequestAdapter {
 
   protected FetchRes handleFetch(FetchReq req) {
     throw new JSONException("Request Fetch is not implemented");
+  }
+
+  protected HoverRes handleHover(HoverReq req) {
+    throw new JSONException("Request Hover is not implemented");
+  }
+
+  protected CompleteRes handleComplete(CompleteReq req) {
+    throw new JSONException("Request Complete is not implemented");
   }
 
   protected WsPutInitRes handleWsPutInit(WsPutInitReq req) {

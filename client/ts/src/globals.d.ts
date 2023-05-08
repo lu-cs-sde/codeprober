@@ -84,6 +84,7 @@ interface Window {
   clearUserSettings: () => void;
   saveStateAsUrl: () => void;
   ActiveLocatorRequest?: ActiveNodeLocatorRequest;
+  HandleLspLikeInteraction: (type: 'hover' | 'complete', { line: number, column: number }) => Promise<any>;
 }
 
 interface ActiveNodeLocatorRequest {

@@ -7077,7 +7077,7 @@ define("ui/popup/displayWorkerStatus", ["require", "exports", "ui/create/createM
     };
     exports.default = displayWorkerStatus;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_5, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_3, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_7) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_5, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_3, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_7, hacks_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -7400,6 +7400,48 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     (0, displayTestSuiteListModal_1.default)(modalEnv, () => { uiElements.showTests.disabled = false; }, workerProcessCount);
                 };
                 (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, buildTimeSeconds, modalEnv.performTypedRpc);
+                window.HandleLspLikeInteraction = async (type, pos) => {
+                    switch (type) {
+                        case 'hover': {
+                            const req = {
+                                type: 'ide:hover',
+                                src: modalEnv.createParsingRequestData(),
+                                line: pos.line,
+                                column: pos.column,
+                            };
+                            const result = await modalEnv.performTypedRpc(req);
+                            if (!result.lines) {
+                                return null;
+                            }
+                            const ret = [];
+                            result.lines.forEach((line) => {
+                                ret.push(...line.split('\n').map(value => ({ value: value.trim() })));
+                            });
+                            return { contents: ret };
+                        }
+                        case 'complete': {
+                            const req = {
+                                type: 'ide:complete',
+                                src: modalEnv.createParsingRequestData(),
+                                line: pos.line,
+                                column: pos.column,
+                            };
+                            const result = await modalEnv.performTypedRpc(req);
+                            if (!result.lines) {
+                                return null;
+                            }
+                            const ret = [];
+                            result.lines.forEach((line) => {
+                                ret.push({ label: line, insertText: line, kind: 3 });
+                            });
+                            return { suggestions: ret };
+                        }
+                        default: {
+                            (0, hacks_3.assertUnreachable)(type);
+                            return null;
+                        }
+                    }
+                };
                 window.displayHelp = (type) => {
                     const common = (type, button) => (0, displayHelp_5.default)(type, disabled => button.disabled = disabled);
                     switch (type) {

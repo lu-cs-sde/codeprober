@@ -24,12 +24,16 @@ import codeprober.metaprogramming.TypeIdentificationStyle;
 import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.ClientRequest;
 import codeprober.protocol.PositionRecoveryStrategy;
+import codeprober.protocol.data.CompleteReq;
+import codeprober.protocol.data.CompleteRes;
 import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
 import codeprober.protocol.data.FetchReq;
 import codeprober.protocol.data.FetchRes;
 import codeprober.protocol.data.GetTestSuiteReq;
 import codeprober.protocol.data.GetTestSuiteRes;
+import codeprober.protocol.data.HoverReq;
+import codeprober.protocol.data.HoverRes;
 import codeprober.protocol.data.ListNodesReq;
 import codeprober.protocol.data.ListNodesRes;
 import codeprober.protocol.data.ListPropertiesReq;
@@ -42,8 +46,10 @@ import codeprober.protocol.data.PutTestSuiteReq;
 import codeprober.protocol.data.PutTestSuiteRes;
 import codeprober.protocol.data.RequestAdapter;
 import codeprober.protocol.data.RpcBodyLine;
+import codeprober.requesthandler.CompleteHandler;
 import codeprober.requesthandler.EvaluatePropertyHandler;
 import codeprober.requesthandler.FetchHandler;
+import codeprober.requesthandler.HoverHandler;
 import codeprober.requesthandler.LazyParser;
 import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.requesthandler.ListNodesHandler;
@@ -200,6 +206,15 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					return FetchHandler.apply(req);
 				}
 
+				@Override
+				protected HoverRes handleHover(HoverReq req) {
+					return HoverHandler.apply(req, lp);
+				}
+
+				@Override
+				protected CompleteRes handleComplete(CompleteReq req) {
+					return CompleteHandler.apply(req, lp);
+				}
 
 			}.handle(request.data);
 			if (handled != null) {

@@ -20,10 +20,11 @@ import { createTestManager } from './model/test/TestManager';
 import displayTestSuiteListModal from './ui/popup/displayTestSuiteListModal';
 import ModalEnv from './model/ModalEnv';
 import displayWorkerStatus from './ui/popup/displayWorkerStatus';
-import { AsyncRpcUpdate, Diagnostic, InitInfo, TALStep } from './protocol';
+import { AsyncRpcUpdate, CompleteReq, CompleteRes, Diagnostic, HoverReq, HoverRes, InitInfo, TALStep } from './protocol';
 import showWindow from './ui/create/showWindow';
 import { createMutableLocator } from './model/UpdatableNodeLocator';
 import WindowState from './model/WindowState';
+import { assertUnreachable } from './hacks';
 
 const uiElements = new UIElements();
 
@@ -377,6 +378,52 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
 
        showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, modalEnv.performTypedRpc);
 
+      window.HandleLspLikeInteraction = async (type, pos) => {
+        switch (type) {
+          case 'hover': {
+            const req: HoverReq = {
+              type: 'ide:hover',
+              src: modalEnv.createParsingRequestData(),
+              line: pos.line,
+              column: pos.column,
+            };
+            const result = await modalEnv.performTypedRpc<HoverReq, HoverRes>(req);
+            if (!result.lines) {
+              return null;
+            }
+
+            const ret: any = [];
+            result.lines.forEach((line) => {
+              ret.push(...line.split('\n').map(value => ({ value: value.trim() })));
+            });
+            return { contents: ret };
+          }
+
+          case 'complete': {
+            const req: CompleteReq = {
+              type: 'ide:complete',
+              src: modalEnv.createParsingRequestData(),
+              line: pos.line,
+              column: pos.column,
+            };
+            const result = await modalEnv.performTypedRpc<CompleteReq, CompleteRes>(req);
+            if (!result.lines) {
+              return null;
+            }
+
+            const ret: any = [];
+            result.lines.forEach((line) => {
+              ret.push({ label: line, insertText: line, kind: 3 })
+            });
+            return { suggestions: ret };
+          }
+
+          default: {
+            assertUnreachable(type);
+            return null;
+          }
+        }
+      }
       window.displayHelp = (type) => {
         const common = (type: HelpType, button: HTMLButtonElement) => displayHelp(type, disabled => button.disabled = disabled);
         switch (type) {
