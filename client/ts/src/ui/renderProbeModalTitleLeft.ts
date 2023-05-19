@@ -45,17 +45,31 @@ const renderProbeModalTitleLeft = (
     headAttr.onmousedown = (e) => { e.stopPropagation(); }
     headAttr.classList.add('clickHighlightOnHover');
     headAttr.onclick = (e) => {
+      let initialFilter = '';
+      if (attr.name == metaNodesWithPropertyName) {
+        initialFilter = `*.${attr.args?.[0]?.value}`;
+        if ((attr.args?.length ?? 0) >= 2) {
+          initialFilter = `${initialFilter}[${attr.args?.[1]?.value}]`;
+        }
+      }
       if (env.duplicateOnAttr() != e.shiftKey) {
-        displayAttributeModal(env, null, locator.isMutable() ? locator.createMutableClone() : locator);
+        displayAttributeModal(env, null, locator.isMutable() ? locator.createMutableClone() : locator, { initialFilter });
       } else {
         close?.();
-        displayAttributeModal(env, getWindowPos(), locator);
+        displayAttributeModal(env, getWindowPos(), locator, { initialFilter });
       }
       e.stopPropagation();
     };
   }
 
   container.appendChild(headAttr);
+
+  if (attr.name === metaNodesWithPropertyName && (attr.args?.length ?? 0) >= 2) {
+    const pred = document.createElement('span');
+    pred.classList.add('syntax-int');
+    pred.innerText = `[${attr.args?.[1]?.value}]`;
+    container.appendChild(pred);
+  }
 
   if (attr.args?.length && env && attr.name !== metaNodesWithPropertyName) {
     const editButton = document.createElement('img');

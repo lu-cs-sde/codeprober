@@ -15,8 +15,8 @@ import codeprober.AstInfo;
 import codeprober.locator.ApplyLocator;
 import codeprober.locator.ApplyLocator.ResolvedNode;
 import codeprober.locator.CreateLocator;
-import codeprober.locator.NodesWithProperty;
 import codeprober.locator.CreateLocator.LocatorMergeMethod;
+import codeprober.locator.NodesWithProperty;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.metaprogramming.StdIoInterceptor;
@@ -200,6 +200,9 @@ public class EvaluatePropertyHandler {
 						// Meta-attr, not actually in target AST
 						switch (queryAttrName) {
 						case "m:NodesWithProperty": {
+							if (req.property.args.size() == 0) {
+								throw new IllegalArgumentException("Need at least one argument for m:NodesWithProperty");
+							}
 							int limit = 100;
 							final String limitStr = System.getenv("QUERY_PROBE_OUTPUT_LIMIT");
 							if (limitStr != null) {
@@ -211,7 +214,13 @@ public class EvaluatePropertyHandler {
 								}
 							}
 							final String propName = req.property.args.get(0).asString();
-							value = NodesWithProperty.get(parsed.info, match.node, propName, limit);
+							String predicate = null;
+							if (req.property.args.size() >= 2) {
+								predicate = req.property.args.get(1).asString();
+							}
+
+							System.out.println("meta probe time");
+							value = NodesWithProperty.get(parsed.info, match.node, propName, predicate, limit);
 							break;
 						}
 						default: {
@@ -287,41 +296,41 @@ public class EvaluatePropertyHandler {
 				}
 			};
 
-			diagnostics.addAll(StdIoInterceptor.performCaptured((stdout, line) -> MagicStdoutMessageParser.parse(line), () -> {
-				try {
-					final ResolvedNode match = ApplyLocator.toNode(parsed.info, req.locator,
-							req.skipResultLocator == null ? true : !req.skipResultLocator);
-					if (match == null) {
-						body.add(RpcBodyLine.fromPlain(
-								"No matching node found\n\nTry remaking the probe\nat a different line/column"));
-						return;
-					}
+			diagnostics.addAll(
+					StdIoInterceptor.performCaptured((stdout, line) -> MagicStdoutMessageParser.parse(line), () -> {
+						try {
+							final ResolvedNode match = ApplyLocator.toNode(parsed.info, req.locator,
+									req.skipResultLocator == null ? true : !req.skipResultLocator);
+							if (match == null) {
+								body.add(RpcBodyLine.fromPlain(
+										"No matching node found\n\nTry remaking the probe\nat a different line/column"));
+								return;
+							}
 
-					newLocator.set(match.nodeLocator);
+							newLocator.set(match.nodeLocator);
 
-					if (req.captureStdout) {
-						// TODO add messages live instead of after everything finishes
-						final BiFunction<Boolean, String, RpcBodyLine> encoder = StdIoInterceptor
-								.createDefaultLineEncoder();
-						StdIoInterceptor.performLiveCaptured((stdout, line) -> {
-							body.add(encoder.apply(stdout, line));
-						}, () -> evaluateAttr.accept(match));
-					} else {
-						evaluateAttr.accept(match);
-					}
-				} catch (RuntimeException e) {
-					if (e.getCause() instanceof ClassNotFoundException) {
-						final ClassNotFoundException cce = (ClassNotFoundException) e.getCause();
+							if (req.captureStdout) {
+								// TODO add messages live instead of after everything finishes
+								final BiFunction<Boolean, String, RpcBodyLine> encoder = StdIoInterceptor
+										.createDefaultLineEncoder();
+								StdIoInterceptor.performLiveCaptured((stdout, line) -> {
+									body.add(encoder.apply(stdout, line));
+								}, () -> evaluateAttr.accept(match));
+							} else {
+								evaluateAttr.accept(match);
+							}
+						} catch (RuntimeException e) {
+							if (e.getCause() instanceof ClassNotFoundException) {
+								final ClassNotFoundException cce = (ClassNotFoundException) e.getCause();
 //						System.err.println();
-						body.add(RpcBodyLine.fromPlain("Bad type reference: " + cce.getMessage()));
-						body.add(RpcBodyLine.fromPlain(
-								"Either an AST node type definition was removed, or this probe may have been created for another tool"));
-						return;
-					}
-					throw e;
-				}
-			}));
-			System.out.println("cap errors: " + diagnostics);
+								body.add(RpcBodyLine.fromPlain("Bad type reference: " + cce.getMessage()));
+								body.add(RpcBodyLine.fromPlain(
+										"Either an AST node type definition was removed, or this probe may have been created for another tool"));
+								return;
+							}
+							throw e;
+						}
+					}));
 //			final List<RpcBodyLine> caps = StdIoInterceptor
 //					.performDefaultCapture(() -> handleParsedAst(res.rootNode, queryObj, retBuilder, bodyBuilder));
 //

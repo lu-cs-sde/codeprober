@@ -218,7 +218,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
             }
             deduplicator.add(uniqId);
             pendingAdders.push(() => {
-              const sources = pendingSources[uniqId].filter(Boolean).sort((a, b) => (a < b ? -1 : (a > b) ? 1 : 0));
+              const sources = [...new Set(pendingSources[uniqId].filter(Boolean))].sort((a, b) => (a < b ? -1 : (a > b) ? 1 : 0));
 
               const lineStart = (start >>> 12);
               const colStart = start & 0xFFF;
@@ -371,37 +371,6 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
 
         }
        };
-
-      //  setTimeout(() => {
-      //     modalEnv.minimize({
-      //       locator: {
-      //         result: {
-      //           type: 'Program',
-      //           start: 0,
-      //           end: 0,
-      //           depth: 0,
-      //         },
-      //         steps: []
-      //       },
-      //       nested: {},
-      //       property: {
-      //         name: metaNodesWithPropertyName,
-      //         args: [
-      //           { type: 'string', value: 'errors' }
-      //         ],
-      //       },
-      //       type: 'probe',
-      //     });
-      // }, 500);
-
-       // Faulty cleanup debugger code below
-    // setInterval(() => {
-    //   console.log('save ids:', JSON.stringify(Object.keys(modalEnv.probeWindowStateSavers)));
-    //   console.log('marker ids:', JSON.stringify(Object.keys(modalEnv.probeMarkers)));
-    //   console.log('onChange ids:', JSON.stringify(Object.keys(modalEnv.onChangeListeners)));
-    //   console.log('saver ids:', JSON.stringify(Object.keys(modalEnv.probeWindowStateSavers)));
-    // }, 5000);
-
 
        modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {
         if (reason === 'refresh-from-server') {

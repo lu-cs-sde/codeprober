@@ -8,7 +8,7 @@ import ModalEnv, { JobId } from '../../model/ModalEnv';
 import displayTestAdditionModal from './displayTestAdditionModal';
 import renderProbeModalTitleLeft from '../renderProbeModalTitleLeft';
 import settings from '../../settings';
-import { Property, Diagnostic, EvaluatePropertyReq, EvaluatePropertyRes, RpcBodyLine, StopJobReq, StopJobRes, SynchronousEvaluationResult, PollWorkerStatusReq, PollWorkerStatusRes } from '../../protocol';
+import { Property, EvaluatePropertyReq, EvaluatePropertyRes, RpcBodyLine, StopJobReq, StopJobRes, SynchronousEvaluationResult, PollWorkerStatusReq, PollWorkerStatusRes } from '../../protocol';
 import displayAttributeModal from './displayAttributeModal';
 import displayAstModal from './displayAstModal';
 import createInlineWindowManager, { InlineWindowManager } from '../create/createInlineWindowManager';
@@ -17,6 +17,7 @@ import { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
 import { NestedTestRequest } from '../../model/test/TestManager';
 import SourcedDiagnostic from '../../model/SourcedDiagnostic';
 import { createDiagnosticSource } from '../create/createMinimizedProbeModal';
+import evaluateProperty, { OngoingPropertyEvaluation } from '../../network/evaluateProperty';
 
 const metaNodesWithPropertyName = `m:NodesWithProperty`;
 
@@ -29,7 +30,7 @@ const displayProbeModal = (
   locator: UpdatableNodeLocator,
   property: Property,
   nestedWindows: NestedWindows,
-  optionalArgs: OptionalArgs = {}
+  optionalArgs: OptionalArgs = {},
 ) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   const localDiagnostics: SourcedDiagnostic[] = [];
@@ -37,7 +38,7 @@ const displayProbeModal = (
   let showDiagnostics = optionalArgs.showDiagnostics ?? true;
   let updateMarkers = env.updateMarkers;
   const stickyController = createStickyHighlightController(env);
-  let activelyLoadingJob: JobId | null = null;
+  let activelyLoadingJob: OngoingPropertyEvaluation | null = null;
   let loading = false;
   let isCleanedUp = false;
   nestedWindows = {...nestedWindows}; // Make copy so we can locally modify it
@@ -101,7 +102,8 @@ const displayProbeModal = (
     env.currentlyLoadingModals.delete(queryId);
     stickyController.cleanup();
     if (loading && activelyLoadingJob !== null) {
-      doStopJob(activelyLoadingJob);
+      // doStopJob(activelyLoadingJob);
+      activelyLoadingJob.cancel();
     }
     // console.log('cleanup: ', queryId, 'inline state:', inlineWindowManager.getWindowStates());
     inlineWindowManager.destroy();
@@ -265,138 +267,191 @@ const displayProbeModal = (
       env.currentlyLoadingModals.add(queryId);
       const rpcQueryStart = performance.now();
 
-      const doFetch = () => new Promise<SynchronousEvaluationResult | 'stopped'>(async (resolve, reject) => {
-        let isDone = false;
-        let isConnectedToConcurrentCapableServer = false;
+      const doFetch = (): Promise<SynchronousEvaluationResult | 'stopped'> => {
         let statusPre: HTMLElement | null = null;
-        let localConcurrentCleanup = () => {};
-        const initialPollDelayTimer = setTimeout(() => {
-          if (isDone || isCleanedUp || !isConnectedToConcurrentCapableServer) {
-            return;
-          }
-          const stop = document.createElement('button');
-          stop.innerText = 'Stop';
-          stop.onclick = () => {
-            doStopJob(jobId).then(stopped => {
-              if (stopped) {
-                isDone = true;
-                resolve('stopped');
-              }
-              // Else, job might have finished just as the user clicked stop
-            });
-          }
-          root.appendChild(stop);
+        let stopBtn: HTMLButtonElement | null = null;
 
-          statusPre = document.createElement('p');
-          statusPre.style.whiteSpace = 'pre';
-          statusPre.style.fontFamily = 'monospace';
-          root.appendChild(statusPre);
-          statusPre.innerText = `Request takes a while, polling status..\nIf you see message for longer than a few milliseconds then the job hasn't started running yet, or the server is severely overloaded.`;
-
-          localConcurrentCleanup = () => {
-            root.removeChild(stop);
-            if (statusPre) { root.removeChild(statusPre); }
-          };
-          const poll = () => {
-            if (isDone || isCleanedUp) {
-              return;
-            }
-            env.performTypedRpc<PollWorkerStatusReq, PollWorkerStatusRes>({
-              type: 'Concurrent:PollWorkerStatus',
-              job: jobId,
-            })
-              .then(res => {
-                if (res.ok) {
-                  // Polled OK, async update will be delivered to job monitor below
-                  // Queue future poll.
-                  setTimeout(poll, 1000);
-                } else {
-                  console.warn('Error when polling for job status');
-                  // Don't queue more polling, very unlikely to work anyway.
-                }
-              });
-          };
-          poll();
-        }, 5000);
-        const jobId = env.createJobId(data => {
-          isConnectedToConcurrentCapableServer = true;
-          let knownStatus = 'Unknown';
-          let knownStackTrace: string[] | null = null;
-          const refreshStatusPre = () => {
-            if (!statusPre) { return; }
-            const lines = [];
-            lines.push(`Property evaluation is taking a while, status below:`);
-            lines.push(`Status: ${knownStackTrace}`);
-            if (knownStackTrace) {
-              lines.push("Stack trace:");
-              knownStackTrace.forEach((ste) => lines.push(`> ${ste}`));
-            }
-            statusPre.innerText = lines.join('\n');
-          }
-          switch (data.value.type) {
-
-            case 'status': {
-              knownStatus = data.value.value;
-              refreshStatusPre();
-              break;
-            }
-            case 'workerStackTrace': {
-              knownStackTrace = data.value.value;
-              refreshStatusPre();
-              break;
-            }
-
-            case 'workerTaskDone': {
-              const res = data.value.value;
-              isDone = true;
-              localConcurrentCleanup();
-              if (res.type === 'normal') {
-                const cast = res.value as EvaluatePropertyRes;
-                if (cast.response.type == 'job') {
-                  throw new Error(`Unexpected 'job' result in async update`);
-                }
-                resolve(cast.response.value);
-              } else {
-                console.log('Worker task failed. This is likely an internal CodeProber issue. Error message:');
-                res.value.forEach(line => console.log(line));
-                reject('Worker failed');
-              }
-              break;
-            }
-
-            default: {
-              // Ignore
-            }
-          }
-        });
-        activelyLoadingJob = jobId;
-        env.performTypedRpc<EvaluatePropertyReq, EvaluatePropertyRes>({
+        const epFetch = evaluateProperty(env, {
           type: 'EvaluateProperty',
           property,
           locator: locator.get(),
           src: env.createParsingRequestData(),
           captureStdout: settings.shouldCaptureStdio(),
-          job: jobId,
 
           jobLabel: `Probe: '${`${locator.get().result.label ?? locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
           skipResultLocator: env !== env.getGlobalModalEnv(),
-        })
-          .then(data => {
-            if (data.response.type === 'job') {
-              // Async work queued, not done.
-              isConnectedToConcurrentCapableServer = true;
-            } else {
-              // Sync work executed, done.
-              clearTimeout(initialPollDelayTimer);
-              isDone = true;
-              resolve(data.response.value);
+        },
+          () => { // On slow
+            const stopBtn = document.createElement('button');
+            stopBtn.innerText = 'Stop';
+            stopBtn.onclick = () => {
+              epFetch.cancel();
             }
-          })
-          .catch(err => {
-            isDone = true;
-            reject(err);
-          });
-      });
+            root.appendChild(stopBtn);
+
+            statusPre = document.createElement('p');
+            statusPre.style.whiteSpace = 'pre';
+            statusPre.style.fontFamily = 'monospace';
+            root.appendChild(statusPre);
+            statusPre.innerText = `Request takes a while, polling status..\nIf you see message for longer than a few milliseconds then the job hasn't started running yet, or the server is severely overloaded.`;
+          },
+          (status, stackTrace) => {
+            if (!statusPre) { return; }
+            const lines = [];
+            lines.push(`Property evaluation is taking a while, status below:`);
+            lines.push(`Status: ${status}`);
+            if (stackTrace) {
+              lines.push("Stack trace:");
+              stackTrace.forEach((ste) => lines.push(`> ${ste}`));
+            }
+            statusPre.innerText = lines.join('\n');
+          },
+          () => { // Cleanup
+            if (stopBtn) { root.removeChild(stopBtn); }
+            if (statusPre) { root.removeChild(statusPre); }
+          }
+        )
+        activelyLoadingJob = epFetch;
+        return epFetch.fetch();
+      }
+      // const doFetch = () => new Promise<SynchronousEvaluationResult | 'stopped'>(async (resolve, reject) => {
+      //   let isDone = false;
+      //   let isConnectedToConcurrentCapableServer = false;
+      //   let statusPre: HTMLElement | null = null;
+      //   let localConcurrentCleanup = () => {};
+      //   const initialPollDelayTimer = setTimeout(() => {
+      //     if (isDone || isCleanedUp || !isConnectedToConcurrentCapableServer) {
+      //       return;
+      //     }
+      //     const stop = document.createElement('button');
+      //     stop.innerText = 'Stop';
+      //     stop.onclick = () => {
+      //       doStopJob(jobId).then(stopped => {
+      //         if (stopped) {
+      //           isDone = true;
+      //           resolve('stopped');
+      //         }
+      //         // Else, job might have finished just as the user clicked stop
+      //       });
+      //     }
+      //     root.appendChild(stop);
+
+      //     statusPre = document.createElement('p');
+      //     statusPre.style.whiteSpace = 'pre';
+      //     statusPre.style.fontFamily = 'monospace';
+      //     root.appendChild(statusPre);
+      //     statusPre.innerText = `Request takes a while, polling status..\nIf you see message for longer than a few milliseconds then the job hasn't started running yet, or the server is severely overloaded.`;
+
+      //     localConcurrentCleanup = () => {
+      //       root.removeChild(stop);
+      //       if (statusPre) { root.removeChild(statusPre); }
+      //     };
+      //     const poll = () => {
+      //       if (isDone || isCleanedUp) {
+      //         return;
+      //       }
+      //       env.performTypedRpc<PollWorkerStatusReq, PollWorkerStatusRes>({
+      //         type: 'Concurrent:PollWorkerStatus',
+      //         job: jobId,
+      //       })
+      //         .then(res => {
+      //           if (res.ok) {
+      //             // Polled OK, async update will be delivered to job monitor below
+      //             // Queue future poll.
+      //             setTimeout(poll, 1000);
+      //           } else {
+      //             console.warn('Error when polling for job status');
+      //             // Don't queue more polling, very unlikely to work anyway.
+      //           }
+      //         });
+      //     };
+      //     poll();
+      //   }, 5000);
+      //   const jobId = env.createJobId(data => {
+      //     isConnectedToConcurrentCapableServer = true;
+      //     let knownStatus = 'Unknown';
+      //     let knownStackTrace: string[] | null = null;
+      //     const refreshStatusPre = () => {
+      //       if (!statusPre) { return; }
+      //       const lines = [];
+      //       lines.push(`Property evaluation is taking a while, status below:`);
+      //       lines.push(`Status: ${knownStackTrace}`);
+      //       if (knownStackTrace) {
+      //         lines.push("Stack trace:");
+      //         knownStackTrace.forEach((ste) => lines.push(`> ${ste}`));
+      //       }
+      //       statusPre.innerText = lines.join('\n');
+      //     }
+      //     switch (data.value.type) {
+
+      //       case 'status': {
+      //         knownStatus = data.value.value;
+      //         refreshStatusPre();
+      //         break;
+      //       }
+      //       case 'workerStackTrace': {
+      //         knownStackTrace = data.value.value;
+      //         refreshStatusPre();
+      //         break;
+      //       }
+
+      //       case 'workerTaskDone': {
+      //         const res = data.value.value;
+      //         isDone = true;
+      //         localConcurrentCleanup();
+      //         if (res.type === 'normal') {
+      //           const cast = res.value as EvaluatePropertyRes;
+      //           if (cast.response.type == 'job') {
+      //             throw new Error(`Unexpected 'job' result in async update`);
+      //           }
+      //           resolve(cast.response.value);
+      //         } else {
+      //           console.log('Worker task failed. This is likely an internal CodeProber issue. Error message:');
+      //           res.value.forEach(line => console.log(line));
+      //           reject('Worker failed');
+      //         }
+      //         break;
+      //       }
+
+      //       default: {
+      //         // Ignore
+      //       }
+      //     }
+      //   });
+      //   env.performTypedRpc<EvaluatePropertyReq, EvaluatePropertyRes>({
+      //     type: 'EvaluateProperty',
+      //     property,
+      //     locator: locator.get(),
+      //     src: env.createParsingRequestData(),
+      //     captureStdout: settings.shouldCaptureStdio(),
+      //     job: jobId,
+
+      //     jobLabel: `Probe: '${`${locator.get().result.label ?? locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
+      //     skipResultLocator: env !== env.getGlobalModalEnv(),
+      //   })
+      //     .then(data => {
+      //       if (data.response.type === 'job') {
+      //         // Async work queued, not done.
+      //         if (isCleanedUp) {
+      //           // We were removed while this request was sent
+      //           // Stop it asap
+      //           doStopJob(jobId);
+      //         } else {
+      //           activelyLoadingJob = jobId;
+      //         }
+      //         isConnectedToConcurrentCapableServer = true;
+      //       } else {
+      //         // Sync work executed, done.
+      //         clearTimeout(initialPollDelayTimer);
+      //         isDone = true;
+      //         resolve(data.response.value);
+      //       }
+      //     })
+      //     .catch(err => {
+      //       isDone = true;
+      //       reject(err);
+      //     });
+      // });
       doFetch()
         .then((parsed) => {
           loading = false;
@@ -472,7 +527,11 @@ const displayProbeModal = (
             if (property.name === metaNodesWithPropertyName && body.length === 1 && body[0].type === 'arr' && body[0].value.length === 0) {
               const message = document.createElement('div');
               message.style.padding = '0.25rem';
-              message.innerText = `Found no nodes implementing '${property.args?.[0]?.value}'`;
+              let tail = '';
+              if ((property.args?.length ?? 0) >= 2) {
+                tail = ` that match the predicate${`${property.args?.[1]?.value}`.includes(',') ? 's' : ''}`;
+              }
+              message.innerText = `Found no nodes implementing '${property.args?.[0]?.value}'${tail}`;
               message.style.fontStyle = 'italic';
               root.appendChild(message);
             }

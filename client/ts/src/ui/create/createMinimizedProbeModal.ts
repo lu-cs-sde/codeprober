@@ -4,6 +4,7 @@ import { findAllLocatorsWithinNestingPath } from '../../model/findLocatorWithNes
 import ModalEnv, { JobId } from '../../model/ModalEnv';
 import { createMutableLocator } from '../../model/UpdatableNodeLocator';
 import { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
+import evaluateProperty from '../../network/evaluateProperty';
 import { Diagnostic, EvaluatePropertyReq, EvaluatePropertyRes, NodeLocator, Property, RpcBodyLine, StopJobReq, StopJobRes } from '../../protocol';
 import displayProbeModal, { metaNodesWithPropertyName } from '../popup/displayProbeModal';
 import startEndToSpan from '../startEndToSpan';
@@ -23,7 +24,7 @@ const createMinimizedProbeModal = (
   const queryId = `minimized-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   const localErrors: Diagnostic[] = [];
   env.probeMarkers[queryId] = localErrors;
-  let activelyLoadingJob: JobId | null = null;
+  let activelyLoadingJobCleanup: (() => void) | null = null;
   let loading = false;
   let isCleanedUp = false;
   let refreshOnDone = false;
@@ -45,8 +46,8 @@ const createMinimizedProbeModal = (
     delete env.probeMarkers[queryId];
     delete env.probeWindowStateSavers[queryId];
     env.currentlyLoadingModals.delete(queryId);
-    if (loading && activelyLoadingJob !== null) {
-      doStopJob(activelyLoadingJob);
+    if (loading && activelyLoadingJobCleanup) {
+      activelyLoadingJobCleanup();
     }
     if (localErrors.length > 0) {
       env.updateMarkers();
@@ -62,99 +63,103 @@ const createMinimizedProbeModal = (
         refreshOnDone = true;
         return;
       }
+      loading = true;
       (async () => {
         const src = env.createParsingRequestData();
-        const resp = await env.performTypedRpc<EvaluatePropertyReq, EvaluatePropertyRes>({
-          captureStdout: false,
-          locator,
-          property,
-          src,
-          type: 'EvaluateProperty',
-        });
-        switch (resp.response.type) {
-          case 'job': {
-            throw new Error(`Unexpected async response to sync request`);
-          }
-          case 'sync': {
-            const prelen = localErrors.length;
-            // localErrors.length = 0;
-            const newErrors: Diagnostic[] = [];
-            newErrors.push(...resp.response.value.errors ?? []);
+          const rootEvalProp = evaluateProperty(env, {
+            captureStdout: false,
+            locator,
+            property,
+            src,
+            type: 'EvaluateProperty',
+          },
+            // Status update stuff, can we use this here? :thinking:
+            () => {},
+            () => {},
+            () => {},
+          );
+          const cleanups: (() => void)[] = [];
+          cleanups.push(rootEvalProp.cancel);
+          activelyLoadingJobCleanup = () => {
+            cleanups.forEach(cl => cl());
+          };
+          const resp = await rootEvalProp.fetch();
+        // };
 
-            const handleLines = async (relatedProp: Property, lines: RpcBodyLine[], nests: NestedWindows) => {
-              const nestedRequests: (() => Promise<void>)[] = [];
-              Object.entries(findAllLocatorsWithinNestingPath(lines)).forEach(
-                ([unprefixedPath, nestedLocator]) => {
-                  // const fixedPath = [...pathPrefix, ...JSON.parse(unprefixedPath)];
-                  const nwPathKey = JSON.stringify(unprefixedPath);
-                  const handleNested = async (nwData: WindowStateDataProbe) => {
-                    const resp = await env.performTypedRpc<EvaluatePropertyReq, EvaluatePropertyRes>({
-                      captureStdout: false,
-                      locator: nestedLocator,
-                      property: nwData.property,
-                      src,
-                      type: 'EvaluateProperty',
-                    });
-                    switch (resp.response.type) {
-                      case 'job': {
-                        throw new Error(`Unexpected async response to sync request`);
-                      }
-                      case 'sync': {
-                        newErrors.push(...resp.response.value.errors ?? []);
-                        await handleLines(nwData.property, resp.response.value.body, nwData.nested);
-                        break;
-                      }
-                      default: {
-                        assertUnreachable(resp.response);
-                        break;
-                      }
-                    }
-                  }
-                  nests[nwPathKey]?.forEach(nw => {
-                    nestedRequests.push(async () => {
-                      if (nw.data.type === 'probe') {
-                        console.log('mini handle nested 1');
-                        await handleNested(nw.data);
-                      }
-                    });
-                  });
-                  if (!nests[nwPathKey]?.length && relatedProp.name === metaNodesWithPropertyName) {
-                    console.log('mini handle nested 2');
-                    nestedRequests.push(() => handleNested({
-                      type: 'probe',
-                      locator: nestedLocator,
-                      property: { name: `${relatedProp.args?.[0]?.value}` },
-                      nested: {}
-                    }));
-                  }
+        if (resp === 'stopped') {
+          console.warn('evaluateProperty automatically stopped?');
+          return;
+        }
+
+        const newErrors: Diagnostic[] = [];
+        newErrors.push(...resp.errors ?? []);
+
+        const handleLines = async (relatedProp: Property, lines: RpcBodyLine[], nests: NestedWindows) => {
+          const nestedRequests: (() => Promise<void>)[] = [];
+          Object.entries(findAllLocatorsWithinNestingPath(lines)).forEach(
+            ([unprefixedPath, nestedLocator]) => {
+              const nwPathKey = JSON.stringify(unprefixedPath);
+              const handleNested = async (nwData: WindowStateDataProbe) => {
+                const nestedEvalProp = evaluateProperty(env, {
+                  captureStdout: false,
+                  locator: nestedLocator,
+                  property: nwData.property,
+                  src,
+                  type: 'EvaluateProperty',
+                },
+                // Status update stuff, can we use this here? :thinking:
+                  () => {},
+                  () => {},
+                  () => {},
+                );
+                cleanups.push(nestedEvalProp.cancel);
+                const resp = await nestedEvalProp.fetch();
+                if (resp === 'stopped') {
+                  console.warn('evaluateProperty automatically stopped?');
+                  return;
                 }
-              );
-              await Promise.all(nestedRequests.map(nr => nr()));
-            };
-            await handleLines(property, resp.response.value.body, nestedWindows);
-            if (newErrors.length) {
-              squigglyCheckboxWrapper.style.display = 'flex';
-            } else {
-              squigglyCheckboxWrapper.style.display = 'none';
+                newErrors.push(...resp.errors ?? []);
+                await handleLines(nwData.property, resp.body, nwData.nested);
+              }
+              nests[nwPathKey]?.forEach(nw => {
+                nestedRequests.push(async () => {
+                  if (nw.data.type === 'probe') {
+                    console.log('mini handle nested 1');
+                    await handleNested(nw.data);
+                  }
+                });
+              });
+              if (!nests[nwPathKey]?.length && relatedProp.name === metaNodesWithPropertyName) {
+                console.log('mini handle nested 2');
+                nestedRequests.push(() => handleNested({
+                  type: 'probe',
+                  locator: nestedLocator,
+                  property: { name: `${relatedProp.args?.[0]?.value}` },
+                  nested: {}
+                }));
+              }
             }
-            if (newErrors.length || localErrors.length) {
-              localErrors.length = 0;
+          );
+          await Promise.all(nestedRequests.map(nr => nr()));
+        };
+        await handleLines(property, resp.body, nestedWindows);
+        if (newErrors.length) {
+          squigglyCheckboxWrapper.style.display = 'flex';
+        } else {
+          squigglyCheckboxWrapper.style.display = 'none';
+        }
+        if (newErrors.length || localErrors.length) {
+          localErrors.length = 0;
 
-              localErrors.push(...newErrors.map(err => ({ ...err, source: createDiagnosticSource(locator, property) })));
-              env.updateMarkers();
-            }
-            break;
-          }
-          default: {
-            assertUnreachable(resp.response);
-            break;
-          }
+          localErrors.push(...newErrors.map(err => ({ ...err, source: createDiagnosticSource(locator, property) })));
+          env.updateMarkers();
         }
       })()
         .catch((err) => {
           console.warn('Error when refreshing minimized probe', err);
         })
         .finally(() => {
+          loading = false;
           if (refreshOnDone) {
             refreshOnDone = false;
             refresh();
@@ -196,6 +201,13 @@ const createMinimizedProbeModal = (
   }
   attrLbl.classList.add('syntax-attr');
   clickableUi.appendChild(attrLbl);
+
+  if (property.name == metaNodesWithPropertyName && (property.args?.length ?? 0) >= 2) {
+    const pred = document.createElement('span');
+    pred.classList.add('syntax-int');
+    pred.innerText = `[${property.args?.[1]?.value}]`;
+    clickableUi.appendChild(pred);
+  }
 
 
   env.probeWindowStateSavers[queryId] = (target) => {
@@ -258,10 +270,14 @@ const createDiagnosticSource = (locator: NodeLocator, property: Property) => {
   let source =  `${locator.result.label ?? locator.result.type}`.split('.').slice(-1)[0];
   if (property.name === metaNodesWithPropertyName) {
     const query = property.args?.[0]?.value;
-    if (locator.steps.length === 0) {
-      return `*.${query}`;
+    let tail = '';
+    if ((property.args?.length ?? 0) >= 2) {
+      tail = `[${property.args?.[1]?.value}]`;
     }
-    return `${source}.*.${query}`;
+    if (locator.steps.length === 0) {
+      return `*.${query}${tail}`;
+    }
+    return `${source}.*.${query}${tail}`;
   }
 
   return `${source}.${property.name}`;

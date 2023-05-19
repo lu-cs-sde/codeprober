@@ -1,5 +1,4 @@
 import { assertUnreachable } from '../../hacks';
-import adjustLocator from "../../model/adjustLocator";
 import ModalEnv from '../../model/ModalEnv';
 import UpdatableNodeLocator, { createMutableLocator } from '../../model/UpdatableNodeLocator';
 import { NestedWindows } from '../../model/WindowState';
@@ -8,7 +7,6 @@ import createModalTitle from "../create/createModalTitle";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import registerNodeSelector from "../create/registerNodeSelector";
 import registerOnHover from "../create/registerOnHover";
-import showWindow from "../create/showWindow";
 import startEndToSpan from '../startEndToSpan';
 import trimTypeName from "../trimTypeName";
 import displayAttributeModal from "./displayAttributeModal";

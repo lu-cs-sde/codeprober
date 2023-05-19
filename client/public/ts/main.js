@@ -3398,9 +3398,10 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     trimTypeName_2 = __importDefault(trimTypeName_2);
     displayAstModal_1 = __importDefault(displayAstModal_1);
     startEndToSpan_5 = __importDefault(startEndToSpan_5);
-    const displayAttributeModal = (env, modalPos, locator) => {
+    const displayAttributeModal = (env, modalPos, locator, optionalArgs = {}) => {
+        var _a;
         const queryId = `attr-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-        let filter = '';
+        let filter = (_a = optionalArgs.initialFilter) !== null && _a !== void 0 ? _a : '';
         let state = null;
         let fetchState = 'idle';
         const cleanup = () => {
@@ -3521,7 +3522,12 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                     };
                     if (isFirstRender) {
                         isFirstRender = false;
-                        setTimeout(() => filterInput.focus(), 50);
+                        setTimeout(() => {
+                            // filterInput.focus()
+                            if (optionalArgs.initialFilter) {
+                                filterInput.select();
+                            }
+                        }, 50);
                     }
                     root.appendChild(filterInput);
                     root.style.minHeight = '4rem';
@@ -3611,10 +3617,6 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                             submitExpl.innerText = msg;
                             sortedAttrs.appendChild(submitExpl);
                         };
-                        /**
-                         * TODO if the user has typed "*.foo", allow them to press enter even if no matches exist.
-                         * This will be a semi-hidden convenient shortcut for creating metaprobes
-                         */
                         matches.forEach((attr, idx) => buildNode(attr, idx > 0, matches.length === 1));
                         if (matches.length && misses.length) {
                             if (matches.length === 1) {
@@ -3628,7 +3630,22 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                         else if (!matches.length && filter.startsWith('*.') && filter.length >= 3) {
                             addSubmitExplanation('Press enter to create meta probe');
                             submit = () => {
-                                const prop = { name: displayProbeModal_2.metaNodesWithPropertyName, args: [{ type: 'string', value: filter.slice('*.'.length) }] };
+                                let propAndPredicate = filter.slice('*.'.length);
+                                const args = [];
+                                const predicateStart = propAndPredicate.indexOf('[');
+                                if (predicateStart === -1) {
+                                    args.push({ type: 'string', value: propAndPredicate });
+                                }
+                                else {
+                                    args.push({ type: 'string', value: propAndPredicate.slice(0, predicateStart) });
+                                    if (propAndPredicate.endsWith(']')) {
+                                        args.push({ type: 'string', value: propAndPredicate.slice(predicateStart + 1, propAndPredicate.length - 1) });
+                                    }
+                                    else {
+                                        console.warn('Bad predicate formatting, expected "propertyName[predicateName]"');
+                                    }
+                                }
+                                const prop = { name: displayProbeModal_2.metaNodesWithPropertyName, args };
                                 cleanup();
                                 (0, displayProbeModal_2.default)(env, popup.getPos(), locator, prop, {});
                             };
@@ -4261,7 +4278,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
     startEndToSpan_6 = __importDefault(startEndToSpan_6);
     trimTypeName_4 = __importDefault(trimTypeName_4);
     const renderProbeModalTitleLeft = (env, container, close, getWindowPos, stickyController, locator, attr, nested, typeRenderingStyle) => {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         if (typeRenderingStyle !== 'minimal-nested') {
             const headType = document.createElement('span');
             headType.classList.add('syntax-type');
@@ -4285,18 +4302,32 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
             headAttr.onmousedown = (e) => { e.stopPropagation(); };
             headAttr.classList.add('clickHighlightOnHover');
             headAttr.onclick = (e) => {
+                var _a, _b, _c, _d, _e, _f;
+                let initialFilter = '';
+                if (attr.name == displayProbeModal_3.metaNodesWithPropertyName) {
+                    initialFilter = `*.${(_b = (_a = attr.args) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.value}`;
+                    if (((_d = (_c = attr.args) === null || _c === void 0 ? void 0 : _c.length) !== null && _d !== void 0 ? _d : 0) >= 2) {
+                        initialFilter = `${initialFilter}[${(_f = (_e = attr.args) === null || _e === void 0 ? void 0 : _e[1]) === null || _f === void 0 ? void 0 : _f.value}]`;
+                    }
+                }
                 if (env.duplicateOnAttr() != e.shiftKey) {
-                    (0, displayAttributeModal_4.default)(env, null, locator.isMutable() ? locator.createMutableClone() : locator);
+                    (0, displayAttributeModal_4.default)(env, null, locator.isMutable() ? locator.createMutableClone() : locator, { initialFilter });
                 }
                 else {
                     close === null || close === void 0 ? void 0 : close();
-                    (0, displayAttributeModal_4.default)(env, getWindowPos(), locator);
+                    (0, displayAttributeModal_4.default)(env, getWindowPos(), locator, { initialFilter });
                 }
                 e.stopPropagation();
             };
         }
         container.appendChild(headAttr);
-        if (((_d = attr.args) === null || _d === void 0 ? void 0 : _d.length) && env && attr.name !== displayProbeModal_3.metaNodesWithPropertyName) {
+        if (attr.name === displayProbeModal_3.metaNodesWithPropertyName && ((_e = (_d = attr.args) === null || _d === void 0 ? void 0 : _d.length) !== null && _e !== void 0 ? _e : 0) >= 2) {
+            const pred = document.createElement('span');
+            pred.classList.add('syntax-int');
+            pred.innerText = `[${(_g = (_f = attr.args) === null || _f === void 0 ? void 0 : _f[1]) === null || _g === void 0 ? void 0 : _g.value}]`;
+            container.appendChild(pred);
+        }
+        if (((_h = attr.args) === null || _h === void 0 ? void 0 : _h.length) && env && attr.name !== displayProbeModal_3.metaNodesWithPropertyName) {
             const editButton = document.createElement('img');
             editButton.src = '/icons/edit_white_24dp.svg';
             editButton.classList.add('modalEditButton');
@@ -4313,7 +4344,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
                 span: (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end),
                 marginLeft: true,
                 onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end) : null),
-                onClick: (_e = stickyController === null || stickyController === void 0 ? void 0 : stickyController.onClick) !== null && _e !== void 0 ? _e : undefined,
+                onClick: (_j = stickyController === null || stickyController === void 0 ? void 0 : stickyController.onClick) !== null && _j !== void 0 ? _j : undefined,
                 external: locator.get().result.external,
                 styleOverride: typeRenderingStyle === 'minimal-nested' ? 'lines-compact' : undefined,
             });
@@ -4482,19 +4513,144 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
     };
     exports.default = createInlineWindowManager;
 });
-define("ui/create/createMinimizedProbeModal", ["require", "exports", "hacks", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "ui/popup/displayProbeModal", "ui/startEndToSpan", "ui/create/registerOnHover"], function (require, exports, hacks_3, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_4, displayProbeModal_4, startEndToSpan_7, registerOnHover_4) {
+define("network/evaluateProperty", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const evaluateProperty = (env, req, onSlowResponseDetected, onStatusUpdate, cleanupSlownessInformation) => {
+        let cancelled = false;
+        let activelyLoadingJob = null;
+        const doStopJob = (jobId) => env.performTypedRpc({
+            type: 'Concurrent:StopJob',
+            job: jobId,
+        }).then(res => {
+            if (res.err) {
+                console.warn('Error when stopping job:', res.err);
+                return false;
+            }
+            return true;
+        });
+        let stopper = () => { };
+        return {
+            cancel: () => {
+                cancelled = true;
+                if (activelyLoadingJob !== null) {
+                    doStopJob(activelyLoadingJob);
+                    activelyLoadingJob = null;
+                }
+                stopper();
+            },
+            fetch: () => new Promise((resolve, reject) => {
+                var _a;
+                stopper = () => resolve('stopped');
+                let isDone = false;
+                let isConnectedToConcurrentCapableServer = false;
+                let knownStatus = 'Unknown';
+                let knownStackTrace = null;
+                let localConcurrentCleanup = () => { };
+                const initialPollDelayTimer = setTimeout(() => {
+                    if (isDone || cancelled || !isConnectedToConcurrentCapableServer) {
+                        return;
+                    }
+                    onSlowResponseDetected();
+                    localConcurrentCleanup = () => { cleanupSlownessInformation(); };
+                    const poll = () => {
+                        if (isDone || cancelled) {
+                            return;
+                        }
+                        env.performTypedRpc({
+                            type: 'Concurrent:PollWorkerStatus',
+                            job: jobId,
+                        })
+                            .then(res => {
+                            if (res.ok) {
+                                // Polled OK, async update will be delivered to job monitor below
+                                // Queue future poll.
+                                setTimeout(poll, 1000);
+                            }
+                            else {
+                                console.warn('Error when polling for job status');
+                                // Don't queue more polling, very unlikely to work anyway.
+                            }
+                        });
+                    };
+                    poll();
+                }, 5000);
+                const jobId = env.createJobId(update => {
+                    switch (update.value.type) {
+                        case 'status': {
+                            knownStatus = update.value.value;
+                            onStatusUpdate(knownStatus, knownStackTrace);
+                            break;
+                        }
+                        case 'workerStackTrace': {
+                            knownStackTrace = update.value.value;
+                            onStatusUpdate(knownStatus, knownStackTrace);
+                            break;
+                        }
+                        case 'workerTaskDone': {
+                            const wtd = update.value.value;
+                            switch (wtd.type) {
+                                case 'normal': {
+                                    isDone = true;
+                                    activelyLoadingJob = null;
+                                    localConcurrentCleanup();
+                                    const cast = wtd.value;
+                                    if (cast.response.type == 'job') {
+                                        throw new Error(`Unexpected 'job' result in async update`);
+                                    }
+                                    resolve(cast.response.value);
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                });
+                env.performTypedRpc({
+                    ...req,
+                    job: jobId,
+                    jobLabel: `Probe: '${`${(_a = req.locator.result.label) !== null && _a !== void 0 ? _a : req.locator.result.type}`.split('.').slice(-1)[0]}.${req.property.name}'`,
+                })
+                    .then((data) => {
+                    if (data.response.type === 'job') {
+                        // Async work queued, not done.
+                        if (cancelled) {
+                            // We were removed while this request was sent
+                            // Stop it asap
+                            doStopJob(jobId);
+                            clearTimeout(initialPollDelayTimer);
+                        }
+                        else {
+                            activelyLoadingJob = jobId;
+                        }
+                        isConnectedToConcurrentCapableServer = true;
+                    }
+                    else {
+                        // Sync work executed, done.
+                        clearTimeout(initialPollDelayTimer);
+                        isDone = true;
+                        resolve(data.response.value);
+                    }
+                });
+            }),
+        };
+    };
+    exports.default = evaluateProperty;
+});
+define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/startEndToSpan", "ui/create/registerOnHover"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_4, evaluateProperty_1, displayProbeModal_4, startEndToSpan_7, registerOnHover_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.createDiagnosticSource = void 0;
+    evaluateProperty_1 = __importDefault(evaluateProperty_1);
     displayProbeModal_4 = __importStar(displayProbeModal_4);
     startEndToSpan_7 = __importDefault(startEndToSpan_7);
     registerOnHover_4 = __importDefault(registerOnHover_4);
     const createMinimizedProbeModal = (env, locator, property, nestedWindows, optionalArgs = {}) => {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e, _f, _g, _h;
         const queryId = `minimized-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
         env.probeMarkers[queryId] = localErrors;
-        let activelyLoadingJob = null;
+        let activelyLoadingJobCleanup = null;
         let loading = false;
         let isCleanedUp = false;
         let refreshOnDone = false;
@@ -4514,8 +4670,8 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "hacks", "m
             delete env.probeMarkers[queryId];
             delete env.probeWindowStateSavers[queryId];
             env.currentlyLoadingModals.delete(queryId);
-            if (loading && activelyLoadingJob !== null) {
-                doStopJob(activelyLoadingJob);
+            if (loading && activelyLoadingJobCleanup) {
+                activelyLoadingJobCleanup();
             }
             if (localErrors.length > 0) {
                 env.updateMarkers();
@@ -4530,102 +4686,98 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "hacks", "m
                 refreshOnDone = true;
                 return;
             }
+            loading = true;
             (async () => {
                 var _a;
                 const src = env.createParsingRequestData();
-                const resp = await env.performTypedRpc({
+                const rootEvalProp = (0, evaluateProperty_1.default)(env, {
                     captureStdout: false,
                     locator,
                     property,
                     src,
                     type: 'EvaluateProperty',
-                });
-                switch (resp.response.type) {
-                    case 'job': {
-                        throw new Error(`Unexpected async response to sync request`);
-                    }
-                    case 'sync': {
-                        const prelen = localErrors.length;
-                        // localErrors.length = 0;
-                        const newErrors = [];
-                        newErrors.push(...(_a = resp.response.value.errors) !== null && _a !== void 0 ? _a : []);
-                        const handleLines = async (relatedProp, lines, nests) => {
-                            const nestedRequests = [];
-                            Object.entries((0, findLocatorWithNestingPath_2.findAllLocatorsWithinNestingPath)(lines)).forEach(([unprefixedPath, nestedLocator]) => {
-                                var _a, _b;
-                                // const fixedPath = [...pathPrefix, ...JSON.parse(unprefixedPath)];
-                                const nwPathKey = JSON.stringify(unprefixedPath);
-                                const handleNested = async (nwData) => {
-                                    var _a;
-                                    const resp = await env.performTypedRpc({
-                                        captureStdout: false,
-                                        locator: nestedLocator,
-                                        property: nwData.property,
-                                        src,
-                                        type: 'EvaluateProperty',
-                                    });
-                                    switch (resp.response.type) {
-                                        case 'job': {
-                                            throw new Error(`Unexpected async response to sync request`);
-                                        }
-                                        case 'sync': {
-                                            newErrors.push(...(_a = resp.response.value.errors) !== null && _a !== void 0 ? _a : []);
-                                            await handleLines(nwData.property, resp.response.value.body, nwData.nested);
-                                            break;
-                                        }
-                                        default: {
-                                            (0, hacks_3.assertUnreachable)(resp.response);
-                                            break;
-                                        }
-                                    }
-                                };
-                                (_a = nests[nwPathKey]) === null || _a === void 0 ? void 0 : _a.forEach(nw => {
-                                    nestedRequests.push(async () => {
-                                        if (nw.data.type === 'probe') {
-                                            console.log('mini handle nested 1');
-                                            await handleNested(nw.data);
-                                        }
-                                    });
-                                });
-                                if (!((_b = nests[nwPathKey]) === null || _b === void 0 ? void 0 : _b.length) && relatedProp.name === displayProbeModal_4.metaNodesWithPropertyName) {
-                                    console.log('mini handle nested 2');
-                                    nestedRequests.push(() => {
-                                        var _a, _b;
-                                        return handleNested({
-                                            type: 'probe',
-                                            locator: nestedLocator,
-                                            property: { name: `${(_b = (_a = relatedProp.args) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.value}` },
-                                            nested: {}
-                                        });
-                                    });
+                }, 
+                // Status update stuff, can we use this here? :thinking:
+                () => { }, () => { }, () => { });
+                const cleanups = [];
+                cleanups.push(rootEvalProp.cancel);
+                activelyLoadingJobCleanup = () => {
+                    cleanups.forEach(cl => cl());
+                };
+                const resp = await rootEvalProp.fetch();
+                // };
+                if (resp === 'stopped') {
+                    console.warn('evaluateProperty automatically stopped?');
+                    return;
+                }
+                const newErrors = [];
+                newErrors.push(...(_a = resp.errors) !== null && _a !== void 0 ? _a : []);
+                const handleLines = async (relatedProp, lines, nests) => {
+                    const nestedRequests = [];
+                    Object.entries((0, findLocatorWithNestingPath_2.findAllLocatorsWithinNestingPath)(lines)).forEach(([unprefixedPath, nestedLocator]) => {
+                        var _a, _b;
+                        const nwPathKey = JSON.stringify(unprefixedPath);
+                        const handleNested = async (nwData) => {
+                            var _a;
+                            const nestedEvalProp = (0, evaluateProperty_1.default)(env, {
+                                captureStdout: false,
+                                locator: nestedLocator,
+                                property: nwData.property,
+                                src,
+                                type: 'EvaluateProperty',
+                            }, 
+                            // Status update stuff, can we use this here? :thinking:
+                            () => { }, () => { }, () => { });
+                            cleanups.push(nestedEvalProp.cancel);
+                            const resp = await nestedEvalProp.fetch();
+                            if (resp === 'stopped') {
+                                console.warn('evaluateProperty automatically stopped?');
+                                return;
+                            }
+                            newErrors.push(...(_a = resp.errors) !== null && _a !== void 0 ? _a : []);
+                            await handleLines(nwData.property, resp.body, nwData.nested);
+                        };
+                        (_a = nests[nwPathKey]) === null || _a === void 0 ? void 0 : _a.forEach(nw => {
+                            nestedRequests.push(async () => {
+                                if (nw.data.type === 'probe') {
+                                    console.log('mini handle nested 1');
+                                    await handleNested(nw.data);
                                 }
                             });
-                            await Promise.all(nestedRequests.map(nr => nr()));
-                        };
-                        await handleLines(property, resp.response.value.body, nestedWindows);
-                        if (newErrors.length) {
-                            squigglyCheckboxWrapper.style.display = 'flex';
+                        });
+                        if (!((_b = nests[nwPathKey]) === null || _b === void 0 ? void 0 : _b.length) && relatedProp.name === displayProbeModal_4.metaNodesWithPropertyName) {
+                            console.log('mini handle nested 2');
+                            nestedRequests.push(() => {
+                                var _a, _b;
+                                return handleNested({
+                                    type: 'probe',
+                                    locator: nestedLocator,
+                                    property: { name: `${(_b = (_a = relatedProp.args) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.value}` },
+                                    nested: {}
+                                });
+                            });
                         }
-                        else {
-                            squigglyCheckboxWrapper.style.display = 'none';
-                        }
-                        if (newErrors.length || localErrors.length) {
-                            localErrors.length = 0;
-                            localErrors.push(...newErrors.map(err => ({ ...err, source: createDiagnosticSource(locator, property) })));
-                            env.updateMarkers();
-                        }
-                        break;
-                    }
-                    default: {
-                        (0, hacks_3.assertUnreachable)(resp.response);
-                        break;
-                    }
+                    });
+                    await Promise.all(nestedRequests.map(nr => nr()));
+                };
+                await handleLines(property, resp.body, nestedWindows);
+                if (newErrors.length) {
+                    squigglyCheckboxWrapper.style.display = 'flex';
+                }
+                else {
+                    squigglyCheckboxWrapper.style.display = 'none';
+                }
+                if (newErrors.length || localErrors.length) {
+                    localErrors.length = 0;
+                    localErrors.push(...newErrors.map(err => ({ ...err, source: createDiagnosticSource(locator, property) })));
+                    env.updateMarkers();
                 }
             })()
                 .catch((err) => {
                 console.warn('Error when refreshing minimized probe', err);
             })
                 .finally(() => {
+                loading = false;
                 if (refreshOnDone) {
                     refreshOnDone = false;
                     refresh();
@@ -4662,6 +4814,12 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "hacks", "m
         }
         attrLbl.classList.add('syntax-attr');
         clickableUi.appendChild(attrLbl);
+        if (property.name == displayProbeModal_4.metaNodesWithPropertyName && ((_e = (_d = property.args) === null || _d === void 0 ? void 0 : _d.length) !== null && _e !== void 0 ? _e : 0) >= 2) {
+            const pred = document.createElement('span');
+            pred.classList.add('syntax-int');
+            pred.innerText = `[${(_g = (_f = property.args) === null || _f === void 0 ? void 0 : _f[1]) === null || _g === void 0 ? void 0 : _g.value}]`;
+            clickableUi.appendChild(pred);
+        }
         env.probeWindowStateSavers[queryId] = (target) => {
             target.push({
                 modalPos: { x: 0, y: 0 },
@@ -4686,7 +4844,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "hacks", "m
             (0, displayProbeModal_4.default)(env, null, (0, UpdatableNodeLocator_4.createMutableLocator)(locator), property, nestedWindows, { showDiagnostics });
             cleanup();
         };
-        let showDiagnostics = (_d = optionalArgs.showDiagnostics) !== null && _d !== void 0 ? _d : true;
+        let showDiagnostics = (_h = optionalArgs.showDiagnostics) !== null && _h !== void 0 ? _h : true;
         const squigglyCheckboxWrapper = createSquigglyCheckbox({
             onInput: (checked) => {
                 showDiagnostics = checked;
@@ -4704,21 +4862,25 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "hacks", "m
         return { ui };
     };
     const createDiagnosticSource = (locator, property) => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e, _f, _g;
         let source = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : locator.result.type}`.split('.').slice(-1)[0];
         if (property.name === displayProbeModal_4.metaNodesWithPropertyName) {
             const query = (_c = (_b = property.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value;
-            if (locator.steps.length === 0) {
-                return `*.${query}`;
+            let tail = '';
+            if (((_e = (_d = property.args) === null || _d === void 0 ? void 0 : _d.length) !== null && _e !== void 0 ? _e : 0) >= 2) {
+                tail = `[${(_g = (_f = property.args) === null || _f === void 0 ? void 0 : _f[1]) === null || _g === void 0 ? void 0 : _g.value}]`;
             }
-            return `${source}.*.${query}`;
+            if (locator.steps.length === 0) {
+                return `*.${query}${tail}`;
+            }
+            return `${source}.*.${query}${tail}`;
         }
         return `${source}.${property.name}`;
     };
     exports.createDiagnosticSource = createDiagnosticSource;
     exports.default = createMinimizedProbeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_3, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_5, createMinimizedProbeModal_1) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_3, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_5, createMinimizedProbeModal_1, evaluateProperty_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.metaNodesWithPropertyName = void 0;
@@ -4733,6 +4895,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     displayAttributeModal_5 = __importDefault(displayAttributeModal_5);
     displayAstModal_2 = __importDefault(displayAstModal_2);
     createInlineWindowManager_1 = __importDefault(createInlineWindowManager_1);
+    evaluateProperty_2 = __importDefault(evaluateProperty_2);
     const metaNodesWithPropertyName = `m:NodesWithProperty`;
     exports.metaNodesWithPropertyName = metaNodesWithPropertyName;
     const displayProbeModal = (env, modalPos, locator, property, nestedWindows, optionalArgs = {}) => {
@@ -4799,7 +4962,8 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             env.currentlyLoadingModals.delete(queryId);
             stickyController.cleanup();
             if (loading && activelyLoadingJob !== null) {
-                doStopJob(activelyLoadingJob);
+                // doStopJob(activelyLoadingJob);
+                activelyLoadingJob.cancel();
             }
             // console.log('cleanup: ', queryId, 'inline state:', inlineWindowManager.getWindowStates());
             inlineWindowManager.destroy();
@@ -4949,143 +5113,188 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 // console.log('req attr:', JSON.stringify(attr, null, 2));
                 env.currentlyLoadingModals.add(queryId);
                 const rpcQueryStart = performance.now();
-                const doFetch = () => new Promise(async (resolve, reject) => {
+                const doFetch = () => {
                     var _a;
-                    let isDone = false;
-                    let isConnectedToConcurrentCapableServer = false;
                     let statusPre = null;
-                    let localConcurrentCleanup = () => { };
-                    const initialPollDelayTimer = setTimeout(() => {
-                        if (isDone || isCleanedUp || !isConnectedToConcurrentCapableServer) {
-                            return;
-                        }
-                        const stop = document.createElement('button');
-                        stop.innerText = 'Stop';
-                        stop.onclick = () => {
-                            doStopJob(jobId).then(stopped => {
-                                if (stopped) {
-                                    isDone = true;
-                                    resolve('stopped');
-                                }
-                                // Else, job might have finished just as the user clicked stop
-                            });
-                        };
-                        root.appendChild(stop);
-                        statusPre = document.createElement('p');
-                        statusPre.style.whiteSpace = 'pre';
-                        statusPre.style.fontFamily = 'monospace';
-                        root.appendChild(statusPre);
-                        statusPre.innerText = `Request takes a while, polling status..\nIf you see message for longer than a few milliseconds then the job hasn't started running yet, or the server is severely overloaded.`;
-                        localConcurrentCleanup = () => {
-                            root.removeChild(stop);
-                            if (statusPre) {
-                                root.removeChild(statusPre);
-                            }
-                        };
-                        const poll = () => {
-                            if (isDone || isCleanedUp) {
-                                return;
-                            }
-                            env.performTypedRpc({
-                                type: 'Concurrent:PollWorkerStatus',
-                                job: jobId,
-                            })
-                                .then(res => {
-                                if (res.ok) {
-                                    // Polled OK, async update will be delivered to job monitor below
-                                    // Queue future poll.
-                                    setTimeout(poll, 1000);
-                                }
-                                else {
-                                    console.warn('Error when polling for job status');
-                                    // Don't queue more polling, very unlikely to work anyway.
-                                }
-                            });
-                        };
-                        poll();
-                    }, 5000);
-                    const jobId = env.createJobId(data => {
-                        isConnectedToConcurrentCapableServer = true;
-                        let knownStatus = 'Unknown';
-                        let knownStackTrace = null;
-                        const refreshStatusPre = () => {
-                            if (!statusPre) {
-                                return;
-                            }
-                            const lines = [];
-                            lines.push(`Property evaluation is taking a while, status below:`);
-                            lines.push(`Status: ${knownStackTrace}`);
-                            if (knownStackTrace) {
-                                lines.push("Stack trace:");
-                                knownStackTrace.forEach((ste) => lines.push(`> ${ste}`));
-                            }
-                            statusPre.innerText = lines.join('\n');
-                        };
-                        switch (data.value.type) {
-                            case 'status': {
-                                knownStatus = data.value.value;
-                                refreshStatusPre();
-                                break;
-                            }
-                            case 'workerStackTrace': {
-                                knownStackTrace = data.value.value;
-                                refreshStatusPre();
-                                break;
-                            }
-                            case 'workerTaskDone': {
-                                const res = data.value.value;
-                                isDone = true;
-                                localConcurrentCleanup();
-                                if (res.type === 'normal') {
-                                    const cast = res.value;
-                                    if (cast.response.type == 'job') {
-                                        throw new Error(`Unexpected 'job' result in async update`);
-                                    }
-                                    resolve(cast.response.value);
-                                }
-                                else {
-                                    console.log('Worker task failed. This is likely an internal CodeProber issue. Error message:');
-                                    res.value.forEach(line => console.log(line));
-                                    reject('Worker failed');
-                                }
-                                break;
-                            }
-                            default: {
-                                // Ignore
-                            }
-                        }
-                    });
-                    activelyLoadingJob = jobId;
-                    env.performTypedRpc({
+                    let stopBtn = null;
+                    const epFetch = (0, evaluateProperty_2.default)(env, {
                         type: 'EvaluateProperty',
                         property,
                         locator: locator.get(),
                         src: env.createParsingRequestData(),
                         captureStdout: settings_3.default.shouldCaptureStdio(),
-                        job: jobId,
                         jobLabel: `Probe: '${`${(_a = locator.get().result.label) !== null && _a !== void 0 ? _a : locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
                         skipResultLocator: env !== env.getGlobalModalEnv(),
-                    })
-                        .then(data => {
-                        if (data.response.type === 'job') {
-                            // Async work queued, not done.
-                            isConnectedToConcurrentCapableServer = true;
+                    }, () => {
+                        const stopBtn = document.createElement('button');
+                        stopBtn.innerText = 'Stop';
+                        stopBtn.onclick = () => {
+                            epFetch.cancel();
+                        };
+                        root.appendChild(stopBtn);
+                        statusPre = document.createElement('p');
+                        statusPre.style.whiteSpace = 'pre';
+                        statusPre.style.fontFamily = 'monospace';
+                        root.appendChild(statusPre);
+                        statusPre.innerText = `Request takes a while, polling status..\nIf you see message for longer than a few milliseconds then the job hasn't started running yet, or the server is severely overloaded.`;
+                    }, (status, stackTrace) => {
+                        if (!statusPre) {
+                            return;
                         }
-                        else {
-                            // Sync work executed, done.
-                            clearTimeout(initialPollDelayTimer);
-                            isDone = true;
-                            resolve(data.response.value);
+                        const lines = [];
+                        lines.push(`Property evaluation is taking a while, status below:`);
+                        lines.push(`Status: ${status}`);
+                        if (stackTrace) {
+                            lines.push("Stack trace:");
+                            stackTrace.forEach((ste) => lines.push(`> ${ste}`));
                         }
-                    })
-                        .catch(err => {
-                        isDone = true;
-                        reject(err);
+                        statusPre.innerText = lines.join('\n');
+                    }, () => {
+                        if (stopBtn) {
+                            root.removeChild(stopBtn);
+                        }
+                        if (statusPre) {
+                            root.removeChild(statusPre);
+                        }
                     });
-                });
+                    activelyLoadingJob = epFetch;
+                    return epFetch.fetch();
+                };
+                // const doFetch = () => new Promise<SynchronousEvaluationResult | 'stopped'>(async (resolve, reject) => {
+                //   let isDone = false;
+                //   let isConnectedToConcurrentCapableServer = false;
+                //   let statusPre: HTMLElement | null = null;
+                //   let localConcurrentCleanup = () => {};
+                //   const initialPollDelayTimer = setTimeout(() => {
+                //     if (isDone || isCleanedUp || !isConnectedToConcurrentCapableServer) {
+                //       return;
+                //     }
+                //     const stop = document.createElement('button');
+                //     stop.innerText = 'Stop';
+                //     stop.onclick = () => {
+                //       doStopJob(jobId).then(stopped => {
+                //         if (stopped) {
+                //           isDone = true;
+                //           resolve('stopped');
+                //         }
+                //         // Else, job might have finished just as the user clicked stop
+                //       });
+                //     }
+                //     root.appendChild(stop);
+                //     statusPre = document.createElement('p');
+                //     statusPre.style.whiteSpace = 'pre';
+                //     statusPre.style.fontFamily = 'monospace';
+                //     root.appendChild(statusPre);
+                //     statusPre.innerText = `Request takes a while, polling status..\nIf you see message for longer than a few milliseconds then the job hasn't started running yet, or the server is severely overloaded.`;
+                //     localConcurrentCleanup = () => {
+                //       root.removeChild(stop);
+                //       if (statusPre) { root.removeChild(statusPre); }
+                //     };
+                //     const poll = () => {
+                //       if (isDone || isCleanedUp) {
+                //         return;
+                //       }
+                //       env.performTypedRpc<PollWorkerStatusReq, PollWorkerStatusRes>({
+                //         type: 'Concurrent:PollWorkerStatus',
+                //         job: jobId,
+                //       })
+                //         .then(res => {
+                //           if (res.ok) {
+                //             // Polled OK, async update will be delivered to job monitor below
+                //             // Queue future poll.
+                //             setTimeout(poll, 1000);
+                //           } else {
+                //             console.warn('Error when polling for job status');
+                //             // Don't queue more polling, very unlikely to work anyway.
+                //           }
+                //         });
+                //     };
+                //     poll();
+                //   }, 5000);
+                //   const jobId = env.createJobId(data => {
+                //     isConnectedToConcurrentCapableServer = true;
+                //     let knownStatus = 'Unknown';
+                //     let knownStackTrace: string[] | null = null;
+                //     const refreshStatusPre = () => {
+                //       if (!statusPre) { return; }
+                //       const lines = [];
+                //       lines.push(`Property evaluation is taking a while, status below:`);
+                //       lines.push(`Status: ${knownStackTrace}`);
+                //       if (knownStackTrace) {
+                //         lines.push("Stack trace:");
+                //         knownStackTrace.forEach((ste) => lines.push(`> ${ste}`));
+                //       }
+                //       statusPre.innerText = lines.join('\n');
+                //     }
+                //     switch (data.value.type) {
+                //       case 'status': {
+                //         knownStatus = data.value.value;
+                //         refreshStatusPre();
+                //         break;
+                //       }
+                //       case 'workerStackTrace': {
+                //         knownStackTrace = data.value.value;
+                //         refreshStatusPre();
+                //         break;
+                //       }
+                //       case 'workerTaskDone': {
+                //         const res = data.value.value;
+                //         isDone = true;
+                //         localConcurrentCleanup();
+                //         if (res.type === 'normal') {
+                //           const cast = res.value as EvaluatePropertyRes;
+                //           if (cast.response.type == 'job') {
+                //             throw new Error(`Unexpected 'job' result in async update`);
+                //           }
+                //           resolve(cast.response.value);
+                //         } else {
+                //           console.log('Worker task failed. This is likely an internal CodeProber issue. Error message:');
+                //           res.value.forEach(line => console.log(line));
+                //           reject('Worker failed');
+                //         }
+                //         break;
+                //       }
+                //       default: {
+                //         // Ignore
+                //       }
+                //     }
+                //   });
+                //   env.performTypedRpc<EvaluatePropertyReq, EvaluatePropertyRes>({
+                //     type: 'EvaluateProperty',
+                //     property,
+                //     locator: locator.get(),
+                //     src: env.createParsingRequestData(),
+                //     captureStdout: settings.shouldCaptureStdio(),
+                //     job: jobId,
+                //     jobLabel: `Probe: '${`${locator.get().result.label ?? locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
+                //     skipResultLocator: env !== env.getGlobalModalEnv(),
+                //   })
+                //     .then(data => {
+                //       if (data.response.type === 'job') {
+                //         // Async work queued, not done.
+                //         if (isCleanedUp) {
+                //           // We were removed while this request was sent
+                //           // Stop it asap
+                //           doStopJob(jobId);
+                //         } else {
+                //           activelyLoadingJob = jobId;
+                //         }
+                //         isConnectedToConcurrentCapableServer = true;
+                //       } else {
+                //         // Sync work executed, done.
+                //         clearTimeout(initialPollDelayTimer);
+                //         isDone = true;
+                //         resolve(data.response.value);
+                //       }
+                //     })
+                //     .catch(err => {
+                //       isDone = true;
+                //       reject(err);
+                //     });
+                // });
                 doFetch()
                     .then((parsed) => {
-                    var _a, _b, _c, _d;
+                    var _a, _b, _c, _d, _e, _f, _g, _h;
                     loading = false;
                     if (parsed === 'stopped') {
                         refreshOnDone = false;
@@ -5161,7 +5370,11 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         if (property.name === metaNodesWithPropertyName && body.length === 1 && body[0].type === 'arr' && body[0].value.length === 0) {
                             const message = document.createElement('div');
                             message.style.padding = '0.25rem';
-                            message.innerText = `Found no nodes implementing '${(_d = (_c = property.args) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.value}'`;
+                            let tail = '';
+                            if (((_d = (_c = property.args) === null || _c === void 0 ? void 0 : _c.length) !== null && _d !== void 0 ? _d : 0) >= 2) {
+                                tail = ` that match the predicate${`${(_f = (_e = property.args) === null || _e === void 0 ? void 0 : _e[1]) === null || _f === void 0 ? void 0 : _f.value}`.includes(',') ? 's' : ''}`;
+                            }
+                            message.innerText = `Found no nodes implementing '${(_h = (_g = property.args) === null || _g === void 0 ? void 0 : _g[0]) === null || _h === void 0 ? void 0 : _h.value}'${tail}`;
                             message.style.fontStyle = 'italic';
                             root.appendChild(message);
                         }
@@ -7397,7 +7610,7 @@ define("ui/popup/displayWorkerStatus", ["require", "exports", "ui/create/createM
     };
     exports.default = displayWorkerStatus;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_3, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_8, hacks_4, createMinimizedProbeModal_2) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_3, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_8, hacks_3, createMinimizedProbeModal_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -7584,7 +7797,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             }
                             deduplicator.add(uniqId);
                             pendingAdders.push(() => {
-                                const sources = pendingSources[uniqId].filter(Boolean).sort((a, b) => (a < b ? -1 : (a > b) ? 1 : 0));
+                                const sources = [...new Set(pendingSources[uniqId].filter(Boolean))].sort((a, b) => (a < b ? -1 : (a > b) ? 1 : 0));
                                 const lineStart = (start >>> 12);
                                 const colStart = start & 0xFFF;
                                 const lineEnd = (end >>> 12);
@@ -7722,34 +7935,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         uiElements.minimizedProbeArea.appendChild(miniProbe.ui);
                     }
                 };
-                //  setTimeout(() => {
-                //     modalEnv.minimize({
-                //       locator: {
-                //         result: {
-                //           type: 'Program',
-                //           start: 0,
-                //           end: 0,
-                //           depth: 0,
-                //         },
-                //         steps: []
-                //       },
-                //       nested: {},
-                //       property: {
-                //         name: metaNodesWithPropertyName,
-                //         args: [
-                //           { type: 'string', value: 'errors' }
-                //         ],
-                //       },
-                //       type: 'probe',
-                //     });
-                // }, 500);
-                // Faulty cleanup debugger code below
-                // setInterval(() => {
-                //   console.log('save ids:', JSON.stringify(Object.keys(modalEnv.probeWindowStateSavers)));
-                //   console.log('marker ids:', JSON.stringify(Object.keys(modalEnv.probeMarkers)));
-                //   console.log('onChange ids:', JSON.stringify(Object.keys(modalEnv.onChangeListeners)));
-                //   console.log('saver ids:', JSON.stringify(Object.keys(modalEnv.probeWindowStateSavers)));
-                // }, 5000);
                 modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {
                     if (reason === 'refresh-from-server') {
                         testManager.flushTestCaseData();
@@ -7797,7 +7982,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             return { suggestions: ret };
                         }
                         default: {
-                            (0, hacks_4.assertUnreachable)(type);
+                            (0, hacks_3.assertUnreachable)(type);
                             return null;
                         }
                     }
@@ -7855,7 +8040,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                                     break;
                                 }
                                 default: {
-                                    (0, hacks_4.assertUnreachable)(state.data);
+                                    (0, hacks_3.assertUnreachable)(state.data);
                                     break;
                                 }
                             }

@@ -14,13 +14,17 @@ import { Property, ListPropertiesReq, ListPropertiesRes, RpcBodyLine } from '../
 import startEndToSpan from '../startEndToSpan';
 import UpdatableNodeLocator from '../../model/UpdatableNodeLocator';
 
+interface OptionalArgs {
+  initialFilter?: string;
+}
 const displayAttributeModal = (
   env: ModalEnv,
   modalPos: ModalPosition | null,
   locator: UpdatableNodeLocator,
+  optionalArgs: OptionalArgs = {},
 ) => {
   const queryId = `attr-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-  let filter: string = '';
+  let filter: string = optionalArgs.initialFilter ?? '';
   let state: { type: 'attrs', attrs: Property[] } | { type: 'err', body: RpcBodyLine[] } | null = null;
 
  let fetchState: 'idle' | 'fetching' | 'queued' = 'idle';
@@ -145,7 +149,12 @@ const displayAttributeModal = (
         }
         if (isFirstRender) {
           isFirstRender = false;
-          setTimeout(() => filterInput.focus(), 50);
+          setTimeout(() => {
+            // filterInput.focus()
+            if (optionalArgs.initialFilter) {
+              filterInput.select();
+            }
+          }, 50);
         }
         root.appendChild(filterInput);
 
@@ -236,10 +245,6 @@ const displayAttributeModal = (
             sortedAttrs.appendChild(submitExpl);
           };
 
-          /**
-           * TODO if the user has typed "*.foo", allow them to press enter even if no matches exist.
-           * This will be a semi-hidden convenient shortcut for creating metaprobes
-           */
           matches.forEach((attr, idx) => buildNode(attr, idx > 0, matches.length === 1));
           if (matches.length && misses.length) {
             if (matches.length === 1) {
@@ -252,7 +257,20 @@ const displayAttributeModal = (
           } else if (!matches.length && filter.startsWith('*.') && filter.length >= 3) {
             addSubmitExplanation('Press enter to create meta probe');
             submit = () => {
-              const prop: Property = { name: metaNodesWithPropertyName, args: [{ type: 'string', value: filter.slice('*.'.length)}] };
+              let propAndPredicate = filter.slice('*.'.length);
+              const args: Property['args'] = [];
+              const predicateStart = propAndPredicate.indexOf('[');
+              if (predicateStart === -1) {
+                args.push({ type: 'string', value: propAndPredicate });
+              } else {
+                args.push({ type: 'string', value: propAndPredicate.slice(0, predicateStart) });
+                if (propAndPredicate.endsWith(']')) {
+                  args.push({ type: 'string', value: propAndPredicate.slice(predicateStart + 1, propAndPredicate.length - 1) });
+                } else {
+                  console.warn('Bad predicate formatting, expected "propertyName[predicateName]"')
+                }
+              }
+              const prop: Property = { name: metaNodesWithPropertyName, args };
               cleanup();
               displayProbeModal(env, popup.getPos(), locator, prop, {});
             };
