@@ -671,7 +671,7 @@ define("model/adjustTypeAtLoc", ["require", "exports", "ui/startEndToSpan"], fun
 define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], function (require, exports, adjustTypeAtLoc_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.adjustValue = void 0;
+    exports.adjustLocatorAndProperty = exports.adjustValue = void 0;
     adjustTypeAtLoc_1 = __importDefault(adjustTypeAtLoc_1);
     const adjustValue = (adj, arg) => {
         switch (arg.type) {
@@ -704,6 +704,12 @@ define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], f
         };
         loc.steps.forEach(adjustStep);
     };
+    const adjustLocatorAndProperty = (adj, loc, prop) => {
+        var _a;
+        adjustLocator(adj, loc);
+        (_a = prop.args) === null || _a === void 0 ? void 0 : _a.forEach(arg => adjustValue(adj, arg));
+    };
+    exports.adjustLocatorAndProperty = adjustLocatorAndProperty;
     exports.default = adjustLocator;
 });
 define("model/repositoryUrl", ["require", "exports"], function (require, exports) {
@@ -1528,6 +1534,31 @@ aspect MagicOutputDemo {
 define("model/findLocatorWithNestingPath", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.findAllLocatorsWithinNestingPath = void 0;
+    const findAllLocatorsWithinNestingPath = (rootLines) => {
+        const ret = {};
+        const step = (parentPath, from) => {
+            let backshift = 0;
+            for (let i = 0; i < from.length; ++i) {
+                const line = from[i];
+                switch (line.type) {
+                    case 'stdout':
+                    case 'stderr':
+                        --backshift;
+                        break;
+                    case 'arr':
+                        step([...parentPath, i + backshift], line.value);
+                        break;
+                    case 'node':
+                        ret[JSON.stringify([...parentPath, i + backshift])] = line.value;
+                        break;
+                }
+            }
+        };
+        step([], rootLines);
+        return ret;
+    };
+    exports.findAllLocatorsWithinNestingPath = findAllLocatorsWithinNestingPath;
     const findLocatorWithNestingPath = (path, rootLines) => {
         const step = (index, from) => {
             let position = path[index];
@@ -2274,6 +2305,10 @@ define("model/test/TestManager", ["require", "exports", "model/findLocatorWithNe
     };
     exports.nestedTestResponseToTest = nestedTestResponseToTest;
 });
+define("model/SourcedDiagnostic", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
 define("model/ModalEnv", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -2284,46 +2319,26 @@ define("model/UpdatableNodeLocator", ["require", "exports", "model/adjustLocator
     exports.createMutableLocator = exports.createImmutableLocator = void 0;
     adjustLocator_1 = __importDefault(adjustLocator_1);
     const createImmutableLocator = (source) => {
-        // const callbacks: { [id: string]: () => void } = {};
-        // const ourOwnListenerId = `immut-${(Math.random() * Number.MAX_SAFE_INTEGER)|0}`;
-        // source.setUpdateCallback()
-        // HMM How would this be cleaned up? Does it need to be?
         return {
             get: () => source.get(),
             set: () => { },
             adjust: () => { },
             isMutable: () => false,
             createMutableClone: () => createMutableLocator(JSON.parse(JSON.stringify(source.get()))),
-            // setUpdateCallback: (id, callback) => {
-            //   if (callback) {
-            //     callbacks[id] = callback;
-            //   } else {
-            //     delete callbacks[id];
-            //   }
-            // },
         };
     };
     exports.createImmutableLocator = createImmutableLocator;
     const createMutableLocator = (locator) => {
-        // const callbacks: { [id: string]: () => void } = {};
         return {
             get: () => locator,
             set: (val) => {
                 locator = val;
-                // Object.values(callbacks).forEach(cb => cb());
             },
             adjust: (adjusters) => {
                 adjusters.forEach(adj => (0, adjustLocator_1.default)(adj, locator));
             },
             isMutable: () => true,
             createMutableClone: () => createMutableLocator(JSON.parse(JSON.stringify(locator))),
-            // setUpdateCallback: (id, callback) => {
-            //   if (callback) {
-            //     callbacks[id] = callback;
-            //   } else {
-            //     delete callbacks[id];
-            //   }
-            // }
         };
     };
     exports.createMutableLocator = createMutableLocator;
@@ -4313,7 +4328,7 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     const createInlineArea = (args) => {
-        let { inlineRoot, expansionAreaInsideTheRoot } = args;
+        let { inlineRoot, expansionAreaInsideTheRoot, bumpContainingWindowIntoScreen } = args;
         const applyActiveRootStyling = (from) => {
             inlineRoot.style.border = '1px solid black';
             inlineRoot.style.paddingTop = '0.25rem';
@@ -4325,12 +4340,17 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
         // const activeWindowRefreshers: (() => void)[] = [];
         let activeSubWindowCount = 0;
         const area = {
-            getNestedModalEnv: (parentEnv) => ({
-                ...parentEnv,
-                showWindow: (args) => area.add(args),
-                onChangeListeners: localChangeListeners,
-                probeWindowStateSavers: args.localWindowStateSaves,
-            }),
+            getNestedModalEnv: (parentEnv) => {
+                var _a, _b;
+                return ({
+                    ...parentEnv,
+                    showWindow: (args) => area.add(args),
+                    onChangeListeners: localChangeListeners,
+                    probeWindowStateSavers: args.localWindowStateSaves,
+                    probeMarkers: (_a = args.parentArgs.probeMarkersOverride) !== null && _a !== void 0 ? _a : parentEnv.probeMarkers,
+                    updateMarkers: (_b = args.parentArgs.updateMarkersOverride) !== null && _b !== void 0 ? _b : parentEnv.updateMarkers,
+                });
+            },
             add: (args) => {
                 if (activeSubWindowCount === 0) {
                     applyActiveRootStyling('add');
@@ -4381,7 +4401,7 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
                             console.log('could not find index of closer in remove');
                         }
                     },
-                    bumpIntoScreen: () => { }
+                    bumpIntoScreen: () => { bumpContainingWindowIntoScreen(); }
                 };
             },
             notifyListenersOfChange: () => {
@@ -4395,25 +4415,27 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
                     closer();
                 });
             },
-            updateRoot: (newRoot) => {
+            updateRoot: (newRoot, newBumper) => {
                 inlineRoot = newRoot;
                 if (activeSubWindowCount > 0) {
                     applyActiveRootStyling(`update:${activeSubWindowCount}`);
                 }
+                bumpContainingWindowIntoScreen = newBumper;
             },
             // refresh: () => {
             //   activeWindowRefreshers.forEach(closer => closer());
             // },
         };
     };
-    const createInlineWindowManager = () => {
+    ;
+    const createInlineWindowManager = (args = {}) => {
         const areas = {};
         const encodeAreaId = (raw) => JSON.stringify(raw);
         const decodeAreaId = (raw) => JSON.parse(raw);
         return {
             getPreviousExpansionArea: (areaId) => { var _a, _b; return (_b = (_a = areas[encodeAreaId(areaId)]) === null || _a === void 0 ? void 0 : _a.expansionArea) !== null && _b !== void 0 ? _b : null; },
             getPreviouslyAssociatedLocator: (areaId) => { var _a, _b; return (_b = (_a = areas[encodeAreaId(areaId)]) === null || _a === void 0 ? void 0 : _a.locator) !== null && _b !== void 0 ? _b : null; },
-            getArea: (areaId, inlineRoot, expansionAreaInsideTheRoot, locator) => {
+            getArea: (areaId, inlineRoot, expansionAreaInsideTheRoot, locator, bumpContainingWindowIntoScreen) => {
                 const encodedId = encodeAreaId(areaId);
                 if (!areas[encodedId]) {
                     const localWindowStateSaves = {};
@@ -4426,11 +4448,13 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
                             inlineRoot,
                             expansionAreaInsideTheRoot,
                             localWindowStateSaves,
+                            bumpContainingWindowIntoScreen,
+                            parentArgs: args,
                         })
                     };
                 }
                 else {
-                    areas[encodedId].area.updateRoot(inlineRoot);
+                    areas[encodedId].area.updateRoot(inlineRoot, bumpContainingWindowIntoScreen);
                 }
                 return areas[encodedId].area.area;
             },
@@ -4458,7 +4482,243 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
     };
     exports.default = createInlineWindowManager;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_2, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_3, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_4) {
+define("ui/create/createMinimizedProbeModal", ["require", "exports", "hacks", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "ui/popup/displayProbeModal", "ui/startEndToSpan", "ui/create/registerOnHover"], function (require, exports, hacks_3, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_4, displayProbeModal_4, startEndToSpan_7, registerOnHover_4) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createDiagnosticSource = void 0;
+    displayProbeModal_4 = __importStar(displayProbeModal_4);
+    startEndToSpan_7 = __importDefault(startEndToSpan_7);
+    registerOnHover_4 = __importDefault(registerOnHover_4);
+    const createMinimizedProbeModal = (env, locator, property, nestedWindows, optionalArgs = {}) => {
+        var _a, _b, _c, _d;
+        const queryId = `minimized-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const localErrors = [];
+        env.probeMarkers[queryId] = localErrors;
+        let activelyLoadingJob = null;
+        let loading = false;
+        let isCleanedUp = false;
+        let refreshOnDone = false;
+        const doStopJob = (jobId) => env.performTypedRpc({
+            type: 'Concurrent:StopJob',
+            job: jobId,
+        }).then(res => {
+            if (res.err) {
+                console.warn('Error when stopping job:', res.err);
+                return false;
+            }
+            return true;
+        });
+        const cleanup = () => {
+            isCleanedUp = true;
+            delete env.onChangeListeners[queryId];
+            delete env.probeMarkers[queryId];
+            delete env.probeWindowStateSavers[queryId];
+            env.currentlyLoadingModals.delete(queryId);
+            if (loading && activelyLoadingJob !== null) {
+                doStopJob(activelyLoadingJob);
+            }
+            if (localErrors.length > 0) {
+                env.updateMarkers();
+            }
+            env.triggerWindowSave();
+        };
+        const refresh = () => {
+            if (isCleanedUp) {
+                return;
+            }
+            if (loading) {
+                refreshOnDone = true;
+                return;
+            }
+            (async () => {
+                var _a;
+                const src = env.createParsingRequestData();
+                const resp = await env.performTypedRpc({
+                    captureStdout: false,
+                    locator,
+                    property,
+                    src,
+                    type: 'EvaluateProperty',
+                });
+                switch (resp.response.type) {
+                    case 'job': {
+                        throw new Error(`Unexpected async response to sync request`);
+                    }
+                    case 'sync': {
+                        const prelen = localErrors.length;
+                        // localErrors.length = 0;
+                        const newErrors = [];
+                        newErrors.push(...(_a = resp.response.value.errors) !== null && _a !== void 0 ? _a : []);
+                        const handleLines = async (relatedProp, lines, nests) => {
+                            const nestedRequests = [];
+                            Object.entries((0, findLocatorWithNestingPath_2.findAllLocatorsWithinNestingPath)(lines)).forEach(([unprefixedPath, nestedLocator]) => {
+                                var _a, _b;
+                                // const fixedPath = [...pathPrefix, ...JSON.parse(unprefixedPath)];
+                                const nwPathKey = JSON.stringify(unprefixedPath);
+                                const handleNested = async (nwData) => {
+                                    var _a;
+                                    const resp = await env.performTypedRpc({
+                                        captureStdout: false,
+                                        locator: nestedLocator,
+                                        property: nwData.property,
+                                        src,
+                                        type: 'EvaluateProperty',
+                                    });
+                                    switch (resp.response.type) {
+                                        case 'job': {
+                                            throw new Error(`Unexpected async response to sync request`);
+                                        }
+                                        case 'sync': {
+                                            newErrors.push(...(_a = resp.response.value.errors) !== null && _a !== void 0 ? _a : []);
+                                            await handleLines(nwData.property, resp.response.value.body, nwData.nested);
+                                            break;
+                                        }
+                                        default: {
+                                            (0, hacks_3.assertUnreachable)(resp.response);
+                                            break;
+                                        }
+                                    }
+                                };
+                                (_a = nests[nwPathKey]) === null || _a === void 0 ? void 0 : _a.forEach(nw => {
+                                    nestedRequests.push(async () => {
+                                        if (nw.data.type === 'probe') {
+                                            console.log('mini handle nested 1');
+                                            await handleNested(nw.data);
+                                        }
+                                    });
+                                });
+                                if (!((_b = nests[nwPathKey]) === null || _b === void 0 ? void 0 : _b.length) && relatedProp.name === displayProbeModal_4.metaNodesWithPropertyName) {
+                                    console.log('mini handle nested 2');
+                                    nestedRequests.push(() => {
+                                        var _a, _b;
+                                        return handleNested({
+                                            type: 'probe',
+                                            locator: nestedLocator,
+                                            property: { name: `${(_b = (_a = relatedProp.args) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.value}` },
+                                            nested: {}
+                                        });
+                                    });
+                                }
+                            });
+                            await Promise.all(nestedRequests.map(nr => nr()));
+                        };
+                        await handleLines(property, resp.response.value.body, nestedWindows);
+                        if (newErrors.length) {
+                            squigglyCheckboxWrapper.style.display = 'flex';
+                        }
+                        else {
+                            squigglyCheckboxWrapper.style.display = 'none';
+                        }
+                        if (newErrors.length || localErrors.length) {
+                            localErrors.length = 0;
+                            localErrors.push(...newErrors.map(err => ({ ...err, source: createDiagnosticSource(locator, property) })));
+                            env.updateMarkers();
+                        }
+                        break;
+                    }
+                    default: {
+                        (0, hacks_3.assertUnreachable)(resp.response);
+                        break;
+                    }
+                }
+            })()
+                .catch((err) => {
+                console.warn('Error when refreshing minimized probe', err);
+            })
+                .finally(() => {
+                if (refreshOnDone) {
+                    refreshOnDone = false;
+                    refresh();
+                }
+            });
+        };
+        refresh();
+        env.onChangeListeners[queryId] = (adjusters) => {
+            if (adjusters) {
+                adjusters.forEach(adj => {
+                    (0, adjustLocator_2.adjustLocatorAndProperty)(adj, locator, property);
+                });
+            }
+            refresh();
+        };
+        const ui = document.createElement('div');
+        const clickableUi = document.createElement('div');
+        ui.appendChild(clickableUi);
+        const typeLbl = document.createElement('span');
+        typeLbl.innerText = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : locator.result.type}`.split('.').slice(-1)[0];
+        typeLbl.classList.add('syntax-type');
+        clickableUi.appendChild(typeLbl);
+        const attrLbl = document.createElement('span');
+        const fixedPropName = property.name == displayProbeModal_4.metaNodesWithPropertyName
+            ? `*.${(_c = (_b = property.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value}`
+            : property.name;
+        if (locator.steps.length === 0 && property.name == displayProbeModal_4.metaNodesWithPropertyName) {
+            // Hide title?
+            typeLbl.style.display = 'none';
+            attrLbl.innerText = fixedPropName;
+        }
+        else {
+            attrLbl.innerText = `.${fixedPropName}`;
+        }
+        attrLbl.classList.add('syntax-attr');
+        clickableUi.appendChild(attrLbl);
+        env.probeWindowStateSavers[queryId] = (target) => {
+            target.push({
+                modalPos: { x: 0, y: 0 },
+                data: {
+                    type: 'minimized-probe',
+                    data: {
+                        type: 'probe',
+                        locator,
+                        property,
+                        nested: nestedWindows,
+                    }
+                },
+            });
+        };
+        env.triggerWindowSave();
+        (0, registerOnHover_4.default)(clickableUi, (on) => env.updateSpanHighlight((on && !locator.result.external) ? (0, startEndToSpan_7.default)(locator.result.start, locator.result.end) : null));
+        clickableUi.onclick = (e) => {
+            if (!e.shiftKey && ui.parentElement) {
+                ui.parentElement.removeChild(ui);
+            }
+            env.updateSpanHighlight(null);
+            (0, displayProbeModal_4.default)(env, null, (0, UpdatableNodeLocator_4.createMutableLocator)(locator), property, nestedWindows, { showDiagnostics });
+            cleanup();
+        };
+        let showDiagnostics = (_d = optionalArgs.showDiagnostics) !== null && _d !== void 0 ? _d : true;
+        const squigglyCheckboxWrapper = createSquigglyCheckbox({
+            onInput: (checked) => {
+                showDiagnostics = checked;
+                env.probeMarkers[queryId] = checked ? localErrors : [];
+                env.updateMarkers();
+            },
+            initiallyChecked: showDiagnostics,
+        });
+        squigglyCheckboxWrapper.style.marginLeft = '0.125rem';
+        squigglyCheckboxWrapper.style.display = 'none';
+        ui.appendChild(squigglyCheckboxWrapper);
+        ui.classList.add('minimizedProbeWindow');
+        clickableUi.classList.add('minimizedProbeWindowOpener');
+        squigglyCheckboxWrapper.classList.add('minimiedProbeWindowCheckboxWrapper');
+        return { ui };
+    };
+    const createDiagnosticSource = (locator, property) => {
+        var _a, _b, _c;
+        let source = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : locator.result.type}`.split('.').slice(-1)[0];
+        if (property.name === displayProbeModal_4.metaNodesWithPropertyName) {
+            const query = (_c = (_b = property.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value;
+            if (locator.steps.length === 0) {
+                return `*.${query}`;
+            }
+            return `${source}.*.${query}`;
+        }
+        return `${source}.${property.name}`;
+    };
+    exports.createDiagnosticSource = createDiagnosticSource;
+    exports.default = createMinimizedProbeModal;
+});
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_3, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_5, createMinimizedProbeModal_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.metaNodesWithPropertyName = void 0;
@@ -4475,24 +4735,50 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     createInlineWindowManager_1 = __importDefault(createInlineWindowManager_1);
     const metaNodesWithPropertyName = `m:NodesWithProperty`;
     exports.metaNodesWithPropertyName = metaNodesWithPropertyName;
-    const displayProbeModal = (env, modalPos, locator, property, nestedWindows) => {
+    const displayProbeModal = (env, modalPos, locator, property, nestedWindows, optionalArgs = {}) => {
+        var _a;
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-        // console.log('displayProbeModal, nested:', nestedWindows, 'attr:', property.name, ', query:', queryId);
-        const localErrors = [];
-        env.probeMarkers[queryId] = localErrors;
+        const localDiagnostics = [];
+        let diagnosticsGetter = localDiagnostics;
+        let showDiagnostics = (_a = optionalArgs.showDiagnostics) !== null && _a !== void 0 ? _a : true;
+        let updateMarkers = env.updateMarkers;
         const stickyController = (0, createStickyHighlightController_2.default)(env);
-        let lastOutput = [];
         let activelyLoadingJob = null;
         let loading = false;
         let isCleanedUp = false;
         nestedWindows = { ...nestedWindows }; // Make copy so we can locally modify it
-        // const activeNests: {
-        //   [id: string]: {
-        //     getWindowStates: () => WindowState[];
-        //     actives: ActiveNesting[]
-        //   }
-        // } = {};
-        const inlineWindowManager = (0, createInlineWindowManager_1.default)();
+        const reinstallDiagnosticsGetter = () => {
+            env.probeMarkers[queryId] = showDiagnostics ? diagnosticsGetter : [];
+        };
+        reinstallDiagnosticsGetter();
+        const doCreateInlineWindowManager = () => {
+            if (env !== env.getGlobalModalEnv()) {
+                return {
+                    inlineWindowManager: (0, createInlineWindowManager_1.default)(),
+                    shouldShowDiagnosticsToggler: false,
+                };
+            }
+            const override = {};
+            diagnosticsGetter = () => {
+                const sum = [...localDiagnostics];
+                Object.values(override).forEach(val => {
+                    sum.push(...(Array.isArray(val) ? val : val()).map(diag => {
+                        // Replace source with ourselves
+                        return { ...diag, source: (0, createMinimizedProbeModal_1.createDiagnosticSource)(locator.get(), property) };
+                    }));
+                });
+                return sum;
+            };
+            reinstallDiagnosticsGetter();
+            return {
+                inlineWindowManager: (0, createInlineWindowManager_1.default)({
+                    probeMarkersOverride: override,
+                    updateMarkersOverride: () => updateMarkers(),
+                }),
+                shouldShowDiagnosticsToggler: true
+            };
+        };
+        const { inlineWindowManager, shouldShowDiagnosticsToggler } = doCreateInlineWindowManager();
         // const inline
         const doStopJob = (jobId) => env.performTypedRpc({
             type: 'Concurrent:StopJob',
@@ -4517,9 +4803,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             }
             // console.log('cleanup: ', queryId, 'inline state:', inlineWindowManager.getWindowStates());
             inlineWindowManager.destroy();
-            if (localErrors.length > 0) {
-                env.updateMarkers();
-            }
+            env.updateMarkers();
             env.triggerWindowSave();
         };
         let copyBody = [];
@@ -4541,19 +4825,28 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             const titleNode = (0, createModalTitle_6.default)({
                 extraActions: [
                     ...(env.getGlobalModalEnv() === env
-                        ? [{
+                        ? [
+                            {
                                 title: 'Duplicate window',
                                 invoke: () => {
                                     const pos = queryWindow.getPos();
-                                    displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator.createMutableClone(), property, inlineWindowManager.getWindowStates());
+                                    displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator.createMutableClone(), property, inlineWindowManager.getWindowStates(), { showDiagnostics });
                                 },
-                            }]
+                            },
+                            {
+                                title: 'Minimize window',
+                                invoke: () => {
+                                    env.minimize(getWindowStateData());
+                                    cleanup();
+                                }
+                            }
+                        ]
                         : [{
                                 title: 'Detatch window',
                                 invoke: () => {
                                     const states = inlineWindowManager.getWindowStates();
                                     cleanup();
-                                    displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, states);
+                                    displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, states, { showDiagnostics });
                                 },
                             }]),
                     {
@@ -4834,15 +5127,17 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         }
                         while (root.firstChild)
                             root.removeChild(root.firstChild);
-                        let refreshMarkers = localErrors.length > 0;
-                        localErrors.length = 0;
-                        localErrors.push(...((_a = parsed.errors) !== null && _a !== void 0 ? _a : []));
+                        let shouldRefreshMarkers = localDiagnostics.length > 0;
+                        localDiagnostics.length = 0;
+                        localDiagnostics.push(...((_a = parsed.errors) !== null && _a !== void 0 ? _a : []).map((err) => {
+                            return ({ ...err, source: (0, createMinimizedProbeModal_1.createDiagnosticSource)(locator.get(), property) });
+                        }));
                         // parsed.errors?.forEach(({severity, start: errStart, end: errEnd, msg }) => {
                         //   localErrors.push({ severity, errStart, errEnd, msg });
                         // })
                         const updatedArgs = parsed.args;
                         if (updatedArgs) {
-                            refreshMarkers = true;
+                            shouldRefreshMarkers = true;
                             (_b = property.args) === null || _b === void 0 ? void 0 : _b.forEach((arg, argIdx) => {
                                 arg.type = updatedArgs[argIdx].type;
                                 // arg.detail = updatedArgs[argIdx].detail;
@@ -4850,17 +5145,15 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             });
                         }
                         if (parsed.locator) {
-                            refreshMarkers = true;
+                            shouldRefreshMarkers = true;
                             locator.set(parsed.locator);
                             // locator = parsed.locator;
                         }
-                        if (refreshMarkers || localErrors.length > 0) {
-                            env.updateMarkers();
+                        if (shouldRefreshMarkers || localDiagnostics.length > 0) {
+                            updateMarkers();
                         }
                         const titleRow = createTitle();
                         root.append(titleRow);
-                        lastOutput = body;
-                        const dolog = env === env.getGlobalModalEnv();
                         const enableExpander = true;
                         // const enableExpander = body.length >= 1 && (body[0].type === 'node' || (
                         //   body[0].type === 'arr' && body[0].value.length >= 1 && body[0].value[0].type === 'node'
@@ -4872,15 +5165,8 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             message.style.fontStyle = 'italic';
                             root.appendChild(message);
                         }
-                        let onCreateCounter = 0;
-                        let onCreateTimeCounter = 0;
-                        let partialOnCreateTimeCounter = 0;
-                        if (dolog) {
-                            console.log('begin encode');
-                            console.time('encodeRpcBodyLines');
-                        }
                         const areasToKeep = new Set();
-                        root.appendChild((0, encodeRpcBodyLines_3.default)(env, body, {
+                        const encodedLines = (0, encodeRpcBodyLines_3.default)(env, body, {
                             excludeStdIoFromPaths: true,
                             nodeLocatorExpanderHandler: enableExpander ? ({
                                 getReusableExpansionArea: (path) => {
@@ -4888,19 +5174,16 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                 },
                                 onCreate: ({ locator, locatorRoot, expansionArea, path: nestId, isFresh }) => {
                                     var _a, _b, _c;
-                                    const createStart = Date.now();
-                                    ++onCreateCounter;
                                     areasToKeep.add(JSON.stringify(nestId));
-                                    const updLocator = (_a = inlineWindowManager.getPreviouslyAssociatedLocator(nestId)) !== null && _a !== void 0 ? _a : (0, UpdatableNodeLocator_4.createMutableLocator)(locator);
+                                    const updLocator = (_a = inlineWindowManager.getPreviouslyAssociatedLocator(nestId)) !== null && _a !== void 0 ? _a : (0, UpdatableNodeLocator_5.createMutableLocator)(locator);
                                     updLocator.set(locator);
-                                    const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, updLocator);
+                                    const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, updLocator, queryWindow.bumpIntoScreen);
                                     const nestedEnv = area.getNestedModalEnv(env);
                                     const encodedId = JSON.stringify(nestId);
                                     const nests = nestedWindows[encodedId];
                                     if (nests) {
                                         delete nestedWindows[encodedId];
-                                        const innerCreateStart = Date.now();
-                                        const immutLoc = (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator);
+                                        const immutLoc = (0, UpdatableNodeLocator_5.createImmutableLocator)(updLocator);
                                         nests.forEach(nest => {
                                             switch (nest.data.type) {
                                                 case 'probe': {
@@ -4915,15 +5198,13 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                                 }
                                             }
                                         });
-                                        partialOnCreateTimeCounter += Date.now() - innerCreateStart;
                                     }
                                     if (isFresh && property.name === metaNodesWithPropertyName) {
                                         const nestedPropName = (_c = (_b = property.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value;
                                         if (!(nests === null || nests === void 0 ? void 0 : nests.some((nest) => nest.data.type === 'probe' && nest.data.property.name === nestedPropName))) {
-                                            displayProbeModal(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(updLocator), { name: nestedPropName }, {});
+                                            displayProbeModal(nestedEnv, null, (0, UpdatableNodeLocator_5.createImmutableLocator)(updLocator), { name: nestedPropName }, {});
                                         }
                                     }
-                                    onCreateTimeCounter += Date.now() - createStart;
                                 },
                                 onClick: ({ locator, locatorRoot, expansionArea, path: nestId }) => {
                                     const prevLocator = inlineWindowManager.getPreviouslyAssociatedLocator(nestId);
@@ -4932,24 +5213,61 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                         return;
                                     }
                                     prevLocator.set(locator);
-                                    const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, prevLocator);
+                                    const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, prevLocator, queryWindow.bumpIntoScreen);
                                     const nestedEnv = area.getNestedModalEnv(env);
-                                    (0, displayAttributeModal_5.default)(nestedEnv, null, (0, UpdatableNodeLocator_4.createImmutableLocator)(prevLocator));
+                                    (0, displayAttributeModal_5.default)(nestedEnv, null, (0, UpdatableNodeLocator_5.createImmutableLocator)(prevLocator));
                                     env.triggerWindowSave();
                                 },
                             }) : undefined,
                             // nodeLocatorExpanderHandler: () => {},
-                        }));
-                        if (dolog) {
-                            console.log('mid encode');
+                        });
+                        if (shouldShowDiagnosticsToggler) {
+                            const expl = document.createElement('div');
+                            expl.style.fontStyle = 'italic';
+                            expl.style.fontSize = '0.5rem';
+                            expl.style.flexDirection = 'row';
+                            expl.style.marginTop = '0.125rem';
+                            const id = `showdiag-${Math.random()}`;
+                            const check = createSquigglyCheckbox({
+                                onInput: (checked) => {
+                                    showDiagnostics = checked;
+                                    reinstallDiagnosticsGetter();
+                                    env.updateMarkers();
+                                    env.triggerWindowSave();
+                                },
+                                initiallyChecked: showDiagnostics,
+                                id,
+                            });
+                            check.classList.add('probeOutputAreaCheckboxWrapper');
+                            check.style.marginLeft = '0';
+                            check.style.marginRight = '0';
+                            expl.appendChild(check);
+                            const label = document.createElement('label');
+                            label.style.margin = `auto 0 auto 0.125rem`;
+                            label.htmlFor = id;
+                            label.innerText = `Show diagnostics`;
+                            expl.appendChild(label);
+                            encodedLines.appendChild(expl);
+                            const updateExplVisibility = () => {
+                                if ((Array.isArray(diagnosticsGetter) ? diagnosticsGetter : diagnosticsGetter()).length > 0) {
+                                    expl.style.display = 'flex';
+                                }
+                                else {
+                                    expl.style.display = 'none';
+                                }
+                            };
+                            updateExplVisibility();
+                            updateMarkers = () => {
+                                updateExplVisibility();
+                                env.updateMarkers();
+                            };
+                            // encodedLines.appendChild(document.createElement('br'));
                         }
+                        ;
+                        root.appendChild(encodedLines);
                         inlineWindowManager.conditiionallyDestroyAreas((areaId) => {
                             return !areasToKeep.has(JSON.stringify(areaId));
                         });
-                        if (dolog) {
-                            console.log('done encode, count:', onCreateCounter, ', createTime:', onCreateTimeCounter, 'partialOnCreate:', partialOnCreateTimeCounter);
-                            console.timeEnd('encodeRpcBodyLines');
-                        }
                         inlineWindowManager.notifyListenersOfChange();
                     }
                     const spinner = (0, createLoadingSpinner_4.default)();
@@ -4987,7 +5305,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             if (adjusters) {
                 locator.adjust(adjusters);
                 (_a = property.args) === null || _a === void 0 ? void 0 : _a.forEach((arg) => {
-                    adjusters.forEach(adj => (0, adjustLocator_2.adjustValue)(adj, arg));
+                    adjusters.forEach(adj => (0, adjustLocator_3.adjustValue)(adj, arg));
                 });
             }
             if (loading) {
@@ -5003,6 +5321,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 locator: locator.get(),
                 property,
                 nested: inlineWindowManager.getWindowStates(),
+                showDiagnostics: showDiagnostics && undefined, // Only include if necessary to reduce serialized form size
             };
         };
         // if (saveWindowState) {
@@ -5017,13 +5336,13 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     };
     exports.default = displayProbeModal;
 });
-define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_5, createModalTitle_7, displayAttributeModal_6, registerOnHover_4, showWindow_4, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5, UpdatableNodeLocator_5) {
+define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_5, createModalTitle_7, displayAttributeModal_6, registerOnHover_5, showWindow_4, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5, UpdatableNodeLocator_6) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_5 = __importDefault(createLoadingSpinner_5);
     createModalTitle_7 = __importDefault(createModalTitle_7);
     displayAttributeModal_6 = __importDefault(displayAttributeModal_6);
-    registerOnHover_4 = __importDefault(registerOnHover_4);
+    registerOnHover_5 = __importDefault(registerOnHover_5);
     showWindow_4 = __importDefault(showWindow_4);
     registerNodeSelector_4 = __importDefault(registerNodeSelector_4);
     encodeRpcBodyLines_4 = __importDefault(encodeRpcBodyLines_4);
@@ -5091,13 +5410,13 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                             node.style.borderTop = '1px solid gray';
                         }
                         node.innerText = `${label !== null && label !== void 0 ? label : (0, trimTypeName_5.default)(type)}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
-                        (0, registerOnHover_4.default)(node, on => env.updateSpanHighlight(on ? span : null));
+                        (0, registerOnHover_5.default)(node, on => env.updateSpanHighlight(on ? span : null));
                         node.onmousedown = (e) => { e.stopPropagation(); };
                         (0, registerNodeSelector_4.default)(node, () => locator);
                         node.onclick = () => {
                             cleanup();
                             env.updateSpanHighlight(null);
-                            (0, displayAttributeModal_6.default)(env, popup.getPos(), (0, UpdatableNodeLocator_5.createMutableLocator)(locator));
+                            (0, displayAttributeModal_6.default)(env, popup.getPos(), (0, UpdatableNodeLocator_6.createMutableLocator)(locator));
                         };
                         rowsContainer.appendChild(node);
                     });
@@ -5785,6 +6104,7 @@ define("ui/UIElements", ["require", "exports"], function (require, exports) {
         get settingsHider() { return document.getElementById('settings-hider'); }
         get settingsRevealer() { return document.getElementById('settings-revealer'); }
         get showTests() { return document.getElementById('show-tests'); }
+        get minimizedProbeArea() { return document.getElementById('minimized-probe-area'); }
     }
     exports.default = UIElements;
 });
@@ -5917,7 +6237,7 @@ define("model/runBgProbe", ["require", "exports", "settings"], function (require
     };
     exports.default = runInvisibleProbe;
 });
-define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_6, settings_6, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_1, displayHelp_4, displayProbeModal_4, encodeRpcBodyLines_5) {
+define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_7, settings_6, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_1, displayHelp_4, displayProbeModal_5, encodeRpcBodyLines_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     settings_6 = __importDefault(settings_6);
@@ -5928,7 +6248,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
     renderProbeModalTitleLeft_2 = __importDefault(renderProbeModalTitleLeft_2);
     UIElements_1 = __importDefault(UIElements_1);
     displayHelp_4 = __importDefault(displayHelp_4);
-    displayProbeModal_4 = __importDefault(displayProbeModal_4);
+    displayProbeModal_5 = __importDefault(displayProbeModal_5);
     encodeRpcBodyLines_5 = __importDefault(encodeRpcBodyLines_5);
     const preventDragOnClick = (elem) => {
         elem.onmousedown = (e) => {
@@ -6222,8 +6542,8 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                                         if (relatedNests.length === 0) {
                                                             return;
                                                         }
-                                                        const wrappedLocator = (0, UpdatableNodeLocator_6.createImmutableLocator)((0, UpdatableNodeLocator_6.createMutableLocator)(locator));
-                                                        const area = lhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator);
+                                                        const wrappedLocator = (0, UpdatableNodeLocator_7.createImmutableLocator)((0, UpdatableNodeLocator_7.createMutableLocator)(locator));
+                                                        const area = lhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator, queryWindow.bumpIntoScreen);
                                                         // const env = area.getNestedModalEnv(modal)
                                                         relatedNests.forEach((nest, nestIdx) => {
                                                             const localWindow = area.add({
@@ -6296,8 +6616,8 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                                 if (relatedNests.length === 0) {
                                                     return;
                                                 }
-                                                const wrappedLocator = (0, UpdatableNodeLocator_6.createImmutableLocator)((0, UpdatableNodeLocator_6.createMutableLocator)(locator));
-                                                const area = rhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator);
+                                                const wrappedLocator = (0, UpdatableNodeLocator_7.createImmutableLocator)((0, UpdatableNodeLocator_7.createMutableLocator)(locator));
+                                                const area = rhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator, queryWindow.bumpIntoScreen);
                                                 // const env = area.getNestedModalEnv(modal)
                                                 relatedNests.forEach((nest, nestIdx) => {
                                                     const localWindow = area.add({
@@ -6434,7 +6754,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                         //   //   }
                                         //   // })
                                         //   })
-                                        (0, displayProbeModal_4.default)(env, null, (0, UpdatableNodeLocator_6.createMutableLocator)(locator), property, nestedTestToProbeData({
+                                        (0, displayProbeModal_5.default)(env, null, (0, UpdatableNodeLocator_7.createMutableLocator)(locator), property, nestedTestToProbeData({
                                             path: [],
                                             expectedOutput: testCase.expectedOutput,
                                             nestedProperties: testCase.nestedProperties,
@@ -7077,11 +7397,11 @@ define("ui/popup/displayWorkerStatus", ["require", "exports", "ui/create/createM
     };
     exports.default = displayWorkerStatus;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_5, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_3, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_7, hacks_3) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_3, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_8, hacks_4, createMinimizedProbeModal_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
-    displayProbeModal_5 = __importDefault(displayProbeModal_5);
+    displayProbeModal_6 = __importDefault(displayProbeModal_6);
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_5 = __importDefault(displayHelp_5);
     displayAttributeModal_7 = __importDefault(displayAttributeModal_7);
@@ -7099,6 +7419,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     displayTestSuiteListModal_1 = __importDefault(displayTestSuiteListModal_1);
     displayWorkerStatus_1 = __importDefault(displayWorkerStatus_1);
     showWindow_11 = __importDefault(showWindow_11);
+    createMinimizedProbeModal_2 = __importDefault(createMinimizedProbeModal_2);
     const uiElements = new UIElements_2.default();
     window.clearUserSettings = () => {
         settings_7.default.set({});
@@ -7115,6 +7436,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         const saveText = btn.textContent;
         setTimeout(() => {
             btn.textContent = saveText;
+            btn.style.border = 'unset';
             delete btn.style.border;
         }, 1000);
         btn.textContent = `Copied to clipboard`;
@@ -7250,20 +7572,31 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         activeMarkers.forEach(m => { var _a; return (_a = m === null || m === void 0 ? void 0 : m.clear) === null || _a === void 0 ? void 0 : _a.call(m); });
                         activeMarkers.length = 0;
                         const deduplicator = new Set();
-                        const filteredAddMarker = (severity, start, end, msg) => {
+                        const pendingSources = {};
+                        const pendingAdders = [];
+                        const filteredAddMarker = (severity, start, end, msg, source) => {
+                            var _a;
                             const uniqId = [severity, start, end, msg].join(' | ');
-                            ;
+                            pendingSources[uniqId] = (_a = pendingSources[uniqId]) !== null && _a !== void 0 ? _a : [];
+                            pendingSources[uniqId].push(source !== null && source !== void 0 ? source : '');
                             if (deduplicator.has(uniqId)) {
                                 return;
                             }
                             deduplicator.add(uniqId);
-                            const lineStart = (start >>> 12);
-                            const colStart = start & 0xFFF;
-                            const lineEnd = (end >>> 12);
-                            const colEnd = end & 0xFFF;
-                            activeMarkers.push(markText({ severity, lineStart, colStart, lineEnd, colEnd, message: msg }));
+                            pendingAdders.push(() => {
+                                const sources = pendingSources[uniqId].filter(Boolean).sort((a, b) => (a < b ? -1 : (a > b) ? 1 : 0));
+                                const lineStart = (start >>> 12);
+                                const colStart = start & 0xFFF;
+                                const lineEnd = (end >>> 12);
+                                const colEnd = end & 0xFFF;
+                                activeMarkers.push(markText({
+                                    severity, lineStart, colStart, lineEnd, colEnd, message: msg,
+                                    source: sources.length === 0 ? undefined : sources.join(', ')
+                                }));
+                            });
                         };
-                        Object.values(probeMarkers).forEach(arr => arr.forEach(({ type, start, end, msg }) => filteredAddMarker(type, start, end, msg)));
+                        Object.values(probeMarkers).forEach(arr => (Array.isArray(arr) ? arr : arr()).forEach(({ type, start, end, msg, source }) => filteredAddMarker(type, start, end, msg, source)));
+                        pendingAdders.forEach(pa => pa());
                     });
                 };
                 const setupSimpleCheckbox = (input, initial, update) => {
@@ -7382,7 +7715,34 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     testManager,
                     createJobId,
                     getGlobalModalEnv: () => modalEnv,
+                    minimize: (data) => {
+                        const miniProbe = (0, createMinimizedProbeModal_2.default)(modalEnv, data.locator, data.property, data.nested, {
+                            showDiagnostics: data.showDiagnostics
+                        });
+                        uiElements.minimizedProbeArea.appendChild(miniProbe.ui);
+                    }
                 };
+                //  setTimeout(() => {
+                //     modalEnv.minimize({
+                //       locator: {
+                //         result: {
+                //           type: 'Program',
+                //           start: 0,
+                //           end: 0,
+                //           depth: 0,
+                //         },
+                //         steps: []
+                //       },
+                //       nested: {},
+                //       property: {
+                //         name: metaNodesWithPropertyName,
+                //         args: [
+                //           { type: 'string', value: 'errors' }
+                //         ],
+                //       },
+                //       type: 'probe',
+                //     });
+                // }, 500);
                 // Faulty cleanup debugger code below
                 // setInterval(() => {
                 //   console.log('save ids:', JSON.stringify(Object.keys(modalEnv.probeWindowStateSavers)));
@@ -7437,7 +7797,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             return { suggestions: ret };
                         }
                         default: {
-                            (0, hacks_3.assertUnreachable)(type);
+                            (0, hacks_4.assertUnreachable)(type);
                             return null;
                         }
                     }
@@ -7482,15 +7842,21 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         windowStates.forEach((state) => {
                             switch (state.data.type) {
                                 case 'probe': {
-                                    (0, displayProbeModal_5.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_7.createMutableLocator)(state.data.locator), state.data.property, state.data.nested);
+                                    const data = state.data;
+                                    (0, displayProbeModal_6.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_8.createMutableLocator)(data.locator), data.property, data.nested, { showDiagnostics: data.showDiagnostics });
                                     break;
                                 }
                                 case 'ast': {
-                                    (0, displayAstModal_3.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_7.createMutableLocator)(state.data.locator), state.data.direction, state.data.transform);
+                                    (0, displayAstModal_3.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_8.createMutableLocator)(state.data.locator), state.data.direction, state.data.transform);
+                                    break;
+                                }
+                                case 'minimized-probe': {
+                                    modalEnv.minimize(state.data.data);
                                     break;
                                 }
                                 default: {
-                                    console.warn('Unexpected probe window state type:', state.data);
+                                    (0, hacks_4.assertUnreachable)(state.data);
+                                    break;
                                 }
                             }
                         });
@@ -7502,7 +7868,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 window.RagQuery = (line, col, autoSelectRoot) => {
                     if (autoSelectRoot) {
                         const node = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1, depth: 0 };
-                        (0, displayAttributeModal_7.default)(modalEnv, null, (0, UpdatableNodeLocator_7.createMutableLocator)({ result: node, steps: [] }));
+                        (0, displayAttributeModal_7.default)(modalEnv, null, (0, UpdatableNodeLocator_8.createMutableLocator)({ result: node, steps: [] }));
                     }
                     else {
                         (0, displayRagModal_1.default)(modalEnv, line, col);
@@ -7576,4 +7942,36 @@ const darkColors = {
 };
 const getThemedColor = (lightTheme, type) => {
     return (lightTheme ? lightColors : darkColors)[type];
+};
+const createSquigglyCheckbox = (args) => {
+    const squigglyCheckboxWrapper = document.createElement('div');
+    squigglyCheckboxWrapper.style.flexDirection = 'column';
+    const squigglyCheckbox = document.createElement('input');
+    squigglyCheckbox.type = 'checkbox';
+    squigglyCheckbox.checked = args.initiallyChecked;
+    if (args.id)
+        squigglyCheckbox.id = args.id;
+    squigglyCheckboxWrapper.appendChild(squigglyCheckbox);
+    squigglyCheckbox.onmousedown = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+    squigglyCheckbox.oninput = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        args.onInput(squigglyCheckbox.checked);
+    };
+    // Based on https://stackoverflow.com/a/27764538
+    const squigglyDemo = document.createElement('div');
+    squigglyDemo.classList.add('squigglyLineHolder');
+    const addTiny = (type) => {
+        const tiny = document.createElement('div');
+        tiny.classList.add('tinyLine');
+        tiny.classList.add(type);
+        squigglyDemo.appendChild(tiny);
+    };
+    addTiny('tinyLine1');
+    addTiny('tinyLine2');
+    squigglyCheckboxWrapper.appendChild(squigglyDemo);
+    return squigglyCheckboxWrapper;
 };

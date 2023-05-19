@@ -22,7 +22,7 @@ type EditorPreloader = () => {
 type TextMarker = {
   clear?: () => void;
 }
-type TextMarkFn = (mark: Span & { severity: MarkerSeverity; message: string }) => TextMarker;
+type TextMarkFn = (mark: Span & { severity: MarkerSeverity; message: string, source?: string }) => TextMarker;
 
 type LocationAdjuster = (line: number, col: number) => [number, number];
 

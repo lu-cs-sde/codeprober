@@ -121,7 +121,8 @@ window.defineEditor(
             // Starts at underside, just to the right of the edge start
             ctx.moveTo(tipw, barBot);
             switch (leftStyle) {
-              case 'a': {
+              case 'a':
+              case 'A': {
                 ctx.lineTo(tipw, height);
                 ctx.lineTo(0, height / 2);
                 ctx.lineTo(tipw, 0);
@@ -130,7 +131,8 @@ window.defineEditor(
               }
               default:
                 console.log('Unknown left line style "', leftStyle, '", rendering plain');
-              case 'p': {
+              case 'p':
+              case 'P': {
                 ctx.lineTo(0, barBot);
                 ctx.lineTo(0, barTop);
                 ctx.lineTo(tipw, barTop);
@@ -177,6 +179,7 @@ window.defineEditor(
 
             ctx.lineTo(len - tipw, barTop);
             switch (rightStyle) {
+              case 'a':
               case 'A': {
                 ctx.lineTo(len - tipw, 0);
                 ctx.lineTo(len, height / 2);
@@ -185,7 +188,8 @@ window.defineEditor(
                 break;
               }
               default:
-                console.log('Unknown left line style "', leftStyle, '", rendering plain');
+                console.log('Unknown right line style "', leftStyle, '", rendering plain');
+              case 'p':
               case 'P': {
                 ctx.lineTo(len, barTop);
                 ctx.lineTo(len, barBot);
@@ -464,7 +468,7 @@ window.defineEditor(
       getLocalState: () => editor.getValue(),
       updateSpanHighlight,
       registerStickyMarker,
-      markText: ({ severity, lineStart, colStart, lineEnd, colEnd, message }) => {
+      markText: ({ severity, lineStart, colStart, lineEnd, colEnd, source, message }) => {
         const problemId = `problem_${++problemIdGenerator}`;
 
         if (/^LINE_[PA]{2}$/.test(severity)) {
@@ -491,6 +495,7 @@ window.defineEditor(
               endLineNumber: lineEnd,
               endColumn: colEnd + 1,
               message,
+              source,
               severity: ({
                 'info': 2,
                 'warning': 4

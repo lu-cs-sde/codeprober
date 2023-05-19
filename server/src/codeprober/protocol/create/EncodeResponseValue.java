@@ -10,16 +10,37 @@ import codeprober.ast.AstNode;
 import codeprober.locator.CreateLocator;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
+import codeprober.protocol.data.Diagnostic;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.RpcBodyLine;
+import codeprober.util.MagicStdoutMessageParser;
 
 public class EncodeResponseValue {
 
-	public static void encodeTyped(AstInfo info, List<RpcBodyLine> out, Object value,
+	public static void encodeTyped(AstInfo info, List<RpcBodyLine> out, List<Diagnostic> diagnostics, Object value,
 			HashSet<Object> alreadyVisitedNodes) {
 		if (value == null) {
 			out.add(RpcBodyLine.fromPlain("null"));
 			return;
+		}
+
+		try {
+			final Object diagnosticValue = Reflect.invoke0(value, "cpr_getDiagnostic");
+			if (diagnosticValue != null) {
+				if (diagnosticValue instanceof String) {
+					final Diagnostic d = MagicStdoutMessageParser.parse((String) diagnosticValue);
+					if (d != null) {
+						diagnostics.add(d);
+					} else {
+						System.err.println("Invalid diagnostic string '" + diagnosticValue + "'");
+					}
+				} else {
+					System.err.println("Unknown cpr_getDiagnostic return type. Expected String, got "
+							+ diagnosticValue.getClass().getName());
+				}
+			}
+		} catch (InvokeProblem e) {
+			// OK, this is an optional attribute after all
 		}
 		// Clone to avoid showing 'already visited' when this encoding 'branch' hasn't
 		// visited it.
@@ -36,7 +57,7 @@ public class EncodeResponseValue {
 				try {
 					Object preferredView = Reflect.invoke0(node.underlyingAstNode, "cpr_getOutput");
 					alreadyVisitedNodes.add(node.underlyingAstNode);
-					encodeTyped(info, out, preferredView, alreadyVisitedNodes);
+					encodeTyped(info, out, diagnostics, preferredView, alreadyVisitedNodes);
 					return;
 				} catch (InvokeProblem e) {
 					// Fall down to default view
@@ -58,7 +79,7 @@ public class EncodeResponseValue {
 							alreadyVisitedNodes.add(node.underlyingAstNode);
 							out.add(RpcBodyLine.fromPlain("List contents [" + numEntries + "]:"));
 							for (AstNode child : node.getChildren(info)) {
-								encodeTyped(info, out, child, alreadyVisitedNodes);
+								encodeTyped(info, out, diagnostics, child, alreadyVisitedNodes);
 							}
 						}
 						return;
@@ -87,7 +108,7 @@ public class EncodeResponseValue {
 				try {
 					Object preferredView = Reflect.invoke0(value, "cpr_getOutput");
 					alreadyVisitedNodes.add(value);
-					encodeTyped(info, out, preferredView, alreadyVisitedNodes);
+					encodeTyped(info, out, diagnostics, preferredView, alreadyVisitedNodes);
 					return;
 				} catch (InvokeProblem e) {
 					// Fall down to default view
@@ -105,7 +126,7 @@ public class EncodeResponseValue {
 			final List<RpcBodyLine> indent = new ArrayList<>();
 			Iterable<?> iter = (Iterable<?>) value;
 			for (Object o : iter) {
-				encodeTyped(info, indent, o, alreadyVisitedNodes);
+				encodeTyped(info, indent, diagnostics, o, alreadyVisitedNodes);
 			}
 			out.add(RpcBodyLine.fromArr(indent));
 			return;
@@ -119,7 +140,7 @@ public class EncodeResponseValue {
 			final List<RpcBodyLine> indent = new ArrayList<>();
 			Iterator<?> iter = (Iterator<?>) value;
 			while (iter.hasNext()) {
-				encodeTyped(info, indent, iter.next(), alreadyVisitedNodes);
+				encodeTyped(info, indent, diagnostics, iter.next(), alreadyVisitedNodes);
 			}
 			out.add(RpcBodyLine.fromArr(indent));
 			return;
@@ -133,7 +154,7 @@ public class EncodeResponseValue {
 
 			final List<RpcBodyLine> indent = new ArrayList<>();
 			for (Object child : (Object[]) value) {
-				encodeTyped(info, indent, child, alreadyVisitedNodes);
+				encodeTyped(info, indent, diagnostics, child, alreadyVisitedNodes);
 			}
 			out.add(RpcBodyLine.fromArr(indent));
 			return;

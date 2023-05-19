@@ -79,7 +79,7 @@
       return loadedModules[moduleName];
     }
     const moduleExports = loadedModules[moduleName] = { __esModule: true };
-    const { reqs, loader } = definedModules[moduleName];
+    const { reqs, loader } = definedModules[moduleName];
     loader(...reqs.map(req => req === 'exports' ? moduleExports : loadModule(req)))
     return moduleExports;
   }
@@ -90,7 +90,10 @@
   <div id="root" style="display: none;">
     <span id="input-header">
       <span>Input</span>
-      <button class="dim-button" id="show-tests">Tests</button>
+      <div style="display: flex; flex-direction: row;">
+        <div id="minimized-probe-area"></div>
+        <button class="dim-button" id="show-tests">Tests</button>
+      </div>
     </span>
     <span id="settings-header-wrapper">
       <span id="settings-header-open">
@@ -186,7 +189,7 @@
         </div>
         <button id="display-help" onclick="displayHelp('general')">Help</button>
         <button id="clear-settings" onclick="clearUserSettings()">Clear state and reload</button>
-        <button id="saveAsUrl" onclick="saveStateAsUrl()">Save current state as URL</button>
+        <button id="saveAsUrl" onclick="saveStateAsUrl()">Save probe state as URL</button>
         <br>
         <div id="secret-debug-panel" style="display: none; border-top: 2px dashed gray; margin-top: 2rem; padding: 0.25rem 0;">
           <button id="display-statistics" onclick="displayHelp('probe-statistics')">Statistics</button>

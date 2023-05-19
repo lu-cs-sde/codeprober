@@ -3,33 +3,26 @@ package codeprober.util;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import codeprober.CodeProber;
 import codeprober.protocol.DiagnosticType;
 import codeprober.protocol.data.Diagnostic;
 
 public class MagicStdoutMessageParser {
 
 	public static Diagnostic parse(String line) {
-
-		// Ignore whether the message is stdout or stderr, capture everything!
-
 		final Matcher matcher = Pattern.compile("(ERR|WARN|INFO|LINE-PP|LINE-AA|LINE-AP|LINE-PA)@(\\d+);(\\d+);(.*)")
 				.matcher(line);
 		if (!matcher.matches()) {
 			return null;
 		}
-		System.out.println("Got matching line! " + line);
 		final int start = Integer.parseInt(matcher.group(2));
 		final int end = Integer.parseInt(matcher.group(3));
 		final String msg = matcher.group(4);
 		final DiagnosticType type;
 		switch (matcher.group(1)) {
 		case "ERR":
-//			obj.put("severity", "error");
 			type = DiagnosticType.ERROR;
 			break;
 		case "WARN":
-//			obj.put("severity", "warning");
 			type = DiagnosticType.WARNING;
 			break;
 		case "INFO":

@@ -11,8 +11,8 @@
   height: 98vh;
   max-height: 98vh;
   grid-template-columns: 3fr 1fr;
-  grid-template-rows: 1.5rem 1fr;
-
+  /* grid-template-rows: 1.5rem 1fr; */
+  grid-template-rows: auto 1fr;
 }
 html {overflow: hidden;}
 
@@ -43,7 +43,7 @@ body.hide-settings #root {
   grid-template-columns: 1fr 1.5rem;
   grid-template-areas: "a b"
                        "c c";
-  /* grid-template-rows: 1fr; */
+  /* grid-template-rows: auto 1fr; */
 }
 body.hide-settings #input-header { grid-area: a; }
 body.hide-settings #settings-header-wrapper {
@@ -366,6 +366,10 @@ body[data-theme-light="true"] .syntax-attr-dim-focus:focus {
   padding-right: 0.25rem;
 }
 
+#input-header span {
+  margin-top: auto;
+  margin-bottom: auto;
+}
 #input-header button,
 select {
   /* font-size: 1rem; */
@@ -374,7 +378,7 @@ select {
 
 #input-header,
 #settings-header-wrapper {
-  margin: auto 0 0 0;
+  margin: auto 0 auto 0;
 }
 
 #show-tests {
@@ -394,8 +398,8 @@ select {
 }
 
 #settings-header-wrapper {
-  min-height: 1.5rem;
-  max-height: 1.5rem;
+  /* min-height: 1.5rem;
+  max-height: 1.5rem; */
   display: flex;
   flex-direction: column;
   justify-content: end;
@@ -805,4 +809,90 @@ body[data-theme-light="true"] .linkedProbeCreator {
 
 body[data-theme-light="true"] .linkedProbeCreator:hover {
   background: greenyellow;
+}
+
+.minimizedProbeWindow {
+  border: 1px solid #CCC;
+  border-radius: 0.25rem;
+
+  display: flex;
+  flex-direction: row;
+  user-select: none;
+}
+body[data-theme-light="true"] .minimizedProbeWindow {
+  border-color: #333;
+}
+/* .minimizedProbeWindow:not(:first-of-type) {
+  margin-right: 0.25rem;
+} */
+
+.minimizedProbeWindowOpener {
+  border-top-left-radius: 0.25rem;
+  border-bottom-left-radius: 0.25rem;
+  cursor: pointer;
+}
+.minimizedProbeWindowOpener:hover:not(:active) {
+  background: #333;
+}
+body[data-theme-light="true"] .minimizedProbeWindowOpener:hover:not(:active) {
+  background: #CCC;
+}
+
+.minimizedProbeWindowOpener,
+.minimiedProbeWindowCheckboxWrapper {
+  padding: 0.125rem;
+}
+
+
+/* Squiggly line styling based on (but modified) from https://stackoverflow.com/a/27764538 */
+.minimiedProbeWindowCheckboxWrapper > .squigglyLineHolder {
+  width: 1rem;
+}
+.probeOutputAreaCheckboxWrapper input {
+  margin: 0;
+}
+.squigglyLineHolder  {
+  position: relative;
+  height: 0;
+  margin-left: auto;
+  margin-right: auto;
+  bottom: 0.5rem;
+}
+.tinyLine {
+  position: absolute;
+  /* Cuts off the bottom half of the pattern */
+  height: 16px;
+  z-index: 99;
+  /* For better cross browser consistency, make it larger with width.  */
+  width: 1000%;
+  /* And then scale it back down with scale, recentering with translateX. */
+  transform: translateX(-45%) scale(0.1);
+}
+
+.tinyLine1 {
+  /* background: linear-gradient(45deg, transparent, transparent 49%, red 49%, transparent 51%); */
+  background: linear-gradient(45deg, transparent, transparent 49%, red 49%,  red 51%, transparent 51%);
+}
+.tinyLine2 {
+  /* background: linear-gradient(-45deg, transparent, transparent 49%, red 49%, transparent 51%); */
+  background: linear-gradient(-45deg, transparent, transparent 49%, red 49%,  red 51%, transparent 51%);
+}
+.tinyLine {
+  /* Must be after background definition. */
+  background-size: 32px 32px;
+}
+
+#minimized-probe-area {
+  margin: auto 0 auto auto;
+  padding-right: 0.25rem;
+  display: flex;
+  flex-direction: row-reverse;
+  /* max-width: 90%; */
+  flex-wrap: wrap;
+  gap: 0.125rem;
+}
+
+#show-tests {
+  margin-top: auto;
+  margin-bottom: auto;
 }

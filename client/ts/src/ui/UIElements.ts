@@ -40,6 +40,7 @@ class UIElements {
   get settingsHider() { return document.getElementById('settings-hider') as HTMLButtonElement; }
   get settingsRevealer() { return document.getElementById('settings-revealer') as HTMLButtonElement; }
   get showTests() { return document.getElementById('show-tests') as HTMLButtonElement; }
+  get minimizedProbeArea() { return document.getElementById('minimized-probe-area') as HTMLDivElement; }
 }
 
 export default UIElements;

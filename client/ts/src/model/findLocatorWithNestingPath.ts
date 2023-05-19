@@ -1,5 +1,31 @@
 import { NodeLocator, RpcBodyLine } from '../protocol';
 
+const findAllLocatorsWithinNestingPath = (rootLines: RpcBodyLine[]): { [path: string]: NodeLocator } => {
+  const ret: { [path: string]: NodeLocator } = {};
+  const step = (parentPath: number[], from: RpcBodyLine[]) => {
+    let backshift = 0;
+    for (let i = 0; i < from.length; ++i) {
+      const line = from[i];
+      switch (line.type) {
+        case 'stdout':
+        case 'stderr':
+          --backshift;
+          break;
+
+        case 'arr':
+          step([...parentPath, i + backshift], line.value);
+          break;
+
+        case 'node':
+          ret[JSON.stringify([...parentPath, i + backshift])] = line.value;
+          break;
+      }
+    }
+  }
+  step([], rootLines);
+  return ret;
+}
+
 const findLocatorWithNestingPath = (path: number[], rootLines: RpcBodyLine[]): NodeLocator | null => {
   const step = (index: number, from: RpcBodyLine[]): NodeLocator | null => {
     let position = path[index];
@@ -46,4 +72,5 @@ const findLocatorWithNestingPath = (path: number[], rootLines: RpcBodyLine[]): N
   return step(0, rootLines);
 }
 
+export { findAllLocatorsWithinNestingPath }
 export default findLocatorWithNestingPath;

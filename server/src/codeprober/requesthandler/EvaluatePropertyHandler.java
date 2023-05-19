@@ -136,12 +136,11 @@ public class EvaluatePropertyHandler {
 		final ParsedAst parsed = parser.parse(req.src);
 //		final long parseTime = System.nanoTime() - requestTime;
 
-		final List<Diagnostic> errors;
+		final List<Diagnostic> diagnostics = new ArrayList<>();
 		final List<RpcBodyLine> body = new ArrayList<>();
 		final AtomicReference<NodeLocator> newLocator = new AtomicReference<>(null);
 		final AtomicReference<List<PropertyArg>> updatedArgsPtr = new AtomicReference<>();
 		if (parsed.info == null) {
-			errors = new ArrayList<>();
 			for (RpcBodyLine line : parsed.captures) {
 				body.add(line);
 
@@ -149,7 +148,7 @@ public class EvaluatePropertyHandler {
 				case stdout: {
 					final Diagnostic diagnostic = MagicStdoutMessageParser.parse(line.asStdout());
 					if (diagnostic != null) {
-						errors.add(diagnostic);
+						diagnostics.add(diagnostic);
 					}
 					break;
 				}
@@ -157,7 +156,7 @@ public class EvaluatePropertyHandler {
 				case stderr:
 					final Diagnostic diagnostic = MagicStdoutMessageParser.parse(line.asStderr());
 					if (diagnostic != null) {
-						errors.add(diagnostic);
+						diagnostics.add(diagnostic);
 					}
 					break;
 
@@ -260,7 +259,7 @@ public class EvaluatePropertyHandler {
 					if (value != Reflect.VOID_RETURN_VALUE) {
 						CreateLocator.setMergeMethod(LocatorMergeMethod.SKIP);
 						try {
-							EncodeResponseValue.encodeTyped(parsed.info, body, value, new HashSet<>());
+							EncodeResponseValue.encodeTyped(parsed.info, body, diagnostics, value, new HashSet<>());
 						} finally {
 							CreateLocator.setMergeMethod(LocatorMergeMethod.DEFAULT_METHOD);
 						}
@@ -288,7 +287,7 @@ public class EvaluatePropertyHandler {
 				}
 			};
 
-			errors = StdIoInterceptor.performCaptured((stdout, line) -> MagicStdoutMessageParser.parse(line), () -> {
+			diagnostics.addAll(StdIoInterceptor.performCaptured((stdout, line) -> MagicStdoutMessageParser.parse(line), () -> {
 				try {
 					final ResolvedNode match = ApplyLocator.toNode(parsed.info, req.locator,
 							req.skipResultLocator == null ? true : !req.skipResultLocator);
@@ -321,8 +320,8 @@ public class EvaluatePropertyHandler {
 					}
 					throw e;
 				}
-			});
-			System.out.println("cap errors: " + errors);
+			}));
+			System.out.println("cap errors: " + diagnostics);
 //			final List<RpcBodyLine> caps = StdIoInterceptor
 //					.performDefaultCapture(() -> handleParsedAst(res.rootNode, queryObj, retBuilder, bodyBuilder));
 //
@@ -340,7 +339,7 @@ public class EvaluatePropertyHandler {
 				BenchmarkTimer.EVALUATE_ATTR.getAccumulatedNano(), //
 				BenchmarkTimer.LIST_NODES.getAccumulatedNano(), //
 				BenchmarkTimer.LIST_PROPERTIES.getAccumulatedNano(), //
-				errors, //
+				diagnostics, //
 				updatedArgsPtr.get(), //
 				newLocator.get() //
 		)));

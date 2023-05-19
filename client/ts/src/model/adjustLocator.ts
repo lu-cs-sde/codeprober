@@ -1,4 +1,4 @@
-import { PropertyArg, NodeLocator, NodeLocatorStep } from '../protocol';
+import { PropertyArg, NodeLocator, NodeLocatorStep, Property } from '../protocol';
 import adjustTypeAtLoc from "./adjustTypeAtLoc";
 
 const adjustValue = (adj: LocationAdjuster, arg: PropertyArg) => {
@@ -33,5 +33,10 @@ const adjustLocator = (adj: LocationAdjuster, loc: NodeLocator) => {
   loc.steps.forEach(adjustStep);
 };
 
-export { adjustValue };
+const adjustLocatorAndProperty = (adj: LocationAdjuster, loc: NodeLocator, prop: Property) => {
+  adjustLocator(adj, loc);
+  prop.args?.forEach(arg => adjustValue(adj, arg));
+}
+
+export { adjustValue, adjustLocatorAndProperty };
 export default adjustLocator;

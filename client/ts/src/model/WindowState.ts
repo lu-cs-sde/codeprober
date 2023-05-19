@@ -5,6 +5,7 @@ interface WindowStateDataProbe {
   locator: NodeLocator;
   property: Property;
   nested: NestedWindows;
+  showDiagnostics?: boolean;
 }
 interface WindowStateDataAst {
   type: 'ast';
@@ -12,8 +13,12 @@ interface WindowStateDataAst {
   direction: 'upwards' | 'downwards';
   transform: { [id: string]: number },
 }
+interface WindowStateDataMinimized {
+  type: 'minimized-probe';
+  data: WindowStateDataProbe;
+}
 
-type WindowStateData = WindowStateDataProbe | WindowStateDataAst;
+type WindowStateData = WindowStateDataProbe | WindowStateDataAst | WindowStateDataMinimized;
 
 interface WindowState {
   modalPos: ModalPosition;

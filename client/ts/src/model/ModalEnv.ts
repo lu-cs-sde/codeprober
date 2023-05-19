@@ -1,7 +1,8 @@
 import TestManager from './test/TestManager';
-import { AsyncRpcUpdate, Diagnostic, ParsingRequestData } from '../protocol';
+import { AsyncRpcUpdate, ParsingRequestData } from '../protocol';
 import { ShowWindowArgs, ShowWindowResult } from '../ui/create/showWindow';
-import WindowState from './WindowState';
+import WindowState, { WindowStateDataProbe } from './WindowState';
+import SourcedDiagnostic from './SourcedDiagnostic';
 
 type JobId = number;
 
@@ -14,7 +15,7 @@ interface ModalEnv {
   updateSpanHighlight: (span: Span | null) => void;
   setStickyHighlight: (probeId: string, hl: StickyHighlight) => void;
   clearStickyHighlight: (probeId: string) => void;
-  probeMarkers: { [probeId: string]: Diagnostic[] };
+  probeMarkers: { [probeId: string]: (() => SourcedDiagnostic[]) | SourcedDiagnostic[] };
   onChangeListeners: { [key: string]: (adjusters?: LocationAdjuster[], reason?: string) => void };
   themeChangeListeners: { [key: string]: (light: boolean) => void };
   themeIsLight: () => boolean,
@@ -30,6 +31,7 @@ interface ModalEnv {
   testManager: TestManager;
   createJobId: (updateHandler: (data: AsyncRpcUpdate) => void) => JobId;
   getGlobalModalEnv: () => ModalEnv;
+  minimize: (data: WindowStateDataProbe) => void;
 }
 
 export { JobId }

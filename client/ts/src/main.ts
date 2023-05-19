@@ -25,6 +25,7 @@ import showWindow from './ui/create/showWindow';
 import { createMutableLocator } from './model/UpdatableNodeLocator';
 import WindowState from './model/WindowState';
 import { assertUnreachable } from './hacks';
+import createMinimizedProbeModal from './ui/create/createMinimizedProbeModal';
 
 const uiElements = new UIElements();
 
@@ -46,6 +47,7 @@ window.saveStateAsUrl = () => {
   const saveText = btn.textContent;
   setTimeout(() => {
     btn.textContent = saveText;
+    btn.style.border = 'unset';
     delete (btn.style as any).border;
   }, 1000);
   btn.textContent = `Copied to clipboard`;
@@ -205,20 +207,31 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
           activeMarkers.length = 0;
 
           const deduplicator = new Set();
-          const filteredAddMarker = (severity: Diagnostic['type'], start: number, end: number, msg: string) => {
-            const uniqId = [severity, start, end, msg].join(' | ');;
+          const pendingSources: { [uniqId: string]: string[] } = {};
+          const pendingAdders: (() => void)[] = [];
+          const filteredAddMarker = (severity: Diagnostic['type'], start: number, end: number, msg: string, source?: string) => {
+            const uniqId = [severity, start, end, msg].join(' | ');
+            pendingSources[uniqId] = pendingSources[uniqId] ?? [];
+            pendingSources[uniqId].push(source ?? '');
             if (deduplicator.has(uniqId)) {
               return;
             }
             deduplicator.add(uniqId);
+            pendingAdders.push(() => {
+              const sources = pendingSources[uniqId].filter(Boolean).sort((a, b) => (a < b ? -1 : (a > b) ? 1 : 0));
 
-            const lineStart = (start >>> 12);
-            const colStart = start & 0xFFF;
-            const lineEnd = (end >>> 12);
-            const colEnd = end & 0xFFF;
-            activeMarkers.push(markText({ severity, lineStart, colStart, lineEnd, colEnd, message: msg }));
+              const lineStart = (start >>> 12);
+              const colStart = start & 0xFFF;
+              const lineEnd = (end >>> 12);
+              const colEnd = end & 0xFFF;
+              activeMarkers.push(markText({
+                severity, lineStart, colStart, lineEnd, colEnd, message: msg,
+                source: sources.length === 0 ? undefined: sources.join(', ') }));
+            })
+
           }
-          Object.values(probeMarkers).forEach(arr => arr.forEach(({ type, start, end, msg }) => filteredAddMarker(type, start, end, msg)));
+          Object.values(probeMarkers).forEach(arr => (Array.isArray(arr) ? arr : arr()).forEach(({ type, start, end, msg, source }) => filteredAddMarker(type, start, end, msg, source)));
+          pendingAdders.forEach(pa => pa());
         });
       };
 
@@ -350,7 +363,36 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         testManager,
         createJobId,
         getGlobalModalEnv: () => modalEnv,
+        minimize: (data) => {
+          const miniProbe = createMinimizedProbeModal(modalEnv, data.locator, data.property, data.nested, {
+            showDiagnostics: data.showDiagnostics
+          });
+          uiElements.minimizedProbeArea.appendChild(miniProbe.ui);
+
+        }
        };
+
+      //  setTimeout(() => {
+      //     modalEnv.minimize({
+      //       locator: {
+      //         result: {
+      //           type: 'Program',
+      //           start: 0,
+      //           end: 0,
+      //           depth: 0,
+      //         },
+      //         steps: []
+      //       },
+      //       nested: {},
+      //       property: {
+      //         name: metaNodesWithPropertyName,
+      //         args: [
+      //           { type: 'string', value: 'errors' }
+      //         ],
+      //       },
+      //       type: 'probe',
+      //     });
+      // }, 500);
 
        // Faulty cleanup debugger code below
     // setInterval(() => {
@@ -475,15 +517,27 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
           windowStates.forEach((state) => {
             switch (state.data.type) {
               case 'probe': {
-                displayProbeModal(modalEnv, state.modalPos, createMutableLocator(state.data.locator), state.data.property, state.data.nested);
+                const data = state.data;
+                displayProbeModal(modalEnv,
+                  state.modalPos,
+                  createMutableLocator(data.locator),
+                  data.property,
+                  data.nested,
+                  { showDiagnostics: data.showDiagnostics },
+                );
                 break;
               }
               case 'ast': {
                 displayAstModal(modalEnv, state.modalPos, createMutableLocator(state.data.locator), state.data.direction, state.data.transform);
                 break;
               }
+              case 'minimized-probe': {
+                modalEnv.minimize(state.data.data);
+                break;
+              }
               default: {
-                console.warn('Unexpected probe window state type:', state.data);
+                assertUnreachable(state.data);
+                break;
               }
             }
           });

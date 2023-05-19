@@ -334,7 +334,7 @@ const displayTestDiffModal = (
                                 return;
                               }
                               const wrappedLocator = createImmutableLocator(createMutableLocator(locator));
-                              const area = lhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator);
+                              const area = lhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator, queryWindow.bumpIntoScreen);
                               // const env = area.getNestedModalEnv(modal)
                               relatedNests.forEach((nest, nestIdx) => {
                                 const localWindow = area.add({
@@ -415,7 +415,7 @@ const displayTestDiffModal = (
                           return;
                         }
                         const wrappedLocator = createImmutableLocator(createMutableLocator(locator));
-                        const area = rhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator);
+                        const area = rhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator, queryWindow.bumpIntoScreen);
                         // const env = area.getNestedModalEnv(modal)
                         relatedNests.forEach((nest, nestIdx) => {
                           const localWindow = area.add({

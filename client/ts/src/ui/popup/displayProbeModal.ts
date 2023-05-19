@@ -11,37 +11,74 @@ import settings from '../../settings';
 import { Property, Diagnostic, EvaluatePropertyReq, EvaluatePropertyRes, RpcBodyLine, StopJobReq, StopJobRes, SynchronousEvaluationResult, PollWorkerStatusReq, PollWorkerStatusRes } from '../../protocol';
 import displayAttributeModal from './displayAttributeModal';
 import displayAstModal from './displayAstModal';
-import createInlineWindowManager from '../create/createInlineWindowManager';
+import createInlineWindowManager, { InlineWindowManager } from '../create/createInlineWindowManager';
 import UpdatableNodeLocator, { createImmutableLocator, createMutableLocator } from '../../model/UpdatableNodeLocator';
 import { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
 import { NestedTestRequest } from '../../model/test/TestManager';
+import SourcedDiagnostic from '../../model/SourcedDiagnostic';
+import { createDiagnosticSource } from '../create/createMinimizedProbeModal';
 
 const metaNodesWithPropertyName = `m:NodesWithProperty`;
 
+interface OptionalArgs {
+  showDiagnostics?: boolean;
+}
 const displayProbeModal = (
   env: ModalEnv,
   modalPos: ModalPosition | null,
   locator: UpdatableNodeLocator,
   property: Property,
   nestedWindows: NestedWindows,
+  optionalArgs: OptionalArgs = {}
 ) => {
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-  // console.log('displayProbeModal, nested:', nestedWindows, 'attr:', property.name, ', query:', queryId);
-  const localErrors: Diagnostic[] = [];
-  env.probeMarkers[queryId] = localErrors;
+  const localDiagnostics: SourcedDiagnostic[] = [];
+  let diagnosticsGetter: SourcedDiagnostic[] | (() => SourcedDiagnostic[]) = localDiagnostics;
+  let showDiagnostics = optionalArgs.showDiagnostics ?? true;
+  let updateMarkers = env.updateMarkers;
   const stickyController = createStickyHighlightController(env);
-  let lastOutput: RpcBodyLine[] = [];
   let activelyLoadingJob: JobId | null = null;
   let loading = false;
   let isCleanedUp = false;
   nestedWindows = {...nestedWindows}; // Make copy so we can locally modify it
-  // const activeNests: {
-  //   [id: string]: {
-  //     getWindowStates: () => WindowState[];
-  //     actives: ActiveNesting[]
-  //   }
-  // } = {};
-  const inlineWindowManager = createInlineWindowManager();
+
+  const reinstallDiagnosticsGetter = () => {
+    env.probeMarkers[queryId] = showDiagnostics ? diagnosticsGetter : [];
+  };
+  reinstallDiagnosticsGetter();
+
+  const doCreateInlineWindowManager = (): {
+    inlineWindowManager: InlineWindowManager,
+    shouldShowDiagnosticsToggler: boolean,
+  } => {
+    if (env !== env.getGlobalModalEnv()) {
+      return {
+        inlineWindowManager: createInlineWindowManager(),
+        shouldShowDiagnosticsToggler: false,
+      };
+    }
+
+    const override: ModalEnv['probeMarkers'] = {};
+    diagnosticsGetter = () => {
+      const sum = [...localDiagnostics]
+      Object.values(override).forEach(val => {
+        sum.push(...(Array.isArray(val) ? val : val()).map(diag => {
+          // Replace source with ourselves
+          return { ...diag, source: createDiagnosticSource(locator.get(), property) }
+        }));
+      })
+      return sum;
+    };
+    reinstallDiagnosticsGetter();
+    return {
+      inlineWindowManager: createInlineWindowManager({
+        probeMarkersOverride: override,
+        updateMarkersOverride: () => updateMarkers(),
+      }),
+      shouldShowDiagnosticsToggler: true
+    }
+  }
+  const { inlineWindowManager, shouldShowDiagnosticsToggler } = doCreateInlineWindowManager();
   // const inline
 
   const doStopJob = (jobId: JobId) => env.performTypedRpc<StopJobReq, StopJobRes>({
@@ -68,9 +105,7 @@ const displayProbeModal = (
     }
     // console.log('cleanup: ', queryId, 'inline state:', inlineWindowManager.getWindowStates());
     inlineWindowManager.destroy();
-    if (localErrors.length > 0) {
-      env.updateMarkers();
-    }
+    env.updateMarkers();
     env.triggerWindowSave();
   };
 
@@ -92,19 +127,32 @@ const displayProbeModal = (
       extraActions: [
         ...(
           env.getGlobalModalEnv() === env
-            ? [{
-              title: 'Duplicate window',
-              invoke: () => {
-                const pos = queryWindow.getPos();
-                displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator.createMutableClone(), property, inlineWindowManager.getWindowStates());
+            ? [
+              {
+                title: 'Duplicate window',
+                invoke: () => {
+                  const pos = queryWindow.getPos();
+                  displayProbeModal(env,
+                    { x: pos.x + 10, y: pos.y + 10 },
+                    locator.createMutableClone(), property, inlineWindowManager.getWindowStates(),
+                    { showDiagnostics }
+                    );
+                },
               },
-            }]
+              {
+                title: 'Minimize window',
+                invoke: () => {
+                  env.minimize(getWindowStateData());
+                  cleanup();
+                }
+              }
+            ]
             : [{
               title: 'Detatch window',
               invoke: () => {
                 const states = inlineWindowManager.getWindowStates();
                 cleanup();
-                displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, states);
+                displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, states, { showDiagnostics });
               },
             }]
         ),
@@ -388,16 +436,18 @@ const displayProbeModal = (
             }
             while (root.firstChild) root.removeChild(root.firstChild);
 
-            let refreshMarkers = localErrors.length > 0;
-            localErrors.length = 0;
+            let shouldRefreshMarkers = localDiagnostics.length > 0;
+            localDiagnostics.length = 0;
 
-            localErrors.push(...(parsed.errors ?? []));
+            localDiagnostics.push(...(parsed.errors ?? []).map((err): SourcedDiagnostic => {
+              return ({ ...err, source: createDiagnosticSource(locator.get(), property) });
+            }));
             // parsed.errors?.forEach(({severity, start: errStart, end: errEnd, msg }) => {
             //   localErrors.push({ severity, errStart, errEnd, msg });
             // })
             const updatedArgs = parsed.args;
             if (updatedArgs) {
-              refreshMarkers = true;
+              shouldRefreshMarkers = true;
               property.args?.forEach((arg, argIdx) => {
                 arg.type = updatedArgs[argIdx].type;
                 // arg.detail = updatedArgs[argIdx].detail;
@@ -405,19 +455,16 @@ const displayProbeModal = (
               })
             }
             if (parsed.locator) {
-              refreshMarkers = true;
+              shouldRefreshMarkers = true;
               locator.set(parsed.locator);
               // locator = parsed.locator;
             }
-            if (refreshMarkers || localErrors.length > 0) {
-              env.updateMarkers();
+            if (shouldRefreshMarkers || localDiagnostics.length > 0) {
+              updateMarkers();
             }
             const titleRow = createTitle();
             root.append(titleRow);
 
-            lastOutput = body;
-
-            const dolog = env === env.getGlobalModalEnv();
             const enableExpander = true;
             // const enableExpander = body.length >= 1 && (body[0].type === 'node' || (
             //   body[0].type === 'arr' && body[0].value.length >= 1 && body[0].value[0].type === 'node'
@@ -430,34 +477,24 @@ const displayProbeModal = (
               root.appendChild(message);
             }
 
-            let onCreateCounter = 0;
-            let onCreateTimeCounter = 0;
-            let partialOnCreateTimeCounter = 0;
-            if (dolog) {
-              console.log('begin encode');
-              console.time('encodeRpcBodyLines');
-            }
             const areasToKeep = new Set<string>();
-            root.appendChild(encodeRpcBodyLines(env, body, {
+            const encodedLines = encodeRpcBodyLines(env, body, {
               excludeStdIoFromPaths: true,
               nodeLocatorExpanderHandler: enableExpander ? ({
                 getReusableExpansionArea: (path) => {
                   return inlineWindowManager.getPreviousExpansionArea(path);
                 },
                 onCreate: ({ locator, locatorRoot, expansionArea, path: nestId, isFresh }) => {
-                  const createStart = Date.now();
-                  ++onCreateCounter;
                   areasToKeep.add(JSON.stringify(nestId));
                   const updLocator = inlineWindowManager.getPreviouslyAssociatedLocator(nestId) ?? createMutableLocator(locator);
                   updLocator.set(locator);
-                  const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, updLocator);
+                  const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, updLocator, queryWindow.bumpIntoScreen);
                   const nestedEnv = area.getNestedModalEnv(env);
 
                   const encodedId = JSON.stringify(nestId);
                   const nests = nestedWindows[encodedId];
                   if (nests) {
                     delete nestedWindows[encodedId];
-                    const innerCreateStart = Date.now();
                     const immutLoc = createImmutableLocator(updLocator);
                     nests.forEach(nest => {
                       switch (nest.data.type) {
@@ -473,7 +510,6 @@ const displayProbeModal = (
                         }
                       }
                     });
-                    partialOnCreateTimeCounter += Date.now() - innerCreateStart;
                   }
                   if (isFresh && property.name === metaNodesWithPropertyName) {
                     const nestedPropName = property.args?.[0]?.value as string;
@@ -481,7 +517,6 @@ const displayProbeModal = (
                       displayProbeModal(nestedEnv , null, createImmutableLocator(updLocator), { name: nestedPropName }, {});
                     }
                   }
-                  onCreateTimeCounter += Date.now() - createStart;
                 },
                 onClick: ({ locator, locatorRoot, expansionArea, path: nestId }) => {
                   const prevLocator = inlineWindowManager.getPreviouslyAssociatedLocator(nestId);
@@ -490,7 +525,7 @@ const displayProbeModal = (
                     return;
                   }
                   prevLocator.set(locator);
-                  const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, prevLocator);
+                  const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, prevLocator, queryWindow.bumpIntoScreen);
                   const nestedEnv = area.getNestedModalEnv(env);
                   displayAttributeModal(nestedEnv, null, createImmutableLocator(prevLocator));
                   env.triggerWindowSave();
@@ -499,17 +534,55 @@ const displayProbeModal = (
 
               }): undefined,
               // nodeLocatorExpanderHandler: () => {},
-            }));
-            if (dolog) {
-              console.log('mid encode');
-            }
+            });
+            if (shouldShowDiagnosticsToggler) {
+              const expl = document.createElement('div');
+              expl.style.fontStyle = 'italic';
+              expl.style.fontSize = '0.5rem';
+              expl.style.flexDirection = 'row';
+              expl.style.marginTop = '0.125rem';
+
+              const id = `showdiag-${Math.random()}`;
+              const check = createSquigglyCheckbox({
+                onInput: (checked) => {
+                  showDiagnostics = checked;
+                  reinstallDiagnosticsGetter();
+                  env.updateMarkers();
+                  env.triggerWindowSave();
+                },
+                initiallyChecked: showDiagnostics,
+                id,
+              });
+              check.classList.add('probeOutputAreaCheckboxWrapper');
+              check.style.marginLeft = '0';
+              check.style.marginRight = '0';
+              expl.appendChild(check);
+
+              const label = document.createElement('label');
+              label.style.margin = `auto 0 auto 0.125rem`;
+              label.htmlFor = id;
+              label.innerText = `Show diagnostics`;
+              expl.appendChild(label);
+
+              encodedLines.appendChild(expl);
+              const updateExplVisibility = () => {
+                if ((Array.isArray(diagnosticsGetter) ? diagnosticsGetter : diagnosticsGetter()).length > 0) {
+                  expl.style.display = 'flex';
+                } else {
+                  expl.style.display = 'none';
+                }
+              };
+              updateExplVisibility();
+              updateMarkers = () => {
+                updateExplVisibility();
+                env.updateMarkers();
+              }
+              // encodedLines.appendChild(document.createElement('br'));
+            };
+            root.appendChild(encodedLines);
             inlineWindowManager.conditiionallyDestroyAreas((areaId) => {
               return !areasToKeep.has(JSON.stringify(areaId));
             });
-            if (dolog) {
-              console.log('done encode, count:', onCreateCounter, ', createTime:', onCreateTimeCounter, 'partialOnCreate:', partialOnCreateTimeCounter);
-              console.timeEnd('encodeRpcBodyLines');
-            }
             inlineWindowManager.notifyListenersOfChange();
           }
           const spinner = createLoadingSpinner();
@@ -560,6 +633,7 @@ const displayProbeModal = (
       locator: locator.get(),
       property,
       nested: inlineWindowManager.getWindowStates(),
+      showDiagnostics: showDiagnostics && undefined, // Only include if necessary to reduce serialized form size
     };
   };
   // if (saveWindowState) {

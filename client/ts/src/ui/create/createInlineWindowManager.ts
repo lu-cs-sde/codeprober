@@ -13,7 +13,7 @@ interface InlineArea {
 interface InlineAreaWithHiddenProperties {
   area: InlineArea;
   destroyer: () => void;
-  updateRoot: (newRoot: HTMLElement) => void;
+  updateRoot: (newRoot: HTMLElement, newBumperIntoScreen: () => void) => void;
   // refresh: () => void;
 }
 
@@ -21,8 +21,10 @@ const createInlineArea = (args: {
   inlineRoot: HTMLElement;
   expansionAreaInsideTheRoot: HTMLElement;
   localWindowStateSaves: ModalEnv['probeWindowStateSavers'];
+  bumpContainingWindowIntoScreen: () => void;
+  parentArgs: CreateWindowManagerArgs;
 }): InlineAreaWithHiddenProperties => {
-  let { inlineRoot, expansionAreaInsideTheRoot } = args;
+  let { inlineRoot, expansionAreaInsideTheRoot, bumpContainingWindowIntoScreen } = args;
 
   const applyActiveRootStyling = (from: string) => {
     inlineRoot.style.border = '1px solid black';
@@ -40,6 +42,8 @@ const createInlineArea = (args: {
       showWindow: (args) => area.add(args),
       onChangeListeners: localChangeListeners,
       probeWindowStateSavers: args.localWindowStateSaves,
+      probeMarkers: args.parentArgs.probeMarkersOverride ?? parentEnv.probeMarkers,
+      updateMarkers: args.parentArgs.updateMarkersOverride ?? parentEnv.updateMarkers,
     }),
     add: (args) => {
       if (activeSubWindowCount === 0) {
@@ -91,7 +95,7 @@ const createInlineArea = (args: {
             console.log('could not find index of closer in remove')
           }
         },
-        bumpIntoScreen: () => { /* noop */ }
+        bumpIntoScreen: () => { bumpContainingWindowIntoScreen(); }
       }
     },
     notifyListenersOfChange: () => {
@@ -105,11 +109,12 @@ const createInlineArea = (args: {
         closer()
       });
     },
-    updateRoot: (newRoot) => {
+    updateRoot: (newRoot, newBumper) => {
       inlineRoot = newRoot;
       if (activeSubWindowCount > 0) {
         applyActiveRootStyling(`update:${activeSubWindowCount}`);
       }
+      bumpContainingWindowIntoScreen = newBumper;
     },
     // refresh: () => {
     //   activeWindowRefreshers.forEach(closer => closer());
@@ -120,7 +125,7 @@ const createInlineArea = (args: {
 interface InlineWindowManager {
   getPreviousExpansionArea: (areaId: number[]) => HTMLElement | null,
   getPreviouslyAssociatedLocator: (areaId: number[]) => UpdatableNodeLocator | null,
-  getArea: (id: number[], inlineRoot: HTMLElement, expansionAreaInsideTheRoot: HTMLElement, associatedLocator: UpdatableNodeLocator) => InlineArea;
+  getArea: (id: number[], inlineRoot: HTMLElement, expansionAreaInsideTheRoot: HTMLElement, associatedLocator: UpdatableNodeLocator, bumpContainingWindowIntoScreen: () => void) => InlineArea;
   getWindowStates: () => ({ [areaId: string]: WindowState[] });
   destroy: () => void,
   conditiionallyDestroyAreas: (predicate: (areaId: number[]) => boolean) => void;
@@ -128,7 +133,11 @@ interface InlineWindowManager {
 
 }
 
-const createInlineWindowManager = (): InlineWindowManager => {
+interface CreateWindowManagerArgs {
+  probeMarkersOverride?: ModalEnv['probeMarkers'];
+  updateMarkersOverride?: ModalEnv['updateMarkers'];
+};
+const createInlineWindowManager = (args: CreateWindowManagerArgs = {}): InlineWindowManager => {
   const areas: { [id: string]: {
     localWindowStateSaves: ModalEnv['probeWindowStateSavers'];
     expansionArea: HTMLElement;
@@ -142,7 +151,7 @@ const createInlineWindowManager = (): InlineWindowManager => {
   return {
     getPreviousExpansionArea: (areaId) => areas[encodeAreaId(areaId)]?.expansionArea ?? null,
     getPreviouslyAssociatedLocator: (areaId) => areas[encodeAreaId(areaId)]?.locator ?? null,
-    getArea: (areaId, inlineRoot, expansionAreaInsideTheRoot, locator) => {
+    getArea: (areaId, inlineRoot, expansionAreaInsideTheRoot, locator, bumpContainingWindowIntoScreen) => {
       const encodedId = encodeAreaId(areaId);
       if (!areas[encodedId]) {
         const localWindowStateSaves: ModalEnv['probeWindowStateSavers'] = {};
@@ -155,10 +164,12 @@ const createInlineWindowManager = (): InlineWindowManager => {
             inlineRoot,
             expansionAreaInsideTheRoot,
             localWindowStateSaves,
+            bumpContainingWindowIntoScreen,
+            parentArgs: args,
           })
         };
       } else {
-        areas[encodedId].area.updateRoot(inlineRoot);
+        areas[encodedId].area.updateRoot(inlineRoot, bumpContainingWindowIntoScreen);
       }
       return areas[encodedId].area.area;
     },
@@ -186,4 +197,5 @@ const createInlineWindowManager = (): InlineWindowManager => {
 }
 
 
+export { InlineWindowManager };
 export default createInlineWindowManager;
