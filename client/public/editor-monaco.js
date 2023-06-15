@@ -242,7 +242,7 @@ window.defineEditor(
           cv.style.pointerEvents = 'none';
           cv.style.position = 'absolute';
           cv.onmouseenter = () => {
-            console.log('enter', color);
+            // console.log('enter', color);
           }
 
           cv.style.top = `${editorRect.top + startPos.top + (startPos.height - cv.height) / 2}px`;
@@ -375,7 +375,7 @@ window.defineEditor(
           const [ls, cs] = adj(descriptor.start >>> 12, descriptor.start & 0xFFF);
           const [le, ce] = adj(descriptor.end >>> 12, descriptor.end & 0xFFF);
 
-          console.log('adjusting arrow end from ', descriptor.end >>> 12, descriptor.end & 0xFFF, ' --to-->', le, ce);
+          // console.log('adjusting arrow end from ', descriptor.end >>> 12, descriptor.end & 0xFFF, ' --to-->', le, ce);
           descriptor.start = (ls << 12) + cs;
           descriptor.end = (le << 12) + ce;
         });
@@ -442,7 +442,7 @@ window.defineEditor(
         // TODO update function so that probeModal can move around if needed
         getSpan: () => {
           const range = editor.getModel().getDecorationRange(decoIds[0]);
-          console.log('got deco range:', range);
+          // console.log('got deco range:', range);
           if (range) {
             lastKnownPos.lineStart = range.startLineNumber;
             lastKnownPos.colStart = range.startColumn;

@@ -5,7 +5,7 @@ import ModalEnv, { JobId } from '../../model/ModalEnv';
 import { createMutableLocator } from '../../model/UpdatableNodeLocator';
 import { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
 import evaluateProperty from '../../network/evaluateProperty';
-import { Diagnostic, EvaluatePropertyReq, EvaluatePropertyRes, NodeLocator, Property, RpcBodyLine, StopJobReq, StopJobRes } from '../../protocol';
+import { Diagnostic, NodeLocator, Property, RpcBodyLine, StopJobReq, StopJobRes } from '../../protocol';
 import displayProbeModal, { metaNodesWithPropertyName } from '../popup/displayProbeModal';
 import startEndToSpan from '../startEndToSpan';
 import registerOnHover from './registerOnHover';
@@ -23,7 +23,8 @@ const createMinimizedProbeModal = (
 ) => {
   const queryId = `minimized-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   const localErrors: Diagnostic[] = [];
-  env.probeMarkers[queryId] = localErrors;
+  let showDiagnostics = optionalArgs.showDiagnostics ?? true;
+  env.probeMarkers[queryId] = showDiagnostics ? localErrors : [];
   let activelyLoadingJobCleanup: (() => void) | null = null;
   let loading = false;
   let isCleanedUp = false;
@@ -130,13 +131,15 @@ const createMinimizedProbeModal = (
                 });
               });
               if (!nests[nwPathKey]?.length && relatedProp.name === metaNodesWithPropertyName) {
-                console.log('mini handle nested 2');
-                nestedRequests.push(() => handleNested({
-                  type: 'probe',
-                  locator: nestedLocator,
-                  property: { name: `${relatedProp.args?.[0]?.value}` },
-                  nested: {}
-                }));
+                const propName = `${relatedProp.args?.[0]?.value}`;
+                if (propName !== '') {
+                  nestedRequests.push(() => handleNested({
+                    type: 'probe',
+                    locator: nestedLocator,
+                    property: { name: propName },
+                    nested: {}
+                  }));
+                }
               }
             }
           );
@@ -220,6 +223,7 @@ const createMinimizedProbeModal = (
           locator,
           property,
           nested: nestedWindows,
+          showDiagnostics,
         }
       },
     });
@@ -245,7 +249,6 @@ const createMinimizedProbeModal = (
     );
     cleanup();
   }
-  let showDiagnostics = optionalArgs.showDiagnostics ?? true;
   const squigglyCheckboxWrapper = createSquigglyCheckbox({
     onInput: (checked) => {
       showDiagnostics = checked;

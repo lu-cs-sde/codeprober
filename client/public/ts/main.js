@@ -818,20 +818,98 @@ define("model/WindowState", ["require", "exports"], function (require, exports) 
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
 });
-define("settings", ["require", "exports", "model/syntaxHighlighting"], function (require, exports, syntaxHighlighting_1) {
+define("ui/UIElements", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    class UIElements {
+        // Use lazy getters since the dom elements haven't been loaded
+        // by the time this script initially runs.
+        get positionRecoverySelector() { return document.getElementById('control-position-recovery-strategy'); }
+        get positionRecoveryHelpButton() { return document.getElementById('control-position-recovery-strategy-help'); }
+        get astCacheStrategySelector() { return document.getElementById('ast-cache-strategy'); }
+        get astCacheStrategyHelpButton() { return document.getElementById('control-ast-cache-strategy-help'); }
+        get syntaxHighlightingSelector() { return document.getElementById('syntax-highlighting'); }
+        get syntaxHighlightingHelpButton() { return document.getElementById('control-syntax-highlighting-help'); }
+        get shouldOverrideMainArgsCheckbox() { return document.getElementById('control-should-override-main-args'); }
+        get configureMainArgsOverrideButton() { return document.getElementById('configure-main-args'); }
+        get mainArgsOverrideHelpButton() { return document.getElementById('main-args-override-help'); }
+        get shouldCustomizeFileSuffixCheckbox() { return document.getElementById('control-customize-file-suffix'); }
+        get configureCustomFileSuffixButton() { return document.getElementById('customize-file-suffix'); }
+        get customFileSuffixHelpButton() { return document.getElementById('customize-file-suffix-help'); }
+        get showAllPropertiesCheckbox() { return document.getElementById('control-show-all-properties'); }
+        get showAllPropertiesHelpButton() { return document.getElementById('show-all-properties-help'); }
+        get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr'); }
+        get duplicateProbeHelpButton() { return document.getElementById('duplicate-probe-on-attr-help'); }
+        get captureStdoutCheckbox() { return document.getElementById('control-capture-stdout'); }
+        get captureStdoutHelpButton() { return document.getElementById('capture-stdout-help'); }
+        get locationStyleSelector() { return document.getElementById('location-style'); }
+        get locationStyleHelpButton() { return document.getElementById('control-location-style-help'); }
+        get generalHelpButton() { return document.getElementById('display-help'); }
+        get saveAsUrlButton() { return document.getElementById('saveAsUrl'); }
+        get darkModeCheckbox() { return document.getElementById('control-dark-mode'); }
+        get displayStatisticsButton() { return document.getElementById('display-statistics'); }
+        get displayWorkerStatusButton() { return document.getElementById('display-worker-status'); }
+        get versionInfo() { return document.getElementById('version'); }
+        get settingsHider() { return document.getElementById('settings-hider'); }
+        get settingsRevealer() { return document.getElementById('settings-revealer'); }
+        get showTests() { return document.getElementById('show-tests'); }
+        get minimizedProbeArea() { return document.getElementById('minimized-probe-area'); }
+    }
+    exports.default = UIElements;
+});
+define("settings", ["require", "exports", "model/syntaxHighlighting", "ui/UIElements"], function (require, exports, syntaxHighlighting_1, UIElements_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    UIElements_1 = __importDefault(UIElements_1);
     let settingsObj = null;
+    const clearHashFromLocation = () => history.replaceState('', document.title, `${window.location.pathname}${window.location.search}`);
+    window.saveStateAsUrl = () => {
+        const encoded = encodeURIComponent(JSON.stringify(settings.get()));
+        // delete location.hash;'
+        // console.log('loc:', location.toString());
+        navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}${window.location.search}${window.location.search.length === 0 ? '?' : '&'}settings=${encoded}`);
+        const btn = new UIElements_1.default().saveAsUrlButton;
+        const saveText = btn.textContent;
+        setTimeout(() => {
+            btn.textContent = saveText;
+            btn.style.border = 'unset';
+            delete btn.style.border;
+        }, 1000);
+        btn.textContent = `Copied to clipboard`;
+        btn.style.border = '1px solid green';
+    };
     const settings = {
         get: () => {
             if (!settingsObj) {
-                try {
-                    // TODO remove 'pasta-settings' fallback after an appropriate amount of time
-                    settingsObj = JSON.parse(localStorage.getItem('codeprober-settings') || localStorage.getItem('pasta-settings') || '{}');
+                let settingsMatch;
+                if ((settingsMatch = /[?&]settings=[^?&]+/.exec(location.search)) != null) {
+                    const trimmedSearch = settingsMatch.index === 0
+                        ? (settingsMatch[0].length < location.search.length
+                            ? `?${location.search.slice(settingsMatch[0].length + 1)}`
+                            : `${location.search.slice(0, settingsMatch.index)}${location.search.slice(settingsMatch.index + settingsMatch[0].length)}`)
+                        : `${location.search.slice(0, settingsMatch.index)}${location.search.slice(settingsMatch.index + settingsMatch[0].length)}`;
+                    history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
+                    try {
+                        // windowStates = JSON.parse(decodeURIComponent(settingsMatch[0].slice('?ws='.length)));
+                        settingsObj = JSON.parse(decodeURIComponent(settingsMatch[0].slice(`?settings=`.length)));
+                        clearHashFromLocation();
+                        if (settingsObj) {
+                            settings.set(settingsObj);
+                        }
+                    }
+                    catch (e) {
+                        console.warn('Invalid windowState in hash', e);
+                    }
                 }
-                catch (e) {
-                    console.warn('Bad data in localStorage, resetting settings', e);
-                    settingsObj = {};
+                if (!settingsObj) {
+                    try {
+                        // TODO remove 'pasta-settings' fallback after an appropriate amount of time
+                        settingsObj = JSON.parse(localStorage.getItem('codeprober-settings') || localStorage.getItem('pasta-settings') || '{}');
+                    }
+                    catch (e) {
+                        console.warn('Bad data in localStorage, resetting settings', e);
+                        settingsObj = {};
+                    }
                 }
             }
             return settingsObj || {};
@@ -3523,9 +3601,11 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                     if (isFirstRender) {
                         isFirstRender = false;
                         setTimeout(() => {
-                            // filterInput.focus()
                             if (optionalArgs.initialFilter) {
                                 filterInput.select();
+                            }
+                            else {
+                                filterInput.focus();
                             }
                         }, 50);
                     }
@@ -4649,7 +4729,8 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
         var _a, _b, _c, _d, _e, _f, _g, _h;
         const queryId = `minimized-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
-        env.probeMarkers[queryId] = localErrors;
+        let showDiagnostics = (_a = optionalArgs.showDiagnostics) !== null && _a !== void 0 ? _a : true;
+        env.probeMarkers[queryId] = showDiagnostics ? localErrors : [];
         let activelyLoadingJobCleanup = null;
         let loading = false;
         let isCleanedUp = false;
@@ -4715,7 +4796,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
                 const handleLines = async (relatedProp, lines, nests) => {
                     const nestedRequests = [];
                     Object.entries((0, findLocatorWithNestingPath_2.findAllLocatorsWithinNestingPath)(lines)).forEach(([unprefixedPath, nestedLocator]) => {
-                        var _a, _b;
+                        var _a, _b, _c, _d;
                         const nwPathKey = JSON.stringify(unprefixedPath);
                         const handleNested = async (nwData) => {
                             var _a;
@@ -4746,16 +4827,15 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
                             });
                         });
                         if (!((_b = nests[nwPathKey]) === null || _b === void 0 ? void 0 : _b.length) && relatedProp.name === displayProbeModal_4.metaNodesWithPropertyName) {
-                            console.log('mini handle nested 2');
-                            nestedRequests.push(() => {
-                                var _a, _b;
-                                return handleNested({
+                            const propName = `${(_d = (_c = relatedProp.args) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.value}`;
+                            if (propName !== '') {
+                                nestedRequests.push(() => handleNested({
                                     type: 'probe',
                                     locator: nestedLocator,
-                                    property: { name: `${(_b = (_a = relatedProp.args) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.value}` },
+                                    property: { name: propName },
                                     nested: {}
-                                });
-                            });
+                                }));
+                            }
                         }
                     });
                     await Promise.all(nestedRequests.map(nr => nr()));
@@ -4797,12 +4877,12 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
         const clickableUi = document.createElement('div');
         ui.appendChild(clickableUi);
         const typeLbl = document.createElement('span');
-        typeLbl.innerText = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : locator.result.type}`.split('.').slice(-1)[0];
+        typeLbl.innerText = `${(_b = locator.result.label) !== null && _b !== void 0 ? _b : locator.result.type}`.split('.').slice(-1)[0];
         typeLbl.classList.add('syntax-type');
         clickableUi.appendChild(typeLbl);
         const attrLbl = document.createElement('span');
         const fixedPropName = property.name == displayProbeModal_4.metaNodesWithPropertyName
-            ? `*.${(_c = (_b = property.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value}`
+            ? `*.${(_d = (_c = property.args) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.value}`
             : property.name;
         if (locator.steps.length === 0 && property.name == displayProbeModal_4.metaNodesWithPropertyName) {
             // Hide title?
@@ -4814,10 +4894,10 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
         }
         attrLbl.classList.add('syntax-attr');
         clickableUi.appendChild(attrLbl);
-        if (property.name == displayProbeModal_4.metaNodesWithPropertyName && ((_e = (_d = property.args) === null || _d === void 0 ? void 0 : _d.length) !== null && _e !== void 0 ? _e : 0) >= 2) {
+        if (property.name == displayProbeModal_4.metaNodesWithPropertyName && ((_f = (_e = property.args) === null || _e === void 0 ? void 0 : _e.length) !== null && _f !== void 0 ? _f : 0) >= 2) {
             const pred = document.createElement('span');
             pred.classList.add('syntax-int');
-            pred.innerText = `[${(_g = (_f = property.args) === null || _f === void 0 ? void 0 : _f[1]) === null || _g === void 0 ? void 0 : _g.value}]`;
+            pred.innerText = `[${(_h = (_g = property.args) === null || _g === void 0 ? void 0 : _g[1]) === null || _h === void 0 ? void 0 : _h.value}]`;
             clickableUi.appendChild(pred);
         }
         env.probeWindowStateSavers[queryId] = (target) => {
@@ -4830,6 +4910,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
                         locator,
                         property,
                         nested: nestedWindows,
+                        showDiagnostics,
                     }
                 },
             });
@@ -4844,7 +4925,6 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
             (0, displayProbeModal_4.default)(env, null, (0, UpdatableNodeLocator_4.createMutableLocator)(locator), property, nestedWindows, { showDiagnostics });
             cleanup();
         };
-        let showDiagnostics = (_h = optionalArgs.showDiagnostics) !== null && _h !== void 0 ? _h : true;
         const squigglyCheckboxWrapper = createSquigglyCheckbox({
             onInput: (checked) => {
                 showDiagnostics = checked;
@@ -5160,138 +5240,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                     activelyLoadingJob = epFetch;
                     return epFetch.fetch();
                 };
-                // const doFetch = () => new Promise<SynchronousEvaluationResult | 'stopped'>(async (resolve, reject) => {
-                //   let isDone = false;
-                //   let isConnectedToConcurrentCapableServer = false;
-                //   let statusPre: HTMLElement | null = null;
-                //   let localConcurrentCleanup = () => {};
-                //   const initialPollDelayTimer = setTimeout(() => {
-                //     if (isDone || isCleanedUp || !isConnectedToConcurrentCapableServer) {
-                //       return;
-                //     }
-                //     const stop = document.createElement('button');
-                //     stop.innerText = 'Stop';
-                //     stop.onclick = () => {
-                //       doStopJob(jobId).then(stopped => {
-                //         if (stopped) {
-                //           isDone = true;
-                //           resolve('stopped');
-                //         }
-                //         // Else, job might have finished just as the user clicked stop
-                //       });
-                //     }
-                //     root.appendChild(stop);
-                //     statusPre = document.createElement('p');
-                //     statusPre.style.whiteSpace = 'pre';
-                //     statusPre.style.fontFamily = 'monospace';
-                //     root.appendChild(statusPre);
-                //     statusPre.innerText = `Request takes a while, polling status..\nIf you see message for longer than a few milliseconds then the job hasn't started running yet, or the server is severely overloaded.`;
-                //     localConcurrentCleanup = () => {
-                //       root.removeChild(stop);
-                //       if (statusPre) { root.removeChild(statusPre); }
-                //     };
-                //     const poll = () => {
-                //       if (isDone || isCleanedUp) {
-                //         return;
-                //       }
-                //       env.performTypedRpc<PollWorkerStatusReq, PollWorkerStatusRes>({
-                //         type: 'Concurrent:PollWorkerStatus',
-                //         job: jobId,
-                //       })
-                //         .then(res => {
-                //           if (res.ok) {
-                //             // Polled OK, async update will be delivered to job monitor below
-                //             // Queue future poll.
-                //             setTimeout(poll, 1000);
-                //           } else {
-                //             console.warn('Error when polling for job status');
-                //             // Don't queue more polling, very unlikely to work anyway.
-                //           }
-                //         });
-                //     };
-                //     poll();
-                //   }, 5000);
-                //   const jobId = env.createJobId(data => {
-                //     isConnectedToConcurrentCapableServer = true;
-                //     let knownStatus = 'Unknown';
-                //     let knownStackTrace: string[] | null = null;
-                //     const refreshStatusPre = () => {
-                //       if (!statusPre) { return; }
-                //       const lines = [];
-                //       lines.push(`Property evaluation is taking a while, status below:`);
-                //       lines.push(`Status: ${knownStackTrace}`);
-                //       if (knownStackTrace) {
-                //         lines.push("Stack trace:");
-                //         knownStackTrace.forEach((ste) => lines.push(`> ${ste}`));
-                //       }
-                //       statusPre.innerText = lines.join('\n');
-                //     }
-                //     switch (data.value.type) {
-                //       case 'status': {
-                //         knownStatus = data.value.value;
-                //         refreshStatusPre();
-                //         break;
-                //       }
-                //       case 'workerStackTrace': {
-                //         knownStackTrace = data.value.value;
-                //         refreshStatusPre();
-                //         break;
-                //       }
-                //       case 'workerTaskDone': {
-                //         const res = data.value.value;
-                //         isDone = true;
-                //         localConcurrentCleanup();
-                //         if (res.type === 'normal') {
-                //           const cast = res.value as EvaluatePropertyRes;
-                //           if (cast.response.type == 'job') {
-                //             throw new Error(`Unexpected 'job' result in async update`);
-                //           }
-                //           resolve(cast.response.value);
-                //         } else {
-                //           console.log('Worker task failed. This is likely an internal CodeProber issue. Error message:');
-                //           res.value.forEach(line => console.log(line));
-                //           reject('Worker failed');
-                //         }
-                //         break;
-                //       }
-                //       default: {
-                //         // Ignore
-                //       }
-                //     }
-                //   });
-                //   env.performTypedRpc<EvaluatePropertyReq, EvaluatePropertyRes>({
-                //     type: 'EvaluateProperty',
-                //     property,
-                //     locator: locator.get(),
-                //     src: env.createParsingRequestData(),
-                //     captureStdout: settings.shouldCaptureStdio(),
-                //     job: jobId,
-                //     jobLabel: `Probe: '${`${locator.get().result.label ?? locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
-                //     skipResultLocator: env !== env.getGlobalModalEnv(),
-                //   })
-                //     .then(data => {
-                //       if (data.response.type === 'job') {
-                //         // Async work queued, not done.
-                //         if (isCleanedUp) {
-                //           // We were removed while this request was sent
-                //           // Stop it asap
-                //           doStopJob(jobId);
-                //         } else {
-                //           activelyLoadingJob = jobId;
-                //         }
-                //         isConnectedToConcurrentCapableServer = true;
-                //       } else {
-                //         // Sync work executed, done.
-                //         clearTimeout(initialPollDelayTimer);
-                //         isDone = true;
-                //         resolve(data.response.value);
-                //       }
-                //     })
-                //     .catch(err => {
-                //       isDone = true;
-                //       reject(err);
-                //     });
-                // });
                 doFetch()
                     .then((parsed) => {
                     var _a, _b, _c, _d, _e, _f, _g, _h;
@@ -5414,7 +5362,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     }
                                     if (isFresh && property.name === metaNodesWithPropertyName) {
                                         const nestedPropName = (_c = (_b = property.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value;
-                                        if (!(nests === null || nests === void 0 ? void 0 : nests.some((nest) => nest.data.type === 'probe' && nest.data.property.name === nestedPropName))) {
+                                        if (nestedPropName !== '' && !(nests === null || nests === void 0 ? void 0 : nests.some((nest) => nest.data.type === 'probe' && nest.data.property.name === nestedPropName))) {
                                             displayProbeModal(nestedEnv, null, (0, UpdatableNodeLocator_5.createImmutableLocator)(updLocator), { name: nestedPropName }, {});
                                         }
                                     }
@@ -6282,45 +6230,6 @@ define("ui/configureCheckboxWithHiddenButton", ["require", "exports"], function 
     };
     exports.default = configureCheckboxWithHiddenButton;
 });
-define("ui/UIElements", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    class UIElements {
-        // Use lazy getters since the dom elements haven't been loaded
-        // by the time this script initially runs.
-        get positionRecoverySelector() { return document.getElementById('control-position-recovery-strategy'); }
-        get positionRecoveryHelpButton() { return document.getElementById('control-position-recovery-strategy-help'); }
-        get astCacheStrategySelector() { return document.getElementById('ast-cache-strategy'); }
-        get astCacheStrategyHelpButton() { return document.getElementById('control-ast-cache-strategy-help'); }
-        get syntaxHighlightingSelector() { return document.getElementById('syntax-highlighting'); }
-        get syntaxHighlightingHelpButton() { return document.getElementById('control-syntax-highlighting-help'); }
-        get shouldOverrideMainArgsCheckbox() { return document.getElementById('control-should-override-main-args'); }
-        get configureMainArgsOverrideButton() { return document.getElementById('configure-main-args'); }
-        get mainArgsOverrideHelpButton() { return document.getElementById('main-args-override-help'); }
-        get shouldCustomizeFileSuffixCheckbox() { return document.getElementById('control-customize-file-suffix'); }
-        get configureCustomFileSuffixButton() { return document.getElementById('customize-file-suffix'); }
-        get customFileSuffixHelpButton() { return document.getElementById('customize-file-suffix-help'); }
-        get showAllPropertiesCheckbox() { return document.getElementById('control-show-all-properties'); }
-        get showAllPropertiesHelpButton() { return document.getElementById('show-all-properties-help'); }
-        get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr'); }
-        get duplicateProbeHelpButton() { return document.getElementById('duplicate-probe-on-attr-help'); }
-        get captureStdoutCheckbox() { return document.getElementById('control-capture-stdout'); }
-        get captureStdoutHelpButton() { return document.getElementById('capture-stdout-help'); }
-        get locationStyleSelector() { return document.getElementById('location-style'); }
-        get locationStyleHelpButton() { return document.getElementById('control-location-style-help'); }
-        get generalHelpButton() { return document.getElementById('display-help'); }
-        get saveAsUrlButton() { return document.getElementById('saveAsUrl'); }
-        get darkModeCheckbox() { return document.getElementById('control-dark-mode'); }
-        get displayStatisticsButton() { return document.getElementById('display-statistics'); }
-        get displayWorkerStatusButton() { return document.getElementById('display-worker-status'); }
-        get versionInfo() { return document.getElementById('version'); }
-        get settingsHider() { return document.getElementById('settings-hider'); }
-        get settingsRevealer() { return document.getElementById('settings-revealer'); }
-        get showTests() { return document.getElementById('show-tests'); }
-        get minimizedProbeArea() { return document.getElementById('minimized-probe-area'); }
-    }
-    exports.default = UIElements;
-});
 define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], function (require, exports, repositoryUrl_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -6450,7 +6359,7 @@ define("model/runBgProbe", ["require", "exports", "settings"], function (require
     };
     exports.default = runInvisibleProbe;
 });
-define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_7, settings_6, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_1, displayHelp_4, displayProbeModal_5, encodeRpcBodyLines_5) {
+define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_7, settings_6, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_2, displayHelp_4, displayProbeModal_5, encodeRpcBodyLines_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     settings_6 = __importDefault(settings_6);
@@ -6459,7 +6368,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
     createModalTitle_10 = __importDefault(createModalTitle_10);
     showWindow_7 = __importDefault(showWindow_7);
     renderProbeModalTitleLeft_2 = __importDefault(renderProbeModalTitleLeft_2);
-    UIElements_1 = __importDefault(UIElements_1);
+    UIElements_2 = __importDefault(UIElements_2);
     displayHelp_4 = __importDefault(displayHelp_4);
     displayProbeModal_5 = __importDefault(displayProbeModal_5);
     encodeRpcBodyLines_5 = __importDefault(encodeRpcBodyLines_5);
@@ -7073,7 +6982,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                 };
                                 const ul = document.createElement('ul');
                                 ul.style.margin = '0 0 0.25rem';
-                                const uiElements = new UIElements_1.default();
+                                const uiElements = new UIElements_2.default();
                                 [
                                     ['Position Recovery', translateSelectorValToHumanLabel(testCase.src.posRecovery, uiElements.positionRecoverySelector)],
                                     ['Cache Strategy', translateSelectorValToHumanLabel(testCase.src.cache, uiElements.astCacheStrategySelector)],
@@ -7610,7 +7519,7 @@ define("ui/popup/displayWorkerStatus", ["require", "exports", "ui/create/createM
     };
     exports.default = displayWorkerStatus;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_2, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_3, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_8, hacks_3, createMinimizedProbeModal_2) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_3, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_3, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_8, hacks_3, createMinimizedProbeModal_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -7624,7 +7533,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     displayMainArgsOverrideModal_1 = __importDefault(displayMainArgsOverrideModal_1);
     createWebsocketHandler_1 = __importStar(createWebsocketHandler_1);
     configureCheckboxWithHiddenButton_1 = __importDefault(configureCheckboxWithHiddenButton_1);
-    UIElements_2 = __importDefault(UIElements_2);
+    UIElements_3 = __importDefault(UIElements_3);
     showVersionInfo_1 = __importDefault(showVersionInfo_1);
     runBgProbe_1 = __importDefault(runBgProbe_1);
     cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
@@ -7633,27 +7542,10 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     displayWorkerStatus_1 = __importDefault(displayWorkerStatus_1);
     showWindow_11 = __importDefault(showWindow_11);
     createMinimizedProbeModal_2 = __importDefault(createMinimizedProbeModal_2);
-    const uiElements = new UIElements_2.default();
+    const uiElements = new UIElements_3.default();
     window.clearUserSettings = () => {
         settings_7.default.set({});
         location.reload();
-    };
-    const clearHashFromLocation = () => history.replaceState('', document.title, `${window.location.pathname}${window.location.search}`);
-    window.saveStateAsUrl = () => {
-        const encoded = encodeURIComponent(JSON.stringify(settings_7.default.getProbeWindowStates()));
-        clearHashFromLocation();
-        // delete location.hash;'
-        // console.log('loc:', location.toString());
-        navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}${window.location.search}${window.location.search.length === 0 ? '?' : '&'}ws=${encoded}`);
-        const btn = uiElements.saveAsUrlButton;
-        const saveText = btn.textContent;
-        setTimeout(() => {
-            btn.textContent = saveText;
-            btn.style.border = 'unset';
-            delete btn.style.border;
-        }, 1000);
-        btn.textContent = `Copied to clipboard`;
-        btn.style.border = '1px solid green';
     };
     const doMain = (wsPort) => {
         if (settings_7.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
@@ -8008,22 +7900,24 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 setTimeout(() => {
                     try {
                         let windowStates = settings_7.default.getProbeWindowStates();
-                        let wsMatch;
-                        if ((wsMatch = /[?&]?ws=[^?&]+/.exec(location.search)) != null) {
-                            const trimmedSearch = wsMatch.index === 0
-                                ? (wsMatch[0].length < location.search.length
-                                    ? `?${location.search.slice(wsMatch[0].length + 1)}`
-                                    : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`)
-                                : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`;
-                            history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
-                            try {
-                                windowStates = JSON.parse(decodeURIComponent(wsMatch[0].slice('?ws='.length)));
-                                clearHashFromLocation();
-                            }
-                            catch (e) {
-                                console.warn('Invalid windowState in hash', e);
-                            }
-                        }
+                        // let wsMatch: RegExpExecArray | null;
+                        // if ((wsMatch = /[?&]?ws=[^?&]+/.exec(location.search)) != null) {
+                        //   const trimmedSearch = wsMatch.index === 0
+                        //   ? (
+                        //     wsMatch[0].length < location.search.length
+                        //       ? `?${location.search.slice(wsMatch[0].length + 1)}`
+                        //       : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`
+                        //   )
+                        //   : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`
+                        //   ;
+                        //   history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
+                        //   try {
+                        //     windowStates = JSON.parse(decodeURIComponent(wsMatch[0].slice('?ws='.length)));
+                        //     clearHashFromLocation();
+                        //   } catch (e) {
+                        //     console.warn('Invalid windowState in hash', e);
+                        //   }
+                        // }
                         windowStates.forEach((state) => {
                             switch (state.data.type) {
                                 case 'probe': {

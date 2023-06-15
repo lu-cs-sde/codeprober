@@ -85,7 +85,7 @@ public class NodesWithProperty {
 			}
 		}
 		if (show) {
-			if (astNode.hasProperty(info, propName)) {
+			if (propName.equals("") || astNode.hasProperty(info, propName)) {
 				--remainingNodeBudget;
 				if (remainingNodeBudget >= 0) {
 					out.add(astNode);

@@ -150,9 +150,10 @@ const displayAttributeModal = (
         if (isFirstRender) {
           isFirstRender = false;
           setTimeout(() => {
-            // filterInput.focus()
             if (optionalArgs.initialFilter) {
               filterInput.select();
+            } else {
+              filterInput.focus()
             }
           }, 50);
         }

@@ -1,6 +1,7 @@
 import { getAppropriateFileSuffix } from "./model/syntaxHighlighting";
 import WindowState from './model/WindowState';
 import { TextSpanStyle } from "./ui/create/createTextSpanIndicator";
+import UIElements from './ui/UIElements';
 
 
 interface Settings {
@@ -21,15 +22,62 @@ interface Settings {
 
 let settingsObj: Settings | null = null;
 
+
+
+const clearHashFromLocation = () => history.replaceState('', document.title, `${window.location.pathname}${window.location.search}`);
+
+window.saveStateAsUrl = () => {
+  const encoded = encodeURIComponent(JSON.stringify(settings.get()));
+  // delete location.hash;'
+  // console.log('loc:', location.toString());
+  navigator.clipboard.writeText(
+    `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.search.length === 0 ? '?' : '&'}settings=${encoded}`
+  );
+  const btn = new UIElements().saveAsUrlButton;
+  const saveText = btn.textContent;
+  setTimeout(() => {
+    btn.textContent = saveText;
+    btn.style.border = 'unset';
+    delete (btn.style as any).border;
+  }, 1000);
+  btn.textContent = `Copied to clipboard`;
+  btn.style.border = '1px solid green'
+}
+
 const settings = {
   get: (): Settings => {
     if (!settingsObj) {
-      try {
-        // TODO remove 'pasta-settings' fallback after an appropriate amount of time
-        settingsObj = JSON.parse(localStorage.getItem('codeprober-settings') || localStorage.getItem('pasta-settings') || '{}');
-      } catch (e) {
-        console.warn('Bad data in localStorage, resetting settings', e);
-        settingsObj = {};
+      let settingsMatch: RegExpExecArray | null;
+      if ((settingsMatch = /[?&]settings=[^?&]+/.exec(location.search)) != null) {
+        const trimmedSearch = settingsMatch.index === 0
+          ? (
+            settingsMatch[0].length < location.search.length
+              ? `?${location.search.slice(settingsMatch[0].length + 1)}`
+              : `${location.search.slice(0, settingsMatch.index)}${location.search.slice(settingsMatch.index + settingsMatch[0].length)}`
+          )
+          : `${location.search.slice(0, settingsMatch.index)}${location.search.slice(settingsMatch.index + settingsMatch[0].length)}`
+        ;
+
+        history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
+        try {
+          // windowStates = JSON.parse(decodeURIComponent(settingsMatch[0].slice('?ws='.length)));
+          settingsObj = JSON.parse(decodeURIComponent(settingsMatch[0].slice(`?settings=`.length)))
+          clearHashFromLocation();
+          if (settingsObj) {
+            settings.set(settingsObj);
+          }
+        } catch (e) {
+          console.warn('Invalid windowState in hash', e);
+        }
+      }
+      if (!settingsObj) {
+        try {
+          // TODO remove 'pasta-settings' fallback after an appropriate amount of time
+          settingsObj = JSON.parse(localStorage.getItem('codeprober-settings') || localStorage.getItem('pasta-settings') || '{}');
+        } catch (e) {
+          console.warn('Bad data in localStorage, resetting settings', e);
+          settingsObj = {};
+        }
       }
     }
     return settingsObj || {};

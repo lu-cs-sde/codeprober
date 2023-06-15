@@ -33,26 +33,6 @@ window.clearUserSettings = () => {
   settings.set({});
   location.reload();
 }
-const clearHashFromLocation = () => history.replaceState('', document.title, `${window.location.pathname}${window.location.search}`);
-
-window.saveStateAsUrl = () => {
-  const encoded = encodeURIComponent(JSON.stringify(settings.getProbeWindowStates()));
-  clearHashFromLocation();
-  // delete location.hash;'
-  // console.log('loc:', location.toString());
-  navigator.clipboard.writeText(
-    `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.search.length === 0 ? '?' : '&'}ws=${encoded}`
-  );
-  const btn = uiElements.saveAsUrlButton;
-  const saveText = btn.textContent;
-  setTimeout(() => {
-    btn.textContent = saveText;
-    btn.style.border = 'unset';
-    delete (btn.style as any).border;
-  }, 1000);
-  btn.textContent = `Copied to clipboard`;
-  btn.style.border = '1px solid green'
-}
 
 
 const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', 'from': number, to: number }) => {
@@ -464,25 +444,25 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
       setTimeout(() => {
         try {
           let windowStates: WindowState[] = settings.getProbeWindowStates();
-          let wsMatch: RegExpExecArray | null;
-          if ((wsMatch = /[?&]?ws=[^?&]+/.exec(location.search)) != null) {
-            const trimmedSearch = wsMatch.index === 0
-            ? (
-              wsMatch[0].length < location.search.length
-                ? `?${location.search.slice(wsMatch[0].length + 1)}`
-                : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`
-            )
-            : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`
-            ;
+          // let wsMatch: RegExpExecArray | null;
+          // if ((wsMatch = /[?&]?ws=[^?&]+/.exec(location.search)) != null) {
+          //   const trimmedSearch = wsMatch.index === 0
+          //   ? (
+          //     wsMatch[0].length < location.search.length
+          //       ? `?${location.search.slice(wsMatch[0].length + 1)}`
+          //       : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`
+          //   )
+          //   : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`
+          //   ;
 
-            history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
-            try {
-              windowStates = JSON.parse(decodeURIComponent(wsMatch[0].slice('?ws='.length)));
-              clearHashFromLocation();
-            } catch (e) {
-              console.warn('Invalid windowState in hash', e);
-            }
-          }
+          //   history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
+          //   try {
+          //     windowStates = JSON.parse(decodeURIComponent(wsMatch[0].slice('?ws='.length)));
+          //     clearHashFromLocation();
+          //   } catch (e) {
+          //     console.warn('Invalid windowState in hash', e);
+          //   }
+          // }
           windowStates.forEach((state) => {
             switch (state.data.type) {
               case 'probe': {
