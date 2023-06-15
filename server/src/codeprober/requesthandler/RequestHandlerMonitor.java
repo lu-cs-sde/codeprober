@@ -35,7 +35,7 @@ public class RequestHandlerMonitor {
 			processThread.start();
 		}
 
-		while (pendingRequest != null) {
+		while (pendingRequest != null || pendingResponse != null) {
 			try {
 				wait();
 			} catch (InterruptedException e) {
