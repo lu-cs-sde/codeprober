@@ -204,6 +204,7 @@ interface InitInfo {
   };
   changeBufferTime?: number;
   workerProcessCount?: number;
+  disableVersionCheckerByDefault?: boolean;
 }
 type TestSuiteListOrError = (
     { type: 'err'; value: ('NO_TEST_DIR_SET'| 'ERROR_WHEN_LISTING_TEST_DIR'); }

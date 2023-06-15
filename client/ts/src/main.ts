@@ -117,7 +117,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
 
     const rootElem = document.getElementById('root') as HTMLElement;
     const initHandler = (info: InitInfo) => {
-      const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount } = info;
+      const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault } = info;
       console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
       rootElem.style.display = "grid";
 
@@ -367,7 +367,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         );
       };
 
-       showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, modalEnv.performTypedRpc);
+       showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, disableVersionCheckerByDefault, modalEnv.performTypedRpc);
 
       window.HandleLspLikeInteraction = async (type, pos) => {
         switch (type) {

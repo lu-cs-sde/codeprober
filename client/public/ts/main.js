@@ -6233,7 +6233,7 @@ define("ui/configureCheckboxWithHiddenButton", ["require", "exports"], function 
 define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], function (require, exports, repositoryUrl_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    const showVersionInfo = (elem, ourHash, ourClean, ourBuildTime, sendRequest) => {
+    const showVersionInfo = (elem, ourHash, ourClean, ourBuildTime, disableVersionCheckerByDefault, sendRequest) => {
         const innerPrefix = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
         if (ourBuildTime !== undefined) {
             const d = new Date(ourBuildTime * 1000);
@@ -6242,7 +6242,13 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
         else {
             elem.innerText = innerPrefix;
         }
-        if ('false' === localStorage.getItem('enable-version-checker')) {
+        const enablePref = localStorage.getItem('enable-version-checker');
+        if (disableVersionCheckerByDefault && enablePref == null) {
+            // Used by the CodeProber playground. It isn't kept dilligently up to date, and it is
+            // hard(er) to update for end users. Avoid annoying them with version promps by default.
+            return;
+        }
+        if ('false' === enablePref) {
             // In case somebody wants to stay on an old version for a long time,
             // then the "new version available" popup can become annoying.
             // This flag allows you to disable version checking.
@@ -7618,7 +7624,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             });
             const rootElem = document.getElementById('root');
             const initHandler = (info) => {
-                const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount } = info;
+                const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault } = info;
                 console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
                 rootElem.style.display = "grid";
                 const onChange = (newValue, adjusters) => {
@@ -7836,7 +7842,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     uiElements.showTests.disabled = true;
                     (0, displayTestSuiteListModal_1.default)(modalEnv, () => { uiElements.showTests.disabled = false; }, workerProcessCount);
                 };
-                (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, buildTimeSeconds, modalEnv.performTypedRpc);
+                (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, buildTimeSeconds, disableVersionCheckerByDefault, modalEnv.performTypedRpc);
                 window.HandleLspLikeInteraction = async (type, pos) => {
                     switch (type) {
                         case 'hover': {

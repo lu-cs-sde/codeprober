@@ -13,5 +13,5 @@ public class InitInfo extends Streamable{
 
 	public final Object changeBufferTime = opt(Integer.class);
 	public final Object workerProcessCount = opt(Integer.class);
-
+	public final Object disableVersionCheckerByDefault = opt(Boolean.class);
 }

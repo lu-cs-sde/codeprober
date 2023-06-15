@@ -2,7 +2,7 @@ import ModalEnv from '../model/ModalEnv';
 import { repositoryUrl, rawUrl } from "../model/repositoryUrl";
 import { FetchReq, FetchRes } from '../protocol';
 
-const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolean, ourBuildTime: number | undefined, sendRequest: ModalEnv['performTypedRpc']) => {
+const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolean, ourBuildTime: number | undefined, disableVersionCheckerByDefault: boolean | undefined, sendRequest: ModalEnv['performTypedRpc']) => {
 
   const innerPrefix = `Version: ${ourHash}${ourClean ? '' : ' [DEV]'}`;
   if (ourBuildTime !== undefined) {
@@ -11,7 +11,14 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
   } else {
     elem.innerText = innerPrefix;
   }
-  if ('false' === localStorage.getItem('enable-version-checker')) {
+
+  const enablePref = localStorage.getItem('enable-version-checker');
+  if (disableVersionCheckerByDefault && enablePref == null) {
+    // Used by the CodeProber playground. It isn't kept dilligently up to date, and it is
+    // hard(er) to update for end users. Avoid annoying them with version promps by default.
+    return;
+  }
+  if ('false' === enablePref) {
     // In case somebody wants to stay on an old version for a long time,
     // then the "new version available" popup can become annoying.
     // This flag allows you to disable version checking.

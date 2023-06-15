@@ -117,32 +117,17 @@ public class WebSocketServer {
 	}
 
 	static InitInfo getInitMsg(ParsedArgs args) {
-//		final JSONObject initMsg = new JSONObject();
-//		initMsg.put("type", "init");
-//
-//		final JSONObject versionMsg = new JSONObject();
 		final VersionInfo vinfo = VersionInfo.getInstance();
-//		versionMsg.put("hash", vinfo.revision);
-//		versionMsg.put("clean", vinfo.clean);
 		final Integer buildTimeSeconds = vinfo.buildTimeSeconds;
-//		if (buildTimeSeconds != null) {
-//			versionMsg.put("buildTimeSeconds", buildTimeSeconds.intValue());
-//		}
-//		initMsg.put("version", versionMsg);
-//
-		int bufferTime = CodespacesCompat.getChangeBufferTime();
-//		if (bufferTime > 0) {
-//			initMsg.put("changeBufferTime", bufferTime);
-//		}
-//
-//		if (args.workerProcessCount != null) {
-//			initMsg.put("workerProcessCount", args.workerProcessCount.intValue());
-//		}
+		final int bufferTime = CodespacesCompat.getChangeBufferTime();
+		final boolean disableVersionCheckerByDefault = "true".equals(System.getenv("DISABLE_VERISON_CHECKER_BY_DEFAULT"));
 
 		return new InitInfo( //
 				new protocolgen_spec_InitInfo_1(vinfo.revision, vinfo.clean, buildTimeSeconds), //
 				bufferTime > 0 ? bufferTime : null, //
-				args.workerProcessCount);
+				args.workerProcessCount, //
+				disableVersionCheckerByDefault ? true : null //
+		);
 	}
 
 	private static void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
