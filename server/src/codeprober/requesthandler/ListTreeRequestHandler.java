@@ -18,7 +18,9 @@ public class ListTreeRequestHandler {
 			return new ListTreeRes(parsed.captures, null, null);
 		}
 		final ResolvedNode match = ApplyLocator.toNode(parsed.info, req.locator);
-		// objs instead
+		if (match == null) {
+			return new ListTreeRes(parsed.captures, null, null);
+		}
 		CreateLocator.setMergeMethod(LocatorMergeMethod.SKIP);
 		try {
 			final ListedTreeNode listing;

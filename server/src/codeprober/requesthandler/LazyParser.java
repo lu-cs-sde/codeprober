@@ -20,6 +20,11 @@ public interface LazyParser {
 		public final AstInfo info;
 		public final long parseTimeNanos;
 		public final List<RpcBodyLine> captures;
+
+		public ParsedAst(AstInfo info) {
+			this(info, 0L, null);
+		}
+
 		public ParsedAst(AstInfo info, long parseTimeNanos, List<RpcBodyLine> captures) {
 			this.info = info;
 			this.parseTimeNanos = parseTimeNanos;

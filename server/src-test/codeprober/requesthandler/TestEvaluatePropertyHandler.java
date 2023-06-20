@@ -23,7 +23,7 @@ import codeprober.protocol.data.RpcBodyLine;
 
 public class TestEvaluatePropertyHandler {
 
-	private LazyParser createHardcodedParser(AstInfo result) {
+	protected static LazyParser createHardcodedParser(AstInfo result) {
 		final LazyParser.ParsedAst wrapped = new LazyParser.ParsedAst(result, 0L, Collections.emptyList());
 		return new LazyParser() {
 
