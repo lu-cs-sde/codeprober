@@ -1,6 +1,6 @@
 import createLoadingSpinner from "../create/createLoadingSpinner";
 import createModalTitle from "../create/createModalTitle";
-import displayProbeModal, { metaNodesWithPropertyName } from "./displayProbeModal";
+import displayProbeModal, { searchProbePropertyName } from "./displayProbeModal";
 import displayArgModal from "./displayArgModal";
 import formatAttr from "./formatAttr";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
@@ -255,23 +255,24 @@ const displayAttributeModal = (
             const sep = document.createElement('div');
             sep.classList.add('search-list-separator')
             sortedAttrs.appendChild(sep);
-          } else if (!matches.length && filter.startsWith('*.') && filter.length >= 3) {
-            addSubmitExplanation('Press enter to create meta probe');
+          } else if (!matches.length && (filter.startsWith('*.') || filter.startsWith('?')) && filter.length >= 3) {
+            addSubmitExplanation('Press enter to create search probe');
             submit = () => {
-              let propAndPredicate = filter.slice('*.'.length);
               const args: Property['args'] = [];
-              const predicateStart = propAndPredicate.indexOf('[');
-              if (predicateStart === -1) {
-                args.push({ type: 'string', value: propAndPredicate });
+              if (filter.startsWith('?')) {
+                args.push({ type: 'string', value: '' });
+                args.push({ type: 'string', value: filter.slice(1) });
               } else {
-                args.push({ type: 'string', value: propAndPredicate.slice(0, predicateStart) });
-                if (propAndPredicate.endsWith(']')) {
-                  args.push({ type: 'string', value: propAndPredicate.slice(predicateStart + 1, propAndPredicate.length - 1) });
+                let propAndPredicate = filter.slice('*.'.length);
+                const predicateStart = propAndPredicate.indexOf('?');
+                if (predicateStart === -1) {
+                  args.push({ type: 'string', value: propAndPredicate });
                 } else {
-                  console.warn('Bad predicate formatting, expected "propertyName[predicateName]"')
+                  args.push({ type: 'string', value: propAndPredicate.slice(0, predicateStart) });
+                  args.push({ type: 'string', value: propAndPredicate.slice(predicateStart + 1) });
                 }
               }
-              const prop: Property = { name: metaNodesWithPropertyName, args };
+              const prop: Property = { name: searchProbePropertyName, args };
               cleanup();
               displayProbeModal(env, popup.getPos(), locator, prop, {});
             };

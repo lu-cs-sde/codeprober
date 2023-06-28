@@ -1,8 +1,6 @@
 import createLoadingSpinner from "../create/createLoadingSpinner";
 import createModalTitle from "../create/createModalTitle";
-import showWindow from "../create/showWindow";
 import displayHelp from "./displayHelp";
-import adjustLocator from "../../model/adjustLocator";
 import encodeRpcBodyLines from "./encodeRpcBodyLines";
 import attachDragToX from "../create/attachDragToX";
 import displayAttributeModal from "./displayAttributeModal";
@@ -19,8 +17,13 @@ interface Node extends Omit<ListedTreeNode, 'children'> {
   boundingBox?: Point;
   children: (Node[]) | { type: 'placeholder', num: number };
 }
+interface ExtraArgs {
+  initialTransform?: { [id: string]: number };
+  hideTitleBar?: boolean;
+}
+
 type AstListDirection = 'downwards' | 'upwards';
-const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: UpdatableNodeLocator, listDirection: AstListDirection, initialTransform?: { [id: string]: number }) => {
+const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: UpdatableNodeLocator, listDirection: AstListDirection, extraArgs: ExtraArgs = {}) => {
   const queryId = `ast-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   let state: { type: 'ok', data: Node } | { type: 'err', body: RpcBodyLine[] } | null = null;
   let lightTheme = env.themeIsLight();
@@ -42,6 +45,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
   const saveAfterTransformChange = () => {
     bufferingSaver.submit(() => { env.triggerWindowSave() });
   };
+  const initialTransform = extraArgs.initialTransform;
   const trn = {
     x: initialTransform?.x ?? 1920/2,
     y: initialTransform?.y ?? 0,
@@ -80,40 +84,45 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
       while (root.firstChild) root.firstChild.remove();
       // root.innerText = 'Loading..';
 
-      root.appendChild(createModalTitle({
-        renderLeft: (container) => {
-          const headType = document.createElement('span');
-          headType.innerText = `AST`;
+      if (!extraArgs.hideTitleBar) {
+        root.appendChild(createModalTitle({
+          renderLeft: (container) => {
+            const headType = document.createElement('span');
+            headType.innerText = `AST`;
 
-          container.appendChild(headType);
-          const spanIndicator = createTextSpanIndicator({
-            span: startEndToSpan(locator.get().result.start, locator.get().result.end),
-            marginLeft: true,
-            onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.get().result.start, locator.get().result.end) : null),
-            onClick: stickyController.onClick,
-          });
-          stickyController.configure(spanIndicator, locator);
-          container.appendChild(spanIndicator);
-        },
-        onClose: () => {
-          cleanup();
-        },
-        extraActions: [
-          ...(env.getGlobalModalEnv() === env ? [] :[{
-            title: 'Detatch window',
-            invoke: () => {
-              cleanup();
-              displayAstModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), listDirection, trn);
-            }
-          }]),
-          {
-            title: 'Help',
-            invoke: () => {
-              displayHelp('ast', () => {});
-            }
+            container.appendChild(headType);
+            const spanIndicator = createTextSpanIndicator({
+              span: startEndToSpan(locator.get().result.start, locator.get().result.end),
+              marginLeft: true,
+              onHover: on => env.updateSpanHighlight(on ? startEndToSpan(locator.get().result.start, locator.get().result.end) : null),
+              onClick: stickyController.onClick,
+            });
+            stickyController.configure(spanIndicator, locator);
+            container.appendChild(spanIndicator);
           },
-        ],
-      }).element);
+          onClose: () => {
+            cleanup();
+          },
+          extraActions: [
+            ...(env.getGlobalModalEnv() === env ? [] :[{
+              title: 'Detatch window',
+              invoke: () => {
+                cleanup();
+                displayAstModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), listDirection, {
+                  initialTransform,
+                  hideTitleBar: extraArgs.hideTitleBar,
+                });
+              }
+            }]),
+            {
+              title: 'Help',
+              invoke: () => {
+                displayHelp('ast', () => {});
+              }
+            },
+          ],
+        }).element);
+      }
 
       const addSpinner = () => {
         const spinner = createLoadingSpinner();

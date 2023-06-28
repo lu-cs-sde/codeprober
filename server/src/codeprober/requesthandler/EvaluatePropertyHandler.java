@@ -219,7 +219,6 @@ public class EvaluatePropertyHandler {
 								predicate = req.property.args.get(1).asString();
 							}
 
-							System.out.println("meta probe time");
 							value = NodesWithProperty.get(parsed.info, match.node, propName, predicate, limit);
 							break;
 						}

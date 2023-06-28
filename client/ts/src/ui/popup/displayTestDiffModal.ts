@@ -12,7 +12,7 @@ import showWindow from '../create/showWindow';
 import renderProbeModalTitleLeft from '../renderProbeModalTitleLeft';
 import UIElements from '../UIElements';
 import displayHelp from './displayHelp';
-import displayProbeModal, { metaNodesWithPropertyName } from './displayProbeModal';
+import displayProbeModal, { searchProbePropertyName } from './displayProbeModal';
 import encodeRpcBodyLines from './encodeRpcBodyLines';
 
 const preventDragOnClick = (elem: HTMLElement) => {
@@ -156,11 +156,9 @@ const displayTestDiffModal = (
           if (cancelToken.cancelled) { return; }
           while (root.firstChild) root.removeChild(root.firstChild);
 
-          const titleRow = createTitle();
-          root.append(titleRow.element);
-
 
           if (evaluationResult === 'failed-fetching') {
+            root.append(createTitle().element);
             root.appendChild(document.createTextNode(`Failed running test, please check the server log for more information`));
             lastLoadedTestCase = null;
             return;
@@ -169,6 +167,9 @@ const displayTestDiffModal = (
           const testStatus = evaluationResult.status;
           const testCase = evaluationResult.test;
           lastLoadedTestCase = testCase;
+
+          root.append(createTitle().element);
+
 
           let contentUpdater = (tab: TabType) => {};
 
@@ -404,7 +405,7 @@ const displayTestDiffModal = (
                       getReusableExpansionArea: () => null,
                       onCreate: ({ path, locatorRoot, expansionArea, locator, isFresh }) => {
                         // if (isFresh) {
-                        //   if (testCase.property.name === metaNodesWithPropertyName) {
+                        //   if (testCase.property.name === searchProbePropertyName) {
                             // TODO force expand meta/query properties here?
                         //   }
                         // }

@@ -13,12 +13,6 @@ interface Span {
   colEnd: number;
 }
 
-type EditorPreloader = () => {
-  script: string[];
-  style: string[];
-  predicate: () => boolean;
-};
-
 type TextMarker = {
   clear?: () => void;
 }
@@ -27,16 +21,6 @@ type TextMarkFn = (mark: Span & { severity: MarkerSeverity; message: string, sou
 type LocationAdjuster = (line: number, col: number) => [number, number];
 
 type SyntaxHighlightingLanguageId = 'plaintext' | 'abap' | 'apex' | 'azcli' | 'bat' | 'bicep' | 'cameligo' | 'clojure' | 'coffeescript' | 'c' | 'cpp' | 'csharp' | 'csp' | 'css' | 'dart' | 'dockerfile' | 'ecl' | 'elixir' | 'flow9' | 'fsharp' | 'go' | 'graphql' | 'handlebars' | 'hcl' | 'html' | 'ini' | 'java' | 'javascript' | 'julia' | 'kotlin' | 'less' | 'lexon' | 'lua' | 'liquid' | 'm3' | 'markdown' | 'mips' | 'msdax' | 'mysql' | 'objective-c' | 'pascal' | 'pascaligo' | 'perl' | 'pgsql' | 'php' | 'postiats' | 'powerquery' | 'powershell' | 'proto' | 'pug' | 'python' | 'qsharp' | 'r' | 'razor' | 'redis' | 'redshift' | 'restructuredtext' | 'ruby' | 'rust' | 'sb' | 'scala' | 'scheme' | 'scss' | 'shell' | 'sol' | 'aes' | 'sparql' | 'sql' | 'st' | 'swift' | 'systemverilog' | 'verilog' | 'tcl' | 'twig' | 'typescript' | 'vb' | 'xml' | 'yaml' | 'json';
-
-type EditorInitializer = (initialValue: string, onChange: (newValue: string, adjusters?: LocationAdjuster[] ) => void, initialSyntaxHIghlight: SyntaxHighlightingLanguageId) => {
-  setLocalState?: (newValue: string) => void;
-  getLocalState?: () => string;
-  updateSpanHighlight?: (baseHighlight: Span | null, stickyHighlights: StickyHighlight[]) => void;
-  registerStickyMarker?: (initialSpan: Span) => StickyMarker;
-  markText?: TextMarkFn;
-  themeToggler: (isLightTheme: boolean) => void;
-  syntaxHighlightingToggler: (langId: SyntaxHighlightingLanguageId) => void;
-};
 
 interface StickyMarker {
   getSpan: () => Span;
@@ -71,13 +55,6 @@ interface ModalPosition { x: number, y: number };
 
 interface Window {
   RagQuery: (line: number, col: number, autoSelectRoot?: boolean) => void;
-  definedEditors: {
-    [editorId: string]: {
-      preload: EditorPreloader;
-      init: EditorInitializer;
-    };
-  };
-  loadPreload: (preloader: EditorPreloader, onDone: () => void) => void;
   displayHelp: (type: HelpType | 'probe-statistics' | 'worker-status') => void;
   initCodeProber: () => void;
   MiniEditorMain: () => void;

@@ -16,7 +16,6 @@ import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.data.ListedTreeChildNode;
 import codeprober.protocol.data.ListedTreeNode;
 import codeprober.protocol.data.NodeLocator;
-import codeprober.protocol.data.NodeLocatorStep;
 
 public class DataDrivenListTree {
 
@@ -29,6 +28,15 @@ public class DataDrivenListTree {
 //		ent.put("type", "node");
 //		ent.put("locator", CreateLocator.fromNode(info, node));
 		final NodeLocator locator = CreateLocator.fromNode(info, node);
+
+		final String astLabel = node.getAstLabel();
+		if (astLabel != null) {
+			if (name != null) {
+				name = String.format("%s - \"%s\"", name, astLabel);
+			} else {
+				name = String.format("\"%s\"", astLabel);
+			}
+		}
 
 //		UnionOfChildTreeNodesPlaceholderNode chilr
 		final List<ListedTreeNode> extraChildren = nodesToForceExploreAndAddExtraChildren.get(node.underlyingAstNode);
@@ -43,7 +51,7 @@ public class DataDrivenListTree {
 					if (m.getParameterCount() != 0) {
 						continue;
 					}
-					String astName = MethodKindDetector.getAstChildName(m);
+					final String astName = MethodKindDetector.getAstChildName(m);
 					if (astName != null) {
 						try {
 							underlyingAstNodeToName.put(Reflect.invoke0(node.underlyingAstNode, m.getName()), astName);
@@ -91,8 +99,8 @@ public class DataDrivenListTree {
 			final StepWithTarget swt = edges.mergedEdges.get(i);
 			if (swt.step.isNta()) {
 				// Normal downwards listing would not follow this edge. We must do it ourselves
-				ListedTreeNode obj = listDownwardsWithInjects(info, swt.target,
-						swt.step.asNta().property.name, budget + 1, forceExploreAndInjects);
+				ListedTreeNode obj = listDownwardsWithInjects(info, swt.target, swt.step.asNta().property.name,
+						budget + 1, forceExploreAndInjects);
 //				obj.put("type", "fn");
 //				obj.put("name", edge.toJson().getJSONObject("value").getString("name"));
 				final ArrayList<ListedTreeNode> extraChildren = new ArrayList<>();

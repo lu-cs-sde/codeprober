@@ -19,7 +19,7 @@ import SourcedDiagnostic from '../../model/SourcedDiagnostic';
 import { createDiagnosticSource } from '../create/createMinimizedProbeModal';
 import evaluateProperty, { OngoingPropertyEvaluation } from '../../network/evaluateProperty';
 
-const metaNodesWithPropertyName = `m:NodesWithProperty`;
+const searchProbePropertyName = `m:NodesWithProperty`;
 
 interface OptionalArgs {
   showDiagnostics?: boolean;
@@ -170,14 +170,14 @@ const displayProbeModal = (
             navigator.clipboard.writeText(copyBody.map(line => typeof line === 'string' ? line : JSON.stringify(line, null, 2)).join('\n'));
           }
         },
-        ...((property.args?.length ?? 0) === 0 ? [
-          {
-            title: 'Create metaProbe',
-            invoke: () => {
-              displayProbeModal(env, null, locator, { name: metaNodesWithPropertyName, args: [{ type: 'string', value: property.name }] }, {});
-            }
-          },
-        ] : []),
+        // ...((property.args?.length ?? 0) === 0 ? [
+        //   {
+        //     title: 'Create search probe',
+        //     invoke: () => {
+        //       displayProbeModal(env, null, locator, { name: searchProbePropertyName, args: [{ type: 'string', value: property.name }] }, {});
+        //     }
+        //   },
+        // ] : []),
         {
           title: 'General probe help',
           invoke: () => {
@@ -386,7 +386,7 @@ const displayProbeModal = (
             // const enableExpander = body.length >= 1 && (body[0].type === 'node' || (
             //   body[0].type === 'arr' && body[0].value.length >= 1 && body[0].value[0].type === 'node'
             // ));
-            if (property.name === metaNodesWithPropertyName && body.length === 1 && body[0].type === 'arr' && body[0].value.length === 0) {
+            if (property.name === searchProbePropertyName && body.length === 1 && body[0].type === 'arr' && body[0].value.length === 0) {
               const message = document.createElement('div');
               message.style.padding = '0.25rem';
               let tail = '';
@@ -432,7 +432,7 @@ const displayProbeModal = (
                       }
                     });
                   }
-                  if (isFresh && property.name === metaNodesWithPropertyName) {
+                  if (isFresh && property.name === searchProbePropertyName) {
                     const nestedPropName = property.args?.[0]?.value as string;
                     if (nestedPropName !== '' && !nests?.some((nest) => nest.data.type === 'probe' && nest.data.property.name === nestedPropName)) {
                       displayProbeModal(nestedEnv , null, createImmutableLocator(updLocator), { name: nestedPropName }, {});
@@ -568,5 +568,5 @@ const displayProbeModal = (
   // }
 }
 
-export { metaNodesWithPropertyName }
+export { searchProbePropertyName }
 export default displayProbeModal;

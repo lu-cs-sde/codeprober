@@ -29,6 +29,56 @@ public class NodesWithProperty {
 		return ret;
 	}
 
+	static List<String> parsePredicates(String fullPredicateStr) {
+		final List<String> ret = new ArrayList<>();
+		boolean escape = false;
+		final StringBuilder builder = new StringBuilder();
+		for (int i = 0; i < fullPredicateStr.length(); ++i) {
+			final char ch = fullPredicateStr.charAt(i);
+			if (escape) {
+				escape = false;
+				switch (ch) {
+				case 'n':
+					builder.append('\n');
+					break;
+				case '&':
+					builder.append('&');
+					break;
+				case '\\': {
+					builder.append('\\');
+					break;
+				}
+				default: {
+					System.err.println("Invalid escape character '" + ch + "'");
+					builder.append(ch);
+					break;
+				}
+				}
+				continue;
+			}
+			switch (ch) {
+			case '\\': {
+				escape = true;
+				break;
+			}
+			case '&': {
+				ret.add(builder.toString().trim());
+				builder.delete(0, builder.length());
+				break;
+			}
+			default: {
+				builder.append(ch);
+			}
+			}
+		}
+		final String tail = builder.toString().trim();
+		if (tail.length() > 0) {
+			ret.add(tail);
+		}
+
+		return ret;
+	}
+
 	private static int getTo(List<Object> out, AstInfo info, AstNode astNode, String propName, String predicate,
 			int remainingNodeBudget) {
 
@@ -36,7 +86,7 @@ public class NodesWithProperty {
 		boolean show = !astNode.isList() && !astNode.isOpt();
 		if (predicate != null) {
 			show = true;
-			for (String predPart : predicate.split(",")) {
+			for (String predPart : parsePredicates(predicate)) {
 				predPart = predPart.trim();
 				try {
 					final int eqPos = predPart.indexOf('=');
@@ -53,8 +103,10 @@ public class NodesWithProperty {
 							contains = true;
 							key = key.substring(0, key.length() - 1).trim();
 						}
-						final String expected = (eqPos == predPart.length() - 1) ? "" : predPart.substring(eqPos + 1).trim();
-						final String strInvokeVal = String.valueOf(Reflect.invoke0(astNode.underlyingAstNode, key)).trim();
+						final String expected = (eqPos == predPart.length() - 1) ? ""
+								: predPart.substring(eqPos + 1).trim();
+						final String strInvokeVal = String.valueOf(Reflect.invoke0(astNode.underlyingAstNode, key))
+								.trim();
 						if (contains) {
 							show = strInvokeVal.contains(expected);
 						} else {

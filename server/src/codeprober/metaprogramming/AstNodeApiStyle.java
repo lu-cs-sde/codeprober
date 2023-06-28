@@ -36,4 +36,10 @@ public enum AstNodeApiStyle {
 	 * getEndColumn() getNumChildren(), getChild(int), getParent()
 	 */
 	PMD_SEPARATE_LINE_COLUMN,
+
+	/**
+	 * No line/column functions.
+	 * getNumChild(), getChild(int), getParent()
+	 */
+	JASTADD_NO_POSITION,
 }

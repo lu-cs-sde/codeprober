@@ -2966,7 +2966,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
     createStickyHighlightController_1 = __importDefault(createStickyHighlightController_1);
     startEndToSpan_4 = __importDefault(startEndToSpan_4);
-    const displayAstModal = (env, modalPos, locator, listDirection, initialTransform) => {
+    const displayAstModal = (env, modalPos, locator, listDirection, extraArgs = {}) => {
         var _a, _b, _c, _d, _e;
         const queryId = `ast-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let state = null;
@@ -2988,6 +2988,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
         const saveAfterTransformChange = () => {
             bufferingSaver.submit(() => { env.triggerWindowSave(); });
         };
+        const initialTransform = extraArgs.initialTransform;
         const trn = {
             x: (_a = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.x) !== null && _a !== void 0 ? _a : 1920 / 2,
             y: (_b = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.y) !== null && _b !== void 0 ? _b : 0,
@@ -3025,39 +3026,44 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                 while (root.firstChild)
                     root.firstChild.remove();
                 // root.innerText = 'Loading..';
-                root.appendChild((0, createModalTitle_3.default)({
-                    renderLeft: (container) => {
-                        const headType = document.createElement('span');
-                        headType.innerText = `AST`;
-                        container.appendChild(headType);
-                        const spanIndicator = (0, createTextSpanIndicator_3.default)({
-                            span: (0, startEndToSpan_4.default)(locator.get().result.start, locator.get().result.end),
-                            marginLeft: true,
-                            onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_4.default)(locator.get().result.start, locator.get().result.end) : null),
-                            onClick: stickyController.onClick,
-                        });
-                        stickyController.configure(spanIndicator, locator);
-                        container.appendChild(spanIndicator);
-                    },
-                    onClose: () => {
-                        cleanup();
-                    },
-                    extraActions: [
-                        ...(env.getGlobalModalEnv() === env ? [] : [{
-                                title: 'Detatch window',
-                                invoke: () => {
-                                    cleanup();
-                                    displayAstModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), listDirection, trn);
-                                }
-                            }]),
-                        {
-                            title: 'Help',
-                            invoke: () => {
-                                (0, displayHelp_1.default)('ast', () => { });
-                            }
+                if (!extraArgs.hideTitleBar) {
+                    root.appendChild((0, createModalTitle_3.default)({
+                        renderLeft: (container) => {
+                            const headType = document.createElement('span');
+                            headType.innerText = `AST`;
+                            container.appendChild(headType);
+                            const spanIndicator = (0, createTextSpanIndicator_3.default)({
+                                span: (0, startEndToSpan_4.default)(locator.get().result.start, locator.get().result.end),
+                                marginLeft: true,
+                                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_4.default)(locator.get().result.start, locator.get().result.end) : null),
+                                onClick: stickyController.onClick,
+                            });
+                            stickyController.configure(spanIndicator, locator);
+                            container.appendChild(spanIndicator);
                         },
-                    ],
-                }).element);
+                        onClose: () => {
+                            cleanup();
+                        },
+                        extraActions: [
+                            ...(env.getGlobalModalEnv() === env ? [] : [{
+                                    title: 'Detatch window',
+                                    invoke: () => {
+                                        cleanup();
+                                        displayAstModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), listDirection, {
+                                            initialTransform,
+                                            hideTitleBar: extraArgs.hideTitleBar,
+                                        });
+                                    }
+                                }]),
+                            {
+                                title: 'Help',
+                                invoke: () => {
+                                    (0, displayHelp_1.default)('ast', () => { });
+                                }
+                            },
+                        ],
+                    }).element);
+                }
                 const addSpinner = () => {
                     const spinner = (0, createLoadingSpinner_1.default)();
                     spinner.classList.add('absoluteCenter');
@@ -3707,25 +3713,26 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                             sep.classList.add('search-list-separator');
                             sortedAttrs.appendChild(sep);
                         }
-                        else if (!matches.length && filter.startsWith('*.') && filter.length >= 3) {
-                            addSubmitExplanation('Press enter to create meta probe');
+                        else if (!matches.length && (filter.startsWith('*.') || filter.startsWith('?')) && filter.length >= 3) {
+                            addSubmitExplanation('Press enter to create search probe');
                             submit = () => {
-                                let propAndPredicate = filter.slice('*.'.length);
                                 const args = [];
-                                const predicateStart = propAndPredicate.indexOf('[');
-                                if (predicateStart === -1) {
-                                    args.push({ type: 'string', value: propAndPredicate });
+                                if (filter.startsWith('?')) {
+                                    args.push({ type: 'string', value: '' });
+                                    args.push({ type: 'string', value: filter.slice(1) });
                                 }
                                 else {
-                                    args.push({ type: 'string', value: propAndPredicate.slice(0, predicateStart) });
-                                    if (propAndPredicate.endsWith(']')) {
-                                        args.push({ type: 'string', value: propAndPredicate.slice(predicateStart + 1, propAndPredicate.length - 1) });
+                                    let propAndPredicate = filter.slice('*.'.length);
+                                    const predicateStart = propAndPredicate.indexOf('?');
+                                    if (predicateStart === -1) {
+                                        args.push({ type: 'string', value: propAndPredicate });
                                     }
                                     else {
-                                        console.warn('Bad predicate formatting, expected "propertyName[predicateName]"');
+                                        args.push({ type: 'string', value: propAndPredicate.slice(0, predicateStart) });
+                                        args.push({ type: 'string', value: propAndPredicate.slice(predicateStart + 1) });
                                     }
                                 }
-                                const prop = { name: displayProbeModal_2.metaNodesWithPropertyName, args };
+                                const prop = { name: displayProbeModal_2.searchProbePropertyName, args };
                                 cleanup();
                                 (0, displayProbeModal_2.default)(env, popup.getPos(), locator, prop, {});
                             };
@@ -4358,7 +4365,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
     startEndToSpan_6 = __importDefault(startEndToSpan_6);
     trimTypeName_4 = __importDefault(trimTypeName_4);
     const renderProbeModalTitleLeft = (env, container, close, getWindowPos, stickyController, locator, attr, nested, typeRenderingStyle) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
         if (typeRenderingStyle !== 'minimal-nested') {
             const headType = document.createElement('span');
             headType.classList.add('syntax-type');
@@ -4367,8 +4374,9 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
         }
         const headAttr = document.createElement('span');
         headAttr.classList.add('syntax-attr');
-        if (attr.name === displayProbeModal_3.metaNodesWithPropertyName) {
-            headAttr.innerText = `.*.${(_c = (_b = attr.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value}`;
+        if (attr.name === displayProbeModal_3.searchProbePropertyName) {
+            const propName = (_d = (_c = (_b = attr.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value) !== null && _d !== void 0 ? _d : '';
+            headAttr.innerText = `.*.${propName}`;
         }
         else if (!attr.args || attr.args.length === 0) {
             headAttr.innerText = `.${(0, formatAttr_3.default)(attr)}`;
@@ -4382,12 +4390,16 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
             headAttr.onmousedown = (e) => { e.stopPropagation(); };
             headAttr.classList.add('clickHighlightOnHover');
             headAttr.onclick = (e) => {
-                var _a, _b, _c, _d, _e, _f;
+                var _a, _b, _c, _d, _e, _f, _g;
                 let initialFilter = '';
-                if (attr.name == displayProbeModal_3.metaNodesWithPropertyName) {
-                    initialFilter = `*.${(_b = (_a = attr.args) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.value}`;
-                    if (((_d = (_c = attr.args) === null || _c === void 0 ? void 0 : _c.length) !== null && _d !== void 0 ? _d : 0) >= 2) {
-                        initialFilter = `${initialFilter}[${(_f = (_e = attr.args) === null || _e === void 0 ? void 0 : _e[1]) === null || _f === void 0 ? void 0 : _f.value}]`;
+                if (attr.name == displayProbeModal_3.searchProbePropertyName) {
+                    const propName = (_c = (_b = (_a = attr.args) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.value) !== null && _c !== void 0 ? _c : '';
+                    if (propName) {
+                        console.log('initialFilter:', propName);
+                        initialFilter = `*.${propName}`;
+                    }
+                    if (((_e = (_d = attr.args) === null || _d === void 0 ? void 0 : _d.length) !== null && _e !== void 0 ? _e : 0) >= 2) {
+                        initialFilter = `${initialFilter}?${(_g = (_f = attr.args) === null || _f === void 0 ? void 0 : _f[1]) === null || _g === void 0 ? void 0 : _g.value}`;
                     }
                 }
                 if (env.duplicateOnAttr() != e.shiftKey) {
@@ -4401,13 +4413,13 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
             };
         }
         container.appendChild(headAttr);
-        if (attr.name === displayProbeModal_3.metaNodesWithPropertyName && ((_e = (_d = attr.args) === null || _d === void 0 ? void 0 : _d.length) !== null && _e !== void 0 ? _e : 0) >= 2) {
+        if (attr.name === displayProbeModal_3.searchProbePropertyName && ((_f = (_e = attr.args) === null || _e === void 0 ? void 0 : _e.length) !== null && _f !== void 0 ? _f : 0) >= 2) {
             const pred = document.createElement('span');
             pred.classList.add('syntax-int');
-            pred.innerText = `[${(_g = (_f = attr.args) === null || _f === void 0 ? void 0 : _f[1]) === null || _g === void 0 ? void 0 : _g.value}]`;
+            pred.innerText = `?${(_h = (_g = attr.args) === null || _g === void 0 ? void 0 : _g[1]) === null || _h === void 0 ? void 0 : _h.value}`;
             container.appendChild(pred);
         }
-        if (((_h = attr.args) === null || _h === void 0 ? void 0 : _h.length) && env && attr.name !== displayProbeModal_3.metaNodesWithPropertyName) {
+        if (((_j = attr.args) === null || _j === void 0 ? void 0 : _j.length) && env && attr.name !== displayProbeModal_3.searchProbePropertyName) {
             const editButton = document.createElement('img');
             editButton.src = '/icons/edit_white_24dp.svg';
             editButton.classList.add('modalEditButton');
@@ -4424,7 +4436,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
                 span: (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end),
                 marginLeft: true,
                 onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end) : null),
-                onClick: (_j = stickyController === null || stickyController === void 0 ? void 0 : stickyController.onClick) !== null && _j !== void 0 ? _j : undefined,
+                onClick: (_k = stickyController === null || stickyController === void 0 ? void 0 : stickyController.onClick) !== null && _k !== void 0 ? _k : undefined,
                 external: locator.get().result.external,
                 styleOverride: typeRenderingStyle === 'minimal-nested' ? 'lines-compact' : undefined,
             });
@@ -4826,7 +4838,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
                                 }
                             });
                         });
-                        if (!((_b = nests[nwPathKey]) === null || _b === void 0 ? void 0 : _b.length) && relatedProp.name === displayProbeModal_4.metaNodesWithPropertyName) {
+                        if (!((_b = nests[nwPathKey]) === null || _b === void 0 ? void 0 : _b.length) && relatedProp.name === displayProbeModal_4.searchProbePropertyName) {
                             const propName = `${(_d = (_c = relatedProp.args) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.value}`;
                             if (propName !== '') {
                                 nestedRequests.push(() => handleNested({
@@ -4881,10 +4893,10 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
         typeLbl.classList.add('syntax-type');
         clickableUi.appendChild(typeLbl);
         const attrLbl = document.createElement('span');
-        const fixedPropName = property.name == displayProbeModal_4.metaNodesWithPropertyName
+        const fixedPropName = property.name == displayProbeModal_4.searchProbePropertyName
             ? `*.${(_d = (_c = property.args) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.value}`
             : property.name;
-        if (locator.steps.length === 0 && property.name == displayProbeModal_4.metaNodesWithPropertyName) {
+        if (locator.steps.length === 0 && property.name == displayProbeModal_4.searchProbePropertyName) {
             // Hide title?
             typeLbl.style.display = 'none';
             attrLbl.innerText = fixedPropName;
@@ -4894,7 +4906,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
         }
         attrLbl.classList.add('syntax-attr');
         clickableUi.appendChild(attrLbl);
-        if (property.name == displayProbeModal_4.metaNodesWithPropertyName && ((_f = (_e = property.args) === null || _e === void 0 ? void 0 : _e.length) !== null && _f !== void 0 ? _f : 0) >= 2) {
+        if (property.name == displayProbeModal_4.searchProbePropertyName && ((_f = (_e = property.args) === null || _e === void 0 ? void 0 : _e.length) !== null && _f !== void 0 ? _f : 0) >= 2) {
             const pred = document.createElement('span');
             pred.classList.add('syntax-int');
             pred.innerText = `[${(_h = (_g = property.args) === null || _g === void 0 ? void 0 : _g[1]) === null || _h === void 0 ? void 0 : _h.value}]`;
@@ -4944,7 +4956,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
     const createDiagnosticSource = (locator, property) => {
         var _a, _b, _c, _d, _e, _f, _g;
         let source = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : locator.result.type}`.split('.').slice(-1)[0];
-        if (property.name === displayProbeModal_4.metaNodesWithPropertyName) {
+        if (property.name === displayProbeModal_4.searchProbePropertyName) {
             const query = (_c = (_b = property.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value;
             let tail = '';
             if (((_e = (_d = property.args) === null || _d === void 0 ? void 0 : _d.length) !== null && _e !== void 0 ? _e : 0) >= 2) {
@@ -4963,7 +4975,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
 define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_3, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_5, createMinimizedProbeModal_1, evaluateProperty_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.metaNodesWithPropertyName = void 0;
+    exports.searchProbePropertyName = void 0;
     createLoadingSpinner_4 = __importDefault(createLoadingSpinner_4);
     createModalTitle_6 = __importDefault(createModalTitle_6);
     displayHelp_3 = __importDefault(displayHelp_3);
@@ -4976,8 +4988,8 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     displayAstModal_2 = __importDefault(displayAstModal_2);
     createInlineWindowManager_1 = __importDefault(createInlineWindowManager_1);
     evaluateProperty_2 = __importDefault(evaluateProperty_2);
-    const metaNodesWithPropertyName = `m:NodesWithProperty`;
-    exports.metaNodesWithPropertyName = metaNodesWithPropertyName;
+    const searchProbePropertyName = `m:NodesWithProperty`;
+    exports.searchProbePropertyName = searchProbePropertyName;
     const displayProbeModal = (env, modalPos, locator, property, nestedWindows, optionalArgs = {}) => {
         var _a;
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -5065,7 +5077,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             return { path, property: state.property, nested, };
         };
         const createTitle = () => {
-            var _a, _b;
             const titleNode = (0, createModalTitle_6.default)({
                 extraActions: [
                     ...(env.getGlobalModalEnv() === env
@@ -5105,14 +5116,14 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             navigator.clipboard.writeText(copyBody.map(line => typeof line === 'string' ? line : JSON.stringify(line, null, 2)).join('\n'));
                         }
                     },
-                    ...(((_b = (_a = property.args) === null || _a === void 0 ? void 0 : _a.length) !== null && _b !== void 0 ? _b : 0) === 0 ? [
-                        {
-                            title: 'Create metaProbe',
-                            invoke: () => {
-                                displayProbeModal(env, null, locator, { name: metaNodesWithPropertyName, args: [{ type: 'string', value: property.name }] }, {});
-                            }
-                        },
-                    ] : []),
+                    // ...((property.args?.length ?? 0) === 0 ? [
+                    //   {
+                    //     title: 'Create search probe',
+                    //     invoke: () => {
+                    //       displayProbeModal(env, null, locator, { name: searchProbePropertyName, args: [{ type: 'string', value: property.name }] }, {});
+                    //     }
+                    //   },
+                    // ] : []),
                     {
                         title: 'General probe help',
                         invoke: () => {
@@ -5315,7 +5326,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         // const enableExpander = body.length >= 1 && (body[0].type === 'node' || (
                         //   body[0].type === 'arr' && body[0].value.length >= 1 && body[0].value[0].type === 'node'
                         // ));
-                        if (property.name === metaNodesWithPropertyName && body.length === 1 && body[0].type === 'arr' && body[0].value.length === 0) {
+                        if (property.name === searchProbePropertyName && body.length === 1 && body[0].type === 'arr' && body[0].value.length === 0) {
                             const message = document.createElement('div');
                             message.style.padding = '0.25rem';
                             let tail = '';
@@ -5360,7 +5371,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                             }
                                         });
                                     }
-                                    if (isFresh && property.name === metaNodesWithPropertyName) {
+                                    if (isFresh && property.name === searchProbePropertyName) {
                                         const nestedPropName = (_c = (_b = property.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value;
                                         if (nestedPropName !== '' && !(nests === null || nests === void 0 ? void 0 : nests.some((nest) => nest.data.type === 'probe' && nest.data.property.name === nestedPropName))) {
                                             displayProbeModal(nestedEnv, null, (0, UpdatableNodeLocator_5.createImmutableLocator)(updLocator), { name: nestedPropName }, {});
@@ -6506,9 +6517,8 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                     }
                     while (root.firstChild)
                         root.removeChild(root.firstChild);
-                    const titleRow = createTitle();
-                    root.append(titleRow.element);
                     if (evaluationResult === 'failed-fetching') {
+                        root.append(createTitle().element);
                         root.appendChild(document.createTextNode(`Failed running test, please check the server log for more information`));
                         lastLoadedTestCase = null;
                         return;
@@ -6516,6 +6526,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                     const testStatus = evaluationResult.status;
                     const testCase = evaluationResult.test;
                     lastLoadedTestCase = testCase;
+                    root.append(createTitle().element);
                     let contentUpdater = (tab) => { };
                     const localRefreshListeners = [];
                     env.onChangeListeners[queryId] = () => localRefreshListeners.forEach(lrl => lrl());
@@ -6735,7 +6746,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                             getReusableExpansionArea: () => null,
                                             onCreate: ({ path, locatorRoot, expansionArea, locator, isFresh }) => {
                                                 // if (isFresh) {
-                                                //   if (testCase.property.name === metaNodesWithPropertyName) {
+                                                //   if (testCase.property.name === searchProbePropertyName) {
                                                 // TODO force expand meta/query properties here?
                                                 //   }
                                                 // }
@@ -7525,7 +7536,87 @@ define("ui/popup/displayWorkerStatus", ["require", "exports", "ui/create/createM
     };
     exports.default = displayWorkerStatus;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_7, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_3, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_3, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_8, hacks_3, createMinimizedProbeModal_2) {
+define("model/EditorInitializer", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
+define("model/getEditorDefinitionPlace", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const getEditorDefinitionPlace = () => window;
+    exports.default = getEditorDefinitionPlace;
+});
+define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionPlace", "model/UpdatableNodeLocator", "settings", "ui/popup/displayAstModal", "ui/UIElements"], function (require, exports, getEditorDefinitionPlace_1, UpdatableNodeLocator_8, settings_7, displayAstModal_3, UIElements_3) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    getEditorDefinitionPlace_1 = __importDefault(getEditorDefinitionPlace_1);
+    settings_7 = __importDefault(settings_7);
+    displayAstModal_3 = __importDefault(displayAstModal_3);
+    UIElements_3 = __importDefault(UIElements_3);
+    const installASTEditor = () => {
+        ((0, getEditorDefinitionPlace_1.default)()).defineEditor('AST', () => ({
+            script: [],
+            style: [],
+            predicate: () => true,
+        }), (value, onChange, initialSyntaxHighlight) => {
+            settings_7.default.setProbeWindowStates([]);
+            // TODO load monaco so that main args override editor works
+            const inw = document.getElementById('input-wrapper');
+            inw.classList.add('input-AST');
+            inw.innerHTML = '';
+            // displayAstModal(
+            //   {
+            //   }
+            // )
+            return {
+                // setLocalState?: (newValue: string) => void;
+                // getLocalState?: () => string;
+                // updateSpanHighlight?: (baseHighlight: Span | null, stickyHighlights: StickyHighlight[]) => void;
+                // registerStickyMarker?: (initialSpan: Span) => StickyMarker;
+                // markText?: TextMarkFn;
+                themeToggler: (isLightTheme) => {
+                    // Do anything?
+                },
+                syntaxHighlightingToggler: (langId) => {
+                    // Do nothing
+                },
+                registerModalEnv: (env) => {
+                    (0, displayAstModal_3.default)({
+                        ...env,
+                        probeWindowStateSavers: {},
+                        showWindow: (args) => {
+                            let lastCancelToken = {};
+                            const render = () => {
+                                lastCancelToken.cancelled = true;
+                                lastCancelToken = {};
+                                args.render(inw, { cancelToken: lastCancelToken, bringToFront: () => { } });
+                            };
+                            render();
+                            window.onresize = () => { var _a; return (_a = args.onFinishedResize) === null || _a === void 0 ? void 0 : _a.call(args); };
+                            const uiElements = new UIElements_3.default();
+                            uiElements.settingsHider.addEventListener('click', () => { var _a; return (_a = args.onFinishedResize) === null || _a === void 0 ? void 0 : _a.call(args); });
+                            uiElements.settingsRevealer.addEventListener('click', () => { var _a; return (_a = args.onFinishedResize) === null || _a === void 0 ? void 0 : _a.call(args); });
+                            return {
+                                bumpIntoScreen: () => { },
+                                remove: () => { },
+                                getPos: () => ({ x: 0, y: 0, }),
+                                getSize: () => ({ width: inw.clientWidth, height: inw.clientHeight }),
+                                refresh: render
+                            };
+                        },
+                    }, null, (0, UpdatableNodeLocator_8.createMutableLocator)({
+                        result: { type: '<ROOT>', start: 0, end: 0, depth: 0 },
+                        steps: []
+                    }), 'downwards', {
+                        hideTitleBar: true,
+                    });
+                },
+            };
+        });
+    };
+    exports.default = installASTEditor;
+});
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_8, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_4, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_9, hacks_3, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -7533,34 +7624,37 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_5 = __importDefault(displayHelp_5);
     displayAttributeModal_7 = __importDefault(displayAttributeModal_7);
-    settings_7 = __importDefault(settings_7);
+    settings_8 = __importDefault(settings_8);
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
     displayStatistics_1 = __importDefault(displayStatistics_1);
     displayMainArgsOverrideModal_1 = __importDefault(displayMainArgsOverrideModal_1);
     createWebsocketHandler_1 = __importStar(createWebsocketHandler_1);
     configureCheckboxWithHiddenButton_1 = __importDefault(configureCheckboxWithHiddenButton_1);
-    UIElements_3 = __importDefault(UIElements_3);
+    UIElements_4 = __importDefault(UIElements_4);
     showVersionInfo_1 = __importDefault(showVersionInfo_1);
     runBgProbe_1 = __importDefault(runBgProbe_1);
     cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
-    displayAstModal_3 = __importDefault(displayAstModal_3);
+    displayAstModal_4 = __importDefault(displayAstModal_4);
     displayTestSuiteListModal_1 = __importDefault(displayTestSuiteListModal_1);
     displayWorkerStatus_1 = __importDefault(displayWorkerStatus_1);
     showWindow_11 = __importDefault(showWindow_11);
     createMinimizedProbeModal_2 = __importDefault(createMinimizedProbeModal_2);
-    const uiElements = new UIElements_3.default();
+    getEditorDefinitionPlace_2 = __importDefault(getEditorDefinitionPlace_2);
+    installASTEditor_1 = __importDefault(installASTEditor_1);
+    const uiElements = new UIElements_4.default();
     window.clearUserSettings = () => {
-        settings_7.default.set({});
+        settings_8.default.set({});
         location.reload();
     };
     const doMain = (wsPort) => {
-        if (settings_7.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
+        (0, installASTEditor_1.default)();
+        if (settings_8.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
             document.body.classList.add('hide-settings');
         }
-        if (!settings_7.default.shouldEnableTesting()) {
+        if (!settings_8.default.shouldEnableTesting()) {
             uiElements.showTests.style.display = 'none';
         }
-        let getLocalState = () => { var _a; return (_a = settings_7.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
+        let getLocalState = () => { var _a; return (_a = settings_8.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
         let basicHighlight = null;
         const stickyHighlights = {};
         let updateSpanHighlight = (span, stickies) => { };
@@ -7572,7 +7666,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             windowSaveDebouncer.submit(() => {
                 const states = [];
                 Object.values(probeWindowStateSavers).forEach(v => v(states));
-                settings_7.default.setProbeWindowStates(states);
+                settings_8.default.setProbeWindowStates(states);
             });
         };
         const notifyLocalChangeListeners = (adjusters, reason) => {
@@ -7584,7 +7678,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 location.search = "editor=" + editorType;
                 return;
             }
-            document.body.setAttribute('data-theme-light', `${settings_7.default.isLightTheme()}`);
+            document.body.setAttribute('data-theme-light', `${settings_8.default.isLightTheme()}`);
             const wsHandler = (() => {
                 if (wsPort == 'ws-over-http') {
                     return (0, createWebsocketHandler_1.createWebsocketOverHttpHandler)(addConnectionCloseNotice_1.default);
@@ -7628,7 +7722,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
                 rootElem.style.display = "grid";
                 const onChange = (newValue, adjusters) => {
-                    settings_7.default.setEditorContents(newValue);
+                    settings_8.default.setEditorContents(newValue);
                     notifyLocalChangeListeners(adjusters);
                 };
                 let setLocalState = (value) => { };
@@ -7638,28 +7732,47 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     remove: () => { },
                 });
                 const darkModeCheckbox = uiElements.darkModeCheckbox;
-                darkModeCheckbox.checked = !settings_7.default.isLightTheme();
+                darkModeCheckbox.checked = !settings_8.default.isLightTheme();
                 const themeChangeListeners = {};
                 darkModeCheckbox.oninput = (e) => {
                     let lightTheme = !darkModeCheckbox.checked;
-                    settings_7.default.setLightTheme(lightTheme);
+                    settings_8.default.setLightTheme(lightTheme);
                     document.body.setAttribute('data-theme-light', `${lightTheme}`);
                     Object.values(themeChangeListeners).forEach(cb => cb(lightTheme));
                 };
                 let syntaxHighlightingToggler;
-                if (window.definedEditors[editorType]) {
-                    const { preload, init, } = window.definedEditors[editorType];
-                    window.loadPreload(preload, () => {
+                const modalEnvHolder = {
+                    cachedEnv: null,
+                    cachedRecv: null,
+                    setEnv: (env) => {
+                        modalEnvHolder.cachedEnv = env;
+                        if (modalEnvHolder.cachedRecv) {
+                            modalEnvHolder.cachedRecv(env);
+                        }
+                    },
+                    setRecv: (recv) => {
+                        modalEnvHolder.cachedRecv = recv;
+                        if (modalEnvHolder.cachedEnv) {
+                            recv(modalEnvHolder.cachedEnv);
+                        }
+                    },
+                };
+                if ((0, getEditorDefinitionPlace_2.default)().definedEditors[editorType]) {
+                    const { preload, init, } = (0, getEditorDefinitionPlace_2.default)().definedEditors[editorType];
+                    (0, getEditorDefinitionPlace_2.default)().loadPreload(preload, () => {
                         var _a;
-                        const res = init((_a = settings_7.default.getEditorContents()) !== null && _a !== void 0 ? _a : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_7.default.getSyntaxHighlighting());
+                        const res = init((_a = settings_8.default.getEditorContents()) !== null && _a !== void 0 ? _a : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_8.default.getSyntaxHighlighting());
                         setLocalState = res.setLocalState || setLocalState;
                         getLocalState = res.getLocalState || getLocalState;
                         updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
                         registerStickyMarker = res.registerStickyMarker || registerStickyMarker;
                         markText = res.markText || markText;
+                        if (res.registerModalEnv) {
+                            modalEnvHolder.setRecv(res.registerModalEnv);
+                        }
                         if (res.themeToggler) {
                             themeChangeListeners['main-editor'] = (light) => res.themeToggler(light);
-                            res.themeToggler(settings_7.default.isLightTheme());
+                            res.themeToggler(settings_8.default.isLightTheme());
                             // defineThemeToggler(res.themeToggler);
                         }
                         syntaxHighlightingToggler = res.syntaxHighlightingToggler;
@@ -7714,23 +7827,23 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     input.checked = initial;
                     input.oninput = () => { update(input.checked); notifyLocalChangeListeners(); };
                 };
-                setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_7.default.shouldCaptureStdio(), cb => settings_7.default.setShouldCaptureStdio(cb));
-                setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_7.default.shouldDuplicateProbeOnAttrClick(), cb => settings_7.default.setShouldDuplicateProbeOnAttrClick(cb));
-                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_7.default.shouldShowAllProperties(), cb => settings_7.default.setShouldShowAllProperties(cb));
+                setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_8.default.shouldCaptureStdio(), cb => settings_8.default.setShouldCaptureStdio(cb));
+                setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_8.default.shouldDuplicateProbeOnAttrClick(), cb => settings_8.default.setShouldDuplicateProbeOnAttrClick(cb));
+                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_8.default.shouldShowAllProperties(), cb => settings_8.default.setShouldShowAllProperties(cb));
                 const setupSimpleSelector = (input, initial, update) => {
                     input.value = initial;
                     input.oninput = () => { update(input.value); notifyLocalChangeListeners(); };
                 };
-                setupSimpleSelector(uiElements.astCacheStrategySelector, settings_7.default.getAstCacheStrategy(), cb => settings_7.default.setAstCacheStrategy(cb));
-                setupSimpleSelector(uiElements.positionRecoverySelector, settings_7.default.getPositionRecoveryStrategy(), cb => settings_7.default.setPositionRecoveryStrategy(cb));
-                setupSimpleSelector(uiElements.locationStyleSelector, `${settings_7.default.getLocationStyle()}`, cb => settings_7.default.setLocationStyle(cb));
+                setupSimpleSelector(uiElements.astCacheStrategySelector, settings_8.default.getAstCacheStrategy(), cb => settings_8.default.setAstCacheStrategy(cb));
+                setupSimpleSelector(uiElements.positionRecoverySelector, settings_8.default.getPositionRecoveryStrategy(), cb => settings_8.default.setPositionRecoveryStrategy(cb));
+                setupSimpleSelector(uiElements.locationStyleSelector, `${settings_8.default.getLocationStyle()}`, cb => settings_8.default.setLocationStyle(cb));
                 uiElements.settingsHider.onclick = () => {
                     document.body.classList.add('hide-settings');
-                    settings_7.default.setShouldHideSettingsPanel(true);
+                    settings_8.default.setShouldHideSettingsPanel(true);
                 };
                 uiElements.settingsRevealer.onclick = () => {
                     document.body.classList.remove('hide-settings');
-                    settings_7.default.setShouldHideSettingsPanel(false);
+                    settings_8.default.setShouldHideSettingsPanel(false);
                 };
                 const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
                 syntaxHighlightingSelector.innerHTML = '';
@@ -7740,37 +7853,37 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     option.innerText = alias;
                     syntaxHighlightingSelector.appendChild(option);
                 });
-                setupSimpleSelector(syntaxHighlightingSelector, settings_7.default.getSyntaxHighlighting(), cb => {
-                    settings_7.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
-                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_7.default.getSyntaxHighlighting());
+                setupSimpleSelector(syntaxHighlightingSelector, settings_8.default.getSyntaxHighlighting(), cb => {
+                    settings_8.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
+                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_8.default.getSyntaxHighlighting());
                 });
                 const overrideCfg = (0, configureCheckboxWithHiddenButton_1.default)(uiElements.shouldOverrideMainArgsCheckbox, uiElements.configureMainArgsOverrideButton, (checked) => {
-                    settings_7.default.setMainArgsOverride(checked ? [] : null);
+                    settings_8.default.setMainArgsOverride(checked ? [] : null);
                     overrideCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }, onClose => (0, displayMainArgsOverrideModal_1.default)(onClose, () => {
                     overrideCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }), () => {
-                    const overrides = settings_7.default.getMainArgsOverride();
+                    const overrides = settings_8.default.getMainArgsOverride();
                     return overrides === null ? null : `Edit (${overrides.length})`;
                 });
                 const suffixCfg = (0, configureCheckboxWithHiddenButton_1.default)(uiElements.shouldCustomizeFileSuffixCheckbox, uiElements.configureCustomFileSuffixButton, (checked) => {
-                    settings_7.default.setCustomFileSuffix(checked ? settings_7.default.getCurrentFileSuffix() : null);
+                    settings_8.default.setCustomFileSuffix(checked ? settings_8.default.getCurrentFileSuffix() : null);
                     suffixCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }, onClose => {
-                    const newVal = prompt('Enter new suffix', settings_7.default.getCurrentFileSuffix());
+                    const newVal = prompt('Enter new suffix', settings_8.default.getCurrentFileSuffix());
                     if (newVal !== null) {
-                        settings_7.default.setCustomFileSuffix(newVal);
+                        settings_8.default.setCustomFileSuffix(newVal);
                         suffixCfg.refreshButton();
                         notifyLocalChangeListeners();
                     }
                     onClose();
                     return { forceClose: () => { }, };
                 }, () => {
-                    const overrides = settings_7.default.getCustomFileSuffix();
-                    return overrides === null ? null : `Edit (${settings_7.default.getCurrentFileSuffix()})`;
+                    const overrides = settings_8.default.getCustomFileSuffix();
+                    return overrides === null ? null : `Edit (${settings_8.default.getCurrentFileSuffix()})`;
                 });
                 const statCollectorImpl = new StatisticsCollectorImpl_1.default();
                 if (location.search.includes('debug=true')) {
@@ -7794,13 +7907,13 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             posRecovery: uiElements.positionRecoverySelector.value,
                             cache: uiElements.astCacheStrategySelector.value,
                             text: getLocalState(),
-                            stdout: settings_7.default.shouldCaptureStdio(),
-                            mainArgs: (_a = settings_7.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : undefined,
-                            tmpSuffix: settings_7.default.getCurrentFileSuffix(),
+                            stdout: settings_8.default.shouldCaptureStdio(),
+                            mainArgs: (_a = settings_8.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : undefined,
+                            tmpSuffix: settings_8.default.getCurrentFileSuffix(),
                         });
                     },
                     probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
-                    themeIsLight: () => settings_7.default.isLightTheme(),
+                    themeIsLight: () => settings_8.default.isLightTheme(),
                     getLocalState: () => getLocalState(),
                     setLocalState: (newVal) => setLocalState(newVal),
                     captureStdout: () => uiElements.captureStdoutCheckbox.checked,
@@ -7833,6 +7946,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         uiElements.minimizedProbeArea.appendChild(miniProbe.ui);
                     }
                 };
+                modalEnvHolder.setEnv(modalEnv);
                 modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {
                     if (reason === 'refresh-from-server') {
                         testManager.flushTestCaseData();
@@ -7905,7 +8019,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 setTimeout(() => {
                     try {
-                        let windowStates = settings_7.default.getProbeWindowStates();
+                        let windowStates = settings_8.default.getProbeWindowStates();
                         // let wsMatch: RegExpExecArray | null;
                         // if ((wsMatch = /[?&]?ws=[^?&]+/.exec(location.search)) != null) {
                         //   const trimmedSearch = wsMatch.index === 0
@@ -7928,11 +8042,13 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             switch (state.data.type) {
                                 case 'probe': {
                                     const data = state.data;
-                                    (0, displayProbeModal_6.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_8.createMutableLocator)(data.locator), data.property, data.nested, { showDiagnostics: data.showDiagnostics });
+                                    (0, displayProbeModal_6.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_9.createMutableLocator)(data.locator), data.property, data.nested, { showDiagnostics: data.showDiagnostics });
                                     break;
                                 }
                                 case 'ast': {
-                                    (0, displayAstModal_3.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_8.createMutableLocator)(state.data.locator), state.data.direction, state.data.transform);
+                                    (0, displayAstModal_4.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_9.createMutableLocator)(state.data.locator), state.data.direction, {
+                                        initialTransform: state.data.transform,
+                                    });
                                     break;
                                 }
                                 case 'minimized-probe': {
@@ -7953,7 +8069,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 window.RagQuery = (line, col, autoSelectRoot) => {
                     if (autoSelectRoot) {
                         const node = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1, depth: 0 };
-                        (0, displayAttributeModal_7.default)(modalEnv, null, (0, UpdatableNodeLocator_8.createMutableLocator)({ result: node, steps: [] }));
+                        (0, displayAttributeModal_7.default)(modalEnv, null, (0, UpdatableNodeLocator_9.createMutableLocator)({ result: node, steps: [] }));
                     }
                     else {
                         (0, displayRagModal_1.default)(modalEnv, line, col);
@@ -7966,7 +8082,12 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 notifyLocalChangeListeners(undefined, 'refresh-from-server');
             });
         }
-        initEditor('Monaco');
+        if (location.search.split(/[?&]/).includes('editor=AST')) {
+            initEditor('AST');
+        }
+        else {
+            initEditor('Monaco');
+        }
     };
     window.initCodeProber = () => {
         (async () => {

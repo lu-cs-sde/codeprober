@@ -183,6 +183,10 @@ public class AstNode {
 								+ ((Number) Reflect.invoke0(underlyingAstNode, "getEndColumn")).intValue());
 				break;
 			}
+			case JASTADD_NO_POSITION: {
+				this.rawSpan = new Span(0, 0);
+				break;
+			}
 			default: {
 				throw new RuntimeException("Unknown position representation");
 			}
@@ -343,6 +347,7 @@ public class AstNode {
 			switch (info.astApiStyle) {
 			case CPR_SEPARATE_LINE_COLUMN:
 			case BEAVER_PACKED_BITS: // Fall through
+			case JASTADD_NO_POSITION: // Fall through
 			case JASTADD_SEPARATE_LINE_COLUMN:
 				numCh = (Integer) Reflect.invoke0(underlyingAstNode, "getNumChild");
 				break;
@@ -444,6 +449,15 @@ public class AstNode {
 			return (String) Reflect.invoke0(underlyingAstNode, "cpr_nodeLabel");
 		} catch (InvokeProblem | ClassCastException ip) {
 			// OK, nodeLabel is optional
+			return null;
+		}
+	}
+
+	public String getAstLabel() {
+		try {
+			return (String) Reflect.invoke0(underlyingAstNode, "cpr_astLabel");
+		} catch (InvokeProblem | ClassCastException ip) {
+			// OK, astLabel is optional
 			return null;
 		}
 	}

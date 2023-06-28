@@ -26,6 +26,8 @@ import { createMutableLocator } from './model/UpdatableNodeLocator';
 import WindowState from './model/WindowState';
 import { assertUnreachable } from './hacks';
 import createMinimizedProbeModal from './ui/create/createMinimizedProbeModal';
+import getEditorDefinitionPlace from './model/getEditorDefinitionPlace';
+import installASTEditor from './ui/installASTEditor';
 
 const uiElements = new UIElements();
 
@@ -36,6 +38,7 @@ window.clearUserSettings = () => {
 
 
 const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', 'from': number, to: number }) => {
+  installASTEditor();
   if (settings.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
     document.body.classList.add('hide-settings');
   }
@@ -145,15 +148,40 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
 
       let syntaxHighlightingToggler: ((langId: SyntaxHighlightingLanguageId) => void) | undefined;
 
-      if (window.definedEditors[editorType]) {
-        const { preload, init, } = window.definedEditors[editorType];
-        window.loadPreload(preload, () => {
+      const modalEnvHolder: {
+        setEnv: (env: ModalEnv) => void,
+        cachedEnv: ModalEnv | null,
+        setRecv: (recv: (env: ModalEnv) => void) => void,
+        cachedRecv: ((env: ModalEnv) => void) | null,
+       } = {
+        cachedEnv: null,
+        cachedRecv: null,
+        setEnv: (env) => {
+          modalEnvHolder.cachedEnv = env;
+          if (modalEnvHolder.cachedRecv) {
+            modalEnvHolder.cachedRecv(env);
+          }
+        },
+        setRecv: (recv) => {
+          modalEnvHolder.cachedRecv = recv;
+          if (modalEnvHolder.cachedEnv) {
+            recv(modalEnvHolder.cachedEnv);
+          }
+        },
+      }
+
+      if (getEditorDefinitionPlace().definedEditors[editorType]) {
+        const { preload, init, } = getEditorDefinitionPlace().definedEditors[editorType];
+        getEditorDefinitionPlace().loadPreload(preload, () => {
           const res = init(settings.getEditorContents() ?? `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings.getSyntaxHighlighting());
           setLocalState = res.setLocalState || setLocalState;
           getLocalState = res.getLocalState || getLocalState;
           updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
           registerStickyMarker = res.registerStickyMarker || registerStickyMarker;
           markText = res.markText || markText;
+          if (res.registerModalEnv) {
+            modalEnvHolder.setRecv(res.registerModalEnv);
+          }
           if (res.themeToggler) {
             themeChangeListeners['main-editor'] = (light) => res.themeToggler(light);
             res.themeToggler(settings.isLightTheme());
@@ -351,6 +379,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
 
         }
        };
+       modalEnvHolder.setEnv(modalEnv);
 
        modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {
         if (reason === 'refresh-from-server') {
@@ -477,7 +506,9 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
                 break;
               }
               case 'ast': {
-                displayAstModal(modalEnv, state.modalPos, createMutableLocator(state.data.locator), state.data.direction, state.data.transform);
+                displayAstModal(modalEnv, state.modalPos, createMutableLocator(state.data.locator), state.data.direction, {
+                  initialTransform: state.data.transform,
+                });
                 break;
               }
               case 'minimized-probe': {
@@ -511,7 +542,11 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
     });
   }
 
-  initEditor('Monaco');
+  if (location.search.split(/[?&]/).includes('editor=AST')) {
+    initEditor('AST');
+  } else {
+    initEditor('Monaco');
+  }
 }
 
 window.initCodeProber = () => {

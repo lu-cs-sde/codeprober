@@ -111,10 +111,27 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			}
 		}
 		if (positionRepresentation == null) {
-			if (Reflect.invoke0(ast, "getStart") instanceof Integer) {
-				positionRepresentation = AstNodeApiStyle.BEAVER_PACKED_BITS;
+			try {
+
+				if (Reflect.invoke0(ast, "getStart") instanceof Integer) {
+					positionRepresentation = AstNodeApiStyle.BEAVER_PACKED_BITS;
+				}
+			} catch (RuntimeException e) {
+				// Not packed bits
 			}
 		}
+		if (positionRepresentation == null) {
+			try {
+				if (Reflect.invoke0(ast, "getNumChild") instanceof Integer) {
+					// Fall back to no position
+					positionRepresentation = AstNodeApiStyle.JASTADD_NO_POSITION;
+				}
+			} catch (RuntimeException e) {
+				// Not packed bits
+			}
+
+		}
+
 		if (positionRepresentation == null) {
 			System.out.println("Unable to determine how position is stored in the AST, exiting. Expected one of:");
 			System.out.println(

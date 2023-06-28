@@ -6,7 +6,7 @@ import { createMutableLocator } from '../../model/UpdatableNodeLocator';
 import { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
 import evaluateProperty from '../../network/evaluateProperty';
 import { Diagnostic, NodeLocator, Property, RpcBodyLine, StopJobReq, StopJobRes } from '../../protocol';
-import displayProbeModal, { metaNodesWithPropertyName } from '../popup/displayProbeModal';
+import displayProbeModal, { searchProbePropertyName } from '../popup/displayProbeModal';
 import startEndToSpan from '../startEndToSpan';
 import registerOnHover from './registerOnHover';
 
@@ -130,7 +130,7 @@ const createMinimizedProbeModal = (
                   }
                 });
               });
-              if (!nests[nwPathKey]?.length && relatedProp.name === metaNodesWithPropertyName) {
+              if (!nests[nwPathKey]?.length && relatedProp.name === searchProbePropertyName) {
                 const propName = `${relatedProp.args?.[0]?.value}`;
                 if (propName !== '') {
                   nestedRequests.push(() => handleNested({
@@ -191,11 +191,11 @@ const createMinimizedProbeModal = (
   clickableUi.appendChild(typeLbl);
 
   const attrLbl = document.createElement('span');
-  const fixedPropName = property.name == metaNodesWithPropertyName
+  const fixedPropName = property.name == searchProbePropertyName
     ? `*.${property.args?.[0]?.value}`
     : property.name;
 
-  if (locator.steps.length === 0 && property.name == metaNodesWithPropertyName) {
+  if (locator.steps.length === 0 && property.name == searchProbePropertyName) {
     // Hide title?
     typeLbl.style.display = 'none';
     attrLbl.innerText = fixedPropName;
@@ -205,7 +205,7 @@ const createMinimizedProbeModal = (
   attrLbl.classList.add('syntax-attr');
   clickableUi.appendChild(attrLbl);
 
-  if (property.name == metaNodesWithPropertyName && (property.args?.length ?? 0) >= 2) {
+  if (property.name == searchProbePropertyName && (property.args?.length ?? 0) >= 2) {
     const pred = document.createElement('span');
     pred.classList.add('syntax-int');
     pred.innerText = `[${property.args?.[1]?.value}]`;
@@ -271,7 +271,7 @@ const createMinimizedProbeModal = (
 
 const createDiagnosticSource = (locator: NodeLocator, property: Property) => {
   let source =  `${locator.result.label ?? locator.result.type}`.split('.').slice(-1)[0];
-  if (property.name === metaNodesWithPropertyName) {
+  if (property.name === searchProbePropertyName) {
     const query = property.args?.[0]?.value;
     let tail = '';
     if ((property.args?.length ?? 0) >= 2) {
