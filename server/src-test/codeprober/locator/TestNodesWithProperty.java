@@ -1,10 +1,17 @@
 package codeprober.locator;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.Test;
+
+import codeprober.AstInfo;
+import codeprober.ast.AstNode;
+import codeprober.ast.TestData;
+import codeprober.ast.TestData.Bar;
 
 public class TestNodesWithProperty {
 
@@ -65,5 +72,36 @@ public class TestNodesWithProperty {
 	@Test
 	public void testPredicatesWithEscapedEscapedEscapeCharacters() {
 		assertPredicates("foo=b\\\\\\&r&baz", "foo=b\\&r", "baz");
+	}
+
+	@Test
+	public void testSubtypeSearchCanFindRoot() {
+		final AstInfo info = TestData.getInfo(new AstNode(TestData.getSimple()));
+		final List<Object> result = NodesWithProperty.get(info, info.ast, "", "this <: Program", 32);
+		assertEquals(2, result.size());
+		assertEquals("Found 1 node", result.get(0));
+		assertEquals(info.ast, (result.get(1)));
+	}
+
+	@Test
+	public void testSubtypeSearch() {
+		final AstInfo info = TestData.getInfo(new AstNode(TestData.getIdenticalBarsWithDifferentParents()));
+		final List<Object> result = NodesWithProperty.get(info, info.ast, "",
+				String.format("this<:%s", Bar.class.getName()), 32);
+		assertEquals(3, result.size());
+		assertEquals("Found 2 nodes", result.get(0));
+		assertTrue(result.get(1) instanceof AstNode);
+		assertTrue(result.get(2) instanceof AstNode);
+	}
+
+	@Test
+	public void testSubtypeSearchWithSimpleClassName() {
+		final AstInfo info = TestData.getInfo(new AstNode(TestData.getIdenticalBarsWithDifferentParents()));
+		final List<Object> result = NodesWithProperty.get(info, info.ast, "",
+				String.format("this<:%s", Bar.class.getSimpleName()), 32);
+		assertEquals(3, result.size());
+		assertEquals("Found 2 nodes", result.get(0));
+		assertTrue(result.get(1) instanceof AstNode);
+		assertTrue(result.get(2) instanceof AstNode);
 	}
 }

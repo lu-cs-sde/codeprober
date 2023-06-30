@@ -37,7 +37,7 @@ public class AttrsInNode {
 			}
 			final List<PropertyArg> args = CreateType.fromParameters(info, m.getParameters());
 			if (args == null) {
-				System.out.println("skip due to bad param types " + m.getName());
+//				System.out.println("skip due to bad param types " + m.getName());
 				continue;
 			}
 

@@ -25,7 +25,7 @@ echo "Server unit tests succeeded"
 check_expected_outcome () {
   # The test suite is intentionally constructed with 1 failure so that
   # we can detect that assertions actually are performed.
-  if grep -q "Pass 6/7 tests" test_log; then
+  if grep -q "Pass 7/8 tests" test_log; then
     echo "Pass.."
     rm test_log
     # exit;

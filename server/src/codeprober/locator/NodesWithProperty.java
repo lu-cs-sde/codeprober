@@ -19,12 +19,12 @@ public class NodesWithProperty {
 			ret.clear();
 		} else if (totalNumNodes > limitNumberOfNodes) {
 			ret.set(0, String.format("%s\n%s\n%s", //
-					"Found " + totalNumNodes + " nodes with '" + propName + "', limited output to " + limitNumberOfNodes
-							+ ".", //
+					"Found " + totalNumNodes + " node" + (totalNumNodes == 1 ? "" : "s") + " with '" + propName
+							+ "', limited output to " + limitNumberOfNodes + ".", //
 					"This limit can be configured with the environment variable:", //
 					"  `QUERY_PROBE_OUTPUT_LIMIT=NUM`"));
 		} else {
-			ret.set(0, "Found " + totalNumNodes + " nodes");
+			ret.set(0, "Found " + totalNumNodes + " node" + (totalNumNodes == 1 ? "" : "s"));
 		}
 		return ret;
 	}
@@ -89,6 +89,65 @@ public class NodesWithProperty {
 			for (String predPart : parsePredicates(predicate)) {
 				predPart = predPart.trim();
 				try {
+					final int subtypePos = predPart.indexOf("<:");
+					if (subtypePos > 0) {
+
+						final String expression = predPart.substring(0, subtypePos).trim();
+						final String expectedValue = predPart.substring(subtypePos + "<:".length()).trim();
+
+						final Object actualValue;
+						switch (expression) {
+						case "this": {
+							actualValue = astNode.underlyingAstNode;
+							break;
+						}
+						default: {
+							actualValue = Reflect.invoke0(astNode.underlyingAstNode, expression);
+							break;
+						}
+						}
+						if (actualValue == null) {
+							show = false;
+							break;
+						}
+						try {
+							Class<?> expectedCls = null;
+							final ClassLoader classLoader = info.ast.underlyingAstNode.getClass().getClassLoader();
+							try {
+								expectedCls = classLoader.loadClass(expectedValue);
+							} catch (ClassNotFoundException e) {
+								if (!expectedValue.contains(".")) {
+									final Class<?> rootClass = info.ast.underlyingAstNode.getClass();
+									// Might be shorthand syntax, retry with the ast package prefixed
+									final String desugaredClsName = String.format("%s%s", //
+											rootClass.getEnclosingClass() != null //
+													? (rootClass.getEnclosingClass().getName() + "$")
+													: (rootClass.getPackage().getName() + "."), //
+											expectedValue //
+									);
+									expectedCls = classLoader.loadClass(desugaredClsName);
+
+								} else {
+									throw e;
+								}
+							}
+//							actualValue.getClass().asSubclass(expectedCls); // Will throw CCE if not correct subtype
+							if (expectedCls.isInstance(actualValue)) {
+								continue;
+							}
+							show = false;
+							break;
+						} catch (ClassNotFoundException e) {
+							System.out.println("Invalid expected class in subtype predicate: " + expectedValue);
+							e.printStackTrace();
+							show = false;
+							break;
+//						} catch (ClassCastException e) {
+//							// Does not implement the requested type, continue
+//							show = false;
+//							break;
+						}
+					}
 					final int eqPos = predPart.indexOf('=');
 					if (eqPos <= 0) {
 						show = (boolean) Reflect.invoke0(astNode.underlyingAstNode, predPart);

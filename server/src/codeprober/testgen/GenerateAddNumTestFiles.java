@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.PositionRecoveryStrategy;
@@ -50,6 +51,7 @@ public class GenerateAddNumTestFiles {
 		cases.add(genPrettyPrintToStream());
 		cases.add(genNested());
 		cases.add(genIntentionalTestFailure());
+		cases.add(genSubtypeSearch());
 
 		Files.write(new File(dstFile).toPath(),
 				new TestSuite(1, cases).toJSON().toString().getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE,
@@ -66,8 +68,13 @@ public class GenerateAddNumTestFiles {
 	}
 
 	private static TestCase simpleRootTest(String name, String text, Property property, String expectedOutput) {
-		return new TestCase(name, src(text), property, root(), TestCaseAssertType.IDENTITY,
-				Arrays.asList(RpcBodyLine.fromPlain(expectedOutput)), Collections.emptyList());
+		return simpleRootTest(name, text, property, Arrays.asList(RpcBodyLine.fromPlain(expectedOutput)));
+	}
+
+	private static TestCase simpleRootTest(String name, String text, Property property,
+			List<RpcBodyLine> expectedOutput) {
+		return new TestCase(name, src(text), property, root(), TestCaseAssertType.IDENTITY, expectedOutput,
+				Collections.emptyList());
 	}
 
 	private static TestCase genNumVal() {
@@ -86,6 +93,25 @@ public class GenerateAddNumTestFiles {
 	private static TestCase genPrettyPrintNestedAdd() {
 		return simpleRootTest("(1 + 2 + 3).prettyPrint", "1 + 2 + 3",
 				new Property("prettyPrint", Collections.emptyList(), null), "((1 + 2) + 3)");
+	}
+
+	private static NodeLocator childLocator(String type, int start, int end, Integer... childIndexes) {
+		return new NodeLocator(new TALStep("addnum.ast.Num", null, start, end, childIndexes.length, false),
+				Arrays.asList(childIndexes).stream().map(NodeLocatorStep::fromChild).collect(Collectors.toList()));
+	}
+
+	private static TestCase genSubtypeSearch() {
+		return simpleRootTest("Subtype search", "1 + 2 + 3", new Property("m:NodesWithProperty", Arrays.asList( //
+				PropertyArg.fromString(""), PropertyArg.fromString("this <: Num")), null),
+				Arrays.asList(RpcBodyLine.fromArr(Arrays.asList( //
+						RpcBodyLine.fromPlain("Found 3 nodes"), //
+						RpcBodyLine.fromNode(childLocator("addnum.ast.Num", (1 << 12) + 1, (1 << 12) + 1, 0, 0, 0)),
+						RpcBodyLine.fromPlain("\n"), //
+						RpcBodyLine.fromNode(childLocator("addnum.ast.Num", (1 << 12) + 5, (1 << 12) + 5, 0, 0, 1)),
+						RpcBodyLine.fromPlain("\n"), //
+						RpcBodyLine.fromNode(childLocator("addnum.ast.Num", (1 << 12) + 9, (1 << 12) + 9, 0, 1)), //
+						RpcBodyLine.fromPlain("\n") //
+				))));
 	}
 
 	private static TestCase genPrettyPrintToStream() {
@@ -124,6 +150,7 @@ public class GenerateAddNumTestFiles {
 	}
 
 	private static TestCase genIntentionalTestFailure() {
-		return simpleRootTest("(1+3).value() - intentionally created to fail", "1 + 2", new Property("value", Collections.emptyList(), null), "5");
+		return simpleRootTest("(1+3).value() - intentionally created to fail", "1 + 2",
+				new Property("value", Collections.emptyList(), null), "5");
 	}
 }
