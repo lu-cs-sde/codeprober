@@ -18,6 +18,12 @@ import org.json.JSONObject;
 import codeprober.RunAllTests.MergedResult;
 import codeprober.metaprogramming.StdIoInterceptor;
 import codeprober.protocol.ClientRequest;
+import codeprober.protocol.data.RequestAdapter;
+import codeprober.protocol.data.TopRequestReq;
+import codeprober.protocol.data.TopRequestRes;
+import codeprober.protocol.data.TopRequestResponseData;
+import codeprober.protocol.data.TunneledWsPutRequestReq;
+import codeprober.protocol.data.TunneledWsPutRequestRes;
 import codeprober.requesthandler.RequestHandlerMonitor;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.server.BackingFileSettings;
@@ -171,6 +177,33 @@ public class CodeProber {
 
 			return;
 		}
+		if (parsedArgs.oneshotRequest != null) {
+			final JSONObject responseObj = new RequestAdapter() {
+
+				@Override
+				protected TopRequestRes handleTopRequest(TopRequestReq req) {
+					final JSONObject resp = this.handle(req.data);
+					return new TopRequestRes(req.id, TopRequestResponseData.fromSuccess(resp));
+				}
+
+				@Override
+				protected TunneledWsPutRequestRes handleTunneledWsPutRequest(TunneledWsPutRequestReq req) {
+					final ClientRequest cr = new ClientRequest(req.request, asyncMsg -> {
+						throw new IllegalStateException("Async message in oneshot request");
+					}, new AtomicBoolean(true));
+
+					final JSONObject resp = userFacingHandler.handleRequest(cr);
+					return new TunneledWsPutRequestRes(resp);
+				}
+
+			}.handle(new JSONObject(parsedArgs.oneshotRequest));
+
+			Files.write(parsedArgs.oneshotOutput.toPath(), responseObj.toString().getBytes(StandardCharsets.UTF_8),
+					StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+			System.out.println("Wrote result to " + parsedArgs.oneshotOutput);
+			System.exit(0);
+			return;
+		}
 
 		// First access to compat methods causes info messages to appear in the
 		// terminal. Do it early to inform user.
@@ -178,7 +211,6 @@ public class CodeProber {
 		CodespacesCompat.getChangeBufferTime();
 
 		final ServerToClientMessagePusher msgPusher = new ServerToClientMessagePusher();
-//		final Function<ClientRequest, JSONObject> reqHandler = userFacingHandler.createRpcRequestHandler();
 		final RequestHandlerMonitor monitor = new RequestHandlerMonitor(userFacingHandler::handleRequest);
 		final Function<ClientRequest, JSONObject> unwrappedHandler = monitor::submit;
 		final Function<ClientRequest, JSONObject> topHandler = JsonRequestHandler

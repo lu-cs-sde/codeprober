@@ -1,10 +1,9 @@
 package codeprober.util;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-
-import codeprober.CodeProber;
 
 public class ParsedArgs {
 	public static enum ConcurrencyMode {
@@ -16,14 +15,18 @@ public class ParsedArgs {
 	public final Integer workerProcessCount;
 	public final String jarPath;
 	public final String[] extraArgs;
+	public final String oneshotRequest;
+	public final File oneshotOutput;
 
 	public ParsedArgs(boolean runTest, ConcurrencyMode concurrencyMode, Integer workerProcessCount, String jarPath,
-			String[] extraArgs) {
+			String[] extraArgs, String oneshotRequest, File oneshotOutput) {
 		this.runTest = runTest;
 		this.concurrencyMode = concurrencyMode;
 		this.workerProcessCount = workerProcessCount;
 		this.jarPath = jarPath;
 		this.extraArgs = extraArgs;
+		this.oneshotRequest = oneshotRequest;
+		this.oneshotOutput = oneshotOutput;
 	}
 
 	public static void printUsage() {
@@ -45,6 +48,8 @@ public class ParsedArgs {
 		String jarPath = null;
 		String[] extraArgs = null;
 		Integer workerCount = null;
+		String oneshotRequest = null;
+		File oneshotOutput = null;
 
 		gatherArgs: for (int i = 0; i < args.length; ++i) {
 			switch (args[i]) {
@@ -71,6 +76,24 @@ public class ParsedArgs {
 			}
 
 			default: {
+				if (args[i].startsWith("--oneshot=")) {
+					if (oneshotRequest != null) {
+						throw new IllegalArgumentException("Cannot specify multiple --oneshot values");
+					}
+					oneshotRequest = args[i].substring("--oneshot=".length());
+					continue;
+				}
+				if (args[i].startsWith("--output=")) {
+					if (oneshotOutput != null) {
+						throw new IllegalArgumentException("Cannot specify multiple --output values");
+					}
+					oneshotOutput = new File(args[i].substring("--output=".length())).getAbsoluteFile();
+					if (oneshotOutput.getParentFile() == null || !oneshotOutput.getParentFile().exists()) {
+						throw new IllegalArgumentException(
+								"Directory of output file ('" + oneshotOutput + "') does not exist");
+					}
+					continue;
+				}
 				if (args[i].startsWith("--concurrent=")) {
 					setConcurrencyMode.accept(ConcurrencyMode.COORDINATOR);
 					try {
@@ -91,6 +114,25 @@ public class ParsedArgs {
 			}
 			}
 		}
-		return new ParsedArgs(runTests, concurrency.get(), workerCount, jarPath, extraArgs);
+		if (oneshotRequest != null) {
+			if (jarPath == null) {
+				throw new IllegalArgumentException("Must specify analyzer-or-compiler.jar when using --oneshot");
+			}
+			if (runTests) {
+				throw new IllegalArgumentException("Cannot run tests and handle oneshot requests at the same time");
+			}
+			if (concurrency.get() != ConcurrencyMode.DISABLED) {
+				throw new IllegalArgumentException("Concurrency is not supported for oneshot requests");
+			}
+			if (oneshotOutput == null) {
+				throw new IllegalArgumentException("Must specify --output= as well when running oneshot requests");
+			}
+		} else {
+			if (oneshotOutput != null) {
+				throw new IllegalArgumentException("--output= is only valid together with --oneshot=");
+			}
+		}
+		return new ParsedArgs(runTests, concurrency.get(), workerCount, jarPath, extraArgs, oneshotRequest,
+				oneshotOutput);
 	}
 }
