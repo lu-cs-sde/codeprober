@@ -75,6 +75,7 @@
     require: () => { throw new Error("TODO implement require if needed"); },
   };
   function loadModule(moduleName) {
+    console.log('loadModule', moduleName)
     if (loadedModules[moduleName]) {
       return loadedModules[moduleName];
     }
@@ -87,6 +88,7 @@
 </script>
 
 <body onload="initCodeProber()" data-theme-light="false">
+  <div id="graph"></div>
   <div id="root" style="display: none;">
     <span id="input-header">
       <span>Input</span>

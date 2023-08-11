@@ -100,6 +100,10 @@ public class TestData {
 		public int timesTwo(int v) {
 			return v * 2;
 		}
+
+		public Object cpr_lInvoke(String prop) {
+			return (getClass().getSimpleName() + ":" + prop).hashCode();
+		}
 	}
 
 	public static class Program extends Node {

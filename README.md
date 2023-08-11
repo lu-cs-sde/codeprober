@@ -124,11 +124,15 @@ If you want to "deploy" a new version, i.e make the tiny "New version available"
 
 ## I didn't use JastAdd, what now?
 
-As mentioned above, the API that CodeProber demands of the ASTs found in `CodeProber_root_node` hasn't been formalized yet.
-However, if you are willing to explore a bit yourself then looking in [AstNodeApiStyle.java](server/src/codeprober/metaprogramming/AstNodeApiStyle.java) is a good start. It is an enum describing different styles of "AST APIs". CodeProber tries to detect which style is present by experimentally invoking some methods within each style.
-You can also look in [TestData.java->Node](server/src-test/codeprober/ast/TestData.java), which shows the non-JastAdd node implementation used for test cases.
+It is possible that your AST will just "magically" work with CodeProber. Assign `CodeProber_root_node` as described above and just try running with it.
+CodeProber has a few different styles of ASTs it tries to detect and interact with.
 
-CodeProber needs to know a shared supertype of all AST nodes. Any subtype of this supertype is expected to implement the "API style" mentioned above. CodeProber tries to automatically detect the common supertype with the following pseudocode:
+If that doesn't work, the quickest way to get started is to use the [minimal-prober-wrapper example implementation](minimal-probe-wrapper).
+
+If you have a little more time and want to create a richer CodeProber experience then the best thing would be to adapt to one of the AST structures CodeProber expects. [AstNodeApiStyle.java](server/src/codeprober/metaprogramming/AstNodeApiStyle.java) is an enum representing the different options currently supported. CodeProber tries to detect which style is present by experimentally invoking some methods within each style.
+For some more examples, you can also look in [TestData.java->Node](server/src-test/codeprober/ast/TestData.java), which shows the non-JastAdd node implementation used for test cases.
+
+CodeProber needs to know a shared supertype of all AST nodes. Any subtype of this supertype is expected to implement the "AST API style" mentioned above. CodeProber tries to automatically detect the common supertype with the following pseudocode:
 
 ```
 def find_super(type)
@@ -139,55 +143,11 @@ def find_super(type)
 ```
 
 `find_super` is called with `CodeProber_root_node`. In other words, it finds the top supertype that belongs to the same package as `CodeProber_root_node`.
-
-If you already have an AST structure and don't want/cannot modify it, you can create a wrapper class that fulfills the API above. Something like:
-
-```java
-
-class MyWrapper {
-  Node n;
-  MyWrapper parent;
-  MyWrapper[] children;
-
-  private MyWrapper[] getChildren() {
-    // Lazily initialized for performance reasons.
-    // Iterate over all child nodes in n, wrap in 'MyWrapper'.
-    // Set parent on the wrapped nodes to `this`.
-    // assign list to this.children.
-    // return this.children.
-    // It is important that the same 'Node' is only wrapped *once*
-    // This is because CodeProber uses identity comparison, so wrapping the same 'Node' twice
-    // would create two different wrapper instances that won't pass identity comparison.
-  }
-
-  public int getNumChild() { return getChildren().length; }
-  public MyWrapper getChild(int idx) { return getChildren()[idx]; }
-  public MyWrapper getParent() { return parent; }
-
-  // Replace n.X() with correct values for your node
-  public int getStartLine() { return n.X(); }
-  public int getStartColumn() { return n.X(); }
-  public int getEndLine() { return n.X(); }
-  public int getEndColumn() { return n.X(); }
-
-  public String cpr_nodeLabel() {
-    // Optional method, can return a label here that will presented in the UI instead of 'MyWrapper'.
-    // This allows you to differentiate between different node types, even though you are using a wrapper.
-  }
-
-  // This method can be used to make properties appear in the property list
-  // even when the user hasn't checked 'Show all properties'.
-  public java.util.List<String> cpr_propertyListShow() {
-    return java.util.Arrays.asList("foo", "bar");
-  }
-  public X foo() { ... }
-  public Y bar() { ... }
-}
-```
-
-At the time of writing, the live node tracking used in CodeProber doesn't work well with wrapper implementations, since all types will be the same. This might be improved in the future, at least for nodes that implement cpr_nodeLabel().
+If your native AST structure uses a hierarchy of packages rather than a single flat package, then this will likely cause problems so you should probably rely on a wrapper type instead.
 
 ## Artifact
 
-If you want to try CodeProber, but don't have an analysis tool of your own, you can follow the instructions in the artifact to our Property probe paper, found here: https://doi.org/10.5281/zenodo.7185242.
+If you want to try CodeProber, but don't have an analysis tool of your own, you can try out the playground at https://github.com/Kevlanche/codeprober-playground/.
+
+You can also download the artifact to our Property probe paper, found here: https://doi.org/10.5281/zenodo.7185242.
 This will let you use CodeProber with a Java compiler/analyzer called IntraJ (https://github.com/lu-cs-sde/IntraJ).

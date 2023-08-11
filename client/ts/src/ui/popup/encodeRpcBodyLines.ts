@@ -6,6 +6,8 @@ import registerNodeSelector from "../create/registerNodeSelector";
 import registerOnHover from "../create/registerOnHover";
 import trimTypeName from "../trimTypeName";
 import displayAttributeModal from "./displayAttributeModal";
+import { graphviz as d3 } from 'dependencies/graphviz/graphviz';
+import { assertUnreachable } from '../../hacks';
 
 const getCommonStreamArgWhitespacePrefix = (line: RpcBodyLine): number => {
   if (Array.isArray(line)) {
@@ -74,6 +76,28 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
   }
 
   const streamArgPrefix = Math.min(...body.map(getCommonStreamArgWhitespacePrefix));
+
+  const encodeDotVal = (dotVal: string): HTMLDivElement => {
+    const holder = document.createElement('div');
+    const id = `dot_${(Math.random() * Number.MAX_SAFE_INTEGER) | 0}`
+    holder.id = id;
+    setTimeout(() => {
+      if (!!document.getElementById(id)) {
+        try {
+          d3(`#${id}`, { zoom: false })
+            .dot(dotVal)
+            .render()
+            .catch((err: any) => {
+              console.warn('err caught', err);
+            })
+            ;
+        } catch (e) {
+          console.warn('Error when d3:ing', e);
+        }
+      }
+    }, 100)
+    return holder;
+  }
   const encodeLine = (target: HTMLElement, line: RpcBodyLine, nestingLevel: number, bodyPath: number[]) => {
     switch (line.type) {
       case 'plain': {
@@ -179,7 +203,7 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
         target.appendChild(document.createElement('br'));
         break;
       }
-      case "node": {
+      case 'node': {
         const { start, end, type, label } = line.value.result;
 
         const container = document.createElement('div');
@@ -289,8 +313,15 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
         break;
       }
 
+      case 'dotGraph': {
+        target.appendChild(encodeDotVal(line.value));
+        target.appendChild(document.createElement('br'));
+        break;
+      }
+
       default: {
         console.warn('Unknown body line type', line);
+        assertUnreachable(line);
         break;
       }
     }

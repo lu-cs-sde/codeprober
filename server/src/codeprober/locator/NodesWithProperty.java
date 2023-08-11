@@ -79,6 +79,13 @@ public class NodesWithProperty {
 		return ret;
 	}
 
+	private static Object invokePotentiallyLabelled(Object unerlyingAstNode, String property) {
+		if (property.startsWith("l:")) {
+			return Reflect.invokeN(unerlyingAstNode, "cpr_lInvoke", new Class[] {String.class}, new Object[] { property.substring("l:".length()) } );
+		}
+		return Reflect.invoke0(unerlyingAstNode, property);
+	}
+
 	private static int getTo(List<Object> out, AstInfo info, AstNode astNode, String propName, String predicate,
 			int remainingNodeBudget) {
 
@@ -102,7 +109,7 @@ public class NodesWithProperty {
 							break;
 						}
 						default: {
-							actualValue = Reflect.invoke0(astNode.underlyingAstNode, expression);
+							actualValue = invokePotentiallyLabelled(astNode.underlyingAstNode, expression);
 							break;
 						}
 						}
@@ -150,7 +157,7 @@ public class NodesWithProperty {
 					}
 					final int eqPos = predPart.indexOf('=');
 					if (eqPos <= 0) {
-						show = (boolean) Reflect.invoke0(astNode.underlyingAstNode, predPart);
+						show = (boolean) invokePotentiallyLabelled(astNode.underlyingAstNode, predPart);
 					} else {
 						String key = predPart.substring(0, eqPos).trim();
 						boolean contains = false;
@@ -164,7 +171,7 @@ public class NodesWithProperty {
 						}
 						final String expected = (eqPos == predPart.length() - 1) ? ""
 								: predPart.substring(eqPos + 1).trim();
-						final String strInvokeVal = String.valueOf(Reflect.invoke0(astNode.underlyingAstNode, key))
+						final String strInvokeVal = String.valueOf(invokePotentiallyLabelled(astNode.underlyingAstNode, key))
 								.trim();
 						if (contains) {
 							show = strInvokeVal.contains(expected);

@@ -36,6 +36,10 @@ window.clearUserSettings = () => {
   location.reload();
 }
 
+// setTimeout(() => {
+//   console.log('d3:', d3)
+
+// }, 1000)
 
 const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', 'from': number, to: number }) => {
   installASTEditor();

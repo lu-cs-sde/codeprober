@@ -8,6 +8,10 @@ const rpcBodyToTestBody = (line: RpcBodyLine): RpcBodyLine | null => {
     case 'node':
       return line;
 
+    case 'dotGraph':
+      // No dot support in tests..?
+      return { type: 'plain', value: line.value };
+
     case 'stdout':
     case 'stderr':
       // Do not keep these

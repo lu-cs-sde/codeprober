@@ -235,6 +235,7 @@ type RpcBodyLine = (
   | { type: 'streamArg'; value: string; }
   | { type: 'arr'; value: RpcBodyLine[]; }
   | { type: 'node'; value: NodeLocator; }
+  | { type: 'dotGraph'; value: string; }
 );
 interface TestCase {
   name: string;

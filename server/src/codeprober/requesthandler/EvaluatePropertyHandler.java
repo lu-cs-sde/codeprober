@@ -267,7 +267,12 @@ public class EvaluatePropertyHandler {
 					if (value != Reflect.VOID_RETURN_VALUE) {
 						CreateLocator.setMergeMethod(LocatorMergeMethod.SKIP);
 						try {
-							EncodeResponseValue.encodeTyped(parsed.info, body, diagnostics, value, new HashSet<>());
+							if (value instanceof String && ((String)value).startsWith("@@DOT:")) {
+								// Hacky dot support
+								body.add(RpcBodyLine.fromDotGraph(((String)value).substring("@@DOT:".length())));
+							} else {
+								EncodeResponseValue.encodeTyped(parsed.info, body, diagnostics, value, new HashSet<>());
+							}
 						} finally {
 							CreateLocator.setMergeMethod(LocatorMergeMethod.DEFAULT_METHOD);
 						}

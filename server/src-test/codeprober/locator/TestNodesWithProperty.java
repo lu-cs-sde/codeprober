@@ -104,4 +104,13 @@ public class TestNodesWithProperty {
 		assertTrue(result.get(1) instanceof AstNode);
 		assertTrue(result.get(2) instanceof AstNode);
 	}
+
+	@Test
+	public void testLabeledPropertySearch() {
+		final AstInfo info = TestData.getInfo(new AstNode(TestData.getSimple()));
+		final List<Object> result = NodesWithProperty.get(info, info.ast, "",
+				String.format("l:abc=%d", "Bar:abc".hashCode()), 32);
+		assertEquals(2, result.size());
+		assertEquals("Found 1 node", result.get(0));
+	}
 }

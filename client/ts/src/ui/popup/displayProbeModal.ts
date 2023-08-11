@@ -18,6 +18,8 @@ import { NestedTestRequest } from '../../model/test/TestManager';
 import SourcedDiagnostic from '../../model/SourcedDiagnostic';
 import { createDiagnosticSource } from '../create/createMinimizedProbeModal';
 import evaluateProperty, { OngoingPropertyEvaluation } from '../../network/evaluateProperty';
+import { assertUnreachable } from '../../hacks';
+import startEndToSpan from '../startEndToSpan';
 
 const searchProbePropertyName = `m:NodesWithProperty`;
 
@@ -165,9 +167,38 @@ const displayProbeModal = (
           }
         },
         {
-          title: 'Copy output to clipboard',
+          title: 'Copy raw output to clipboard',
           invoke: () => {
             navigator.clipboard.writeText(copyBody.map(line => typeof line === 'string' ? line : JSON.stringify(line, null, 2)).join('\n'));
+          }
+        },
+        {
+          title: 'Copy output as text to clipboard',
+          invoke: () => {
+            const buildLine = (line: RpcBodyLine): string => {
+              switch (line.type) {
+                case 'plain':
+                case 'stdout':
+                case 'stderr':
+                case 'dotGraph':
+                case 'streamArg': {
+                  return line.value;
+                  break;
+                }
+                case 'arr': {
+                  return ['', ...line.value.map(buildLine)].join('\n').replace(/\n/g, '\n  ');
+                }
+                case 'node': {
+                  const span = startEndToSpan(line.value.result.start, line.value.result.end);
+                  return `[${span.lineStart}:${span.colStart}-${span.lineEnd}:${span.colEnd}] ${line.value.result.label ?? line.value.result.type.split('.').slice(-1)[0]}`;
+                }
+                default: {
+                  assertUnreachable(line);
+                  return '';
+                }
+              }
+            };
+            navigator.clipboard.writeText(copyBody.map(buildLine).join('\n'));
           }
         },
         // ...((property.args?.length ?? 0) === 0 ? [
