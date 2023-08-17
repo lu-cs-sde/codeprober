@@ -183,7 +183,9 @@ const displayProbeModal = (
                 case 'dotGraph':
                 case 'streamArg': {
                   return line.value;
-                  break;
+                }
+                case 'highlightMsg': {
+                  return line.value.msg;
                 }
                 case 'arr': {
                   return ['', ...line.value.map(buildLine)].join('\n').replace(/\n/g, '\n  ');

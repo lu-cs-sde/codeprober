@@ -1940,6 +1940,8 @@ define("model/test/rpcBodyToAssertionLine", ["require", "exports", "hacks"], fun
             case 'streamArg':
             case 'node':
                 return line;
+            case 'highlightMsg':
+                return { type: 'plain', value: line.value.msg };
             case 'dotGraph':
                 // No dot support in tests..?
                 return { type: 'plain', value: line.value };
@@ -10075,7 +10077,7 @@ define("dependencies/graphviz/graphviz", ["require", "exports"], function (requi
     selection.prototype.graphviz = selection_graphviz;
     selection.prototype.selectWithoutDataPropagation = selection_selectWithoutDataPropagation;
 });
-define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNodeLocator", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal", "dependencies/graphviz/graphviz", "hacks"], function (require, exports, UpdatableNodeLocator_3, createTextSpanIndicator_5, registerNodeSelector_2, registerOnHover_3, trimTypeName_3, displayAttributeModal_3, graphviz_1, hacks_3) {
+define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNodeLocator", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal", "dependencies/graphviz/graphviz", "hacks", "ui/startEndToSpan"], function (require, exports, UpdatableNodeLocator_3, createTextSpanIndicator_5, registerNodeSelector_2, registerOnHover_3, trimTypeName_3, displayAttributeModal_3, graphviz_1, hacks_3, startEndToSpan_6) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createTextSpanIndicator_5 = __importDefault(createTextSpanIndicator_5);
@@ -10083,6 +10085,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
     registerOnHover_3 = __importDefault(registerOnHover_3);
     trimTypeName_3 = __importDefault(trimTypeName_3);
     displayAttributeModal_3 = __importDefault(displayAttributeModal_3);
+    startEndToSpan_6 = __importDefault(startEndToSpan_6);
     const getCommonStreamArgWhitespacePrefix = (line) => {
         if (Array.isArray(line)) {
             return Math.min(...line.map(getCommonStreamArgWhitespacePrefix));
@@ -10129,10 +10132,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                     try {
                         (0, graphviz_1.graphviz)(`#${id}`, { zoom: false })
                             .dot(dotVal)
-                            .render()
-                            .catch((err) => {
-                            console.warn('err caught', err);
-                        });
+                            .render();
                     }
                     catch (e) {
                         console.warn('Error when d3:ing', e);
@@ -10142,38 +10142,58 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
             return holder;
         };
         const encodeLine = (target, line, nestingLevel, bodyPath) => {
+            const addPlain = (msg, plainHoverSpan) => {
+                const trimmed = msg.trimStart();
+                if (extras.decorator) {
+                    const decoration = extras.decorator(bodyPath);
+                    if (decoration !== 'default') {
+                        const holder = document.createElement('spawn');
+                        if (extras.capWidths) {
+                            holder.style.whiteSpace = 'normal';
+                        }
+                        else {
+                            holder.style.whiteSpace = 'pre';
+                        }
+                        if (trimmed.length !== msg.length) {
+                            holder.appendChild(document.createTextNode(' '.repeat(msg.length - trimmed.length)));
+                        }
+                        if (msg.trim()) {
+                            holder.appendChild(document.createTextNode(msg.trim()));
+                        }
+                        holder.appendChild(document.createElement('br'));
+                        applyDecoratorClass(holder, nestingLevel <= 1, decoration);
+                        target.appendChild(holder);
+                        return;
+                    }
+                }
+                if (trimmed.length !== msg.length) {
+                    target.appendChild(document.createTextNode(' '.repeat(msg.length - trimmed.length)));
+                }
+                if (msg.trim()) {
+                    const trimmed = msg.trim();
+                    if (plainHoverSpan) {
+                        const node = document.createElement('span');
+                        const span = (0, startEndToSpan_6.default)(plainHoverSpan.start, plainHoverSpan.end);
+                        node.classList.add('highlightOnHover');
+                        (0, registerOnHover_3.default)(node, hovering => {
+                            env.updateSpanHighlight(hovering ? span : null);
+                        });
+                        node.innerText = trimmed;
+                        target.appendChild(node);
+                    }
+                    else {
+                        target.appendChild(document.createTextNode(trimmed));
+                    }
+                }
+                target.appendChild(document.createElement('br'));
+            };
             switch (line.type) {
                 case 'plain': {
-                    const trimmed = line.value.trimStart();
-                    if (extras.decorator) {
-                        const decoration = extras.decorator(bodyPath);
-                        if (decoration !== 'default') {
-                            const holder = document.createElement('spawn');
-                            if (extras.capWidths) {
-                                holder.style.whiteSpace = 'normal';
-                            }
-                            else {
-                                holder.style.whiteSpace = 'pre';
-                            }
-                            if (trimmed.length !== line.value.length) {
-                                holder.appendChild(document.createTextNode(' '.repeat(line.value.length - trimmed.length)));
-                            }
-                            if (line.value.trim()) {
-                                holder.appendChild(document.createTextNode(line.value.trim()));
-                            }
-                            holder.appendChild(document.createElement('br'));
-                            applyDecoratorClass(holder, nestingLevel <= 1, decoration);
-                            target.appendChild(holder);
-                            break;
-                        }
-                    }
-                    if (trimmed.length !== line.value.length) {
-                        target.appendChild(document.createTextNode(' '.repeat(line.value.length - trimmed.length)));
-                    }
-                    if (line.value.trim()) {
-                        target.appendChild(document.createTextNode(line.value.trim()));
-                    }
-                    target.appendChild(document.createElement('br'));
+                    addPlain(line.value);
+                    break;
+                }
+                case 'highlightMsg': {
+                    addPlain(line.value.msg, line.value);
                     break;
                 }
                 case 'arr': {
@@ -10638,7 +10658,7 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "ui/create/cr
     };
     exports.default = displayTestAdditionModal;
 });
-define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, createTextSpanIndicator_6, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_4, displayProbeModal_3, formatAttr_3, startEndToSpan_6, trimTypeName_4) {
+define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, createTextSpanIndicator_6, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_4, displayProbeModal_3, formatAttr_3, startEndToSpan_7, trimTypeName_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createTextSpanIndicator_6 = __importDefault(createTextSpanIndicator_6);
@@ -10646,7 +10666,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
     displayArgModal_2 = __importDefault(displayArgModal_2);
     displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
     formatAttr_3 = __importStar(formatAttr_3);
-    startEndToSpan_6 = __importDefault(startEndToSpan_6);
+    startEndToSpan_7 = __importDefault(startEndToSpan_7);
     trimTypeName_4 = __importDefault(trimTypeName_4);
     const renderProbeModalTitleLeft = (env, container, close, getWindowPos, stickyController, locator, attr, nested, typeRenderingStyle) => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
@@ -10717,9 +10737,9 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
         }
         if (env) {
             const spanIndicator = (0, createTextSpanIndicator_6.default)({
-                span: (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end),
+                span: (0, startEndToSpan_7.default)(locator.get().result.start, locator.get().result.end),
                 marginLeft: true,
-                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end) : null),
+                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_7.default)(locator.get().result.start, locator.get().result.end) : null),
                 onClick: (_k = stickyController === null || stickyController === void 0 ? void 0 : stickyController.onClick) !== null && _k !== void 0 ? _k : undefined,
                 external: locator.get().result.external,
                 styleOverride: typeRenderingStyle === 'minimal-nested' ? 'lines-compact' : undefined,
@@ -11013,13 +11033,13 @@ define("network/evaluateProperty", ["require", "exports"], function (require, ex
     };
     exports.default = evaluateProperty;
 });
-define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/startEndToSpan", "ui/create/registerOnHover"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_4, evaluateProperty_1, displayProbeModal_4, startEndToSpan_7, registerOnHover_4) {
+define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/startEndToSpan", "ui/create/registerOnHover"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_4, evaluateProperty_1, displayProbeModal_4, startEndToSpan_8, registerOnHover_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.createDiagnosticSource = void 0;
     evaluateProperty_1 = __importDefault(evaluateProperty_1);
     displayProbeModal_4 = __importStar(displayProbeModal_4);
-    startEndToSpan_7 = __importDefault(startEndToSpan_7);
+    startEndToSpan_8 = __importDefault(startEndToSpan_8);
     registerOnHover_4 = __importDefault(registerOnHover_4);
     const createMinimizedProbeModal = (env, locator, property, nestedWindows, optionalArgs = {}) => {
         var _a, _b, _c, _d, _e, _f, _g, _h;
@@ -11212,7 +11232,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
             });
         };
         env.triggerWindowSave();
-        (0, registerOnHover_4.default)(clickableUi, (on) => env.updateSpanHighlight((on && !locator.result.external) ? (0, startEndToSpan_7.default)(locator.result.start, locator.result.end) : null));
+        (0, registerOnHover_4.default)(clickableUi, (on) => env.updateSpanHighlight((on && !locator.result.external) ? (0, startEndToSpan_8.default)(locator.result.start, locator.result.end) : null));
         clickableUi.onclick = (e) => {
             if (!e.shiftKey && ui.parentElement) {
                 ui.parentElement.removeChild(ui);
@@ -11256,7 +11276,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
     exports.createDiagnosticSource = createDiagnosticSource;
     exports.default = createMinimizedProbeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_3, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_5, createMinimizedProbeModal_1, evaluateProperty_2, hacks_4, startEndToSpan_8) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_3, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_5, createMinimizedProbeModal_1, evaluateProperty_2, hacks_4, startEndToSpan_9) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.searchProbePropertyName = void 0;
@@ -11272,7 +11292,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     displayAstModal_2 = __importDefault(displayAstModal_2);
     createInlineWindowManager_1 = __importDefault(createInlineWindowManager_1);
     evaluateProperty_2 = __importDefault(evaluateProperty_2);
-    startEndToSpan_8 = __importDefault(startEndToSpan_8);
+    startEndToSpan_9 = __importDefault(startEndToSpan_9);
     const searchProbePropertyName = `m:NodesWithProperty`;
     exports.searchProbePropertyName = searchProbePropertyName;
     const displayProbeModal = (env, modalPos, locator, property, nestedWindows, optionalArgs = {}) => {
@@ -11413,13 +11433,15 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     case 'dotGraph':
                                     case 'streamArg': {
                                         return line.value;
-                                        break;
+                                    }
+                                    case 'highlightMsg': {
+                                        return line.value.msg;
                                     }
                                     case 'arr': {
                                         return ['', ...line.value.map(buildLine)].join('\n').replace(/\n/g, '\n  ');
                                     }
                                     case 'node': {
-                                        const span = (0, startEndToSpan_8.default)(line.value.result.start, line.value.result.end);
+                                        const span = (0, startEndToSpan_9.default)(line.value.result.start, line.value.result.end);
                                         return `[${span.lineStart}:${span.colStart}-${span.lineEnd}:${span.colEnd}] ${(_a = line.value.result.label) !== null && _a !== void 0 ? _a : line.value.result.type.split('.').slice(-1)[0]}`;
                                     }
                                     default: {
@@ -14036,9 +14058,24 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             });
             const rootElem = document.getElementById('root');
             const initHandler = (info) => {
-                const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault } = info;
+                const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile } = info;
                 console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
                 rootElem.style.display = "grid";
+                if (backingFile) {
+                    settings_8.default.setEditorContents(backingFile.value);
+                    const inputLabel = document.querySelector('#input-header > span');
+                    if (!inputLabel) {
+                        console.warn('Could not find input header');
+                    }
+                    else {
+                        // inputLabel.innerText = `Input`
+                        const locIndicator = document.createElement('span');
+                        locIndicator.style.marginLeft = '0.25rem';
+                        locIndicator.classList.add('syntax-string');
+                        locIndicator.innerText = `(${backingFile.path})`;
+                        inputLabel.appendChild(locIndicator);
+                    }
+                }
                 const onChange = (newValue, adjusters) => {
                     settings_8.default.setEditorContents(newValue);
                     notifyLocalChangeListeners(adjusters);

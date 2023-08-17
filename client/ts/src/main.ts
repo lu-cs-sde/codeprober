@@ -124,9 +124,24 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
 
     const rootElem = document.getElementById('root') as HTMLElement;
     const initHandler = (info: InitInfo) => {
-      const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault } = info;
+      const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile } = info;
       console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
       rootElem.style.display = "grid";
+
+      if (backingFile) {
+        settings.setEditorContents(backingFile.value);
+        const inputLabel = document.querySelector('#input-header > span') as HTMLSpanElement;
+        if (!inputLabel) {
+          console.warn('Could not find input header')
+        } else {
+          // inputLabel.innerText = `Input`
+          const locIndicator = document.createElement('span');
+          locIndicator.style.marginLeft = '0.25rem';
+          locIndicator.classList.add('syntax-string');
+          locIndicator.innerText = `(${backingFile.path})`;
+          inputLabel.appendChild(locIndicator);
+        }
+      }
 
       const onChange = (newValue: string, adjusters?: LocationAdjuster[]) => {
         settings.setEditorContents(newValue);

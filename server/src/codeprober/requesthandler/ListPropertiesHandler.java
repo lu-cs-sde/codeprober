@@ -15,6 +15,9 @@ public class ListPropertiesHandler {
 			return new ListPropertiesRes(parsed.captures, null);
 		}
 		final ResolvedNode match = ApplyLocator.toNode(parsed.info, req.locator);
+		if (match == null) {
+			return new ListPropertiesRes(parsed.captures, null);
+		}
 
 		return new ListPropertiesRes(parsed.captures, AttrsInNode.getTyped(parsed.info, match.node,
 				AttrsInNode.extractFilter(parsed.info, match.node), req.all));

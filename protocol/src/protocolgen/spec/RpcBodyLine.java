@@ -8,4 +8,5 @@ public class RpcBodyLine extends StreamableUnion {
 	public final Object arr = arr(RpcBodyLine.class);
 	public final Object node = NodeLocator.class;
 	public final Object dotGraph = String.class;
+	public final Object highlightMsg = HighlightableMessage.class;
 }

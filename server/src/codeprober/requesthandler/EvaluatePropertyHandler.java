@@ -58,9 +58,6 @@ public class EvaluatePropertyHandler {
 		case nodeLocator: {
 			final NullableNodeLocator nl = val.asNodeLocator();
 			if (nl.value == null) {
-				if (Math.random() < 0.5) {
-					nl.value.toString(); // TODO a little bit of chaos testing
-				}
 				return new UnpackedAttrValue(val.value, val);
 			}
 			final ResolvedNode res = ApplyLocator.toNode(info, nl.value);

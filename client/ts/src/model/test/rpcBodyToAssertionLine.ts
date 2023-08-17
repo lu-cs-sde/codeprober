@@ -8,6 +8,9 @@ const rpcBodyToTestBody = (line: RpcBodyLine): RpcBodyLine | null => {
     case 'node':
       return line;
 
+    case 'highlightMsg':
+      return { type: 'plain', value: line.value.msg };
+
     case 'dotGraph':
       // No dot support in tests..?
       return { type: 'plain', value: line.value };

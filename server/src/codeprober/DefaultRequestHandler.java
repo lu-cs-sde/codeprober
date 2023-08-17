@@ -57,6 +57,7 @@ import codeprober.requesthandler.ListPropertiesHandler;
 import codeprober.requesthandler.ListTreeRequestHandler;
 import codeprober.requesthandler.TestRequestHandler;
 import codeprober.rpc.JsonRequestHandler;
+import codeprober.server.BackingFileSettings;
 import codeprober.toolglue.ParseResult;
 import codeprober.toolglue.UnderlyingTool;
 import codeprober.util.ASTProvider;
@@ -154,6 +155,21 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			final File existing = tmp.get();
 			if (existing != null) {
 				return existing;
+			}
+			final File backingFile = BackingFileSettings.getRealFileToBeUsedInRequests();
+			if (backingFile != null) {
+				try {
+
+					Files.write(backingFile.toPath(), inputText.getBytes(StandardCharsets.UTF_8),
+							StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+					// Do NOT set 'tmp' to backingFile, as that would cause it to be deleted.
+					return backingFile;
+				} catch (IOException e) {
+					System.out.println("Failed while copying source text to the backing file " + backingFile);
+					e.printStackTrace();
+					throw new RuntimeException(e);
+
+				}
 			}
 			try {
 				final File tmpFile = File.createTempFile("code-prober", tmpSuffix);

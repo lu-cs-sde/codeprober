@@ -1,6 +1,7 @@
 package codeprober.server;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -9,6 +10,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -20,11 +22,13 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.json.JSONObject;
 
 import codeprober.protocol.ClientRequest;
 import codeprober.protocol.data.AsyncRpcUpdate;
+import codeprober.protocol.data.BackingFile;
 import codeprober.protocol.data.InitInfo;
 import codeprober.protocol.data.Refresh;
 import codeprober.protocol.data.protocolgen_spec_InitInfo_1;
@@ -120,13 +124,30 @@ public class WebSocketServer {
 		final VersionInfo vinfo = VersionInfo.getInstance();
 		final Integer buildTimeSeconds = vinfo.buildTimeSeconds;
 		final int bufferTime = CodespacesCompat.getChangeBufferTime();
-		final boolean disableVersionCheckerByDefault = "true".equals(System.getenv("DISABLE_VERISON_CHECKER_BY_DEFAULT"));
+		final boolean disableVersionCheckerByDefault = "true"
+				.equals(System.getenv("DISABLE_VERISON_CHECKER_BY_DEFAULT"));
+
+		final File backingFile = BackingFileSettings.getRealFileToBeUsedInRequests();
+		String backingFileContents = null;
+		if (backingFile != null && backingFile.exists()) {
+			try {
+				backingFileContents = Files.readAllLines(backingFile.toPath()).stream()
+						.collect(Collectors.joining("\n"));
+			} catch (IOException e) {
+				System.err.println("Failed reading initial state of backing file " + backingFile
+						+ ", perhaps there are permission problems?");
+				e.printStackTrace();
+				System.err.println("Proceeding with empty initial state");
+				backingFileContents = "";
+			}
+		}
 
 		return new InitInfo( //
 				new protocolgen_spec_InitInfo_1(vinfo.revision, vinfo.clean, buildTimeSeconds), //
 				bufferTime > 0 ? bufferTime : null, //
 				args.workerProcessCount, //
-				disableVersionCheckerByDefault ? true : null //
+				disableVersionCheckerByDefault ? true : null, //
+				backingFile == null ? null : new BackingFile(backingFile.getPath(), backingFileContents) //
 		);
 	}
 

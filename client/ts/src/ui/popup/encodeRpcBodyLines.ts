@@ -8,6 +8,7 @@ import trimTypeName from "../trimTypeName";
 import displayAttributeModal from "./displayAttributeModal";
 import { graphviz as d3 } from 'dependencies/graphviz/graphviz';
 import { assertUnreachable } from '../../hacks';
+import startEndToSpan from '../startEndToSpan';
 
 const getCommonStreamArgWhitespacePrefix = (line: RpcBodyLine): number => {
   if (Array.isArray(line)) {
@@ -87,9 +88,6 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
           d3(`#${id}`, { zoom: false })
             .dot(dotVal)
             .render()
-            .catch((err: any) => {
-              console.warn('err caught', err);
-            })
             ;
         } catch (e) {
           console.warn('Error when d3:ing', e);
@@ -99,37 +97,56 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
     return holder;
   }
   const encodeLine = (target: HTMLElement, line: RpcBodyLine, nestingLevel: number, bodyPath: number[]) => {
+    const addPlain = (msg: string, plainHoverSpan?: { start: number, end: number }) => {
+      const trimmed = msg.trimStart();
+      if (extras.decorator) {
+        const decoration = extras.decorator(bodyPath);
+        if (decoration !== 'default') {
+          const holder = document.createElement('spawn');
+          if (extras.capWidths) {
+            holder.style.whiteSpace = 'normal';
+          } else {
+            holder.style.whiteSpace = 'pre';
+          }
+          if (trimmed.length !== msg.length) {
+            holder.appendChild(document.createTextNode(' '.repeat(msg.length - trimmed.length)));
+          }
+          if (msg.trim()) {
+            holder.appendChild(document.createTextNode(msg.trim()));
+          }
+          holder.appendChild(document.createElement('br'));
+          applyDecoratorClass(holder, nestingLevel <= 1, decoration);
+          target.appendChild(holder);
+          return;
+        }
+      }
+      if (trimmed.length !== msg.length) {
+        target.appendChild(document.createTextNode(' '.repeat(msg.length - trimmed.length)));
+      }
+      if (msg.trim()) {
+        const trimmed = msg.trim();
+        if (plainHoverSpan) {
+          const node = document.createElement('span');
+          const span = startEndToSpan(plainHoverSpan.start, plainHoverSpan.end);
+          node.classList.add('highlightOnHover');
+          registerOnHover(node, hovering => {
+            env.updateSpanHighlight(hovering ? span : null)
+          });
+          node.innerText = trimmed;
+          target.appendChild(node);
+        } else {
+          target.appendChild(document.createTextNode(trimmed));
+        }
+      }
+      target.appendChild(document.createElement('br'));
+    };
     switch (line.type) {
       case 'plain': {
-        const trimmed = line.value.trimStart();
-        if (extras.decorator) {
-          const decoration = extras.decorator(bodyPath);
-          if (decoration !== 'default') {
-            const holder = document.createElement('spawn');
-            if (extras.capWidths) {
-              holder.style.whiteSpace = 'normal';
-            } else {
-              holder.style.whiteSpace = 'pre';
-            }
-            if (trimmed.length !== line.value.length) {
-              holder.appendChild(document.createTextNode(' '.repeat(line.value.length - trimmed.length)));
-            }
-            if (line.value.trim()) {
-              holder.appendChild(document.createTextNode(line.value.trim()));
-            }
-            holder.appendChild(document.createElement('br'));
-            applyDecoratorClass(holder, nestingLevel <= 1, decoration);
-            target.appendChild(holder);
-            break;
-          }
-        }
-        if (trimmed.length !== line.value.length) {
-          target.appendChild(document.createTextNode(' '.repeat(line.value.length - trimmed.length)));
-        }
-        if (line.value.trim()) {
-          target.appendChild(document.createTextNode(line.value.trim()));
-        }
-        target.appendChild(document.createElement('br'));
+        addPlain(line.value);
+        break;
+      }
+      case 'highlightMsg': {
+        addPlain(line.value.msg, line.value);
         break;
       }
       case 'arr': {
