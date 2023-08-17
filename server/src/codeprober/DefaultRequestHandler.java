@@ -10,6 +10,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
@@ -61,11 +62,13 @@ import codeprober.server.BackingFileSettings;
 import codeprober.toolglue.ParseResult;
 import codeprober.toolglue.UnderlyingTool;
 import codeprober.util.ASTProvider;
+import codeprober.util.SessionLogger;
 
 public class DefaultRequestHandler implements JsonRequestHandler {
 
 	private final UnderlyingTool underlyingTool;
 	private final String[] defaultForwardArgs;
+	private final SessionLogger logger;
 
 	private AstInfo lastInfo = null;
 	private String lastParsedInput = null;
@@ -73,13 +76,14 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 	private Long lastToolVersionId;
 
 	public DefaultRequestHandler(UnderlyingTool underlyingTool) {
-		this(underlyingTool, null);
+		this(underlyingTool, null, null);
 	}
 
-	public DefaultRequestHandler(UnderlyingTool underlyingTool, String[] forwardArgs) {
+	public DefaultRequestHandler(UnderlyingTool underlyingTool, String[] forwardArgs, SessionLogger logger) {
 		this.underlyingTool = underlyingTool;
 		this.defaultForwardArgs = forwardArgs != null ? forwardArgs : new String[0];
 		this.lastForwardArgs = this.defaultForwardArgs;
+		this.logger = logger;
 	}
 
 	private AstInfo parsedAstToInfo(Object ast, PositionRecoveryStrategy posRecovery) {
@@ -197,6 +201,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				}
 				return new ParsedAst(parsedAstToInfo(res.rootNode, posRecovery), res.parseTime, res.captures);
 			};
+			final AtomicBoolean logged = new AtomicBoolean(false);
 			final JSONObject handled = new RequestAdapter() {
 
 				@Override
@@ -231,6 +236,13 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 				@Override
 				protected EvaluatePropertyRes handleEvaluateProperty(EvaluatePropertyReq req) {
+					if (logger != null) {
+						logged.set(true);
+						logger.log(new JSONObject() //
+								.put("t", "EvaluateProperty") //
+								.put("prop", req.property.name) //
+								.put("node", req.locator.result.type));
+					}
 					return EvaluatePropertyHandler.apply(req, lp);
 				}
 
@@ -250,6 +262,12 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				}
 
 			}.handle(request.data);
+			if (logger != null && !logged.get()) {
+				final String type = request.data.optString("type");
+				if (type != null) {
+					logger.log(new JSONObject().put("t", type));
+				}
+			}
 			if (handled != null) {
 				return handled;
 			}

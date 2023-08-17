@@ -104,7 +104,7 @@ public class TestDefaultRequestHandler {
 				});
 			}
 		};
-		DefaultRequestHandler handler = new DefaultRequestHandler(countingTool, new String[0]);
+		DefaultRequestHandler handler = new DefaultRequestHandler(countingTool);
 
 		final EvaluatePropertyRes initial = EvaluatePropertyRes
 				.fromJSON(handler.handleRequest(constructRequest("Hello World", "getData")));

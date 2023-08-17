@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.ClosedFileSystemException;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
@@ -29,6 +28,7 @@ import codeprober.toolglue.UnderlyingTool;
 import codeprober.util.FileMonitor;
 import codeprober.util.ParsedArgs;
 import codeprober.util.ParsedArgs.ConcurrencyMode;
+import codeprober.util.SessionLogger;
 import codeprober.util.VersionInfo;
 
 public class CodeProber {
@@ -61,10 +61,15 @@ public class CodeProber {
 
 		final ParsedArgs parsedArgs = ParsedArgs.parse(mainArgs);
 
+		final SessionLogger sessionLogger = SessionLogger.init();
+		if (sessionLogger != null) {
+			System.out.println("Logging anonymous session data to " + sessionLogger.getTargetDirectory());
+		}
 		final JsonRequestHandler defaultHandler = new DefaultRequestHandler(UnderlyingTool.fromJar(parsedArgs.jarPath),
-				parsedArgs.extraArgs);
+				parsedArgs.extraArgs, sessionLogger);
 		final JsonRequestHandler userFacingHandler;
 		flog(Arrays.toString(mainArgs));
+
 
 		final File backingFile = BackingFileSettings.getRealFileToBeUsedInRequests();
 		if (backingFile != null) {
