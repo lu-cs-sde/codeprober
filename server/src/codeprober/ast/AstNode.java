@@ -1,6 +1,5 @@
 package codeprober.ast;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -464,7 +463,7 @@ public class AstNode {
 
 	public List<String> propertyListShow(AstInfo info) {
 		final String mth = "cpr_propertyListShow";
-		if (!info.hasOverride0(underlyingAstNode.getClass(), mth)) {
+		if (info.hasOverride0(underlyingAstNode.getClass(), mth)) {
 			try {
 				final Object override = Reflect.invoke0(underlyingAstNode, mth);
 				if (override instanceof Collection<?>) {

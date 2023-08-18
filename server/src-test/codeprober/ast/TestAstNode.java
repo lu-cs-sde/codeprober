@@ -1,6 +1,11 @@
 package codeprober.ast;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.util.Arrays;
+import java.util.List;
 
 import org.junit.Test;
 
@@ -34,4 +39,25 @@ public class TestAstNode {
 		assertEquals(2, numIterator);
 	}
 
+	@Test
+	public void testHasPropertyWorksWithoutPropertyListShow() {
+		final AstNode an = new AstNode(TestData.getSimple());
+		final AstInfo info = TestData.getInfo(an);
+		assertTrue(an.hasProperty(info, "getNumChild"));
+		assertFalse(an.hasProperty(info, "foobar"));
+	}
+
+	@Test
+	public void testHasPropertyWorksWithPropertyListShow() {
+		final AstNode an = new AstNode(new PropertyListShower());
+		final AstInfo info = TestData.getInfo(an);
+		assertFalse(an.hasProperty(info, "getNumChild"));
+		assertTrue(an.hasProperty(info, "foobar"));
+	}
+
+	static class PropertyListShower {
+		public List<String> cpr_propertyListShow() {
+			return Arrays.asList("foobar");
+		}
+	}
 }

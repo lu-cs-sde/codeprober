@@ -5,9 +5,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -63,7 +66,7 @@ public class SessionLogger {
 		if (dir == null) {
 			return null;
 		}
-		final String subHead = System.currentTimeMillis() + "_";
+		final String subHead = new SimpleDateFormat("yyyy-MM-dd-HH-mm", Locale.ENGLISH).format(new Date()) + "_";
 		String subTail = Base64.getEncoder().withoutPadding()
 				.encodeToString(((Math.random() * Integer.MAX_VALUE) + "_" + (Math.random() * Integer.MAX_VALUE))
 						.getBytes(StandardCharsets.UTF_8));
@@ -143,13 +146,27 @@ public class SessionLogger {
 			lastEventNanos = System.nanoTime();
 		}
 		final File dst = new File(dir, String.format("%04d.json", flushFileNameGen.getAndIncrement()));
+		if (!dst.getParentFile().exists()) {
+			// We _could_ recover here by recreating the directory.
+			// However, the safe choice is to interpret the deletion of the dir as a signal
+			// to stop.
+			// Otherwise the user may get very annoyed that the directory keeps popping up.
+			System.out.println("Target directory for SessionLogger has disappeared, stopping.");
+			stopLogger();
+			return;
+		}
 		try {
 			final byte[] data = arr.toString().getBytes(StandardCharsets.UTF_8);
 			numLoggedBytes += data.length;
 			Files.write(dst.toPath(), data, StandardOpenOption.CREATE_NEW);
 		} catch (IOException e) {
-			System.err.println("Error when flushing events to " + dst);
+			System.err.println("SessionLogger: Error when flushing events to " + dst + ". Stopping.");
 			e.printStackTrace();
+			// Again, here we could just ignore the error and keep on going
+			// But let's be cautious and just stop, instead of constantly bombarding the
+			// file system with faulty writes.
+			stopLogger();
+			return;
 		}
 		if (numLoggedBytes >= AUTO_STOP_DATA_THRESHOLD) {
 			System.out.println("Stopping SessionLogger, amount of data written has reached threshold.");
