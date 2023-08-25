@@ -8,6 +8,8 @@ interface Settings {
   editorContents?: string;
   lightTheme?: boolean;
   captureStdio?: boolean;
+  captureTraces?: boolean;
+  autoflushTraces?: boolean;
   duplicateProbeOnAttrClick?: boolean;
   showAllProperties?: boolean;
   positionRecoveryStrategy?: string;
@@ -97,6 +99,10 @@ const settings = {
   setShouldDuplicateProbeOnAttrClick: (duplicateProbeOnAttrClick: boolean) => settings.set({ ...settings.get(), duplicateProbeOnAttrClick }),
   shouldCaptureStdio: () => settings.get().captureStdio ?? true,
   setShouldCaptureStdio: (captureStdio: boolean) => settings.set({ ...settings.get(), captureStdio }),
+  shouldCaptureTraces: () => settings.get().captureTraces ?? false,
+  setShouldCaptureTraces: (captureTraces: boolean) => settings.set({ ...settings.get(), captureTraces }),
+  shouldAutoflushTraces: () => settings.get().autoflushTraces ?? true,
+  setShouldAutoflushTraces: (autoflushTraces: boolean) => settings.set({ ...settings.get(), autoflushTraces }),
 
   getPositionRecoveryStrategy: () => settings.get().positionRecoveryStrategy ?? 'ALTERNATE_PARENT_CHILD',
   setPositionRecoveryStrategy: (positionRecoveryStrategy: string) => settings.set({ ...settings.get(), positionRecoveryStrategy }),

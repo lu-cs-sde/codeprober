@@ -199,7 +199,7 @@ public class TestClient {
 			}
 
 			final EvaluatePropertyReq req = new EvaluatePropertyReq(src, locator, nt.property, false,
-					allowAsync ? jobIdGenerator.getAndIncrement() : null, null, null);
+					allowAsync ? jobIdGenerator.getAndIncrement() : null, null, null, null);
 			runEvaluateProperty(req, sync -> {
 				if (!(identityComparison //
 						? compareIdentityLines(nt.expectedOutput, sync.body)
@@ -343,7 +343,7 @@ public class TestClient {
 			}
 
 			final EvaluatePropertyReq req = new EvaluatePropertyReq(tcase.src, tcase.locator, tcase.property, false,
-					job, null, null);
+					job, null, null, null);
 
 			runEvaluateProperty(req, handleResponse);
 //			handleCallback.accept(requestHandler.handleRequest(new ClientRequest(req.toJSON(), asyncMsg -> {

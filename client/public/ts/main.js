@@ -842,6 +842,10 @@ define("ui/UIElements", ["require", "exports"], function (require, exports) {
         get duplicateProbeHelpButton() { return document.getElementById('duplicate-probe-on-attr-help'); }
         get captureStdoutCheckbox() { return document.getElementById('control-capture-stdout'); }
         get captureStdoutHelpButton() { return document.getElementById('capture-stdout-help'); }
+        get captureTracesCheckbox() { return document.getElementById('control-capture-traces'); }
+        get captureTracesHelpButton() { return document.getElementById('capture-traces-help'); }
+        get autoflushTracesCheckbox() { return document.getElementById('control-autoflush-traces'); }
+        get autoflushTracesContainer() { return document.getElementById('container-autoflush-traces'); }
         get locationStyleSelector() { return document.getElementById('location-style'); }
         get locationStyleHelpButton() { return document.getElementById('control-location-style-help'); }
         get generalHelpButton() { return document.getElementById('display-help'); }
@@ -926,6 +930,10 @@ define("settings", ["require", "exports", "model/syntaxHighlighting", "ui/UIElem
         setShouldDuplicateProbeOnAttrClick: (duplicateProbeOnAttrClick) => settings.set({ ...settings.get(), duplicateProbeOnAttrClick }),
         shouldCaptureStdio: () => { var _a; return (_a = settings.get().captureStdio) !== null && _a !== void 0 ? _a : true; },
         setShouldCaptureStdio: (captureStdio) => settings.set({ ...settings.get(), captureStdio }),
+        shouldCaptureTraces: () => { var _a; return (_a = settings.get().captureTraces) !== null && _a !== void 0 ? _a : false; },
+        setShouldCaptureTraces: (captureTraces) => settings.set({ ...settings.get(), captureTraces }),
+        shouldAutoflushTraces: () => { var _a; return (_a = settings.get().autoflushTraces) !== null && _a !== void 0 ? _a : true; },
+        setShouldAutoflushTraces: (autoflushTraces) => settings.set({ ...settings.get(), autoflushTraces }),
         getPositionRecoveryStrategy: () => { var _a; return (_a = settings.get().positionRecoveryStrategy) !== null && _a !== void 0 ? _a : 'ALTERNATE_PARENT_CHILD'; },
         setPositionRecoveryStrategy: (positionRecoveryStrategy) => settings.set({ ...settings.get(), positionRecoveryStrategy }),
         getAstCacheStrategy: () => { var _a; return (_a = settings.get().astCacheStrategy) !== null && _a !== void 0 ? _a : 'PARTIAL'; },
@@ -1067,6 +1075,7 @@ define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui
         'show-all-properties': 'Show all properties',
         'duplicate-probe-on-attr': 'Duplicate probe',
         'capture-stdout': 'Capture stdout',
+        'capture-traces': 'Capture traces',
         'location-style': 'Location styles',
         'ast': 'AST',
         'test-code-vs-codeprober-code': 'Test code vs CodeProber code',
@@ -1494,6 +1503,35 @@ aspect MagicOutputDemo {
                     `Note that only messages printed during property evaluation are captured.`,
                     `Messages printed during parsing are not shown here, but can still be seen in the terminal where you started code-prober.jar.`,
                     `An exception to this is when parsing fails, in which case messages during parsing are displayed (even if this checkbox is unchecked).`,
+                ];
+            }
+            case 'capture-traces': {
+                const code = document.createElement('pre');
+                code.innerText = '  ' + [
+                    `public void Program.cpr_setTraceReceiver(final java.util.function.Consumer<Object[]> recv) {`,
+                    `  trace().setReceiver(new ASTState.Trace.Receiver() {`,
+                    `    @Override`,
+                    `    public void accept(ASTState.Trace.Event event, ASTNode node, String attribute, Object params, Object value) {`,
+                    `      recv.accept(new Object[] { event, node, attribute, params, value });`,
+                    `    }`,
+                    `  });`,
+                    `}`,
+                ].join('\n  ');
+                const copyButton = document.createElement('button');
+                copyButton.innerText = 'Copy to clipboard';
+                copyButton.onclick = () => {
+                    navigator.clipboard.writeText(code.innerText);
+                };
+                return [
+                    `Check this if you want to capture traces of indirect dependencies while evaluating properties.`,
+                    `Once checked, you can optionally also decide if you want to call flushTreeCache() before each time traces are collected.`,
+                    `If you perform computations during main() that results in cached values in your AST, then you wouldn't see the traces of those computations when the probe is evaluated.`,
+                    `By always performing an extra flushTreeCache() prior to collecting traces, we get a bigger and more accurate trace, at the cost of some speed.`,
+                    ``,
+                    `Tracing is an advanced feature which requires some customization in your tool to be able to use`,
+                    `If using JastAdd, add a --tracing flag in your build script, and then the following aspect code (replace 'Program' with your root node type):`,
+                    code,
+                    copyButton
                 ];
             }
             case 'location-style': {
@@ -1951,6 +1989,21 @@ define("model/test/rpcBodyToAssertionLine", ["require", "exports", "hacks"], fun
                 return null;
             case 'arr':
                 return { type: 'arr', value: line.value.map(rpcBodyToTestBody).filter(Boolean) };
+            case 'tracing':
+                // Should we really keep the tracing for tests? Not a very good thing to test I think.
+                const encodeTrace = (tr) => {
+                    const result = rpcBodyToTestBody(tr.result);
+                    return {
+                        type: 'arr',
+                        value: [
+                            { type: 'node', value: tr.node },
+                            { type: 'plain', value: tr.prop.name },
+                            { type: 'arr', value: tr.dependencies.map(encodeTrace) },
+                            ...(result ? [result] : []),
+                        ],
+                    };
+                };
+                return encodeTrace(line.value);
             default: {
                 (0, hacks_1.assertUnreachable)(line);
                 return line;
@@ -10102,6 +10155,111 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
     };
     const encodeRpcBodyLines = (env, body, extras = {}) => {
         let needCapturedStreamArgExplanation = false;
+        let localDisableNodeExpander = false;
+        const createNodeNode = (target, locator, nestingLevel, bodyPath, includePositionIndicator = false) => {
+            const { start, end, type, label } = locator.result;
+            const container = document.createElement('div');
+            if (extras.decorator) {
+                applyDecoratorClass(container, nestingLevel <= 1, extras.decorator(bodyPath));
+            }
+            // container.appendChild(document.createTextNode(`area:${JSON.stringify(bodyPath)}`));
+            const span = {
+                lineStart: (start >>> 12), colStart: (start & 0xFFF),
+                lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
+            };
+            if (includePositionIndicator) {
+                container.appendChild((0, createTextSpanIndicator_5.default)({
+                    span,
+                    marginLeft: false,
+                    autoVerticalMargin: true,
+                }));
+            }
+            const typeNode = document.createElement('span');
+            typeNode.classList.add('syntax-type');
+            typeNode.innerText = label !== null && label !== void 0 ? label : (0, trimTypeName_3.default)(type);
+            typeNode.style.margin = 'auto 0';
+            container.appendChild(typeNode);
+            container.classList.add('clickHighlightOnHover');
+            container.style.width = 'fit-content';
+            container.style.display = 'inline';
+            (0, registerOnHover_3.default)(container, on => {
+                var _a, _b;
+                if (!on || ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true)) {
+                    env.updateSpanHighlight(on ? span : null);
+                    container.style.cursor = 'default';
+                    container.classList.add('clickHighlightOnHover');
+                }
+                else {
+                    container.style.cursor = 'not-allowed';
+                    container.classList.remove('clickHighlightOnHover');
+                }
+            });
+            container.onmousedown = (e) => {
+                e.stopPropagation();
+            };
+            if (!extras.disableNodeSelectors) {
+                (0, registerNodeSelector_2.default)(container, () => locator);
+            }
+            container.addEventListener('click', () => {
+                var _a, _b;
+                if ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true) {
+                    (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(locator));
+                }
+            });
+            if (!localDisableNodeExpander && extras.nodeLocatorExpanderHandler) {
+                // if (existing) {
+                //   if (existing.parentElement) existing.parentElement.removeChild(existing);
+                //   target.appendChild(existing);
+                // } else {
+                const middleContainer = document.createElement('div');
+                middleContainer.style.display = 'flex';
+                middleContainer.style.flexDirection = 'row';
+                container.style.display = 'flex';
+                middleContainer.appendChild(container);
+                if (!extras.disableInlineExpansionButton) {
+                    const expander = document.createElement('div');
+                    expander.innerText = `▼`;
+                    expander.style.marginLeft = '0.25rem';
+                    expander.classList.add('linkedProbeCreator');
+                    expander.onmouseover = e => e.stopPropagation();
+                    expander.onmousedown = (e) => {
+                        e.stopPropagation();
+                    };
+                    middleContainer.appendChild(expander);
+                    const clickHandler = extras.nodeLocatorExpanderHandler.onClick;
+                    expander.onclick = () => clickHandler({
+                        locator,
+                        locatorRoot: outerContainer,
+                        expansionArea,
+                        path: bodyPath,
+                    });
+                }
+                const outerContainer = document.createElement('div');
+                outerContainer.style.display = 'inline-flex';
+                // outerContainer.style.marginBottom = '0.125rem';
+                outerContainer.style.flexDirection = 'column';
+                outerContainer.appendChild(middleContainer);
+                const existingExpansionArea = extras.nodeLocatorExpanderHandler.getReusableExpansionArea(bodyPath);
+                if (existingExpansionArea) {
+                    if (existingExpansionArea.parentElement) {
+                        existingExpansionArea.parentElement.removeChild(existingExpansionArea);
+                    }
+                }
+                const expansionArea = existingExpansionArea !== null && existingExpansionArea !== void 0 ? existingExpansionArea : document.createElement('div');
+                outerContainer.appendChild(expansionArea);
+                target.appendChild(outerContainer);
+                extras.nodeLocatorExpanderHandler.onCreate({
+                    locator,
+                    locatorRoot: outerContainer,
+                    expansionArea,
+                    path: bodyPath,
+                    isFresh: !existingExpansionArea,
+                });
+            }
+            else {
+                target.appendChild(container);
+            }
+        };
         const appliedDecoratorResultsTrackers = [];
         const applyDecoratorClass = (target, applyRoot, decoratorResult) => {
             appliedDecoratorResultsTrackers.forEach(tracker => tracker[decoratorResult] = true);
@@ -10270,111 +10428,157 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                     break;
                 }
                 case 'node': {
-                    const { start, end, type, label } = line.value.result;
-                    const container = document.createElement('div');
-                    if (extras.decorator) {
-                        applyDecoratorClass(container, nestingLevel <= 1, extras.decorator(bodyPath));
-                    }
-                    // container.appendChild(document.createTextNode(`area:${JSON.stringify(bodyPath)}`));
-                    const span = {
-                        lineStart: (start >>> 12), colStart: (start & 0xFFF),
-                        lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
-                    };
-                    container.appendChild((0, createTextSpanIndicator_5.default)({
-                        span,
-                        marginLeft: false,
-                        autoVerticalMargin: true,
-                    }));
-                    const typeNode = document.createElement('span');
-                    typeNode.classList.add('syntax-type');
-                    typeNode.innerText = label !== null && label !== void 0 ? label : (0, trimTypeName_3.default)(type);
-                    typeNode.style.margin = 'auto 0';
-                    container.appendChild(typeNode);
-                    container.classList.add('clickHighlightOnHover');
-                    container.style.width = 'fit-content';
-                    container.style.display = 'inline';
-                    (0, registerOnHover_3.default)(container, on => {
-                        var _a, _b;
-                        if (!on || ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true)) {
-                            env.updateSpanHighlight(on ? span : null);
-                            container.style.cursor = 'default';
-                            container.classList.add('clickHighlightOnHover');
-                        }
-                        else {
-                            container.style.cursor = 'not-allowed';
-                            container.classList.remove('clickHighlightOnHover');
-                        }
-                    });
-                    container.onmousedown = (e) => {
-                        e.stopPropagation();
-                    };
-                    if (!extras.disableNodeSelectors) {
-                        (0, registerNodeSelector_2.default)(container, () => line.value);
-                    }
-                    container.addEventListener('click', () => {
-                        var _a, _b;
-                        if ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true) {
-                            (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(line.value));
-                        }
-                    });
-                    if (extras.nodeLocatorExpanderHandler) {
-                        // if (existing) {
-                        //   if (existing.parentElement) existing.parentElement.removeChild(existing);
-                        //   target.appendChild(existing);
-                        // } else {
-                        const middleContainer = document.createElement('div');
-                        middleContainer.style.display = 'flex';
-                        middleContainer.style.flexDirection = 'row';
-                        container.style.display = 'flex';
-                        middleContainer.appendChild(container);
-                        if (!extras.disableInlineExpansionButton) {
-                            const expander = document.createElement('div');
-                            expander.innerText = `▼`;
-                            expander.style.marginLeft = '0.25rem';
-                            expander.classList.add('linkedProbeCreator');
-                            expander.onmouseover = e => e.stopPropagation();
-                            expander.onmousedown = (e) => {
-                                e.stopPropagation();
-                            };
-                            middleContainer.appendChild(expander);
-                            const clickHandler = extras.nodeLocatorExpanderHandler.onClick;
-                            expander.onclick = () => clickHandler({
-                                locator: line.value,
-                                locatorRoot: outerContainer,
-                                expansionArea,
-                                path: bodyPath,
-                            });
-                        }
-                        const outerContainer = document.createElement('div');
-                        outerContainer.style.display = 'inline-flex';
-                        // outerContainer.style.marginBottom = '0.125rem';
-                        outerContainer.style.flexDirection = 'column';
-                        outerContainer.appendChild(middleContainer);
-                        const existingExpansionArea = extras.nodeLocatorExpanderHandler.getReusableExpansionArea(bodyPath);
-                        if (existingExpansionArea) {
-                            if (existingExpansionArea.parentElement) {
-                                existingExpansionArea.parentElement.removeChild(existingExpansionArea);
-                            }
-                        }
-                        const expansionArea = existingExpansionArea !== null && existingExpansionArea !== void 0 ? existingExpansionArea : document.createElement('div');
-                        outerContainer.appendChild(expansionArea);
-                        target.appendChild(outerContainer);
-                        extras.nodeLocatorExpanderHandler.onCreate({
-                            locator: line.value,
-                            locatorRoot: outerContainer,
-                            expansionArea,
-                            path: bodyPath,
-                            isFresh: !existingExpansionArea,
-                        });
-                    }
-                    else {
-                        target.appendChild(container);
-                    }
+                    createNodeNode(target, line.value, nestingLevel, bodyPath);
                     break;
                 }
                 case 'dotGraph': {
                     target.appendChild(encodeDotVal(line.value));
                     target.appendChild(document.createElement('br'));
+                    break;
+                }
+                case 'tracing': {
+                    const encodeTrace = (tr, path, isTopTrace, dst) => {
+                        const locToShortStr = (locator) => { var _a; return (_a = locator.result.label) !== null && _a !== void 0 ? _a : locator.result.type.split('.').slice(-1)[0]; };
+                        const summaryHolder = document.createElement('div');
+                        summaryHolder.style.display = 'inline';
+                        let addResult = !isTopTrace;
+                        if (isTopTrace) {
+                            const countTraces = (tr) => {
+                                return 1 + tr.dependencies.reduce((a, b) => a + countTraces(b), 0);
+                            };
+                            const count = countTraces(tr);
+                            summaryHolder.classList.add('stream-arg-msg');
+                            if (count <= 1) {
+                                summaryHolder.innerText = `No traces available`;
+                            }
+                            else {
+                                summaryHolder.innerText = `${count - 1} trace${count == 2 ? '' : 's'} available, click to expand`;
+                            }
+                        }
+                        else {
+                            const summaryPartNode = document.createElement('span');
+                            summaryPartNode.classList.add('syntax-type');
+                            summaryPartNode.innerText = locToShortStr(tr.node);
+                            summaryPartNode.classList.add('clickHighlightOnHover');
+                            summaryPartNode.onmousedown = (e) => {
+                                e.stopPropagation();
+                                e.stopImmediatePropagation();
+                            };
+                            const span = (0, startEndToSpan_6.default)(tr.node.result.start, tr.node.result.end);
+                            (0, registerOnHover_3.default)(summaryPartNode, isHovering => {
+                                env.updateSpanHighlight(isHovering ? span : null);
+                            });
+                            summaryPartNode.onclick = (e) => {
+                                // console.log('click summary node', e)
+                                e.stopPropagation();
+                                e.stopImmediatePropagation();
+                                e.preventDefault();
+                                (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(tr.node));
+                            };
+                            const summaryPartAttr = document.createElement('span');
+                            summaryPartAttr.classList.add('syntax-attr');
+                            summaryPartAttr.innerText = `.${tr.prop.name}`;
+                            let summaryPartResult = null;
+                            const addSummaryResult = (builder) => {
+                                let div = document.createElement('div');
+                                div.style.display = 'inline';
+                                builder(div);
+                                summaryPartResult = div;
+                            };
+                            // let summaryText = `${locToShortStr(tr.node)}.${tr.prop.name}`;
+                            switch (tr.result.type) {
+                                case 'arr': {
+                                    const arr = tr.result.value;
+                                    console.log('arr:', arr);
+                                    if (arr.length == 2 && arr[0].type == 'node' && arr[1].type == 'plain' && !arr[1].value.trim()) {
+                                        const locator = arr[0].value;
+                                        const locStr = locToShortStr(locator);
+                                        addSummaryResult(tgt => {
+                                            tgt.appendChild(document.createTextNode(' = '));
+                                            createNodeNode(tgt, locator, nestingLevel + 1, path, false);
+                                            // encodeLine(tgt, { type: 'node', value: locator }, nestingLevel + 1, path);
+                                            addResult = false;
+                                            // tgt.innerText = ` = ${locStr}..`
+                                        });
+                                        // summaryText = `${summaryText};
+                                    }
+                                    break;
+                                }
+                                case 'plain': {
+                                    const val = tr.result.value.trim().replace(/\n/g, '\\n');
+                                    const trimmed = val.length < 16 ? val : `${val.slice(0, 14)}..`;
+                                    addSummaryResult((tgt) => {
+                                        if (!trimmed) {
+                                            // Empty string, treat specially
+                                            tgt.appendChild(document.createTextNode(' = '));
+                                            const empty = document.createElement('span');
+                                            empty.classList.add('dimmed');
+                                            empty.innerText = `(empty str)`;
+                                            tgt.appendChild(empty);
+                                        }
+                                        else {
+                                            tgt.innerText = ` = ${trimmed}`;
+                                        }
+                                    });
+                                    if (val.length < 16) {
+                                        addResult = false;
+                                    }
+                                    break;
+                                }
+                            }
+                            // summary.innerText = summaryText;
+                            summaryHolder.appendChild(summaryPartNode);
+                            summaryHolder.appendChild(summaryPartAttr);
+                            if (!!summaryPartResult) {
+                                summaryHolder.appendChild(summaryPartResult);
+                            }
+                        }
+                        // encodeLine = (target: HTMLElement, line: RpcBodyLine, nestingLevel: number, bodyPath: number[]) => {
+                        if (addResult) {
+                            switch (tr.result.type) {
+                                case 'arr': {
+                                    addResult = !!tr.result.value.length;
+                                    break;
+                                }
+                                case 'plain': {
+                                    addResult = !!tr.result.value.length;
+                                    break;
+                                }
+                            }
+                        }
+                        const body = document.createElement('div');
+                        body.style.paddingLeft = '1rem';
+                        if (addResult) {
+                            console.log('going encode tracing child of', tr.prop.name, ':', tr.result);
+                            // if (tr.result.type == 'arr' && tr.result.value[1].type == 'plain' && !tr.result.value[1].value.trim()) {
+                            //   encodeLine(body, tr.result.value[0], nestingLevel + 1, path);
+                            // } else {
+                            encodeLine(body, tr.result, nestingLevel + 1, path);
+                            // }
+                        }
+                        tr.dependencies.forEach((dep, depIdx) => {
+                            encodeTrace(dep, [...path, depIdx + 1], false, body);
+                        });
+                        const summary = document.createElement('summary');
+                        summary.appendChild(summaryHolder);
+                        // summary.classList.add('syntax-attr');
+                        if (!addResult && !tr.dependencies.length) {
+                            dst.append(summary);
+                        }
+                        else {
+                            summary.onmousedown = (e) => {
+                                e.stopPropagation();
+                            };
+                            summary.classList.add('clickHighlightOnHover');
+                            const det = document.createElement('details');
+                            det.appendChild(summary);
+                            det.appendChild(body);
+                            dst.appendChild(det);
+                        }
+                    };
+                    localDisableNodeExpander = true;
+                    encodeTrace(line.value, bodyPath, true, target);
+                    localDisableNodeExpander = false;
                     break;
                 }
                 default: {
@@ -11416,7 +11620,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         }
                     },
                     {
-                        title: 'Copy raw output to clipboard',
+                        title: 'Copy output as JSON to clipboard',
                         invoke: () => {
                             navigator.clipboard.writeText(copyBody.map(line => typeof line === 'string' ? line : JSON.stringify(line, null, 2)).join('\n'));
                         }
@@ -11443,6 +11647,17 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     case 'node': {
                                         const span = (0, startEndToSpan_9.default)(line.value.result.start, line.value.result.end);
                                         return `[${span.lineStart}:${span.colStart}-${span.lineEnd}:${span.colEnd}] ${(_a = line.value.result.label) !== null && _a !== void 0 ? _a : line.value.result.type.split('.').slice(-1)[0]}`;
+                                    }
+                                    case 'tracing': {
+                                        const buildTracingLine = (tr) => {
+                                            var _a;
+                                            const lines = [];
+                                            lines.push(`${(_a = tr.node.result.label) !== null && _a !== void 0 ? _a : tr.node.result.type.split('.').slice(-1)[0]}.${tr.prop.name}`);
+                                            tr.dependencies.forEach((dep, depIdx) => lines.push(`${depIdx == tr.dependencies.length - 1 ? '└' : '├'} ${buildTracingLine(dep)}`));
+                                            lines.push(`-> ${buildLine(tr.result)}`);
+                                            return lines.join('\n').replace(/\n/g, '\n│ ');
+                                        };
+                                        return buildTracingLine(line.value);
                                     }
                                     default: {
                                         (0, hacks_4.assertUnreachable)(line);
@@ -11551,6 +11766,8 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         locator: locator.get(),
                         src: env.createParsingRequestData(),
                         captureStdout: settings_3.default.shouldCaptureStdio(),
+                        captureTraces: settings_3.default.shouldCaptureTraces() || undefined,
+                        flushBeforeTraceCollection: (settings_3.default.shouldCaptureTraces() && settings_3.default.shouldAutoflushTraces()) || undefined,
                         jobLabel: `Probe: '${`${(_a = locator.get().result.label) !== null && _a !== void 0 ? _a : locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
                         skipResultLocator: env !== env.getGlobalModalEnv(),
                     }, () => {
@@ -13953,7 +14170,32 @@ define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionP
     };
     exports.default = installASTEditor;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_8, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_4, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_9, hacks_5, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1) {
+define("ui/configureCheckboxWithHiddenCheckbox", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const configureCheckboxWithHiddenCheckbox = (outer, hidden) => {
+        outer.checkbox.checked = outer.initiallyChecked;
+        hidden.checkbox.checked = hidden.initiallyChecked;
+        const refreshHidden = () => {
+            if (outer.checkbox.checked) {
+                hidden.container.style.display = 'inline-block';
+            }
+            else {
+                hidden.container.style.display = 'none';
+            }
+        };
+        refreshHidden();
+        outer.checkbox.oninput = (e) => {
+            refreshHidden();
+            outer.onChange(outer.checkbox.checked);
+        };
+        hidden.checkbox.oninput = (e) => {
+            hidden.onChange(hidden.checkbox.checked);
+        };
+    };
+    exports.default = configureCheckboxWithHiddenCheckbox;
+});
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_8, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_4, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_9, hacks_5, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -13978,6 +14220,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     createMinimizedProbeModal_2 = __importDefault(createMinimizedProbeModal_2);
     getEditorDefinitionPlace_2 = __importDefault(getEditorDefinitionPlace_2);
     installASTEditor_1 = __importDefault(installASTEditor_1);
+    configureCheckboxWithHiddenCheckbox_1 = __importDefault(configureCheckboxWithHiddenCheckbox_1);
     const uiElements = new UIElements_4.default();
     window.clearUserSettings = () => {
         settings_8.default.set({});
@@ -14183,6 +14426,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     input.oninput = () => { update(input.checked); notifyLocalChangeListeners(); };
                 };
                 setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_8.default.shouldCaptureStdio(), cb => settings_8.default.setShouldCaptureStdio(cb));
+                setupSimpleCheckbox(uiElements.captureTracesCheckbox, settings_8.default.shouldCaptureTraces(), cb => settings_8.default.setShouldCaptureTraces(cb));
                 setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_8.default.shouldDuplicateProbeOnAttrClick(), cb => settings_8.default.setShouldDuplicateProbeOnAttrClick(cb));
                 setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_8.default.shouldShowAllProperties(), cb => settings_8.default.setShouldShowAllProperties(cb));
                 const setupSimpleSelector = (input, initial, update) => {
@@ -14239,6 +14483,26 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 }, () => {
                     const overrides = settings_8.default.getCustomFileSuffix();
                     return overrides === null ? null : `Edit (${settings_8.default.getCurrentFileSuffix()})`;
+                });
+                (0, configureCheckboxWithHiddenCheckbox_1.default)(
+                // Outer
+                {
+                    checkbox: uiElements.captureTracesCheckbox,
+                    initiallyChecked: settings_8.default.shouldCaptureTraces(),
+                    onChange: (checked) => {
+                        settings_8.default.setShouldCaptureTraces(checked);
+                        notifyLocalChangeListeners();
+                    },
+                }, 
+                // Hidden
+                {
+                    checkbox: uiElements.autoflushTracesCheckbox,
+                    initiallyChecked: settings_8.default.shouldAutoflushTraces(),
+                    onChange: (checked) => {
+                        settings_8.default.setShouldAutoflushTraces(checked);
+                        notifyLocalChangeListeners();
+                    },
+                    container: uiElements.autoflushTracesContainer,
                 });
                 const statCollectorImpl = new StatisticsCollectorImpl_1.default();
                 if (location.search.includes('debug=true')) {
@@ -14368,6 +14632,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         case 'show-all-properties': return common('show-all-properties', uiElements.showAllPropertiesHelpButton);
                         case 'duplicate-probe-on-attr': return common('duplicate-probe-on-attr', uiElements.duplicateProbeHelpButton);
                         case 'capture-stdout': return common('capture-stdout', uiElements.captureStdoutHelpButton);
+                        case 'capture-traces': return common('capture-traces', uiElements.captureTracesHelpButton);
                         case 'location-style': return common('location-style', uiElements.locationStyleHelpButton);
                         default: return console.error('Unknown help type', type);
                     }

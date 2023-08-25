@@ -4,6 +4,9 @@ import org.json.JSONObject;
 
 public class HoverRes implements codeprober.util.JsonUtil.ToJsonable {
   public final java.util.List<String> lines;
+  public HoverRes() {
+    this(null);
+  }
   public HoverRes(java.util.List<String> lines) {
     this.lines = lines;
   }

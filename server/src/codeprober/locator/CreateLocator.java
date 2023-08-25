@@ -69,6 +69,10 @@ public class CreateLocator {
 		mergeMethod = mth;
 	}
 
+	public static LocatorMergeMethod getMergeMethod() {
+		return mergeMethod;
+	}
+
 	public static void putNodeTypeValues(AstNode node, JSONObject dst) {
 		dst.put("type", node.underlyingAstNode.getClass().getName());
 		String lbl = node.getNodeLabel();

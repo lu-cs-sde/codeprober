@@ -49,7 +49,7 @@ public class TestEvaluatePropertyHandler {
 				null, //
 				CreateLocator.fromNode(info, ast), //
 				new Property("timesTwo", Arrays.asList(PropertyArg.fromInteger(21)), null), //
-				true, null, null, null);
+				true, null, null, null, null);
 
 		final List<RpcBodyLine> body = EvaluatePropertyHandler.apply(requestObj, createHardcodedParser(info)).response.asSync().body;
 
@@ -67,7 +67,7 @@ public class TestEvaluatePropertyHandler {
 				CreateLocator.fromNode(info, ast), //
 				new Property("mthWithPrintStreamArg",
 						Arrays.asList(PropertyArg.fromOutputstream(PrintStream.class.getName())), null), //
-				true, null, null, null);
+				true, null, null, null, null);
 
 		final List<RpcBodyLine> body = EvaluatePropertyHandler.apply(requestObj, createHardcodedParser(info)).response.asSync().body;
 		assertEquals(2, body.size());

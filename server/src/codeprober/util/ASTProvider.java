@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.jar.JarFile;
 
 import codeprober.metaprogramming.StdIoInterceptor;
@@ -187,7 +188,7 @@ public class ASTProvider {
 					}));
 					return new ParseResult(null, captures);
 				}
-				// rootConsumer.accept(root);
+
 				return new ParseResult(root, captures);
 			} catch (IllegalAccessException e) {
 				e.printStackTrace();
@@ -199,7 +200,8 @@ public class ASTProvider {
 		} catch (NoSuchFieldException e) {
 			System.err.println("Could not find the AST root declaration.");
 			final List<RpcBodyLine> userHelp = StdIoInterceptor.performDefaultCapture(() -> {
-				System.err.println("'CodeProber_root_node' not found. Make sure you declare and assign the following field in your main class:");
+				System.err.println(
+						"'CodeProber_root_node' not found. Make sure you declare and assign the following field in your main class:");
 				System.err.println("'public static Object CodeProber_root_node'");
 			});
 			return new ParseResult(null, userHelp);

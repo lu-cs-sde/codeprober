@@ -122,6 +122,15 @@
           <button onClick="displayHelp('capture-stdout')" id="capture-stdout-help" style="border-radius: 50%; ">?</button>
         </div>
         <div>
+          <input type='checkbox' id='control-capture-traces'></input>
+          <label for='control-capture-traces'>Capture traces</label>
+          <button onClick="displayHelp('capture-traces')" id="capture-traces-help" style="border-radius: 50%; ">?</button>
+          <div id='container-autoflush-traces' style="display: inline-block; padding-left: 0.5rem; padding-bottom: 0.5rem;">
+            <input type='checkbox' id='control-autoflush-traces'></input>
+            <label for='control-autoflush-traces'>..but flush tree first</label>
+          </div>
+        </div>
+        <div>
           <input type='checkbox' id='control-duplicate-probe-on-attr' checked></input>
           <label for='control-duplicate-probe-on-attr'>Duplicate probe on attr click</label>
           <button onClick="displayHelp('duplicate-probe-on-attr')" id="duplicate-probe-on-attr-help" style="border-radius: 50%; ">?</button>

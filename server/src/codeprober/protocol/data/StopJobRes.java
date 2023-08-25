@@ -4,6 +4,9 @@ import org.json.JSONObject;
 
 public class StopJobRes implements codeprober.util.JsonUtil.ToJsonable {
   public final String err;
+  public StopJobRes() {
+    this(null);
+  }
   public StopJobRes(String err) {
     this.err = err;
   }

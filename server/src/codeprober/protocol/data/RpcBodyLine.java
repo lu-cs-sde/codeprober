@@ -14,6 +14,7 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
     node,
     dotGraph,
     highlightMsg,
+    tracing,
   }
 
   public final Type type;
@@ -30,6 +31,7 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
   public static RpcBodyLine fromNode(NodeLocator val) { return new RpcBodyLine(Type.node, val); }
   public static RpcBodyLine fromDotGraph(String val) { return new RpcBodyLine(Type.dotGraph, val); }
   public static RpcBodyLine fromHighlightMsg(HighlightableMessage val) { return new RpcBodyLine(Type.highlightMsg, val); }
+  public static RpcBodyLine fromTracing(Tracing val) { return new RpcBodyLine(Type.tracing, val); }
 
   public boolean isPlain() { return type == Type.plain; }
   public String asPlain() { if (type != Type.plain) { throw new IllegalStateException("This RpcBodyLine is not of type plain, it is '" + type + "'"); } return (String)value; }
@@ -47,6 +49,8 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
   public String asDotGraph() { if (type != Type.dotGraph) { throw new IllegalStateException("This RpcBodyLine is not of type dotGraph, it is '" + type + "'"); } return (String)value; }
   public boolean isHighlightMsg() { return type == Type.highlightMsg; }
   public HighlightableMessage asHighlightMsg() { if (type != Type.highlightMsg) { throw new IllegalStateException("This RpcBodyLine is not of type highlightMsg, it is '" + type + "'"); } return (HighlightableMessage)value; }
+  public boolean isTracing() { return type == Type.tracing; }
+  public Tracing asTracing() { if (type != Type.tracing) { throw new IllegalStateException("This RpcBodyLine is not of type tracing, it is '" + type + "'"); } return (Tracing)value; }
 
   public static RpcBodyLine fromJSON(JSONObject obj) {
     final Type type;
@@ -103,10 +107,17 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
         throw new org.json.JSONException("Not a valid RpcBodyLine", e);
       }
     case highlightMsg:
-    default:
       try {
         final HighlightableMessage val = HighlightableMessage.fromJSON(obj.getJSONObject("value"));
         return fromHighlightMsg(val);
+      } catch (org.json.JSONException e) {
+        throw new org.json.JSONException("Not a valid RpcBodyLine", e);
+      }
+    case tracing:
+    default:
+      try {
+        final Tracing val = Tracing.fromJSON(obj.getJSONObject("value"));
+        return fromTracing(val);
       } catch (org.json.JSONException e) {
         throw new org.json.JSONException("Not a valid RpcBodyLine", e);
       }
@@ -138,8 +149,11 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
       ret.put("value", ((String)value));
       break;
     case highlightMsg:
-    default:
       ret.put("value", ((HighlightableMessage)value).toJSON());
+      break;
+    case tracing:
+    default:
+      ret.put("value", ((Tracing)value).toJSON());
       break;
     }
     return ret;

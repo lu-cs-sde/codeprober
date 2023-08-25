@@ -4,6 +4,9 @@ import org.json.JSONObject;
 
 public class CompleteRes implements codeprober.util.JsonUtil.ToJsonable {
   public final java.util.List<String> lines;
+  public CompleteRes() {
+    this(null);
+  }
   public CompleteRes(java.util.List<String> lines) {
     this.lines = lines;
   }

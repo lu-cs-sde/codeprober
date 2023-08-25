@@ -26,8 +26,8 @@ public class AstInfo {
 	private final Map<Class<?>, Map<String, Boolean>> hasOverride0Cache = new HashMap<>();
 	private final Map<Class<?>, Map<String, Map<Class<?>, Boolean>>> hasOverride1Cache = new HashMap<>();
 
-	public AstInfo(AstNode ast, PositionRecoveryStrategy recoveryStrategy,
-			AstNodeApiStyle astApiStyle, TypeIdentificationStyle typeIdentificationStyle) {
+	public AstInfo(AstNode ast, PositionRecoveryStrategy recoveryStrategy, AstNodeApiStyle astApiStyle,
+			TypeIdentificationStyle typeIdentificationStyle) {
 		this.ast = ast;
 		this.recoveryStrategy = recoveryStrategy;
 		this.astApiStyle = astApiStyle;
@@ -35,7 +35,7 @@ public class AstInfo {
 			try {
 				return Class.forName(cname, true, ast.underlyingAstNode.getClass().getClassLoader());
 			} catch (ClassNotFoundException e) {
-				System.err.println("Type '" + cname +"' cannot be instantiated by the AST's ClassLoader");
+				System.err.println("Type '" + cname + "' cannot be instantiated by the AST's ClassLoader");
 				e.printStackTrace();
 				throw new RuntimeException(e);
 			}
@@ -64,7 +64,7 @@ public class AstInfo {
 		if (!loadedLocatorTALRoot) {
 			loadedLocatorTALRoot = true;
 			try {
-				String underlyingType = (String)Reflect.invoke0(ast.underlyingAstNode, "cpr_locatorTALRoot");
+				String underlyingType = (String) Reflect.invoke0(ast.underlyingAstNode, "cpr_locatorTALRoot");
 				locatorTALRoot = loadAstClass.apply(getQualifiedAstType(underlyingType));
 			} catch (InvokeProblem e) {
 				// OK, this is an optional attribute after all
@@ -84,7 +84,9 @@ public class AstInfo {
 		}
 
 		Boolean ex = inner.get(mthName);
-		if (ex != null) { return ex; }
+		if (ex != null) {
+			return ex;
+		}
 
 		boolean fresh;
 		try {
@@ -111,7 +113,9 @@ public class AstInfo {
 		}
 
 		Boolean ex = innerer.get(argType);
-		if (ex != null) { return ex; }
+		if (ex != null) {
+			return ex;
+		}
 
 		boolean fresh;
 		try {

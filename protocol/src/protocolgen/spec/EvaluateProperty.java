@@ -14,6 +14,8 @@ public class EvaluateProperty extends Rpc {
 			public final Object job = opt(Long.class);
 			public final Object jobLabel = opt(String.class);
 			public final Object skipResultLocator = opt(Boolean.class);
+			public final Object captureTraces = opt(Boolean.class);
+			public final Object flushBeforeTraceCollection = opt(Boolean.class);
 		};
 	}
 

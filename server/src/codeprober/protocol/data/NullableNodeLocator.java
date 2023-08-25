@@ -5,6 +5,9 @@ import org.json.JSONObject;
 public class NullableNodeLocator implements codeprober.util.JsonUtil.ToJsonable {
   public final String type;
   public final NodeLocator value;
+  public NullableNodeLocator(String type) {
+    this(type, null);
+  }
   public NullableNodeLocator(String type, NodeLocator value) {
     this.type = type;
     this.value = value;

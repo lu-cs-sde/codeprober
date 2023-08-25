@@ -4,6 +4,9 @@ import org.json.JSONObject;
 
 public class FetchRes implements codeprober.util.JsonUtil.ToJsonable {
   public final String result;
+  public FetchRes() {
+    this(null);
+  }
   public FetchRes(String result) {
     this.result = result;
   }

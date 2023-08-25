@@ -9,6 +9,9 @@ public class TALStep implements codeprober.util.JsonUtil.ToJsonable {
   public final int end;
   public final int depth;
   public final Boolean external;
+  public TALStep(String type, String label, int start, int end, int depth) {
+    this(type, label, start, end, depth, null);
+  }
   public TALStep(String type, String label, int start, int end, int depth, Boolean external) {
     this.type = type;
     this.label = label;

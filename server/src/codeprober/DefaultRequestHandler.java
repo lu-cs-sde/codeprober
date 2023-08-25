@@ -199,7 +199,8 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				if (res.rootNode == null) {
 					return new ParsedAst(null, res.parseTime, res.captures);
 				}
-				return new ParsedAst(parsedAstToInfo(res.rootNode, posRecovery), res.parseTime, res.captures);
+				return new ParsedAst(parsedAstToInfo(res.rootNode, posRecovery), res.parseTime,
+						res.captures);
 			};
 			final AtomicBoolean logged = new AtomicBoolean(false);
 			final JSONObject handled = new RequestAdapter() {
@@ -328,6 +329,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 							tmpFile.getAbsolutePath());
 					System.out.println("Tried optimized flush, result: " + replacedOk);
 					if (replacedOk) {
+
 //						handleParsedAst(lastInfo.ast.underlyingAstNode, queryObj, retBuilder, bodyBuilder);
 						lastParsedInput = inputText;
 						return new ParseResultWithExtraInfo(lastInfo.ast.underlyingAstNode, null,

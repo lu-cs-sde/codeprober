@@ -9,6 +9,18 @@ public class InitInfo implements codeprober.util.JsonUtil.ToJsonable {
   public final Integer workerProcessCount;
   public final Boolean disableVersionCheckerByDefault;
   public final BackingFile backingFile;
+  public InitInfo(protocolgen_spec_InitInfo_1 version, Integer changeBufferTime, Integer workerProcessCount, Boolean disableVersionCheckerByDefault) {
+    this(version, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, null);
+  }
+  public InitInfo(protocolgen_spec_InitInfo_1 version, Integer changeBufferTime, Integer workerProcessCount) {
+    this(version, changeBufferTime, workerProcessCount, null, null);
+  }
+  public InitInfo(protocolgen_spec_InitInfo_1 version, Integer changeBufferTime) {
+    this(version, changeBufferTime, null, null, null);
+  }
+  public InitInfo(protocolgen_spec_InitInfo_1 version) {
+    this(version, null, null, null, null);
+  }
   public InitInfo(protocolgen_spec_InitInfo_1 version, Integer changeBufferTime, Integer workerProcessCount, Boolean disableVersionCheckerByDefault, BackingFile backingFile) {
     this.type = "init";
     this.version = version;

@@ -4,6 +4,9 @@ import org.json.JSONObject;
 
 public class PutTestSuiteRes implements codeprober.util.JsonUtil.ToJsonable {
   public final codeprober.protocol.PutTestSuiteContentsErrorCode err;
+  public PutTestSuiteRes() {
+    this(null);
+  }
   public PutTestSuiteRes(codeprober.protocol.PutTestSuiteContentsErrorCode err) {
     this.err = err;
   }

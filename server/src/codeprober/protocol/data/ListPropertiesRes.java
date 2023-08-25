@@ -5,6 +5,9 @@ import org.json.JSONObject;
 public class ListPropertiesRes implements codeprober.util.JsonUtil.ToJsonable {
   public final java.util.List<RpcBodyLine> body;
   public final java.util.List<Property> properties;
+  public ListPropertiesRes(java.util.List<RpcBodyLine> body) {
+    this(body, null);
+  }
   public ListPropertiesRes(java.util.List<RpcBodyLine> body, java.util.List<Property> properties) {
     this.body = body;
     this.properties = properties;
