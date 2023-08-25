@@ -132,8 +132,7 @@ public class EvaluatePropertyHandler {
 		BenchmarkTimer.resetAll();
 
 		final long requestStart = System.nanoTime();
-		final ParsingRequestData prd = req.src;
-		final ParsedAst parsed = parser.parse(prd.text, prd.cache, prd.mainArgs, prd.posRecovery, prd.tmpSuffix);
+		final ParsedAst parsed = parser.parse(req.src);
 
 //		final long parseTime = System.nanoTime() - requestTime;
 
