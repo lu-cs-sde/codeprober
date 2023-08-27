@@ -53,7 +53,7 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
   let needCapturedStreamArgExplanation = false;
   let localDisableNodeExpander = false;
 
-  const createNodeNode = (target: HTMLElement, locator: NodeLocator, nestingLevel: number, bodyPath: number[], includePositionIndicator = false) => {
+  const createNodeNode = (target: HTMLElement, locator: NodeLocator, nestingLevel: number, bodyPath: number[], includePositionIndicator = true) => {
     const { start, end, type, label } = locator.result;
 
     const container = document.createElement('div');
