@@ -6,6 +6,12 @@ public class ListTreeRes implements codeprober.util.JsonUtil.ToJsonable {
   public final java.util.List<RpcBodyLine> body;
   public final NodeLocator locator;
   public final ListedTreeNode node;
+  public ListTreeRes(java.util.List<RpcBodyLine> body, NodeLocator locator) {
+    this(body, locator, null);
+  }
+  public ListTreeRes(java.util.List<RpcBodyLine> body) {
+    this(body, null, null);
+  }
   public ListTreeRes(java.util.List<RpcBodyLine> body, NodeLocator locator, ListedTreeNode node) {
     this.body = body;
     this.locator = locator;

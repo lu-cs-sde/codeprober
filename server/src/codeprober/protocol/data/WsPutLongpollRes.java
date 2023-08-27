@@ -4,6 +4,9 @@ import org.json.JSONObject;
 
 public class WsPutLongpollRes implements codeprober.util.JsonUtil.ToJsonable {
   public final LongPollResponse data;
+  public WsPutLongpollRes() {
+    this(null);
+  }
   public WsPutLongpollRes(LongPollResponse data) {
     this.data = data;
   }

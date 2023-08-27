@@ -10,6 +10,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
@@ -57,14 +58,17 @@ import codeprober.requesthandler.ListPropertiesHandler;
 import codeprober.requesthandler.ListTreeRequestHandler;
 import codeprober.requesthandler.TestRequestHandler;
 import codeprober.rpc.JsonRequestHandler;
+import codeprober.server.BackingFileSettings;
 import codeprober.toolglue.ParseResult;
 import codeprober.toolglue.UnderlyingTool;
 import codeprober.util.ASTProvider;
+import codeprober.util.SessionLogger;
 
 public class DefaultRequestHandler implements JsonRequestHandler {
 
 	private final UnderlyingTool underlyingTool;
 	private final String[] defaultForwardArgs;
+	private final SessionLogger logger;
 
 	private AstInfo lastInfo = null;
 	private String lastParsedInput = null;
@@ -72,13 +76,14 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 	private Long lastToolVersionId;
 
 	public DefaultRequestHandler(UnderlyingTool underlyingTool) {
-		this(underlyingTool, null);
+		this(underlyingTool, null, null);
 	}
 
-	public DefaultRequestHandler(UnderlyingTool underlyingTool, String[] forwardArgs) {
+	public DefaultRequestHandler(UnderlyingTool underlyingTool, String[] forwardArgs, SessionLogger logger) {
 		this.underlyingTool = underlyingTool;
 		this.defaultForwardArgs = forwardArgs != null ? forwardArgs : new String[0];
 		this.lastForwardArgs = this.defaultForwardArgs;
+		this.logger = logger;
 	}
 
 	private AstInfo parsedAstToInfo(Object ast, PositionRecoveryStrategy posRecovery) {
@@ -155,6 +160,21 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			if (existing != null) {
 				return existing;
 			}
+			final File backingFile = BackingFileSettings.getRealFileToBeUsedInRequests();
+			if (backingFile != null) {
+				try {
+
+					Files.write(backingFile.toPath(), inputText.getBytes(StandardCharsets.UTF_8),
+							StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+					// Do NOT set 'tmp' to backingFile, as that would cause it to be deleted.
+					return backingFile;
+				} catch (IOException e) {
+					System.out.println("Failed while copying source text to the backing file " + backingFile);
+					e.printStackTrace();
+					throw new RuntimeException(e);
+
+				}
+			}
 			try {
 				final File tmpFile = File.createTempFile("code-prober", tmpSuffix);
 				try {
@@ -179,8 +199,10 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				if (res.rootNode == null) {
 					return new ParsedAst(null, res.parseTime, res.captures);
 				}
-				return new ParsedAst(parsedAstToInfo(res.rootNode, posRecovery), res.parseTime, res.captures);
+				return new ParsedAst(parsedAstToInfo(res.rootNode, posRecovery), res.parseTime,
+						res.captures);
 			};
+			final AtomicBoolean logged = new AtomicBoolean(false);
 			final JSONObject handled = new RequestAdapter() {
 
 				@Override
@@ -215,6 +237,13 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 				@Override
 				protected EvaluatePropertyRes handleEvaluateProperty(EvaluatePropertyReq req) {
+					if (logger != null) {
+						logged.set(true);
+						logger.log(new JSONObject() //
+								.put("t", "EvaluateProperty") //
+								.put("prop", req.property.name) //
+								.put("node", req.locator.result.type));
+					}
 					return EvaluatePropertyHandler.apply(req, lp);
 				}
 
@@ -234,6 +263,12 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				}
 
 			}.handle(request.data);
+			if (logger != null && !logged.get()) {
+				final String type = request.data.optString("type");
+				if (type != null) {
+					logger.log(new JSONObject().put("t", type));
+				}
+			}
 			if (handled != null) {
 				return handled;
 			}
@@ -294,6 +329,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 							tmpFile.getAbsolutePath());
 					System.out.println("Tried optimized flush, result: " + replacedOk);
 					if (replacedOk) {
+
 //						handleParsedAst(lastInfo.ast.underlyingAstNode, queryObj, retBuilder, bodyBuilder);
 						lastParsedInput = inputText;
 						return new ParseResultWithExtraInfo(lastInfo.ast.underlyingAstNode, null,

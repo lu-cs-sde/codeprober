@@ -1,6 +1,5 @@
 package codeprober.ast;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -94,8 +93,8 @@ public class AstNode {
 		}
 		if (info.hasOverride1(underlyingAstNode.getClass(), "cpr_propSearchVisible", String.class)) {
 			try {
-				return (Boolean) Reflect.invokeN(underlyingAstNode, "cpr_propSearchVisible", new Class[] { String.class },
-						new Object[] { propName });
+				return (Boolean) Reflect.invokeN(underlyingAstNode, "cpr_propSearchVisible",
+						new Class[] { String.class }, new Object[] { propName });
 			} catch (InvokeProblem e) {
 				// Perfectly fine to not override this, ignore the error
 			}
@@ -417,7 +416,7 @@ public class AstNode {
 
 	@Override
 	public String toString() {
-		return "AstNode<" + underlyingAstNode + ">";
+		return "AstNode<" + underlyingAstNode.getClass().getSimpleName() + ":" + underlyingAstNode + ">";
 	}
 
 	public boolean isList() {
@@ -464,7 +463,7 @@ public class AstNode {
 
 	public List<String> propertyListShow(AstInfo info) {
 		final String mth = "cpr_propertyListShow";
-		if (!info.hasOverride0(underlyingAstNode.getClass(), mth)) {
+		if (info.hasOverride0(underlyingAstNode.getClass(), mth)) {
 			try {
 				final Object override = Reflect.invoke0(underlyingAstNode, mth);
 				if (override instanceof Collection<?>) {

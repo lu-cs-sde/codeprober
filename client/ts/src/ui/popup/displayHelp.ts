@@ -27,6 +27,7 @@ const getHelpTitle = (type: HelpType) => ({
   'show-all-properties': 'Show all properties',
   'duplicate-probe-on-attr': 'Duplicate probe',
   'capture-stdout': 'Capture stdout',
+  'capture-traces': 'Capture traces',
   'location-style': 'Location styles',
   'ast': 'AST',
   'test-code-vs-codeprober-code': 'Test code vs CodeProber code',
@@ -482,6 +483,36 @@ aspect MagicOutputDemo {
           `Note that only messages printed during property evaluation are captured.`,
           `Messages printed during parsing are not shown here, but can still be seen in the terminal where you started code-prober.jar.`,
           `An exception to this is when parsing fails, in which case messages during parsing are displayed (even if this checkbox is unchecked).`,
+        ];
+      }
+
+      case 'capture-traces': {
+        const code = document.createElement('pre');
+        code.innerText = '  ' + [
+          `public void Program.cpr_setTraceReceiver(final java.util.function.Consumer<Object[]> recv) {`,
+          `  trace().setReceiver(new ASTState.Trace.Receiver() {`,
+          `    @Override`,
+          `    public void accept(ASTState.Trace.Event event, ASTNode node, String attribute, Object params, Object value) {`,
+          `      recv.accept(new Object[] { event, node, attribute, params, value });`,
+          `    }`,
+          `  });`,
+          `}`,
+        ].join('\n  ');
+        const copyButton = document.createElement('button');
+        copyButton.innerText = 'Copy to clipboard';
+        copyButton.onclick = () => {
+          navigator.clipboard.writeText(code.innerText);
+        }
+        return [
+          `Check this if you want to capture traces of indirect dependencies while evaluating properties.`,
+          `Once checked, you can optionally also decide if you want to call flushTreeCache() before each time traces are collected.`,
+          `If you perform computations during main() that results in cached values in your AST, then you wouldn't see the traces of those computations when the probe is evaluated.`,
+          `By always performing an extra flushTreeCache() prior to collecting traces, we get a bigger and more accurate trace, at the cost of some speed.`,
+          ``,
+          `Tracing is an advanced feature which requires some customization in your tool to be able to use`,
+          `If using JastAdd, add a --tracing flag in your build script, and then the following aspect code (replace 'Program' with your root node type):`,
+          code,
+          copyButton
         ];
       }
 

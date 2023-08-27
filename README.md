@@ -150,4 +150,5 @@ If your native AST structure uses a hierarchy of packages rather than a single f
 If you want to try CodeProber, but don't have an analysis tool of your own, you can try out the playground at https://github.com/Kevlanche/codeprober-playground/.
 
 You can also download the artifact to our Property probe paper, found here: https://doi.org/10.5281/zenodo.7185242.
-This will let you use CodeProber with a Java compiler/analyzer called IntraJ (https://github.com/lu-cs-sde/IntraJ).
+
+Both options let you use CodeProber with a Java compiler/analyzer called IntraJ (https://github.com/lu-cs-sde/IntraJ).

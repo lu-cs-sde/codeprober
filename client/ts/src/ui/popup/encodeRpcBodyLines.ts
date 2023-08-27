@@ -1,6 +1,6 @@
 import ModalEnv from '../../model/ModalEnv';
 import { createMutableLocator } from '../../model/UpdatableNodeLocator';
-import { NodeLocator, RpcBodyLine } from '../../protocol';
+import { NodeLocator, RpcBodyLine, Tracing } from '../../protocol';
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import registerNodeSelector from "../create/registerNodeSelector";
 import registerOnHover from "../create/registerOnHover";
@@ -8,6 +8,7 @@ import trimTypeName from "../trimTypeName";
 import displayAttributeModal from "./displayAttributeModal";
 import { graphviz as d3 } from 'dependencies/graphviz/graphviz';
 import { assertUnreachable } from '../../hacks';
+import startEndToSpan from '../startEndToSpan';
 
 const getCommonStreamArgWhitespacePrefix = (line: RpcBodyLine): number => {
   if (Array.isArray(line)) {
@@ -50,6 +51,118 @@ interface ExtraEncodingArgs {
 }
 const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEncodingArgs = {}): HTMLElement => {
   let needCapturedStreamArgExplanation = false;
+  let localDisableNodeExpander = false;
+
+  const createNodeNode = (target: HTMLElement, locator: NodeLocator, nestingLevel: number, bodyPath: number[], includePositionIndicator = false) => {
+    const { start, end, type, label } = locator.result;
+
+    const container = document.createElement('div');
+    if (extras.decorator) {
+      applyDecoratorClass(container, nestingLevel <= 1, extras.decorator(bodyPath));
+    }
+    // container.appendChild(document.createTextNode(`area:${JSON.stringify(bodyPath)}`));
+    const span: Span = {
+      lineStart: (start >>> 12), colStart: (start & 0xFFF),
+      lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
+    };
+
+    if (includePositionIndicator) {
+      container.appendChild(createTextSpanIndicator({
+        span,
+        marginLeft: false,
+        autoVerticalMargin: true,
+      }));
+    }
+    const typeNode = document.createElement('span');
+    typeNode.classList.add('syntax-type');
+    typeNode.innerText = label ?? trimTypeName(type);
+    typeNode.style.margin = 'auto 0';
+    container.appendChild(typeNode);
+
+    container.classList.add('clickHighlightOnHover');
+    container.style.width = 'fit-content';
+    container.style.display = 'inline';
+    registerOnHover(container, on => {
+      if (!on || (extras.lateInteractivityEnabledChecker?.() ?? true)) {
+        env.updateSpanHighlight(on ? span : null);
+        container.style.cursor = 'default';
+        container.classList.add('clickHighlightOnHover');
+      } else {
+        container.style.cursor = 'not-allowed';
+        container.classList.remove('clickHighlightOnHover');
+      }
+    });
+    container.onmousedown = (e) => {
+      e.stopPropagation();
+    };
+    if (!extras.disableNodeSelectors) {
+      registerNodeSelector(container, () => locator);
+    }
+    container.addEventListener('click', () => {
+      if (extras.lateInteractivityEnabledChecker?.() ?? true) {
+        displayAttributeModal(env.getGlobalModalEnv(), null, createMutableLocator(locator));
+      }
+    });
+    if (!localDisableNodeExpander && extras.nodeLocatorExpanderHandler) {
+      // if (existing) {
+      //   if (existing.parentElement) existing.parentElement.removeChild(existing);
+      //   target.appendChild(existing);
+      // } else {
+      const middleContainer = document.createElement('div');
+      middleContainer.style.display = 'flex';
+      middleContainer.style.flexDirection = 'row';
+      container.style.display = 'flex';
+      middleContainer.appendChild(container);
+
+      if (!extras.disableInlineExpansionButton) {
+        const expander = document.createElement('div');
+        expander.innerText = `▼`;
+        expander.style.marginLeft = '0.25rem';
+        expander.classList.add('linkedProbeCreator');
+        expander.onmouseover = e => e.stopPropagation();
+        expander.onmousedown = (e) => {
+          e.stopPropagation();
+        };
+        middleContainer.appendChild(expander);
+        const clickHandler = extras.nodeLocatorExpanderHandler.onClick;
+        expander.onclick = () => clickHandler({
+          locator,
+          locatorRoot: outerContainer,
+          expansionArea,
+          path: bodyPath,
+        });
+      }
+
+
+      const outerContainer = document.createElement('div');
+      outerContainer.style.display = 'inline-flex';
+      // outerContainer.style.marginBottom = '0.125rem';
+      outerContainer.style.flexDirection = 'column';
+      outerContainer.appendChild(middleContainer);
+
+      const existingExpansionArea = extras.nodeLocatorExpanderHandler.getReusableExpansionArea(bodyPath);
+      if (existingExpansionArea) {
+        if (existingExpansionArea.parentElement) {
+          existingExpansionArea.parentElement.removeChild(existingExpansionArea);
+        }
+      }
+      const expansionArea = existingExpansionArea ?? document.createElement('div');
+      outerContainer.appendChild(expansionArea);
+
+      target.appendChild(outerContainer);
+
+      extras.nodeLocatorExpanderHandler.onCreate({
+        locator,
+        locatorRoot: outerContainer,
+        expansionArea,
+        path: bodyPath,
+        isFresh: !existingExpansionArea,
+      });
+
+    } else {
+      target.appendChild(container);
+    }
+  };
 
 
   const appliedDecoratorResultsTrackers: Partial<Record<ReturnType<LineDecorator>, true>>[] = [];
@@ -87,9 +200,6 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
           d3(`#${id}`, { zoom: false })
             .dot(dotVal)
             .render()
-            .catch((err: any) => {
-              console.warn('err caught', err);
-            })
             ;
         } catch (e) {
           console.warn('Error when d3:ing', e);
@@ -99,37 +209,56 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
     return holder;
   }
   const encodeLine = (target: HTMLElement, line: RpcBodyLine, nestingLevel: number, bodyPath: number[]) => {
+    const addPlain = (msg: string, plainHoverSpan?: { start: number, end: number }) => {
+      const trimmed = msg.trimStart();
+      if (extras.decorator) {
+        const decoration = extras.decorator(bodyPath);
+        if (decoration !== 'default') {
+          const holder = document.createElement('spawn');
+          if (extras.capWidths) {
+            holder.style.whiteSpace = 'normal';
+          } else {
+            holder.style.whiteSpace = 'pre';
+          }
+          if (trimmed.length !== msg.length) {
+            holder.appendChild(document.createTextNode(' '.repeat(msg.length - trimmed.length)));
+          }
+          if (msg.trim()) {
+            holder.appendChild(document.createTextNode(msg.trim()));
+          }
+          holder.appendChild(document.createElement('br'));
+          applyDecoratorClass(holder, nestingLevel <= 1, decoration);
+          target.appendChild(holder);
+          return;
+        }
+      }
+      if (trimmed.length !== msg.length) {
+        target.appendChild(document.createTextNode(' '.repeat(msg.length - trimmed.length)));
+      }
+      if (msg.trim()) {
+        const trimmed = msg.trim();
+        if (plainHoverSpan) {
+          const node = document.createElement('span');
+          const span = startEndToSpan(plainHoverSpan.start, plainHoverSpan.end);
+          node.classList.add('highlightOnHover');
+          registerOnHover(node, hovering => {
+            env.updateSpanHighlight(hovering ? span : null)
+          });
+          node.innerText = trimmed;
+          target.appendChild(node);
+        } else {
+          target.appendChild(document.createTextNode(trimmed));
+        }
+      }
+      target.appendChild(document.createElement('br'));
+    };
     switch (line.type) {
       case 'plain': {
-        const trimmed = line.value.trimStart();
-        if (extras.decorator) {
-          const decoration = extras.decorator(bodyPath);
-          if (decoration !== 'default') {
-            const holder = document.createElement('spawn');
-            if (extras.capWidths) {
-              holder.style.whiteSpace = 'normal';
-            } else {
-              holder.style.whiteSpace = 'pre';
-            }
-            if (trimmed.length !== line.value.length) {
-              holder.appendChild(document.createTextNode(' '.repeat(line.value.length - trimmed.length)));
-            }
-            if (line.value.trim()) {
-              holder.appendChild(document.createTextNode(line.value.trim()));
-            }
-            holder.appendChild(document.createElement('br'));
-            applyDecoratorClass(holder, nestingLevel <= 1, decoration);
-            target.appendChild(holder);
-            break;
-          }
-        }
-        if (trimmed.length !== line.value.length) {
-          target.appendChild(document.createTextNode(' '.repeat(line.value.length - trimmed.length)));
-        }
-        if (line.value.trim()) {
-          target.appendChild(document.createTextNode(line.value.trim()));
-        }
-        target.appendChild(document.createElement('br'));
+        addPlain(line.value);
+        break;
+      }
+      case 'highlightMsg': {
+        addPlain(line.value.msg, line.value);
         break;
       }
       case 'arr': {
@@ -204,118 +333,167 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
         break;
       }
       case 'node': {
-        const { start, end, type, label } = line.value.result;
-
-        const container = document.createElement('div');
-        if (extras.decorator) {
-          applyDecoratorClass(container, nestingLevel <= 1, extras.decorator(bodyPath));
-        }
-        // container.appendChild(document.createTextNode(`area:${JSON.stringify(bodyPath)}`));
-        const span: Span = {
-          lineStart: (start >>> 12), colStart: (start & 0xFFF),
-          lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
-        };
-
-        container.appendChild(createTextSpanIndicator({
-          span,
-          marginLeft: false,
-          autoVerticalMargin: true,
-        }));
-        const typeNode = document.createElement('span');
-        typeNode.classList.add('syntax-type');
-        typeNode.innerText = label ?? trimTypeName(type);
-        typeNode.style.margin = 'auto 0';
-        container.appendChild(typeNode);
-
-        container.classList.add('clickHighlightOnHover');
-        container.style.width = 'fit-content';
-        container.style.display = 'inline';
-        registerOnHover(container, on => {
-          if (!on || (extras.lateInteractivityEnabledChecker?.() ?? true)) {
-            env.updateSpanHighlight(on ? span : null);
-            container.style.cursor = 'default';
-            container.classList.add('clickHighlightOnHover');
-          } else {
-            container.style.cursor = 'not-allowed';
-            container.classList.remove('clickHighlightOnHover');
-          }
-        });
-        container.onmousedown = (e) => {
-          e.stopPropagation();
-        };
-        if (!extras.disableNodeSelectors) {
-          registerNodeSelector(container, () => line.value);
-        }
-        container.addEventListener('click', () => {
-          if (extras.lateInteractivityEnabledChecker?.() ?? true) {
-            displayAttributeModal(env.getGlobalModalEnv(), null, createMutableLocator(line.value));
-          }
-        });
-        if (extras.nodeLocatorExpanderHandler) {
-          // if (existing) {
-          //   if (existing.parentElement) existing.parentElement.removeChild(existing);
-          //   target.appendChild(existing);
-          // } else {
-          const middleContainer = document.createElement('div');
-          middleContainer.style.display = 'flex';
-          middleContainer.style.flexDirection = 'row';
-          container.style.display = 'flex';
-          middleContainer.appendChild(container);
-
-          if (!extras.disableInlineExpansionButton) {
-            const expander = document.createElement('div');
-            expander.innerText = `▼`;
-            expander.style.marginLeft = '0.25rem';
-            expander.classList.add('linkedProbeCreator');
-            expander.onmouseover = e => e.stopPropagation();
-            expander.onmousedown = (e) => {
-              e.stopPropagation();
-            };
-            middleContainer.appendChild(expander);
-            const clickHandler = extras.nodeLocatorExpanderHandler.onClick;
-            expander.onclick = () => clickHandler({
-              locator: line.value,
-              locatorRoot: outerContainer,
-              expansionArea,
-              path: bodyPath,
-            });
-          }
-
-
-          const outerContainer = document.createElement('div');
-          outerContainer.style.display = 'inline-flex';
-          // outerContainer.style.marginBottom = '0.125rem';
-          outerContainer.style.flexDirection = 'column';
-          outerContainer.appendChild(middleContainer);
-
-          const existingExpansionArea = extras.nodeLocatorExpanderHandler.getReusableExpansionArea(bodyPath);
-          if (existingExpansionArea) {
-            if (existingExpansionArea.parentElement) {
-              existingExpansionArea.parentElement.removeChild(existingExpansionArea);
-            }
-          }
-          const expansionArea = existingExpansionArea ?? document.createElement('div');
-          outerContainer.appendChild(expansionArea);
-
-          target.appendChild(outerContainer);
-
-          extras.nodeLocatorExpanderHandler.onCreate({
-            locator: line.value,
-            locatorRoot: outerContainer,
-            expansionArea,
-            path: bodyPath,
-            isFresh: !existingExpansionArea,
-          });
-
-        } else {
-          target.appendChild(container);
-        }
+        createNodeNode(target, line.value, nestingLevel, bodyPath)
         break;
       }
 
       case 'dotGraph': {
         target.appendChild(encodeDotVal(line.value));
         target.appendChild(document.createElement('br'));
+        break;
+      }
+
+      case 'tracing': {
+
+        const encodeTrace = (tr: Tracing, path: number[], isTopTrace: boolean, dst: HTMLElement) => {
+
+          const locToShortStr = (locator: NodeLocator) => locator.result.label ?? locator.result.type.split('.').slice(-1)[0];
+
+          const summaryHolder = document.createElement('div');
+          summaryHolder.style.display = 'inline';
+          let addResult = !isTopTrace;
+          if (isTopTrace) {
+            const countTraces = (tr: Tracing): number => {
+              return 1 + tr.dependencies.reduce((a, b) => a + countTraces(b), 0);
+            };
+            const count = countTraces(tr);
+            summaryHolder.classList.add('stream-arg-msg');
+            if (count <= 1) {
+              summaryHolder.innerText = `No traces available`;
+            } else {
+              summaryHolder.innerText = `${count - 1} trace${count == 2 ? '' : 's'} available, click to expand`;
+            }
+          } else {
+            const summaryPartNode = document.createElement('span');
+            summaryPartNode.classList.add('syntax-type');
+            summaryPartNode.innerText = locToShortStr(tr.node);
+            summaryPartNode.classList.add('clickHighlightOnHover');
+            summaryPartNode.onmousedown = (e) => {
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+            };
+            const span = startEndToSpan(tr.node.result.start, tr.node.result.end);
+            registerOnHover(summaryPartNode, isHovering => {
+              env.updateSpanHighlight(isHovering ? span : null);
+            })
+            summaryPartNode.onclick = (e) => {
+              // console.log('click summary node', e)
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+              e.preventDefault();
+              displayAttributeModal(env.getGlobalModalEnv(), null, createMutableLocator(tr.node));
+            }
+
+
+            const summaryPartAttr = document.createElement('span');
+            summaryPartAttr.classList.add('syntax-attr');
+            summaryPartAttr.innerText = `.${tr.prop.name}`;
+
+            let summaryPartResult: HTMLElement | null = null;
+            const addSummaryResult = (builder: (dst: HTMLDivElement) => void) => {
+              let div = document.createElement('div');
+              div.style.display = 'inline';
+              builder(div);
+              summaryPartResult = div;
+            }
+
+            // let summaryText = `${locToShortStr(tr.node)}.${tr.prop.name}`;
+            switch (tr.result.type) {
+              case 'arr': {
+                const arr = tr.result.value;
+                console.log('arr:', arr);
+                if (arr.length == 2 && arr[0].type == 'node' && arr[1].type == 'plain' && !arr[1].value.trim()) {
+                  const locator = arr[0].value;
+                  const locStr = locToShortStr(locator);
+                  addSummaryResult(tgt => {
+                    tgt.appendChild(document.createTextNode(' = '));
+                    createNodeNode(tgt, locator, nestingLevel + 1, path, false);
+                    // encodeLine(tgt, { type: 'node', value: locator }, nestingLevel + 1, path);
+                    addResult = false;
+                    // tgt.innerText = ` = ${locStr}..`
+                  });
+                  // summaryText = `${summaryText};
+                }
+                break;
+              }
+              case 'plain': {
+                const val = tr.result.value.trim().replace(/\n/g, '\\n');
+                const trimmed = val.length < 16 ? val : `${val.slice(0, 14)}..`;
+                addSummaryResult((tgt) => {
+                  if (!trimmed) {
+                    // Empty string, treat specially
+                    tgt.appendChild(document.createTextNode(' = '));
+                    const empty = document.createElement('span');
+                    empty.classList.add('dimmed');
+                    empty.innerText = `(empty str)`;
+                    tgt.appendChild(empty);
+                  } else {
+                    tgt.innerText =` = ${trimmed}`;
+                  }
+                });
+                if (val.length < 16) {
+                  addResult = false;
+                }
+                break;
+              }
+            }
+            // summary.innerText = summaryText;
+            summaryHolder.appendChild(summaryPartNode);
+            summaryHolder.appendChild(summaryPartAttr);
+            if (!!summaryPartResult) {
+              summaryHolder.appendChild(summaryPartResult);
+            }
+          }
+
+          // encodeLine = (target: HTMLElement, line: RpcBodyLine, nestingLevel: number, bodyPath: number[]) => {
+
+          if (addResult) {
+            switch (tr.result.type) {
+              case 'arr': {
+                addResult = !!tr.result.value.length;
+                break;
+              }
+              case 'plain': {
+                addResult = !!tr.result.value.length;
+                break;
+              }
+            }
+          }
+
+          const body = document.createElement('div');
+          body.style.paddingLeft = '1rem';
+          if (addResult) {
+            console.log('going encode tracing child of', tr.prop.name, ':', tr.result);
+            // if (tr.result.type == 'arr' && tr.result.value[1].type == 'plain' && !tr.result.value[1].value.trim()) {
+            //   encodeLine(body, tr.result.value[0], nestingLevel + 1, path);
+            // } else {
+              encodeLine(body, tr.result, nestingLevel + 1, path);
+            // }
+          }
+          tr.dependencies.forEach((dep, depIdx) => {
+            encodeTrace(dep, [...path, depIdx + 1], false, body);
+          });
+
+          const summary = document.createElement('summary');
+          summary.appendChild(summaryHolder);
+          // summary.classList.add('syntax-attr');
+          if (!addResult && !tr.dependencies.length) {
+            dst.append(summary);
+          } else {
+            summary.onmousedown = (e) => {
+              e.stopPropagation();
+            };
+            summary.classList.add('clickHighlightOnHover');
+
+            const det = document.createElement('details');
+            det.appendChild(summary);
+            det.appendChild(body);
+            dst.appendChild(det);
+          }
+        };
+        localDisableNodeExpander = true;
+        encodeTrace(line.value, bodyPath, true, target);
+        localDisableNodeExpander = false;
         break;
       }
 

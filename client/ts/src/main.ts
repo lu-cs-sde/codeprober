@@ -28,6 +28,7 @@ import { assertUnreachable } from './hacks';
 import createMinimizedProbeModal from './ui/create/createMinimizedProbeModal';
 import getEditorDefinitionPlace from './model/getEditorDefinitionPlace';
 import installASTEditor from './ui/installASTEditor';
+import configureCheckboxWithHiddenCheckbox from './ui/configureCheckboxWithHiddenCheckbox';
 
 const uiElements = new UIElements();
 
@@ -124,9 +125,24 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
 
     const rootElem = document.getElementById('root') as HTMLElement;
     const initHandler = (info: InitInfo) => {
-      const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault } = info;
+      const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile } = info;
       console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
       rootElem.style.display = "grid";
+
+      if (backingFile) {
+        settings.setEditorContents(backingFile.value);
+        const inputLabel = document.querySelector('#input-header > span') as HTMLSpanElement;
+        if (!inputLabel) {
+          console.warn('Could not find input header')
+        } else {
+          // inputLabel.innerText = `Input`
+          const locIndicator = document.createElement('span');
+          locIndicator.style.marginLeft = '0.25rem';
+          locIndicator.classList.add('syntax-string');
+          locIndicator.innerText = `(${backingFile.path})`;
+          inputLabel.appendChild(locIndicator);
+        }
+      }
 
       const onChange = (newValue: string, adjusters?: LocationAdjuster[]) => {
         settings.setEditorContents(newValue);
@@ -252,6 +268,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         input.oninput = () => { update(input.checked); notifyLocalChangeListeners(); }
       };
       setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings.shouldCaptureStdio(), cb => settings.setShouldCaptureStdio(cb));
+      setupSimpleCheckbox(uiElements.captureTracesCheckbox, settings.shouldCaptureTraces(), cb => settings.setShouldCaptureTraces(cb));
       setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings.shouldDuplicateProbeOnAttrClick(), cb => settings.setShouldDuplicateProbeOnAttrClick(cb));
       setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings.shouldShowAllProperties(), cb => settings.setShouldShowAllProperties(cb));
 
@@ -322,6 +339,28 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
           return overrides === null ? null : `Edit (${settings.getCurrentFileSuffix()})`;
         },
       );
+
+      configureCheckboxWithHiddenCheckbox(
+        // Outer
+        {
+          checkbox: uiElements.captureTracesCheckbox,
+          initiallyChecked: settings.shouldCaptureTraces(),
+          onChange: (checked) => {
+            settings.setShouldCaptureTraces(checked);
+            notifyLocalChangeListeners();
+          },
+        },
+        // Hidden
+        {
+          checkbox: uiElements.autoflushTracesCheckbox,
+          initiallyChecked: settings.shouldAutoflushTraces(),
+          onChange: (checked) => {
+            settings.setShouldAutoflushTraces(checked);
+            notifyLocalChangeListeners();
+          },
+          container: uiElements.autoflushTracesContainer,
+        }
+      )
 
       const statCollectorImpl = new StatisticsCollectorImpl();
       if (location.search.includes('debug=true')) {
@@ -470,6 +509,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
           case 'show-all-properties': return common('show-all-properties', uiElements.showAllPropertiesHelpButton)
           case 'duplicate-probe-on-attr': return common('duplicate-probe-on-attr', uiElements.duplicateProbeHelpButton)
           case 'capture-stdout': return common('capture-stdout', uiElements.captureStdoutHelpButton);
+          case 'capture-traces': return common('capture-traces', uiElements.captureTracesHelpButton);
           case 'location-style': return common('location-style', uiElements.locationStyleHelpButton);
           default: return console.error('Unknown help type', type);
         }

@@ -6,6 +6,12 @@ public class Property implements codeprober.util.JsonUtil.ToJsonable {
   public final String name;
   public final java.util.List<PropertyArg> args;
   public final String astChildName;
+  public Property(String name, java.util.List<PropertyArg> args) {
+    this(name, args, null);
+  }
+  public Property(String name) {
+    this(name, null, null);
+  }
   public Property(String name, java.util.List<PropertyArg> args, String astChildName) {
     this.name = name;
     this.args = args;

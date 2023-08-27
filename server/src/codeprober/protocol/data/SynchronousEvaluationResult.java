@@ -14,6 +14,15 @@ public class SynchronousEvaluationResult implements codeprober.util.JsonUtil.ToJ
   public final java.util.List<Diagnostic> errors;
   public final java.util.List<PropertyArg> args;
   public final NodeLocator locator;
+  public SynchronousEvaluationResult(java.util.List<RpcBodyLine> body, long totalTime, long parseTime, long createLocatorTime, long applyLocatorTime, long attrEvalTime, long listNodesTime, long listPropertiesTime, java.util.List<Diagnostic> errors, java.util.List<PropertyArg> args) {
+    this(body, totalTime, parseTime, createLocatorTime, applyLocatorTime, attrEvalTime, listNodesTime, listPropertiesTime, errors, args, null);
+  }
+  public SynchronousEvaluationResult(java.util.List<RpcBodyLine> body, long totalTime, long parseTime, long createLocatorTime, long applyLocatorTime, long attrEvalTime, long listNodesTime, long listPropertiesTime, java.util.List<Diagnostic> errors) {
+    this(body, totalTime, parseTime, createLocatorTime, applyLocatorTime, attrEvalTime, listNodesTime, listPropertiesTime, errors, null, null);
+  }
+  public SynchronousEvaluationResult(java.util.List<RpcBodyLine> body, long totalTime, long parseTime, long createLocatorTime, long applyLocatorTime, long attrEvalTime, long listNodesTime, long listPropertiesTime) {
+    this(body, totalTime, parseTime, createLocatorTime, applyLocatorTime, attrEvalTime, listNodesTime, listPropertiesTime, null, null, null);
+  }
   public SynchronousEvaluationResult(java.util.List<RpcBodyLine> body, long totalTime, long parseTime, long createLocatorTime, long applyLocatorTime, long attrEvalTime, long listNodesTime, long listPropertiesTime, java.util.List<Diagnostic> errors, java.util.List<PropertyArg> args, NodeLocator locator) {
     this.body = body;
     this.totalTime = totalTime;

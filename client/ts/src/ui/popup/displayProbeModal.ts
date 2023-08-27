@@ -8,7 +8,7 @@ import ModalEnv, { JobId } from '../../model/ModalEnv';
 import displayTestAdditionModal from './displayTestAdditionModal';
 import renderProbeModalTitleLeft from '../renderProbeModalTitleLeft';
 import settings from '../../settings';
-import { Property, EvaluatePropertyReq, EvaluatePropertyRes, RpcBodyLine, StopJobReq, StopJobRes, SynchronousEvaluationResult, PollWorkerStatusReq, PollWorkerStatusRes } from '../../protocol';
+import { Property, EvaluatePropertyReq, EvaluatePropertyRes, RpcBodyLine, StopJobReq, StopJobRes, SynchronousEvaluationResult, PollWorkerStatusReq, PollWorkerStatusRes, Tracing } from '../../protocol';
 import displayAttributeModal from './displayAttributeModal';
 import displayAstModal from './displayAstModal';
 import createInlineWindowManager, { InlineWindowManager } from '../create/createInlineWindowManager';
@@ -167,7 +167,7 @@ const displayProbeModal = (
           }
         },
         {
-          title: 'Copy raw output to clipboard',
+          title: 'Copy output as JSON to clipboard',
           invoke: () => {
             navigator.clipboard.writeText(copyBody.map(line => typeof line === 'string' ? line : JSON.stringify(line, null, 2)).join('\n'));
           }
@@ -183,7 +183,9 @@ const displayProbeModal = (
                 case 'dotGraph':
                 case 'streamArg': {
                   return line.value;
-                  break;
+                }
+                case 'highlightMsg': {
+                  return line.value.msg;
                 }
                 case 'arr': {
                   return ['', ...line.value.map(buildLine)].join('\n').replace(/\n/g, '\n  ');
@@ -191,6 +193,16 @@ const displayProbeModal = (
                 case 'node': {
                   const span = startEndToSpan(line.value.result.start, line.value.result.end);
                   return `[${span.lineStart}:${span.colStart}-${span.lineEnd}:${span.colEnd}] ${line.value.result.label ?? line.value.result.type.split('.').slice(-1)[0]}`;
+                }
+                case 'tracing': {
+                  const buildTracingLine = (tr: Tracing): string => {
+                    const lines: string[] = [];
+                    lines.push(`${tr.node.result.label ?? tr.node.result.type.split('.').slice(-1)[0]}.${tr.prop.name}`);
+                    tr.dependencies.forEach((dep, depIdx) => lines.push(`${depIdx == tr.dependencies.length - 1 ? '└' : '├'} ${buildTracingLine(dep)}`));
+                    lines.push(`-> ${buildLine(tr.result)}`);
+                    return lines.join('\n').replace(/\n/g, '\n│ ');
+                  };
+                  return buildTracingLine(line.value);
                 }
                 default: {
                   assertUnreachable(line);
@@ -308,7 +320,8 @@ const displayProbeModal = (
           locator: locator.get(),
           src: env.createParsingRequestData(),
           captureStdout: settings.shouldCaptureStdio(),
-
+          captureTraces: settings.shouldCaptureTraces() || undefined,
+          flushBeforeTraceCollection: (settings.shouldCaptureTraces() && settings.shouldAutoflushTraces()) || undefined,
           jobLabel: `Probe: '${`${locator.get().result.label ?? locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
           skipResultLocator: env !== env.getGlobalModalEnv(),
         },

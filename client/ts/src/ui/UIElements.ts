@@ -28,6 +28,12 @@ class UIElements {
   get captureStdoutCheckbox() { return document.getElementById('control-capture-stdout') as HTMLInputElement; }
   get captureStdoutHelpButton() { return document.getElementById('capture-stdout-help') as HTMLButtonElement; }
 
+  get captureTracesCheckbox() { return document.getElementById('control-capture-traces') as HTMLInputElement; }
+  get captureTracesHelpButton() { return document.getElementById('capture-traces-help') as HTMLButtonElement; }
+
+  get autoflushTracesCheckbox() { return document.getElementById('control-autoflush-traces') as HTMLInputElement; }
+  get autoflushTracesContainer() { return document.getElementById('container-autoflush-traces') as HTMLDivElement; }
+
   get locationStyleSelector() { return document.getElementById('location-style') as HTMLSelectElement; }
   get locationStyleHelpButton() { return document.getElementById('control-location-style-help') as HTMLButtonElement; }
 

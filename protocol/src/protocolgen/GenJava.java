@@ -41,6 +41,19 @@ public class GenJava {
 				return false;
 			}
 		}
+
+		boolean isOptional() {
+			switch (this) {
+			case OPTIONAL_ENUM:
+			case OPTIONAL_LIST_OF_PRIMITIVES:
+			case OPTIONAL_LIST_OF_STREAMABLES:
+			case OPTIONAL_PRIMITIVE:
+			case OPTIONAL_STREAMABLE:
+				return true;
+			default:
+				return false;
+			}
+		}
 	}
 
 	@FunctionalInterface
@@ -346,7 +359,8 @@ public class GenJava {
 
 	}
 
-	public static void gen(final List<Class<? extends Rpc>> rpcs, List<Class<? extends Streamable>> serverToClient) throws Exception {
+	public static void gen(final List<Class<? extends Rpc>> rpcs, List<Class<? extends Streamable>> serverToClient)
+			throws Exception {
 		System.out.println("== GEN JAVA");
 
 //		final Rpc<?, ?> ln = new ListNodes();
@@ -469,10 +483,10 @@ public class GenJava {
 	private Set<RequestedType> requestedTypes = new HashSet<>();
 
 	private File getDstDir() throws Exception {
-    final String dstDirStr = System.getProperty("JAVA_DST_DIR");
-    if (dstDirStr == null) {
-      throw new Exception("Missing value for system property JAVA_DST_DIR");
-    }
+		final String dstDirStr = System.getProperty("JAVA_DST_DIR");
+		if (dstDirStr == null) {
+			throw new Exception("Missing value for system property JAVA_DST_DIR");
+		}
 		final File dstDir = new File(dstDirStr);
 		if (!dstDir.exists()) {
 			throw new Exception("Bad value for system property JAVA_DST_DIR");
@@ -543,6 +557,49 @@ public class GenJava {
 
 		for (int i = 0; i < fields.size(); i++) {
 			println.accept("  public final " + refs.get(i).name + " " + fields.get(i).getName() + ";");
+		}
+
+		for (int optionalBackoff = fields.size() - 1; optionalBackoff >= 0; optionalBackoff--) {
+			if (!refs.get(optionalBackoff).kind.isOptional()) {
+				break;
+			}
+			// Generate special constructor that forwards to the real one
+			print.accept("  public " + tname + "(");
+			int numAddedArgs = 0;
+			for (int i = 0; i < optionalBackoff; i++) {
+				if (refs.get(i).kind.isConstant()) {
+					continue;
+				}
+				if (numAddedArgs > 0) {
+					print.accept(", ");
+				}
+				print.accept(refs.get(i).name + " " + fields.get(i).getName());
+				++numAddedArgs;
+			}
+			println.accept(") {");
+			int numForwardedArgs = 0;
+			print.accept("    this(");
+			for (int i = 0; i < optionalBackoff; ++i) {
+				if (refs.get(i).kind.isConstant()) {
+					continue;
+				}
+				if (numForwardedArgs > 0) {
+					print.accept(", ");
+				}
+				print.accept(fields.get(i).getName());
+				++numForwardedArgs;
+			}
+			for (int i = optionalBackoff; i < fields.size(); ++i) {
+				if (refs.get(i).kind.isConstant()) {
+					continue;
+				}
+				if (numForwardedArgs > 0) {
+					print.accept(", ");
+				}
+				print.accept("null");
+			}
+			println.accept(");");
+			println.accept("  }");
 		}
 
 		print.accept("  public " + tname + "(");

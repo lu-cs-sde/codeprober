@@ -6,6 +6,9 @@ public class protocolgen_spec_InitInfo_1 implements codeprober.util.JsonUtil.ToJ
   public final String hash;
   public final boolean clean;
   public final Integer buildTimeSeconds;
+  public protocolgen_spec_InitInfo_1(String hash, boolean clean) {
+    this(hash, clean, null);
+  }
   public protocolgen_spec_InitInfo_1(String hash, boolean clean, Integer buildTimeSeconds) {
     this.hash = hash;
     this.clean = clean;

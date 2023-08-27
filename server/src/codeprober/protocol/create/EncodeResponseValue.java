@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
@@ -11,6 +13,7 @@ import codeprober.locator.CreateLocator;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.data.Diagnostic;
+import codeprober.protocol.data.HighlightableMessage;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.util.MagicStdoutMessageParser;
@@ -28,11 +31,40 @@ public class EncodeResponseValue {
 			final Object diagnosticValue = Reflect.invoke0(value, "cpr_getDiagnostic");
 			if (diagnosticValue != null) {
 				if (diagnosticValue instanceof String) {
-					final Diagnostic d = MagicStdoutMessageParser.parse((String) diagnosticValue);
-					if (d != null) {
-						diagnostics.add(d);
+					final String diagStr = (String) diagnosticValue;
+					if (diagStr.startsWith("HLHOVER@")) {
+						final Matcher matcher = Pattern.compile("HLHOVER@(\\d+);(\\d+)").matcher(diagStr);
+						if (!matcher.matches()) {
+							System.err.println("Invalid HLHOVER string '" + diagnosticValue + "'");
+						} else {
+							final int start = Integer.parseInt(matcher.group(1));
+							final int end = Integer.parseInt(matcher.group(2));
+							boolean addToString = true;
+							try {
+								Object preferredView = Reflect.invoke0(value, "cpr_getOutput");
+								out.add(RpcBodyLine.fromHighlightMsg(
+										new HighlightableMessage(start, end, preferredView.toString())));
+								addToString = false;
+								return;
+							} catch (InvokeProblem e) {
+								// Fall down to default view
+							}
+							if (addToString) {
+								out.add(RpcBodyLine
+										.fromHighlightMsg(new HighlightableMessage(start, end, value.toString())));
+							}
+						}
 					} else {
-						System.err.println("Invalid diagnostic string '" + diagnosticValue + "'");
+
+//					if (((String) diagnosticValue).startsWith("))
+						final Diagnostic d = MagicStdoutMessageParser.parse(diagStr);
+						if (d != null) {
+							System.out.println("add to " + diagnostics);
+							System.out.println("add " + d);
+							diagnostics.add(d);
+						} else {
+							System.err.println("Invalid diagnostic string '" + diagnosticValue + "'");
+						}
 					}
 				} else {
 					System.err.println("Unknown cpr_getDiagnostic return type. Expected String, got "
@@ -42,6 +74,7 @@ public class EncodeResponseValue {
 		} catch (InvokeProblem e) {
 			// OK, this is an optional attribute after all
 		}
+
 		// Clone to avoid showing 'already visited' when this encoding 'branch' hasn't
 		// visited it.
 		alreadyVisitedNodes = new HashSet<Object>(alreadyVisitedNodes);

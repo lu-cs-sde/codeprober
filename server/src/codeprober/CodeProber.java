@@ -19,6 +19,7 @@ import codeprober.metaprogramming.StdIoInterceptor;
 import codeprober.protocol.ClientRequest;
 import codeprober.requesthandler.RequestHandlerMonitor;
 import codeprober.rpc.JsonRequestHandler;
+import codeprober.server.BackingFileSettings;
 import codeprober.server.CodespacesCompat;
 import codeprober.server.ServerToClientMessagePusher;
 import codeprober.server.WebServer;
@@ -27,6 +28,7 @@ import codeprober.toolglue.UnderlyingTool;
 import codeprober.util.FileMonitor;
 import codeprober.util.ParsedArgs;
 import codeprober.util.ParsedArgs.ConcurrencyMode;
+import codeprober.util.SessionLogger;
 import codeprober.util.VersionInfo;
 
 public class CodeProber {
@@ -59,10 +61,30 @@ public class CodeProber {
 
 		final ParsedArgs parsedArgs = ParsedArgs.parse(mainArgs);
 
+		final SessionLogger sessionLogger = SessionLogger.init();
+		if (sessionLogger != null) {
+			System.out.println("Logging anonymous session data to " + sessionLogger.getTargetDirectory());
+		}
 		final JsonRequestHandler defaultHandler = new DefaultRequestHandler(UnderlyingTool.fromJar(parsedArgs.jarPath),
-				parsedArgs.extraArgs);
+				parsedArgs.extraArgs, sessionLogger);
 		final JsonRequestHandler userFacingHandler;
 		flog(Arrays.toString(mainArgs));
+
+
+		final File backingFile = BackingFileSettings.getRealFileToBeUsedInRequests();
+		if (backingFile != null) {
+			if (parsedArgs.concurrencyMode != ConcurrencyMode.DISABLED) {
+				System.err
+						.println("Illegal mix of backing files and concurrency modes, you can only use one at a time.");
+				System.err.println(
+						"This is because concurrent evaluations would necessarily need to write their sources to the same file, which is not thread safe");
+				System.err.println("Exiting.");
+				System.exit(1);
+			}
+			System.out.println("Using backing file " + backingFile);
+			System.out.println(
+					"CAUTION: Any edits made inside CodeProber will immediately be saved to that file. Make sure important source files are in git.");
+		}
 
 		switch (parsedArgs.concurrencyMode) {
 
@@ -109,7 +131,8 @@ public class CodeProber {
 
 			};
 			userFacingHandler = new ConcurrentWorker(defaultHandler);
-			final Function<ClientRequest, JSONObject> rpcHandler = JsonRequestHandler.createTopRequestHandler(userFacingHandler::handleRequest);
+			final Function<ClientRequest, JSONObject> rpcHandler = JsonRequestHandler
+					.createTopRequestHandler(userFacingHandler::handleRequest);
 			new Thread(() -> {
 				final AtomicBoolean connectionIsAlive = new AtomicBoolean(true);
 				new IpcReader(System.in) {
@@ -163,7 +186,8 @@ public class CodeProber {
 //		final Function<ClientRequest, JSONObject> reqHandler = userFacingHandler.createRpcRequestHandler();
 		final RequestHandlerMonitor monitor = new RequestHandlerMonitor(userFacingHandler::handleRequest);
 		final Function<ClientRequest, JSONObject> unwrappedHandler = monitor::submit;
-		final Function<ClientRequest, JSONObject> topHandler = JsonRequestHandler.createTopRequestHandler(unwrappedHandler);
+		final Function<ClientRequest, JSONObject> topHandler = JsonRequestHandler
+				.createTopRequestHandler(unwrappedHandler);
 
 		final Runnable onSomeClientDisconnected = userFacingHandler::onOneOrMoreClientsDisconnected;
 		new Thread(() -> WebServer.start(parsedArgs, msgPusher, unwrappedHandler, onSomeClientDisconnected)).start();

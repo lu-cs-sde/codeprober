@@ -27,11 +27,13 @@ import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.NullableNodeLocator;
+import codeprober.protocol.data.ParsingRequestData;
 import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.PropertyArgCollection;
 import codeprober.protocol.data.PropertyEvaluationResult;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.SynchronousEvaluationResult;
+import codeprober.protocol.data.Tracing;
 import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.util.BenchmarkTimer;
 import codeprober.util.MagicStdoutMessageParser;
@@ -58,9 +60,6 @@ public class EvaluatePropertyHandler {
 		case nodeLocator: {
 			final NullableNodeLocator nl = val.asNodeLocator();
 			if (nl.value == null) {
-				if (Math.random() < 0.5) {
-					nl.value.toString(); // TODO a little bit of chaos testing
-				}
 				return new UnpackedAttrValue(val.value, val);
 			}
 			final ResolvedNode res = ApplyLocator.toNode(info, nl.value);
@@ -134,6 +133,7 @@ public class EvaluatePropertyHandler {
 
 		final long requestStart = System.nanoTime();
 		final ParsedAst parsed = parser.parse(req.src);
+
 //		final long parseTime = System.nanoTime() - requestTime;
 
 		final List<Diagnostic> diagnostics = new ArrayList<>();
@@ -167,7 +167,37 @@ public class EvaluatePropertyHandler {
 
 //			return new EvaluatePropertyRes(PropertyEvaluationResult.fromSync(new SynchronousEvaluationResult(parsed.captures, 0, 0, 0, 0, 0, null, null, null)))
 		} else {
+			final TracingBuilder traceBuilder = new TracingBuilder(parsed.info);
 			final Consumer<ResolvedNode> evaluateAttr = (match) -> {
+
+				if (req.captureTraces != null && req.captureTraces.booleanValue()) {
+					if (parsed.info.hasOverride1(parsed.info.ast.underlyingAstNode.getClass(), "cpr_setTraceReceiver",
+							Consumer.class)) {
+						if (req.flushBeforeTraceCollection != null && req.flushBeforeTraceCollection.booleanValue()) {
+							if (parsed.info.hasOverride0(parsed.info.ast.underlyingAstNode.getClass(),
+									"flushTreeCache")) {
+								try {
+									Reflect.invoke0(parsed.info.ast.underlyingAstNode, "flushTreeCache");
+								} catch (InvokeProblem e) {
+									System.out.println("Problem flushing tree during trace setup");
+									e.printStackTrace(System.out);
+								}
+							}
+						}
+						Reflect.invokeN(parsed.info.ast.underlyingAstNode, "cpr_setTraceReceiver",
+								new Class<?>[] { Consumer.class }, new Object[] { traceBuilder });
+
+					} else {
+						body.add(RpcBodyLine.fromStderr(
+								"Asked to collect trace information, but cpr_setTraceReceiver is not implemented."));
+						body.add(RpcBodyLine.fromStderr("See CodeProber README for more information."));
+//					System.out.println("no traceReceiver on " + parsed.info.ast.underlyingAstNode);
+					}
+
+				}
+//				if (parsed.info.tracingRegistration != null) {
+//					parsed.info.tracingRegistration.accept(traceBuilder);
+//				}
 
 				try {
 //					final JSONArray args = ProbeProtocol.Attribute.args.get(queryAttr, null);
@@ -201,7 +231,8 @@ public class EvaluatePropertyHandler {
 						switch (queryAttrName) {
 						case "m:NodesWithProperty": {
 							if (req.property.args.size() == 0) {
-								throw new IllegalArgumentException("Need at least one argument for m:NodesWithProperty");
+								throw new IllegalArgumentException(
+										"Need at least one argument for m:NodesWithProperty");
 							}
 							int limit = 100;
 							final String limitStr = System.getenv("QUERY_PROBE_OUTPUT_LIMIT");
@@ -264,12 +295,14 @@ public class EvaluatePropertyHandler {
 						}
 					}
 
+					traceBuilder.stop();
+
 					if (value != Reflect.VOID_RETURN_VALUE) {
 						CreateLocator.setMergeMethod(LocatorMergeMethod.SKIP);
 						try {
-							if (value instanceof String && ((String)value).startsWith("@@DOT:")) {
+							if (value instanceof String && ((String) value).startsWith("@@DOT:")) {
 								// Hacky dot support
-								body.add(RpcBodyLine.fromDotGraph(((String)value).substring("@@DOT:".length())));
+								body.add(RpcBodyLine.fromDotGraph(((String) value).substring("@@DOT:".length())));
 							} else {
 								EncodeResponseValue.encodeTyped(parsed.info, body, diagnostics, value, new HashSet<>());
 							}
@@ -277,6 +310,11 @@ public class EvaluatePropertyHandler {
 							CreateLocator.setMergeMethod(LocatorMergeMethod.DEFAULT_METHOD);
 						}
 					}
+					final Tracing trace = traceBuilder.finish(match.nodeLocator);
+					if (trace != null) {
+						body.add(RpcBodyLine.fromTracing(trace));
+					}
+
 //					ProbeProtocol.Attribute.args.put(retBuilder, updatedArgs);
 				} catch (InvokeProblem e) {
 					Throwable cause = e.getCause();
@@ -333,6 +371,10 @@ public class EvaluatePropertyHandler {
 								return;
 							}
 							throw e;
+						} finally {
+							// Stop here too, just in case the other stop doesn't execute.
+							// A little scared about permanent trace receiver that fills memory.
+							traceBuilder.stop();
 						}
 					}));
 //			final List<RpcBodyLine> caps = StdIoInterceptor

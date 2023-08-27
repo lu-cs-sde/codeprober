@@ -79,7 +79,7 @@ public class TestDefaultRequestHandler {
 						null, ".tmp"), //
 				new NodeLocator(new TALStep("", "", 0, 0, 0, false), Collections.emptyList()),
 				new Property(attrName, Collections.emptyList(), null),
-				false, null, null, null);
+				false, null, null, null, null);
 		return new ClientRequest(req.toJSON(), obj -> {
 		}, new AtomicBoolean(true));
 	}
@@ -104,7 +104,7 @@ public class TestDefaultRequestHandler {
 				});
 			}
 		};
-		DefaultRequestHandler handler = new DefaultRequestHandler(countingTool, new String[0]);
+		DefaultRequestHandler handler = new DefaultRequestHandler(countingTool);
 
 		final EvaluatePropertyRes initial = EvaluatePropertyRes
 				.fromJSON(handler.handleRequest(constructRequest("Hello World", "getData")));
