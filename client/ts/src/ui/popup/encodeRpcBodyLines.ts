@@ -98,8 +98,9 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
     if (!extras.disableNodeSelectors) {
       registerNodeSelector(container, () => locator);
     }
-    container.addEventListener('click', () => {
+    container.addEventListener('click', (e) => {
       if (extras.lateInteractivityEnabledChecker?.() ?? true) {
+        e.preventDefault();
         displayAttributeModal(env.getGlobalModalEnv(), null, createMutableLocator(locator));
       }
     });
@@ -208,7 +209,12 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
     }, 100)
     return holder;
   }
-  const encodeLine = (target: HTMLElement, line: RpcBodyLine, nestingLevel: number, bodyPath: number[]) => {
+
+  interface ExtraEncodingArgs {
+    omitArrMarginLeft: Boolean;
+  }
+
+  const encodeLine = (target: HTMLElement, line: RpcBodyLine, nestingLevel: number, bodyPath: number[], extraEncodingArgs?: ExtraEncodingArgs) => {
     const addPlain = (msg: string, plainHoverSpan?: { start: number, end: number }) => {
       const trimmed = msg.trimStart();
       if (extras.decorator) {
@@ -284,7 +290,9 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
             appliedDecoratorResultsTrackers.push({});
           }
           const deeper = document.createElement('pre');
-          deeper.style.marginLeft = '1rem';
+          if (!extraEncodingArgs?.omitArrMarginLeft) {
+            deeper.style.marginLeft = '1rem';
+          }
           deeper.style.marginTop = '0.125rem';
           if (extras.capWidths) {
             deeper.style.whiteSpace = 'normal';
@@ -375,9 +383,6 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
               env.updateSpanHighlight(isHovering ? span : null);
             })
             summaryPartNode.onclick = (e) => {
-              // console.log('click summary node', e)
-              e.stopPropagation();
-              e.stopImmediatePropagation();
               e.preventDefault();
               displayAttributeModal(env.getGlobalModalEnv(), null, createMutableLocator(tr.node));
             }
@@ -462,12 +467,7 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
           const body = document.createElement('div');
           body.style.paddingLeft = '1rem';
           if (addResult) {
-            console.log('going encode tracing child of', tr.prop.name, ':', tr.result);
-            // if (tr.result.type == 'arr' && tr.result.value[1].type == 'plain' && !tr.result.value[1].value.trim()) {
-            //   encodeLine(body, tr.result.value[0], nestingLevel + 1, path);
-            // } else {
-              encodeLine(body, tr.result, nestingLevel + 1, path);
-            // }
+            encodeLine(body, tr.result, nestingLevel + 1, path, { omitArrMarginLeft: true });
           }
           tr.dependencies.forEach((dep, depIdx) => {
             encodeTrace(dep, [...path, depIdx + 1], false, body);

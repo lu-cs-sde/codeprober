@@ -1,7 +1,6 @@
 package codeprober.requesthandler;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -131,14 +130,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 		recursionProtection = true;
 		try {
 			final String event = String.valueOf(args[0]);
-//			String prefix = "";
-//			if (nesting != 0) {
-//				for (int i = 0; i < nesting - 1; ++i) {
-//					prefix += "│ ";
-//				}
-//				prefix += String.format("%s─", event.equals("COMPUTE_END") ? "└" : "├");
-//			}
-
 			if (args.length == 0) {
 				System.err.println("Invalid tracing information - empty array");
 				return;
@@ -153,13 +144,18 @@ public class TracingBuilder implements Consumer<Object[]> {
 					return;
 				}
 				final Object astNode = args[1];
-				final String attribute = String.valueOf(args[2]);
-				if (attribute.contains(".cpr_")) {
-					// CodeProber-specific functionality, ignore
-//					return;
-				}
+				String attribute = String.valueOf(args[2]);
 				if (excludeAttribute(astNode, attribute)) {
 					return;
+				}
+				if (attribute.endsWith("(String)")) {
+					final String argStr = String.valueOf(args[3]);
+					if (argStr.length() <= 16) {
+						// Relatively short arg, inline the value into the attribute name.
+						attribute = String.format("%s(\"%s\")",
+								attribute.substring(0, attribute.length() - "(String)".length()),
+								String.valueOf(args[3]));
+					}
 				}
 
 //				System.out.printf("Encode %s on %s\n", attribute, astNode.getClass().getSimpleName());
@@ -188,30 +184,17 @@ public class TracingBuilder implements Consumer<Object[]> {
 				}
 				final Object astNode = args[1];
 				final String attribute = String.valueOf(args[2]);
-				final Object value = args[4];
-				if (attribute.contains(".cpr_")) {
-					// CodeProber-specific functionality, ignore
-//					return;
-				}
-//				System.out.printf("COMPUTE_END '%s' -> %s | %s\n", attribute,
-//						value + " | " + (value != null ? value.getClass() : ""),
-//						Arrays.toString(args));
-
 				if (excludeAttribute(astNode, attribute)) {
 					return;
 				}
-//				body.add(RpcBodyLine.fromStreamArg(String.format("%s─> %s", prefix, String.valueOf(value))));
+				final Object value = args[4];
+
 				final PendingTrace popped = active.pop();
 				popped.value = value;
-//				body.add(RpcBodyLine.fromStreamArg(String.format("%s trace:end %s on a %s", prefix,
-//						attribute, astNode.getClass().getSimpleName())));
-//				--nesting;
 				break;
 			}
 			default: {
 				System.err.printf("Unknown event '%s'", event);
-//				body.add(RpcBodyLine
-//						.fromStreamArg(String.format("%s trace: unknown event '%s'", prefix, String.valueOf(args[0]))));
 			}
 			}
 		} finally {

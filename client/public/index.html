@@ -75,7 +75,6 @@
     require: () => { throw new Error("TODO implement require if needed"); },
   };
   function loadModule(moduleName) {
-    console.log('loadModule', moduleName)
     if (loadedModules[moduleName]) {
       return loadedModules[moduleName];
     }

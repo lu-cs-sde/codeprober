@@ -10159,7 +10159,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
     const encodeRpcBodyLines = (env, body, extras = {}) => {
         let needCapturedStreamArgExplanation = false;
         let localDisableNodeExpander = false;
-        const createNodeNode = (target, locator, nestingLevel, bodyPath, includePositionIndicator = false) => {
+        const createNodeNode = (target, locator, nestingLevel, bodyPath, includePositionIndicator = true) => {
             const { start, end, type, label } = locator.result;
             const container = document.createElement('div');
             if (extras.decorator) {
@@ -10203,9 +10203,10 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
             if (!extras.disableNodeSelectors) {
                 (0, registerNodeSelector_2.default)(container, () => locator);
             }
-            container.addEventListener('click', () => {
+            container.addEventListener('click', (e) => {
                 var _a, _b;
                 if ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true) {
+                    e.preventDefault();
                     (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(locator));
                 }
             });
@@ -10302,7 +10303,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
             }, 100);
             return holder;
         };
-        const encodeLine = (target, line, nestingLevel, bodyPath) => {
+        const encodeLine = (target, line, nestingLevel, bodyPath, extraEncodingArgs) => {
             const addPlain = (msg, plainHoverSpan) => {
                 const trimmed = msg.trimStart();
                 if (extras.decorator) {
@@ -10381,7 +10382,9 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                             appliedDecoratorResultsTrackers.push({});
                         }
                         const deeper = document.createElement('pre');
-                        deeper.style.marginLeft = '1rem';
+                        if (!(extraEncodingArgs === null || extraEncodingArgs === void 0 ? void 0 : extraEncodingArgs.omitArrMarginLeft)) {
+                            deeper.style.marginLeft = '1rem';
+                        }
                         deeper.style.marginTop = '0.125rem';
                         if (extras.capWidths) {
                             deeper.style.whiteSpace = 'normal';
@@ -10472,9 +10475,6 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                                 env.updateSpanHighlight(isHovering ? span : null);
                             });
                             summaryPartNode.onclick = (e) => {
-                                // console.log('click summary node', e)
-                                e.stopPropagation();
-                                e.stopImmediatePropagation();
                                 e.preventDefault();
                                 (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(tr.node));
                             };
@@ -10553,12 +10553,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                         const body = document.createElement('div');
                         body.style.paddingLeft = '1rem';
                         if (addResult) {
-                            console.log('going encode tracing child of', tr.prop.name, ':', tr.result);
-                            // if (tr.result.type == 'arr' && tr.result.value[1].type == 'plain' && !tr.result.value[1].value.trim()) {
-                            //   encodeLine(body, tr.result.value[0], nestingLevel + 1, path);
-                            // } else {
-                            encodeLine(body, tr.result, nestingLevel + 1, path);
-                            // }
+                            encodeLine(body, tr.result, nestingLevel + 1, path, { omitArrMarginLeft: true });
                         }
                         tr.dependencies.forEach((dep, depIdx) => {
                             encodeTrace(dep, [...path, depIdx + 1], false, body);
