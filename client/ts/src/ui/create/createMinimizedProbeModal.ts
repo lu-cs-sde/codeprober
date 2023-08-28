@@ -103,6 +103,7 @@ const createMinimizedProbeModal = (
               const handleNested = async (nwData: WindowStateDataProbe) => {
                 const nestedEvalProp = evaluateProperty(env, {
                   captureStdout: false,
+                  // No need to capture tracing information in minimized probes
                   locator: nestedLocator,
                   property: nwData.property,
                   src,

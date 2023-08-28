@@ -1528,8 +1528,8 @@ aspect MagicOutputDemo {
                     `If you perform computations during main() that results in cached values in your AST, then you wouldn't see the traces of those computations when the probe is evaluated.`,
                     `By always performing an extra flushTreeCache() prior to collecting traces, we get a bigger and more accurate trace, at the cost of some speed.`,
                     ``,
-                    `Tracing is an advanced feature which requires some customization in your tool to be able to use`,
-                    `If using JastAdd, add a --tracing flag in your build script, and then the following aspect code (replace 'Program' with your root node type):`,
+                    `Tracing is an advanced feature which requires some customization in your tool to be able to use.`,
+                    `If you are using JastAdd, add a --tracing flag in your build script, and then the following aspect code (replace 'Program' with your root node type):`,
                     code,
                     copyButton
                 ];
@@ -1997,7 +1997,7 @@ define("model/test/rpcBodyToAssertionLine", ["require", "exports", "hacks"], fun
                         type: 'arr',
                         value: [
                             { type: 'node', value: tr.node },
-                            { type: 'plain', value: tr.prop.name },
+                            { type: 'plain', value: `.${tr.prop.name}` },
                             { type: 'arr', value: tr.dependencies.map(encodeTrace) },
                             ...(result ? [result] : []),
                         ],
@@ -2117,10 +2117,11 @@ define("model/test/compareTestResult", ["require", "exports", "dependencies/onp/
     // export { TestComparisonReport }
     exports.default = compareTestResult;
 });
-define("model/test/TestManager", ["require", "exports", "model/findLocatorWithNestingPath", "model/test/compareTestResult"], function (require, exports, findLocatorWithNestingPath_1, compareTestResult_1) {
+define("model/test/TestManager", ["require", "exports", "settings", "model/findLocatorWithNestingPath", "model/test/compareTestResult"], function (require, exports, settings_2, findLocatorWithNestingPath_1, compareTestResult_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.nestedTestResponseToTest = exports.createTestManager = void 0;
+    settings_2 = __importDefault(settings_2);
     findLocatorWithNestingPath_1 = __importDefault(findLocatorWithNestingPath_1);
     compareTestResult_1 = __importDefault(compareTestResult_1);
     ;
@@ -2331,6 +2332,8 @@ define("model/test/TestManager", ["require", "exports", "model/findLocatorWithNe
                         locator,
                         src,
                         captureStdout: true,
+                        captureTraces: settings_2.default.shouldCaptureTraces() || false,
+                        flushBeforeTraceCollection: (settings_2.default.shouldCaptureTraces() && settings_2.default.shouldAutoflushTraces()) || false,
                         job: jobId,
                         jobLabel: `Test > ${debugLabel}`,
                     });
@@ -3525,7 +3528,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     };
     exports.default = displayAstModal;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_2, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, settings_2, encodeRpcBodyLines_2, trimTypeName_2, displayAstModal_1, startEndToSpan_5) {
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_2, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, settings_3, encodeRpcBodyLines_2, trimTypeName_2, displayAstModal_1, startEndToSpan_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
@@ -3535,7 +3538,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     formatAttr_2 = __importDefault(formatAttr_2);
     createTextSpanIndicator_4 = __importDefault(createTextSpanIndicator_4);
     displayHelp_2 = __importDefault(displayHelp_2);
-    settings_2 = __importDefault(settings_2);
+    settings_3 = __importDefault(settings_3);
     encodeRpcBodyLines_2 = __importDefault(encodeRpcBodyLines_2);
     trimTypeName_2 = __importDefault(trimTypeName_2);
     displayAstModal_1 = __importDefault(displayAstModal_1);
@@ -3836,7 +3839,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                 locator: locator.get(),
                 src: env.createParsingRequestData(),
                 type: 'ListProperties',
-                all: settings_2.default.shouldShowAllProperties(),
+                all: settings_3.default.shouldShowAllProperties(),
             })
                 .then((result) => {
                 var _a;
@@ -10485,44 +10488,45 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                                 builder(div);
                                 summaryPartResult = div;
                             };
+                            const addPlainSummary = (raw) => {
+                                const val = raw.trim().replace(/\n/g, '\\n');
+                                const trimmed = val.length < 16 ? val : `${val.slice(0, 14)}..`;
+                                addSummaryResult((tgt) => {
+                                    if (!trimmed) {
+                                        // Empty string, treat specially
+                                        tgt.appendChild(document.createTextNode(' = '));
+                                        const empty = document.createElement('span');
+                                        empty.classList.add('dimmed');
+                                        empty.innerText = `(empty str)`;
+                                        tgt.appendChild(empty);
+                                    }
+                                    else {
+                                        tgt.innerText = ` = ${trimmed}`;
+                                    }
+                                });
+                                if (val.length < 16) {
+                                    addResult = false;
+                                }
+                            };
                             // let summaryText = `${locToShortStr(tr.node)}.${tr.prop.name}`;
                             switch (tr.result.type) {
                                 case 'arr': {
                                     const arr = tr.result.value;
-                                    console.log('arr:', arr);
+                                    if (arr.length == 1 && arr[0].type == 'plain') {
+                                        addPlainSummary(arr[0].value);
+                                    }
                                     if (arr.length == 2 && arr[0].type == 'node' && arr[1].type == 'plain' && !arr[1].value.trim()) {
                                         const locator = arr[0].value;
-                                        const locStr = locToShortStr(locator);
                                         addSummaryResult(tgt => {
                                             tgt.appendChild(document.createTextNode(' = '));
                                             createNodeNode(tgt, locator, nestingLevel + 1, path, false);
-                                            // encodeLine(tgt, { type: 'node', value: locator }, nestingLevel + 1, path);
                                             addResult = false;
-                                            // tgt.innerText = ` = ${locStr}..`
                                         });
-                                        // summaryText = `${summaryText};
                                     }
                                     break;
                                 }
                                 case 'plain': {
-                                    const val = tr.result.value.trim().replace(/\n/g, '\\n');
-                                    const trimmed = val.length < 16 ? val : `${val.slice(0, 14)}..`;
-                                    addSummaryResult((tgt) => {
-                                        if (!trimmed) {
-                                            // Empty string, treat specially
-                                            tgt.appendChild(document.createTextNode(' = '));
-                                            const empty = document.createElement('span');
-                                            empty.classList.add('dimmed');
-                                            empty.innerText = `(empty str)`;
-                                            tgt.appendChild(empty);
-                                        }
-                                        else {
-                                            tgt.innerText = ` = ${trimmed}`;
-                                        }
-                                    });
-                                    if (val.length < 16) {
-                                        addResult = false;
-                                    }
+                                    addPlainSummary(tr.result.value);
                                     break;
                                 }
                             }
@@ -11322,6 +11326,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
                             var _a;
                             const nestedEvalProp = (0, evaluateProperty_1.default)(env, {
                                 captureStdout: false,
+                                // No need to capture tracing information in minimized probes
                                 locator: nestedLocator,
                                 property: nwData.property,
                                 src,
@@ -11480,7 +11485,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
     exports.createDiagnosticSource = createDiagnosticSource;
     exports.default = createMinimizedProbeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_3, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_5, createMinimizedProbeModal_1, evaluateProperty_2, hacks_4, startEndToSpan_9) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_4, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_5, createMinimizedProbeModal_1, evaluateProperty_2, hacks_4, startEndToSpan_9) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.searchProbePropertyName = void 0;
@@ -11491,7 +11496,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     createStickyHighlightController_2 = __importDefault(createStickyHighlightController_2);
     displayTestAdditionModal_1 = __importDefault(displayTestAdditionModal_1);
     renderProbeModalTitleLeft_1 = __importDefault(renderProbeModalTitleLeft_1);
-    settings_3 = __importDefault(settings_3);
+    settings_4 = __importDefault(settings_4);
     displayAttributeModal_5 = __importDefault(displayAttributeModal_5);
     displayAstModal_2 = __importDefault(displayAstModal_2);
     createInlineWindowManager_1 = __importDefault(createInlineWindowManager_1);
@@ -11689,7 +11694,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         }
                     },
                     ...[
-                        settings_3.default.shouldEnableTesting() && (env === env.getGlobalModalEnv()) && {
+                        settings_4.default.shouldEnableTesting() && (env === env.getGlobalModalEnv()) && {
                             title: 'Save as test',
                             invoke: () => {
                                 const nestedReq = getNestedTestRequests([], getWindowStateData());
@@ -11765,9 +11770,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         property,
                         locator: locator.get(),
                         src: env.createParsingRequestData(),
-                        captureStdout: settings_3.default.shouldCaptureStdio(),
-                        captureTraces: settings_3.default.shouldCaptureTraces() || undefined,
-                        flushBeforeTraceCollection: (settings_3.default.shouldCaptureTraces() && settings_3.default.shouldAutoflushTraces()) || undefined,
+                        captureStdout: settings_4.default.shouldCaptureStdio(),
+                        captureTraces: settings_4.default.shouldCaptureTraces() || undefined,
+                        flushBeforeTraceCollection: (settings_4.default.shouldCaptureTraces() && settings_4.default.shouldAutoflushTraces()) || undefined,
                         jobLabel: `Probe: '${`${(_a = locator.get().result.label) !== null && _a !== void 0 ? _a : locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
                         skipResultLocator: env !== env.getGlobalModalEnv(),
                     }, () => {
@@ -12484,14 +12489,14 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
     };
     exports.default = displayStatistics;
 });
-define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_4, createModalTitle_9, showWindow_6) {
+define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_5, createModalTitle_9, showWindow_6) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    settings_4 = __importDefault(settings_4);
+    settings_5 = __importDefault(settings_5);
     createModalTitle_9 = __importDefault(createModalTitle_9);
     showWindow_6 = __importDefault(showWindow_6);
     const getArgs = () => {
-        const re = settings_4.default.getMainArgsOverride();
+        const re = settings_5.default.getMainArgsOverride();
         if (!re) {
             return re;
         }
@@ -12634,7 +12639,7 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
         parseOuter();
         commit();
         // console.log('done parsing @', parsePos)
-        settings_4.default.setMainArgsOverride(args);
+        settings_5.default.setMainArgsOverride(args);
     };
     const displayMainArgsOverrideModal = (onClose, onChange) => {
         const windowInstance = (0, showWindow_6.default)({
@@ -12678,7 +12683,7 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
                     };
                     // liveView.appendChild(document.createTextNode('tool.main(\n'));
                     addTn('yourtool.main(new String[]{');
-                    [...((_a = settings_4.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : []), '/path/to/file.tmp'].forEach((part, partIdx) => {
+                    [...((_a = settings_5.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : []), '/path/to/file.tmp'].forEach((part, partIdx) => {
                         if (partIdx > 0) {
                             liveView.appendChild(document.createTextNode(', '));
                         }
@@ -12872,10 +12877,10 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
     };
     exports.default = showVersionInfo;
 });
-define("model/runBgProbe", ["require", "exports", "settings"], function (require, exports, settings_5) {
+define("model/runBgProbe", ["require", "exports", "settings"], function (require, exports, settings_6) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    settings_5 = __importDefault(settings_5);
+    settings_6 = __importDefault(settings_6);
     const runInvisibleProbe = (env, locator, property) => {
         const id = `invisible-probe-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
@@ -12896,7 +12901,8 @@ define("model/runBgProbe", ["require", "exports", "settings"], function (require
                 property,
                 locator,
                 src: env.createParsingRequestData(),
-                captureStdout: settings_5.default.shouldCaptureStdio(),
+                captureStdout: settings_6.default.shouldCaptureStdio(),
+                // No need to capture tracing information in background probes
             })
                 .then((rawResp) => {
                 var _a;
@@ -12930,10 +12936,10 @@ define("model/runBgProbe", ["require", "exports", "settings"], function (require
     };
     exports.default = runInvisibleProbe;
 });
-define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_7, settings_6, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_2, displayHelp_4, displayProbeModal_5, encodeRpcBodyLines_5) {
+define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_7, settings_7, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_2, displayHelp_4, displayProbeModal_5, encodeRpcBodyLines_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    settings_6 = __importDefault(settings_6);
+    settings_7 = __importDefault(settings_7);
     createInlineWindowManager_2 = __importDefault(createInlineWindowManager_2);
     createLoadingSpinner_6 = __importDefault(createLoadingSpinner_6);
     createModalTitle_10 = __importDefault(createModalTitle_10);
@@ -13001,13 +13007,13 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                 title: 'Load state into editor',
                                 invoke: () => {
                                     var _a;
-                                    settings_6.default.setAstCacheStrategy(tc.src.cache);
-                                    settings_6.default.setMainArgsOverride((_a = tc.src.mainArgs) !== null && _a !== void 0 ? _a : null);
-                                    settings_6.default.setPositionRecoveryStrategy(tc.src.posRecovery);
-                                    if (tc.src.tmpSuffix && tc.src.tmpSuffix !== settings_6.default.getCurrentFileSuffix()) {
-                                        settings_6.default.setCustomFileSuffix(tc.src.tmpSuffix);
+                                    settings_7.default.setAstCacheStrategy(tc.src.cache);
+                                    settings_7.default.setMainArgsOverride((_a = tc.src.mainArgs) !== null && _a !== void 0 ? _a : null);
+                                    settings_7.default.setPositionRecoveryStrategy(tc.src.posRecovery);
+                                    if (tc.src.tmpSuffix && tc.src.tmpSuffix !== settings_7.default.getCurrentFileSuffix()) {
+                                        settings_7.default.setCustomFileSuffix(tc.src.tmpSuffix);
                                     }
-                                    settings_6.default.setEditorContents(tc.src.text);
+                                    settings_7.default.setEditorContents(tc.src.text);
                                     saveSelfAsProbe = true;
                                     env.triggerWindowSave();
                                     window.location.reload();
@@ -13088,9 +13094,9 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                     // const someLocatorErr = testReport.overall === 'error' || typeof testReport === 'object' && [
                     //   testReport.sourceLocators, testReport.attrArgLocators, testReport.outputLocators
                     // ].some(loc => loc !== 'pass');
-                    const captureStdioSetting = settings_6.default.shouldCaptureStdio();
+                    const captureStdioSetting = settings_7.default.shouldCaptureStdio();
                     localRefreshListeners.push(() => {
-                        if (settings_6.default.shouldCaptureStdio() !== captureStdioSetting) {
+                        if (settings_7.default.shouldCaptureStdio() !== captureStdioSetting) {
                             queryWindow.refresh();
                         }
                     });
@@ -13133,7 +13139,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                             var _a;
                             const sourceBtn = (_a = infos.find(i => i.type === 'source')) === null || _a === void 0 ? void 0 : _a.btn;
                             if (sourceBtn) {
-                                if (testCase.src.text === settings_6.default.getEditorContents()) {
+                                if (testCase.src.text === settings_7.default.getEditorContents()) {
                                     sourceBtn.innerText = `Source Code ✅`;
                                 }
                                 else {
@@ -14100,11 +14106,11 @@ define("model/getEditorDefinitionPlace", ["require", "exports"], function (requi
     const getEditorDefinitionPlace = () => window;
     exports.default = getEditorDefinitionPlace;
 });
-define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionPlace", "model/UpdatableNodeLocator", "settings", "ui/popup/displayAstModal", "ui/UIElements"], function (require, exports, getEditorDefinitionPlace_1, UpdatableNodeLocator_8, settings_7, displayAstModal_3, UIElements_3) {
+define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionPlace", "model/UpdatableNodeLocator", "settings", "ui/popup/displayAstModal", "ui/UIElements"], function (require, exports, getEditorDefinitionPlace_1, UpdatableNodeLocator_8, settings_8, displayAstModal_3, UIElements_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     getEditorDefinitionPlace_1 = __importDefault(getEditorDefinitionPlace_1);
-    settings_7 = __importDefault(settings_7);
+    settings_8 = __importDefault(settings_8);
     displayAstModal_3 = __importDefault(displayAstModal_3);
     UIElements_3 = __importDefault(UIElements_3);
     const installASTEditor = () => {
@@ -14113,7 +14119,7 @@ define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionP
             style: [],
             predicate: () => true,
         }), (value, onChange, initialSyntaxHighlight) => {
-            settings_7.default.setProbeWindowStates([]);
+            settings_8.default.setProbeWindowStates([]);
             // TODO load monaco so that main args override editor works
             const inw = document.getElementById('input-wrapper');
             inw.classList.add('input-AST');
@@ -14178,7 +14184,7 @@ define("ui/configureCheckboxWithHiddenCheckbox", ["require", "exports"], functio
         hidden.checkbox.checked = hidden.initiallyChecked;
         const refreshHidden = () => {
             if (outer.checkbox.checked) {
-                hidden.container.style.display = 'inline-block';
+                hidden.container.style.display = 'block';
             }
             else {
                 hidden.container.style.display = 'none';
@@ -14195,7 +14201,7 @@ define("ui/configureCheckboxWithHiddenCheckbox", ["require", "exports"], functio
     };
     exports.default = configureCheckboxWithHiddenCheckbox;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_8, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_4, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_9, hacks_5, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_9, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_4, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_9, hacks_5, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -14203,7 +14209,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_5 = __importDefault(displayHelp_5);
     displayAttributeModal_7 = __importDefault(displayAttributeModal_7);
-    settings_8 = __importDefault(settings_8);
+    settings_9 = __importDefault(settings_9);
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
     displayStatistics_1 = __importDefault(displayStatistics_1);
     displayMainArgsOverrideModal_1 = __importDefault(displayMainArgsOverrideModal_1);
@@ -14223,7 +14229,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     configureCheckboxWithHiddenCheckbox_1 = __importDefault(configureCheckboxWithHiddenCheckbox_1);
     const uiElements = new UIElements_4.default();
     window.clearUserSettings = () => {
-        settings_8.default.set({});
+        settings_9.default.set({});
         location.reload();
     };
     // setTimeout(() => {
@@ -14231,13 +14237,13 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     // }, 1000)
     const doMain = (wsPort) => {
         (0, installASTEditor_1.default)();
-        if (settings_8.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
+        if (settings_9.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
             document.body.classList.add('hide-settings');
         }
-        if (!settings_8.default.shouldEnableTesting()) {
+        if (!settings_9.default.shouldEnableTesting()) {
             uiElements.showTests.style.display = 'none';
         }
-        let getLocalState = () => { var _a; return (_a = settings_8.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
+        let getLocalState = () => { var _a; return (_a = settings_9.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
         let basicHighlight = null;
         const stickyHighlights = {};
         let updateSpanHighlight = (span, stickies) => { };
@@ -14249,7 +14255,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             windowSaveDebouncer.submit(() => {
                 const states = [];
                 Object.values(probeWindowStateSavers).forEach(v => v(states));
-                settings_8.default.setProbeWindowStates(states);
+                settings_9.default.setProbeWindowStates(states);
             });
         };
         const notifyLocalChangeListeners = (adjusters, reason) => {
@@ -14261,7 +14267,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 location.search = "editor=" + editorType;
                 return;
             }
-            document.body.setAttribute('data-theme-light', `${settings_8.default.isLightTheme()}`);
+            document.body.setAttribute('data-theme-light', `${settings_9.default.isLightTheme()}`);
             const wsHandler = (() => {
                 if (wsPort == 'ws-over-http') {
                     return (0, createWebsocketHandler_1.createWebsocketOverHttpHandler)(addConnectionCloseNotice_1.default);
@@ -14305,7 +14311,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
                 rootElem.style.display = "grid";
                 if (backingFile) {
-                    settings_8.default.setEditorContents(backingFile.value);
+                    settings_9.default.setEditorContents(backingFile.value);
                     const inputLabel = document.querySelector('#input-header > span');
                     if (!inputLabel) {
                         console.warn('Could not find input header');
@@ -14320,7 +14326,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     }
                 }
                 const onChange = (newValue, adjusters) => {
-                    settings_8.default.setEditorContents(newValue);
+                    settings_9.default.setEditorContents(newValue);
                     notifyLocalChangeListeners(adjusters);
                 };
                 let setLocalState = (value) => { };
@@ -14330,11 +14336,11 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     remove: () => { },
                 });
                 const darkModeCheckbox = uiElements.darkModeCheckbox;
-                darkModeCheckbox.checked = !settings_8.default.isLightTheme();
+                darkModeCheckbox.checked = !settings_9.default.isLightTheme();
                 const themeChangeListeners = {};
                 darkModeCheckbox.oninput = (e) => {
                     let lightTheme = !darkModeCheckbox.checked;
-                    settings_8.default.setLightTheme(lightTheme);
+                    settings_9.default.setLightTheme(lightTheme);
                     document.body.setAttribute('data-theme-light', `${lightTheme}`);
                     Object.values(themeChangeListeners).forEach(cb => cb(lightTheme));
                 };
@@ -14359,7 +14365,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     const { preload, init, } = (0, getEditorDefinitionPlace_2.default)().definedEditors[editorType];
                     (0, getEditorDefinitionPlace_2.default)().loadPreload(preload, () => {
                         var _a;
-                        const res = init((_a = settings_8.default.getEditorContents()) !== null && _a !== void 0 ? _a : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_8.default.getSyntaxHighlighting());
+                        const res = init((_a = settings_9.default.getEditorContents()) !== null && _a !== void 0 ? _a : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_9.default.getSyntaxHighlighting());
                         setLocalState = res.setLocalState || setLocalState;
                         getLocalState = res.getLocalState || getLocalState;
                         updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
@@ -14370,7 +14376,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         }
                         if (res.themeToggler) {
                             themeChangeListeners['main-editor'] = (light) => res.themeToggler(light);
-                            res.themeToggler(settings_8.default.isLightTheme());
+                            res.themeToggler(settings_9.default.isLightTheme());
                             // defineThemeToggler(res.themeToggler);
                         }
                         syntaxHighlightingToggler = res.syntaxHighlightingToggler;
@@ -14425,24 +14431,24 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     input.checked = initial;
                     input.oninput = () => { update(input.checked); notifyLocalChangeListeners(); };
                 };
-                setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_8.default.shouldCaptureStdio(), cb => settings_8.default.setShouldCaptureStdio(cb));
-                setupSimpleCheckbox(uiElements.captureTracesCheckbox, settings_8.default.shouldCaptureTraces(), cb => settings_8.default.setShouldCaptureTraces(cb));
-                setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_8.default.shouldDuplicateProbeOnAttrClick(), cb => settings_8.default.setShouldDuplicateProbeOnAttrClick(cb));
-                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_8.default.shouldShowAllProperties(), cb => settings_8.default.setShouldShowAllProperties(cb));
+                setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_9.default.shouldCaptureStdio(), cb => settings_9.default.setShouldCaptureStdio(cb));
+                setupSimpleCheckbox(uiElements.captureTracesCheckbox, settings_9.default.shouldCaptureTraces(), cb => settings_9.default.setShouldCaptureTraces(cb));
+                setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_9.default.shouldDuplicateProbeOnAttrClick(), cb => settings_9.default.setShouldDuplicateProbeOnAttrClick(cb));
+                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_9.default.shouldShowAllProperties(), cb => settings_9.default.setShouldShowAllProperties(cb));
                 const setupSimpleSelector = (input, initial, update) => {
                     input.value = initial;
                     input.oninput = () => { update(input.value); notifyLocalChangeListeners(); };
                 };
-                setupSimpleSelector(uiElements.astCacheStrategySelector, settings_8.default.getAstCacheStrategy(), cb => settings_8.default.setAstCacheStrategy(cb));
-                setupSimpleSelector(uiElements.positionRecoverySelector, settings_8.default.getPositionRecoveryStrategy(), cb => settings_8.default.setPositionRecoveryStrategy(cb));
-                setupSimpleSelector(uiElements.locationStyleSelector, `${settings_8.default.getLocationStyle()}`, cb => settings_8.default.setLocationStyle(cb));
+                setupSimpleSelector(uiElements.astCacheStrategySelector, settings_9.default.getAstCacheStrategy(), cb => settings_9.default.setAstCacheStrategy(cb));
+                setupSimpleSelector(uiElements.positionRecoverySelector, settings_9.default.getPositionRecoveryStrategy(), cb => settings_9.default.setPositionRecoveryStrategy(cb));
+                setupSimpleSelector(uiElements.locationStyleSelector, `${settings_9.default.getLocationStyle()}`, cb => settings_9.default.setLocationStyle(cb));
                 uiElements.settingsHider.onclick = () => {
                     document.body.classList.add('hide-settings');
-                    settings_8.default.setShouldHideSettingsPanel(true);
+                    settings_9.default.setShouldHideSettingsPanel(true);
                 };
                 uiElements.settingsRevealer.onclick = () => {
                     document.body.classList.remove('hide-settings');
-                    settings_8.default.setShouldHideSettingsPanel(false);
+                    settings_9.default.setShouldHideSettingsPanel(false);
                 };
                 const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
                 syntaxHighlightingSelector.innerHTML = '';
@@ -14452,54 +14458,54 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     option.innerText = alias;
                     syntaxHighlightingSelector.appendChild(option);
                 });
-                setupSimpleSelector(syntaxHighlightingSelector, settings_8.default.getSyntaxHighlighting(), cb => {
-                    settings_8.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
-                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_8.default.getSyntaxHighlighting());
+                setupSimpleSelector(syntaxHighlightingSelector, settings_9.default.getSyntaxHighlighting(), cb => {
+                    settings_9.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
+                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_9.default.getSyntaxHighlighting());
                 });
                 const overrideCfg = (0, configureCheckboxWithHiddenButton_1.default)(uiElements.shouldOverrideMainArgsCheckbox, uiElements.configureMainArgsOverrideButton, (checked) => {
-                    settings_8.default.setMainArgsOverride(checked ? [] : null);
+                    settings_9.default.setMainArgsOverride(checked ? [] : null);
                     overrideCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }, onClose => (0, displayMainArgsOverrideModal_1.default)(onClose, () => {
                     overrideCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }), () => {
-                    const overrides = settings_8.default.getMainArgsOverride();
+                    const overrides = settings_9.default.getMainArgsOverride();
                     return overrides === null ? null : `Edit (${overrides.length})`;
                 });
                 const suffixCfg = (0, configureCheckboxWithHiddenButton_1.default)(uiElements.shouldCustomizeFileSuffixCheckbox, uiElements.configureCustomFileSuffixButton, (checked) => {
-                    settings_8.default.setCustomFileSuffix(checked ? settings_8.default.getCurrentFileSuffix() : null);
+                    settings_9.default.setCustomFileSuffix(checked ? settings_9.default.getCurrentFileSuffix() : null);
                     suffixCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }, onClose => {
-                    const newVal = prompt('Enter new suffix', settings_8.default.getCurrentFileSuffix());
+                    const newVal = prompt('Enter new suffix', settings_9.default.getCurrentFileSuffix());
                     if (newVal !== null) {
-                        settings_8.default.setCustomFileSuffix(newVal);
+                        settings_9.default.setCustomFileSuffix(newVal);
                         suffixCfg.refreshButton();
                         notifyLocalChangeListeners();
                     }
                     onClose();
                     return { forceClose: () => { }, };
                 }, () => {
-                    const overrides = settings_8.default.getCustomFileSuffix();
-                    return overrides === null ? null : `Edit (${settings_8.default.getCurrentFileSuffix()})`;
+                    const overrides = settings_9.default.getCustomFileSuffix();
+                    return overrides === null ? null : `Edit (${settings_9.default.getCurrentFileSuffix()})`;
                 });
                 (0, configureCheckboxWithHiddenCheckbox_1.default)(
                 // Outer
                 {
                     checkbox: uiElements.captureTracesCheckbox,
-                    initiallyChecked: settings_8.default.shouldCaptureTraces(),
+                    initiallyChecked: settings_9.default.shouldCaptureTraces(),
                     onChange: (checked) => {
-                        settings_8.default.setShouldCaptureTraces(checked);
+                        settings_9.default.setShouldCaptureTraces(checked);
                         notifyLocalChangeListeners();
                     },
                 }, 
                 // Hidden
                 {
                     checkbox: uiElements.autoflushTracesCheckbox,
-                    initiallyChecked: settings_8.default.shouldAutoflushTraces(),
+                    initiallyChecked: settings_9.default.shouldAutoflushTraces(),
                     onChange: (checked) => {
-                        settings_8.default.setShouldAutoflushTraces(checked);
+                        settings_9.default.setShouldAutoflushTraces(checked);
                         notifyLocalChangeListeners();
                     },
                     container: uiElements.autoflushTracesContainer,
@@ -14526,13 +14532,13 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             posRecovery: uiElements.positionRecoverySelector.value,
                             cache: uiElements.astCacheStrategySelector.value,
                             text: getLocalState(),
-                            stdout: settings_8.default.shouldCaptureStdio(),
-                            mainArgs: (_a = settings_8.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : undefined,
-                            tmpSuffix: settings_8.default.getCurrentFileSuffix(),
+                            stdout: settings_9.default.shouldCaptureStdio(),
+                            mainArgs: (_a = settings_9.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : undefined,
+                            tmpSuffix: settings_9.default.getCurrentFileSuffix(),
                         });
                     },
                     probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
-                    themeIsLight: () => settings_8.default.isLightTheme(),
+                    themeIsLight: () => settings_9.default.isLightTheme(),
                     getLocalState: () => getLocalState(),
                     setLocalState: (newVal) => setLocalState(newVal),
                     captureStdout: () => uiElements.captureStdoutCheckbox.checked,
@@ -14639,7 +14645,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 setTimeout(() => {
                     try {
-                        let windowStates = settings_8.default.getProbeWindowStates();
+                        let windowStates = settings_9.default.getProbeWindowStates();
                         // let wsMatch: RegExpExecArray | null;
                         // if ((wsMatch = /[?&]?ws=[^?&]+/.exec(location.search)) != null) {
                         //   const trimmedSearch = wsMatch.index === 0

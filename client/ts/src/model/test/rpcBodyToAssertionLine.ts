@@ -31,7 +31,7 @@ const rpcBodyToTestBody = (line: RpcBodyLine): RpcBodyLine | null => {
           type: 'arr',
           value: [
             { type: 'node', value: tr.node },
-            { type: 'plain', value: tr.prop.name },
+            { type: 'plain', value: `.${tr.prop.name}` },
             { type: 'arr', value: tr.dependencies.map(encodeTrace) },
             ...(result ? [result] : []),
           ],

@@ -509,8 +509,8 @@ aspect MagicOutputDemo {
           `If you perform computations during main() that results in cached values in your AST, then you wouldn't see the traces of those computations when the probe is evaluated.`,
           `By always performing an extra flushTreeCache() prior to collecting traces, we get a bigger and more accurate trace, at the cost of some speed.`,
           ``,
-          `Tracing is an advanced feature which requires some customization in your tool to be able to use`,
-          `If using JastAdd, add a --tracing flag in your build script, and then the following aspect code (replace 'Program' with your root node type):`,
+          `Tracing is an advanced feature which requires some customization in your tool to be able to use.`,
+          `If you are using JastAdd, add a --tracing flag in your build script, and then the following aspect code (replace 'Program' with your root node type):`,
           code,
           copyButton
         ];

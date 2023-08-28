@@ -344,9 +344,7 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
       }
 
       case 'tracing': {
-
         const encodeTrace = (tr: Tracing, path: number[], isTopTrace: boolean, dst: HTMLElement) => {
-
           const locToShortStr = (locator: NodeLocator) => locator.result.label ?? locator.result.type.split('.').slice(-1)[0];
 
           const summaryHolder = document.createElement('div');
@@ -396,44 +394,45 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
               builder(div);
               summaryPartResult = div;
             }
+            const addPlainSummary = (raw: string) => {
+              const val = raw.trim().replace(/\n/g, '\\n');
+              const trimmed = val.length < 16 ? val : `${val.slice(0, 14)}..`;
+              addSummaryResult((tgt) => {
+                if (!trimmed) {
+                  // Empty string, treat specially
+                  tgt.appendChild(document.createTextNode(' = '));
+                  const empty = document.createElement('span');
+                  empty.classList.add('dimmed');
+                  empty.innerText = `(empty str)`;
+                  tgt.appendChild(empty);
+                } else {
+                  tgt.innerText =` = ${trimmed}`;
+                }
+              });
+              if (val.length < 16) {
+                addResult = false;
+              }
+            };
 
             // let summaryText = `${locToShortStr(tr.node)}.${tr.prop.name}`;
             switch (tr.result.type) {
               case 'arr': {
                 const arr = tr.result.value;
-                console.log('arr:', arr);
+                if (arr.length == 1 && arr[0].type == 'plain') {
+                  addPlainSummary(arr[0].value);
+                }
                 if (arr.length == 2 && arr[0].type == 'node' && arr[1].type == 'plain' && !arr[1].value.trim()) {
                   const locator = arr[0].value;
-                  const locStr = locToShortStr(locator);
                   addSummaryResult(tgt => {
                     tgt.appendChild(document.createTextNode(' = '));
                     createNodeNode(tgt, locator, nestingLevel + 1, path, false);
-                    // encodeLine(tgt, { type: 'node', value: locator }, nestingLevel + 1, path);
                     addResult = false;
-                    // tgt.innerText = ` = ${locStr}..`
                   });
-                  // summaryText = `${summaryText};
                 }
                 break;
               }
               case 'plain': {
-                const val = tr.result.value.trim().replace(/\n/g, '\\n');
-                const trimmed = val.length < 16 ? val : `${val.slice(0, 14)}..`;
-                addSummaryResult((tgt) => {
-                  if (!trimmed) {
-                    // Empty string, treat specially
-                    tgt.appendChild(document.createTextNode(' = '));
-                    const empty = document.createElement('span');
-                    empty.classList.add('dimmed');
-                    empty.innerText = `(empty str)`;
-                    tgt.appendChild(empty);
-                  } else {
-                    tgt.innerText =` = ${trimmed}`;
-                  }
-                });
-                if (val.length < 16) {
-                  addResult = false;
-                }
+                addPlainSummary(tr.result.value);
                 break;
               }
             }

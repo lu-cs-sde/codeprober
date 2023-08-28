@@ -302,6 +302,8 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
           locator,
           src,
           captureStdout: true, // settings.shouldCaptureStdio(),
+          captureTraces: settings.shouldCaptureTraces() || false,
+          flushBeforeTraceCollection: (settings.shouldCaptureTraces() && settings.shouldAutoflushTraces()) || false,
           job: jobId,
           jobLabel: `Test > ${debugLabel}`,
         });

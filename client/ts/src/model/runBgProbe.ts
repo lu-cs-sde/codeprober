@@ -24,6 +24,7 @@ const runInvisibleProbe = (env: ModalEnv, locator: NodeLocator, property: Proper
       locator,
       src: env.createParsingRequestData(),
       captureStdout: settings.shouldCaptureStdio(),
+      // No need to capture tracing information in background probes
     })
       .then((rawResp) => {
         if (rawResp.response.type === 'job') {

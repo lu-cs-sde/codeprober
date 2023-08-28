@@ -13,7 +13,7 @@ const configureCheckboxWithHiddenCheckbox = (
 
   const refreshHidden = () => {
     if (outer.checkbox.checked) {
-      hidden.container.style.display = 'inline-block';
+      hidden.container.style.display = 'block';
     } else {
       hidden.container.style.display = 'none';
     }
