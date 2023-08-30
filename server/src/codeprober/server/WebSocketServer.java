@@ -151,16 +151,22 @@ public class WebSocketServer {
 		);
 	}
 
-	private static void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
+	static void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
 			Function<ClientRequest, JSONObject> onQuery, AtomicBoolean connectionIsAlive)
 			throws IOException, NoSuchAlgorithmException {
-		InputStream in = socket.getInputStream();
-		OutputStream out = socket.getOutputStream();
+		final InputStream in = socket.getInputStream();
 		@SuppressWarnings("resource")
 		Scanner s = new Scanner(in, "UTF-8");
 		String data = s.useDelimiter("\\r\\n\\r\\n").next();
-//		System.out.println("data: " + data);
-//		System.out.println("---");
+		handleRequestWithPreparsedData(socket, args, msgPusher, onQuery, connectionIsAlive, data);
+	}
+
+	static void handleRequestWithPreparsedData(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
+			Function<ClientRequest, JSONObject> onQuery, AtomicBoolean connectionIsAlive, String data)
+			throws IOException, NoSuchAlgorithmException {
+		final InputStream in = socket.getInputStream();
+		final OutputStream out = socket.getOutputStream();
+
 		Matcher get = Pattern.compile("^GET").matcher(data);
 		if (get.find()) {
 			Matcher webSocketReq = Pattern.compile("Sec-WebSocket-Key: (.*)").matcher(data);

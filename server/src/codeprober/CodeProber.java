@@ -191,11 +191,13 @@ public class CodeProber {
 
 		final Runnable onSomeClientDisconnected = userFacingHandler::onOneOrMoreClientsDisconnected;
 		new Thread(() -> WebServer.start(parsedArgs, msgPusher, unwrappedHandler, onSomeClientDisconnected)).start();
-		if (!WebSocketServer.shouldDelegateWebsocketToHttp()) {
+		if (!WebSocketServer.shouldDelegateWebsocketToHttp() && WebSocketServer.getPort() != WebServer.getPort()) {
 			new Thread(() -> WebSocketServer.start(parsedArgs, msgPusher, topHandler, onSomeClientDisconnected))
 					.start();
-		} else {
+		} else if (WebSocketServer.shouldDelegateWebsocketToHttp()) {
 			System.out.println("Not starting websocket server, running requests over normal HTTP requests instead.");
+		} else {
+			// WebSocket port is same as HTTP port. No need to print anything
 		}
 
 		new FileMonitor(new File(parsedArgs.jarPath)) {

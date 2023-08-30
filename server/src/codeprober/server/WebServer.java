@@ -37,6 +37,7 @@ import codeprober.protocol.data.WsPutInitReq;
 import codeprober.protocol.data.WsPutInitRes;
 import codeprober.protocol.data.WsPutLongpollReq;
 import codeprober.protocol.data.WsPutLongpollRes;
+import codeprober.rpc.JsonRequestHandler;
 import codeprober.util.ParsedArgs;
 
 public class WebServer {
@@ -194,8 +195,37 @@ public class WebServer {
 
 	private final WsPutSessionMonitor monitor = new WsPutSessionMonitor();;
 
-	private void handleGetRequest(Socket socket, String data) throws IOException {
+	private void handleGetRequest(Socket socket, String data, ParsedArgs parsedArgs,
+			ServerToClientMessagePusher msgPusher, Function<ClientRequest, JSONObject> onQuery,
+			Runnable onSomeClientDisconnected) throws IOException {
 		final OutputStream out = socket.getOutputStream();
+
+		if (data.contains("\r\nUpgrade: websocket\r\n")) {
+			final AtomicBoolean connectionIsAlive = new AtomicBoolean(true);
+			try {
+				try {
+					WebSocketServer.handleRequestWithPreparsedData(socket, parsedArgs, msgPusher,
+							JsonRequestHandler.createTopRequestHandler(onQuery), connectionIsAlive, data);
+				} catch (NoSuchAlgorithmException | IOException e) {
+					System.out.println("Failed handling HTTP->WS upgrade request");
+					System.out.printf(
+							"Try running with the environment variable 'WEBSOCKET_SERVER_PORT=http' or 'WEBSOCKET_SERVER_PORT=%d' (or another port) if this problem persists\n",
+							WebServer.getPort() + 1);
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			} finally {
+				try {
+					socket.close();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				connectionIsAlive.set(false);
+				onSomeClientDisconnected.run();
+			}
+			return;
+		}
 		final Matcher getReqPathMatcher = Pattern.compile("^GET (.*) HTTP").matcher(data);
 		if (!getReqPathMatcher.find()) {
 			System.err.println("Missing path for GET request");
@@ -441,7 +471,8 @@ public class WebServer {
 	}
 
 	private void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
-			Function<ClientRequest, JSONObject> onQuery) throws IOException, NoSuchAlgorithmException {
+			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected)
+			throws IOException, NoSuchAlgorithmException {
 		System.out.println("Incoming HTTP request from: " + socket.getRemoteSocketAddress());
 
 		final InputStream in = socket.getInputStream();
@@ -499,7 +530,7 @@ public class WebServer {
 		final String headers = new String(headerBaos.toByteArray(), StandardCharsets.UTF_8);
 		final Matcher get = Pattern.compile("^GET").matcher(headers);
 		if (get.find()) {
-			handleGetRequest(socket, headers);
+			handleGetRequest(socket, headers, args, msgPusher, onQuery, onSomeClientDisconnected);
 			return;
 		}
 		final Matcher put = Pattern.compile("^PUT").matcher(headers);
@@ -510,7 +541,7 @@ public class WebServer {
 		System.out.println("Not sure how to handle request " + headers);
 	}
 
-	static int getPort() {
+	public static int getPort() {
 		final String portOverride = System.getenv("WEB_SERVER_PORT");
 		if (portOverride != null) {
 			try {
@@ -554,7 +585,7 @@ public class WebServer {
 					Socket s = server.accept();
 					new Thread(() -> {
 						try {
-							ws.handleRequest(s, args, msgPusher, onQuery);
+							ws.handleRequest(s, args, msgPusher, onQuery, onSomeClientDisconnected);
 						} catch (IOException | NoSuchAlgorithmException e) {
 							System.out.println("Error while handling request");
 							e.printStackTrace();
@@ -575,7 +606,7 @@ public class WebServer {
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
-      if (e.getMessage().contains("Address already in use")) {
+			if (e.getMessage().contains("Address already in use")) {
 				System.out.println(
 						"You can run parallell CodeProber instances, but each instance must have unique WEB_SERVER_PORT and WEBSOCKET_SERVER_PORT");
 				System.exit(1);
