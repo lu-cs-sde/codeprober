@@ -111,14 +111,13 @@ public class TracingBuilder implements Consumer<Object[]> {
 
 	private static boolean excludeAttribute(Object node, String attr) {
 		if (node.getClass().getSimpleName().equals("ParseName")) {
+			// "Temporarily" disabled due to bug(?) in ExtendJ
 			return true;
 		}
-//		if (attr.endsWith(".rewrittenNode()")) {
-//			return true;
-//		}
-//		if (attr.endsWith(".canResolve()")) {
-//			return true;
-//		}
+		if (attr.contains(".cpr_")) {
+			// Internal CodeProber attribute, exclude this
+			return true;
+		}
 		return false;
 	}
 
