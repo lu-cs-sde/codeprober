@@ -170,9 +170,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 					active.peek().dependencies.add(tr);
 				}
 				active.push(tr);
-//				body.add(RpcBodyLine
-//						.fromStreamArg(String.format("%s%s %s", prefix, nesting == 0 ? "┌" : "┬", attribute)));
-//				++nesting;
 				break;
 			}
 			case "COMPUTE_END": {

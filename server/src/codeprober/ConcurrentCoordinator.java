@@ -139,10 +139,8 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 		for (Worker w : workers) {
 			if (w.job != null) {
 				++numActive;
-
 			}
 		}
-		System.out.println("Client disconnected, numActiveWorkers: " + numActive);
 	}
 
 	@Override

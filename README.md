@@ -6,6 +6,22 @@ Quick overview of features (5 minutes): https://www.youtube.com/watch?v=d-KvFy5h
 
 Installation & getting started: https://www.youtube.com/watch?v=1beyfNhUQEg
 
+## Getting started
+
+1) Download [code-prober.jar](https://github.com/lu-cs-sde/codeprober/raw/master/code-prober.jar) from this repository.
+2) Start like this:
+    ```
+    java -jar code-prober.jar your-analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
+    ```
+
+For example, if you have code-prober.jar in your downloads directory, and your tool is called `compiler.jar` and is located in your home directory, then run:
+```
+java -jar ~/Downloads/code-prober.jar ~/compiler.jar
+```
+
+Once started, you should open http://localhost:8000 in your browser.
+When the page is loaded, you'll find a `Help` button on the right side which can help you further.
+
 ## Compatibility
 
 To use CodeProber, you must have a compiler or analyzer that follows certain conventions.
@@ -31,17 +47,6 @@ If you previously used `DrAST` (https://bitbucket.org/jastadd/drast/src/master/)
 CodeProber will use this as a fallback if `CodeProber_root_node` is not defined, so you don't have to do any changes.
 However, the help/warning messages inside `CodeProber` that reference the root node will all reference `CodeProber_root_node`, even if you don't have it.
 So for a more consistent experience, consider adding a specific declaration for CodeProber.
-
-## Running
-
-In general, the tool tries to print helpful messages when needed, so you shouldn't have to read this file to get started.
-Try starting the tool without any arguments and it will tell you the following:
-```
-Usage: java -jar code-prober.jar path/to/your/analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
-```
-
-Once started, you should open http://localhost:8000 in your browser.
-When the page is loaded, you'll find a `Help` button on the right side which can help you further.
 
 ### Environment variables
 
