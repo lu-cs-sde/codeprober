@@ -150,6 +150,67 @@ def find_super(type)
 `find_super` is called with `CodeProber_root_node`. In other words, it finds the top supertype that belongs to the same package as `CodeProber_root_node`.
 If your native AST structure uses a hierarchy of packages rather than a single flat package, then this will likely cause problems so you should probably rely on a wrapper type instead.
 
+## Tracing
+
+In the CodeProber settings panel there is a checkbox with the label `Capture traces`.
+This allows you to capture information about indirect dependencies of properties.
+For this to work, the AST root must have a function `cpr_setTraceReceiver` that looks like this:
+
+```java
+public void cpr_setTraceReceiver(java.util.function.Consumer<Object[]> recv) {
+  // 'recv' records trace information.
+  // You should assign it to a field for later use.
+  this.theTraceReceiver = recv;
+}
+
+// Later, when something should be added to a trace, call it
+// It will be non-null if `Capture traces` is checked.
+if (this.theTraceReceiver != null) {
+  this.theTraceReceiver.accept(new Object[]{ ... })
+}
+```
+
+If `recv` is called while CodeProber is evaluating a property, then the information there will be visible in the CodeProber UI, *if* the user has checked `Capture traces`.
+
+
+### Kinds of trace events
+
+CodeProber will `toString` the first element in the object array to identify the kinds of trace event.
+Currently, two types of events are supported, and they match tracing events produced by JastAdd:
+
+
+#### COMPUTE_BEGIN
+
+Expected structure:
+```
+["COMPUTE_BEGIN", ASTNode node, String attribute, Object params, Object value]
+```
+Example invocation to `recv` in `cpr_setTraceReceiver`:
+```java
+recv.accept(new Object[]{ "COMPUTE_BEGIN", someAstNode, "foo()", null, null })
+```
+
+#### COMPUTE_END
+Expected structure:
+```
+["COMPUTE_END", ASTNode node, String attribute, Object params, Object value]
+```
+Example invocation to `recv` in `cpr_setTraceReceiver`:
+```java
+recv.accept(new Object[]{ "COMPUTE_END", someAstNode, "foo()", null, "ResultValue" })
+```
+
+### Tracing locator issues
+
+Tracing can be tricky to get right. You may get errors in the terminal where you started `code-prober.jar` stating something like:
+```
+Failed creating locator for AstNode< [..]
+```
+This happens if one of the AST nodes passed to a trace events aren't attached to the AST anymore. For example if you mutate the tree through rewrites.
+You can try toggling the `flush tree first` checkbox under `Capture traces` on and off. You can also try changing the `cache strategy` values back and forth. Some combination of the two might work.
+
+If changing the settings doesn't work, then you must change which events are reported to CodeProber. Try to avoid setting the `ASTNode` arguments to nodes that get removed from the tree.
+
 ## Artifact
 
 If you want to try CodeProber, but don't have an analysis tool of your own, you can try out the playground at https://github.com/Kevlanche/codeprober-playground/.
