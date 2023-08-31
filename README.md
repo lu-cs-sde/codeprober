@@ -206,7 +206,7 @@ Tracing can be tricky to get right. You may get errors in the terminal where you
 ```
 Failed creating locator for AstNode< [..]
 ```
-This happens if one of the AST nodes passed to a trace events aren't attached to the AST anymore. For example if you mutate the tree through rewrites.
+This happens if one of the AST nodes passed to a trace events aren't attached to the AST anymore. This can happen for example if you mutate the tree through rewrites.
 You can try toggling the `flush tree first` checkbox under `Capture traces` on and off. You can also try changing the `cache strategy` values back and forth. Some combination of the two might work.
 
 If changing the settings doesn't work, then you must change which events are reported to CodeProber. Try to avoid setting the `ASTNode` arguments to nodes that get removed from the tree.
