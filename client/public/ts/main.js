@@ -10444,6 +10444,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                 }
                 case 'tracing': {
                     const encodeTrace = (tr, path, isTopTrace, dst) => {
+                        var _a, _b;
                         const locToShortStr = (locator) => { var _a; return (_a = locator.result.label) !== null && _a !== void 0 ? _a : locator.result.type.split('.').slice(-1)[0]; };
                         const summaryHolder = document.createElement('div');
                         summaryHolder.style.display = 'inline';
@@ -10570,6 +10571,14 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                             };
                             summary.classList.add('clickHighlightOnHover');
                             const det = document.createElement('details');
+                            const trKey = `${JSON.stringify(path)}:${tr.prop.name}`;
+                            det.open = (_b = (_a = extras.tracingExpansionTracker) === null || _a === void 0 ? void 0 : _a[trKey]) !== null && _b !== void 0 ? _b : false;
+                            det.addEventListener('toggle', e => {
+                                const tracker = extras.tracingExpansionTracker;
+                                if (tracker) {
+                                    tracker[trKey] = det.open;
+                                }
+                            });
                             det.appendChild(summary);
                             det.appendChild(body);
                             dst.appendChild(det);
@@ -11720,6 +11729,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         let lastSpinner = null;
         let isFirstRender = true;
         let refreshOnDone = false;
+        const tracingExpansionTracker = {};
         const queryWindow = env.showWindow({
             pos: modalPos,
             debugLabel: `probe:${property.name}`,
@@ -11894,6 +11904,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         const areasToKeep = new Set();
                         const encodedLines = (0, encodeRpcBodyLines_3.default)(env, body, {
                             excludeStdIoFromPaths: true,
+                            tracingExpansionTracker,
                             nodeLocatorExpanderHandler: enableExpander ? ({
                                 getReusableExpansionArea: (path) => {
                                     return inlineWindowManager.getPreviousExpansionArea(path);

@@ -272,6 +272,7 @@ const displayProbeModal = (
   let lastSpinner: HTMLElement | null = null;
   let isFirstRender = true;
   let refreshOnDone = false;
+  const tracingExpansionTracker: { [id: string]: boolean } = {};
 
   const queryWindow = env.showWindow({
     pos: modalPos,
@@ -445,6 +446,7 @@ const displayProbeModal = (
             const areasToKeep = new Set<string>();
             const encodedLines = encodeRpcBodyLines(env, body, {
               excludeStdIoFromPaths: true,
+              tracingExpansionTracker,
               nodeLocatorExpanderHandler: enableExpander ? ({
                 getReusableExpansionArea: (path) => {
                   return inlineWindowManager.getPreviousExpansionArea(path);

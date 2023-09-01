@@ -47,6 +47,7 @@ interface ExtraEncodingArgs {
     onClick: ExpanderCallback;
   };
   excludeStdIoFromPaths?: true;
+  tracingExpansionTracker?: { [id: string]: boolean };
   capWidths?: true;
 }
 const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEncodingArgs = {}): HTMLElement => {
@@ -485,6 +486,15 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
             summary.classList.add('clickHighlightOnHover');
 
             const det = document.createElement('details');
+            const trKey = `${JSON.stringify(path)}:${tr.prop.name}`;
+            det.open = extras.tracingExpansionTracker?.[trKey] ?? false;
+
+            det.addEventListener('toggle', e => {
+              const tracker = extras.tracingExpansionTracker;
+              if (tracker) {
+                tracker[trKey] = det.open;
+              }
+            });
             det.appendChild(summary);
             det.appendChild(body);
             dst.appendChild(det);
