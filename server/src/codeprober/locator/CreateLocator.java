@@ -20,7 +20,6 @@ import org.json.JSONObject;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
-import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.create.CreateValue;
 import codeprober.protocol.data.FNStep;
 import codeprober.protocol.data.NodeLocator;
@@ -255,11 +254,11 @@ public class CreateLocator {
 
 				if (step.isNta() || foundTALRoot || !canUseTal.test(src, dst)) {
 					ret.add(swt);
-					dst = src.parent();
+					dst = swt.source;
 				} else {
 					// Let it grow
 				}
-				src = src.parent();
+				src = swt.source;
 			}
 			if (src != dst) {
 				ret.add(createTAL.apply(src, dst));

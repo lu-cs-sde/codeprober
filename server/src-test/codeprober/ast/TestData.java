@@ -35,7 +35,7 @@ public class TestData {
 			return children.size();
 		}
 
-		public Object getChild(int index) {
+		public Node getChild(int index) {
 			return children.get(index);
 		}
 
@@ -69,7 +69,7 @@ public class TestData {
 			return simpleNTA_value;
 		}
 
-		private Map<Object, Object> parameterizedNTA_int_Node_values = new HashMap<>();
+		private Map<Object, Node> parameterizedNTA_int_Node_values = new HashMap<>();
 
 		@SuppressWarnings("unused")
 		private final Object parameterizedNTA_int_Node_proxy = new Object();
@@ -90,7 +90,7 @@ public class TestData {
 		}
 
 		@Attribute
-		public Object parameterizedNTA(int arg1, Node arg2) {
+		public Node parameterizedNTA(int arg1, Node arg2) {
 			final List<Object> argList = new ArrayList<>();
 			argList.add(arg1);
 			argList.add(arg2);
@@ -369,6 +369,41 @@ public class TestData {
 						.add(new Bar(lc(0, 0), lc(0, 0))) //
 				) //
 				.setParameterizedNTA(2, ntaArg, new Baz(lc(0, 0), lc(0, 0)));
+	}
+
+	/**
+	 * Get an AST looking like this:
+	 *
+	 * <pre>
+	 * 0 Program {
+	 * 1   Foo {
+	 * 2     Foo { }
+	 * 1     nta(1, Program.child(0)) :: (
+	 * 1       Foo {
+	 * 1         Bar {
+	 * 2           Baz {
+   * 2             nta(2, Program.child(0)) :: Foo { }
+   * 3           }
+	 * 3         }
+	 * 3     )
+	 * 4   }
+	 * 5 }
+	 * </pre>
+	 */
+	public static Program getWithNestedParameterizedNta() {
+		final Foo ntaArg = new Foo(lc(2, 2), lc(2, 2));
+		final Program prog = new Program(lc(1, 1), lc(5, 1));
+		prog //
+				.add(ntaArg) //
+				.setParameterizedNTA(1, ntaArg, new Foo(lc(1, 1), lc(4, 4)) //
+						.add(new Bar(lc(1, 1), lc(3, 3)) //
+								.add(new Baz(lc(2, 2), lc(3, 3)) //
+										.setParameterizedNTA(2, ntaArg, new Foo(lc(1, 1), lc(2, 2)))//
+								) //
+						) //
+				) //
+		;
+		return prog;
 	}
 
 	/**

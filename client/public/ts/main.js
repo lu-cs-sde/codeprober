@@ -11817,7 +11817,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 };
                 doFetch()
                     .then((parsed) => {
-                    var _a, _b, _c, _d, _e, _f, _g, _h;
+                    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
                     loading = false;
                     if (parsed === 'stopped') {
                         refreshOnDone = false;
@@ -11868,9 +11868,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         //   localErrors.push({ severity, errStart, errEnd, msg });
                         // })
                         const updatedArgs = parsed.args;
-                        if (updatedArgs) {
+                        if (updatedArgs && updatedArgs.length === ((_b = property.args) === null || _b === void 0 ? void 0 : _b.length)) {
                             shouldRefreshMarkers = true;
-                            (_b = property.args) === null || _b === void 0 ? void 0 : _b.forEach((arg, argIdx) => {
+                            (_c = property.args) === null || _c === void 0 ? void 0 : _c.forEach((arg, argIdx) => {
                                 arg.type = updatedArgs[argIdx].type;
                                 // arg.detail = updatedArgs[argIdx].detail;
                                 arg.value = updatedArgs[argIdx].value;
@@ -11894,10 +11894,10 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             const message = document.createElement('div');
                             message.style.padding = '0.25rem';
                             let tail = '';
-                            if (((_d = (_c = property.args) === null || _c === void 0 ? void 0 : _c.length) !== null && _d !== void 0 ? _d : 0) >= 2) {
-                                tail = ` that match the predicate${`${(_f = (_e = property.args) === null || _e === void 0 ? void 0 : _e[1]) === null || _f === void 0 ? void 0 : _f.value}`.includes(',') ? 's' : ''}`;
+                            if (((_e = (_d = property.args) === null || _d === void 0 ? void 0 : _d.length) !== null && _e !== void 0 ? _e : 0) >= 2) {
+                                tail = ` that match the predicate${`${(_g = (_f = property.args) === null || _f === void 0 ? void 0 : _f[1]) === null || _g === void 0 ? void 0 : _g.value}`.includes(',') ? 's' : ''}`;
                             }
-                            message.innerText = `Found no nodes implementing '${(_h = (_g = property.args) === null || _g === void 0 ? void 0 : _g[0]) === null || _h === void 0 ? void 0 : _h.value}'${tail}`;
+                            message.innerText = `Found no nodes implementing '${(_j = (_h = property.args) === null || _h === void 0 ? void 0 : _h[0]) === null || _j === void 0 ? void 0 : _j.value}'${tail}`;
                             message.style.fontStyle = 'italic';
                             root.appendChild(message);
                         }

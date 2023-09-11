@@ -27,7 +27,6 @@ import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.NullableNodeLocator;
-import codeprober.protocol.data.ParsingRequestData;
 import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.PropertyArgCollection;
 import codeprober.protocol.data.PropertyEvaluationResult;
@@ -266,7 +265,6 @@ public class EvaluatePropertyHandler {
 							BenchmarkTimer.EVALUATE_ATTR.exit();
 						}
 					} else {
-//						throw new RuntimeException("TODO support args");
 						final int numArgs = req.property.args.size();
 						final Class<?>[] argTypes = new Class<?>[numArgs];
 						final Object[] argValues = new Object[numArgs];
@@ -319,8 +317,7 @@ public class EvaluatePropertyHandler {
 				} catch (InvokeProblem e) {
 					Throwable cause = e.getCause();
 					if (cause instanceof NoSuchMethodException) {
-						body.add(RpcBodyLine.fromPlain("No such attribute '" + req.property.name + "' on "
-								+ match.node.underlyingAstNode.getClass().getName()));
+						body.add(RpcBodyLine.fromPlain(String.format("No such attribute '%s' on %s", req.property.name, match.node.underlyingAstNode.getClass().getName())));
 					} else {
 						if (cause instanceof InvocationTargetException && cause.getCause() != null) {
 							cause = cause.getCause();

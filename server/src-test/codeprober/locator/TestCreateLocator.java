@@ -14,6 +14,8 @@ import org.junit.Test;
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.ast.TestData;
+import codeprober.ast.TestData.Node;
+import codeprober.ast.TestData.Program;
 import codeprober.metaprogramming.Reflect;
 import codeprober.metaprogramming.TypeIdentificationStyle;
 import codeprober.protocol.data.NodeLocator;
@@ -185,6 +187,30 @@ public class TestCreateLocator {
 //		final JSONObject childStep = steps.getJSONObject(1);
 //		assertEquals("child", childStep.getString("type"));
 		assertEquals(1, steps.get(1).asChild());
+	}
+
+	@Test
+	public void testNestedParameterizedNta() {
+		final Program underlyingRoot = TestData.getWithNestedParameterizedNta();
+		final AstNode root = new AstNode(underlyingRoot);
+		final AstInfo info = TestData.getInfo(root);
+
+		final Node ntaArg = underlyingRoot.getChild(0);
+		final Node inner = underlyingRoot //
+      .parameterizedNTA(1, ntaArg) //
+      .getChild(0) //
+      .getChild(0) //
+      .parameterizedNTA(2, ntaArg);
+
+		final NodeLocator locator = CreateLocator.fromNode(info, new AstNode(inner));
+
+		assertEquals(3, locator.steps.size());
+
+		assertEquals(NodeLocatorStep.Type.nta, locator.steps.get(0).type);
+		assertEquals(NodeLocatorStep.Type.tal, locator.steps.get(1).type);
+		assertEquals(NodeLocatorStep.Type.nta, locator.steps.get(2).type);
+
+		assertSame(inner, ApplyLocator.toNode(info, locator).node.underlyingAstNode);
 	}
 
 	@Test

@@ -408,7 +408,7 @@ const displayProbeModal = (
             //   localErrors.push({ severity, errStart, errEnd, msg });
             // })
             const updatedArgs = parsed.args;
-            if (updatedArgs) {
+            if (updatedArgs && updatedArgs.length === property.args?.length) {
               shouldRefreshMarkers = true;
               property.args?.forEach((arg, argIdx) => {
                 arg.type = updatedArgs[argIdx].type;

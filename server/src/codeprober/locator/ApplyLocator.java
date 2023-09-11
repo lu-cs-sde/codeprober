@@ -227,7 +227,7 @@ public class ApplyLocator {
 						for (int j = 0; j < argsValues.length; ++j) {
 //							final ParameterValue param = DecodeValue.decode(info, args.get(j),
 //									new JSONArray());
-							final UnpackedAttrValue uav = EvaluatePropertyHandler.unpackAttrValue(info, args.get(0),
+							final UnpackedAttrValue uav = EvaluatePropertyHandler.unpackAttrValue(info, args.get(j),
 									System.out::println);
 							argsValues[j] = uav.unpacked;
 							argsTypes[j] = EvaluatePropertyHandler.getValueType(info, uav.response);
