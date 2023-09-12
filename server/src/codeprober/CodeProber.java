@@ -70,7 +70,6 @@ public class CodeProber {
 		final JsonRequestHandler userFacingHandler;
 		flog(Arrays.toString(mainArgs));
 
-
 		final File backingFile = BackingFileSettings.getRealFileToBeUsedInRequests();
 		if (backingFile != null) {
 			if (parsedArgs.concurrencyMode != ConcurrencyMode.DISABLED) {
@@ -203,6 +202,10 @@ public class CodeProber {
 		new FileMonitor(new File(parsedArgs.jarPath)) {
 			public void onChange() {
 				System.out.println("Jar changed!");
+				if (sessionLogger != null) {
+					sessionLogger.log(new JSONObject() //
+							.put("t", "Refresh"));
+				}
 				msgPusher.onJarChange();
 			};
 		}.start();

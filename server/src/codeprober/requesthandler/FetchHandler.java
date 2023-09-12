@@ -17,8 +17,8 @@ public class FetchHandler {
 			final URL url = new URL(req.url);
 			final HttpURLConnection con = (HttpURLConnection) url.openConnection();
 			con.setRequestMethod("GET");
-			con.setConnectTimeout(5000);
-			con.setReadTimeout(5000);
+			con.setConnectTimeout(1000);
+			con.setReadTimeout(1000);
 
 			int status = con.getResponseCode();
 			if (status != 200) {

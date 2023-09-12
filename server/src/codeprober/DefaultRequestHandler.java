@@ -199,10 +199,9 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				if (res.rootNode == null) {
 					return new ParsedAst(null, res.parseTime, res.captures);
 				}
-				return new ParsedAst(parsedAstToInfo(res.rootNode, posRecovery), res.parseTime,
-						res.captures);
+				return new ParsedAst(parsedAstToInfo(res.rootNode, posRecovery), res.parseTime, res.captures);
 			};
-			final AtomicBoolean logged = new AtomicBoolean(false);
+			final AtomicBoolean addLog = new AtomicBoolean(logger != null);
 			final JSONObject handled = new RequestAdapter() {
 
 				@Override
@@ -212,11 +211,21 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 				@Override
 				protected ListNodesRes handleListNodes(ListNodesReq req) {
+					if (addLog.getAndSet(false)) {
+						logger.log(new JSONObject() //
+								.put("t", "ListNodes") //
+								.put("pos", req.pos));
+					}
 					return ListNodesHandler.apply(req, lp);
 				}
 
 				@Override
 				protected ListPropertiesRes handleListProperties(ListPropertiesReq req) {
+					if (addLog.getAndSet(false)) {
+						logger.log(new JSONObject() //
+								.put("t", "ListProperties") //
+								.put("node", req.locator.result.type));
+					}
 					return ListPropertiesHandler.apply(req, lp);
 				}
 
@@ -237,8 +246,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 				@Override
 				protected EvaluatePropertyRes handleEvaluateProperty(EvaluatePropertyReq req) {
-					if (logger != null) {
-						logged.set(true);
+					if (addLog.getAndSet(false)) {
 						logger.log(new JSONObject() //
 								.put("t", "EvaluateProperty") //
 								.put("prop", req.property.name) //
@@ -263,7 +271,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				}
 
 			}.handle(request.data);
-			if (logger != null && !logged.get()) {
+			if (addLog.getAndSet(false)) {
 				final String type = request.data.optString("type");
 				if (type != null) {
 					logger.log(new JSONObject().put("t", type));
