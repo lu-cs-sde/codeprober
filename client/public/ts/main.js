@@ -12086,8 +12086,11 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
     trimTypeName_5 = __importDefault(trimTypeName_5);
     const displayRagModal = (env, line, col) => {
         const queryId = `rag-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const localDiagnostics = [];
+        env.probeMarkers[queryId] = localDiagnostics;
         const cleanup = () => {
             delete env.onChangeListeners[queryId];
+            delete env.probeMarkers[queryId];
             popup.remove();
         };
         const popup = (0, showWindow_4.default)({
@@ -12118,16 +12121,24 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                     type: 'ListNodes',
                 })
                     .then((parsed) => {
-                    var _a;
+                    var _a, _b;
                     if (cancelToken.cancelled) {
                         return;
                     }
                     while (root.firstChild)
                         root.removeChild(root.firstChild);
                     root.style.minHeight = '4rem';
+                    let shouldRefreshMarkers = localDiagnostics.length > 0;
+                    localDiagnostics.length = 0;
+                    localDiagnostics.push(...((_a = parsed.errors) !== null && _a !== void 0 ? _a : []).map((err) => {
+                        return ({ ...err, source: 'Node Listing' });
+                    }));
+                    if (shouldRefreshMarkers || localDiagnostics.length > 0) {
+                        env.updateMarkers();
+                    }
                     if (!parsed.nodes) {
                         root.appendChild(createTitle('err'));
-                        if ((_a = parsed.body) === null || _a === void 0 ? void 0 : _a.length) {
+                        if ((_b = parsed.body) === null || _b === void 0 ? void 0 : _b.length) {
                             root.appendChild((0, encodeRpcBodyLines_4.default)(env, parsed.body));
                             return;
                         }

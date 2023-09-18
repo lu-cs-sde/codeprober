@@ -17,6 +17,7 @@ public class ListNodes extends Rpc {
 		return new Streamable() {
 			public final Object body = arr(RpcBodyLine.class);
 			public final Object nodes = opt(arr(NodeLocator.class));
+			public final Object errors = opt(arr(Diagnostic.class));
 		};
 	}
 

@@ -9,12 +9,16 @@ import trimTypeName from "../trimTypeName";
 import ModalEnv from '../../model/ModalEnv';
 import { ListNodesReq, ListNodesRes } from '../../protocol';
 import { createMutableLocator } from '../../model/UpdatableNodeLocator';
+import SourcedDiagnostic from '../../model/SourcedDiagnostic';
 
 const displayRagModal = (env: ModalEnv, line: number, col: number) => {
   const queryId = `rag-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+  const localDiagnostics: SourcedDiagnostic[] = [];
+  env.probeMarkers[queryId] = localDiagnostics;
 
   const cleanup = () => {
     delete env.onChangeListeners[queryId];
+    delete env.probeMarkers[queryId];
     popup.remove();
   };
 
@@ -52,6 +56,14 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
           while (root.firstChild) root.removeChild(root.firstChild);
           root.style.minHeight = '4rem';
 
+          let shouldRefreshMarkers = localDiagnostics.length > 0;
+          localDiagnostics.length = 0;
+          localDiagnostics.push(...(parsed.errors ?? []).map((err): SourcedDiagnostic => {
+            return ({ ...err, source: 'Node Listing' });
+          }));
+          if (shouldRefreshMarkers || localDiagnostics.length > 0) {
+            env.updateMarkers();
+          }
 
           if (!parsed.nodes) {
             root.appendChild(createTitle('err'));
@@ -66,7 +78,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
           rowsContainer.style.padding = '2px';
           root.appendChild(rowsContainer);
           parsed.nodes.forEach((locator, entIdx) => {
-            const { start, end, type, label } = locator.result;
+            const { start, end, type, label } = locator.result;
             const span = { lineStart: (start >>> 12), colStart: (start & 0xFFF), lineEnd: (end >>> 12), colEnd: (end & 0xFFF) };
             const node = document.createElement('div');
             node.classList.add('clickHighlightOnHover');
