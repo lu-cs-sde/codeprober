@@ -59,8 +59,6 @@ public class EncodeResponseValue {
 //					if (((String) diagnosticValue).startsWith("))
 						final Diagnostic d = MagicStdoutMessageParser.parse(diagStr);
 						if (d != null) {
-							System.out.println("add to " + diagnostics);
-							System.out.println("add " + d);
 							diagnostics.add(d);
 						} else {
 							System.err.println("Invalid diagnostic string '" + diagnosticValue + "'");

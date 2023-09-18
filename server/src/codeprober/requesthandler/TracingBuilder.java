@@ -48,7 +48,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 				// Oh dear! Pretend it did not happen
 				return null;
 			}
-//			System.out.println(prefix + " Encode attached node " + node.getClass().getSimpleName() +": " + node + " . " + property.toJSON() +" -> " + (value != null ? value.getClass().getSimpleName() : "null") +": " + value);
 			final NodeLocator locator = CreateLocator.fromNode(info, astNode);
 			if (locator == null) {
 				System.err.println("Failed creating locator to " + node);
@@ -59,10 +58,8 @@ public class TracingBuilder implements Consumer<Object[]> {
 				result = NULL_RESULT;
 			} else {
 				final List<RpcBodyLine> lines = new ArrayList<>();
-//				final List
 				EncodeResponseValue.encodeTyped(info, lines, new ArrayList<>(), value, new HashSet<>());
 				result = lines.size() == 1 ? lines.get(0) : RpcBodyLine.fromArr(lines);
-//				result = RpcBodyLine.fromArr(lines);
 			}
 			return new Tracing(locator, property, dependencies.stream() //
 					.map(pt -> pt.toTrace(prefix + property.name + " > ")) //
@@ -148,12 +145,23 @@ public class TracingBuilder implements Consumer<Object[]> {
 					return;
 				}
 				if (attribute.endsWith("(String)")) {
-					final String argStr = String.valueOf(args[3]);
-					if (argStr.length() <= 16) {
+					final String insert = String.format("\"%s\"", String.valueOf(args[3]));
+					if (insert.length() <= 16) {
 						// Relatively short arg, inline the value into the attribute name.
-						attribute = String.format("%s(\"%s\")",
-								attribute.substring(0, attribute.length() - "(String)".length()),
-								String.valueOf(args[3]));
+						attribute = String.format("%s(%s)",
+								attribute.substring(0, attribute.length() - "(String)".length()), insert);
+					}
+				} else if (attribute.endsWith("(String,int)") && args[3] instanceof List) {
+					final List<?> argList = (List<?>) args[3];
+					if (argList.size() == 2) {
+						final String insert = String.format("\"%s\",%s", String.valueOf(argList.get(0)),
+								String.valueOf(argList.get(1)));
+						if (insert.length() <= 16) {
+							// Relatively short arg list, inline
+							attribute = String.format("%s(%s)",
+									attribute.substring(0, attribute.length() - "(String,int)".length()), insert);
+
+						}
 					}
 				}
 
@@ -190,7 +198,7 @@ public class TracingBuilder implements Consumer<Object[]> {
 				break;
 			}
 			default: {
-				System.err.printf("Unknown event '%s'", event);
+				System.err.printf("Unknown tracing event '%s'", event);
 			}
 			}
 		} finally {
