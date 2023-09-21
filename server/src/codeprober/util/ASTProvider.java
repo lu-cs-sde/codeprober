@@ -106,6 +106,7 @@ public class ASTProvider {
 	 */
 	public static ParseResult parseAst(String jarPath, String[] args) {
 		System.out.println("parsing w/ args: " + Arrays.toString(args));
+		boolean installedSystemExitInterceptor = false;
 		try {
 			LoadedJar ljar = loadJar(jarPath);
 
@@ -119,6 +120,7 @@ public class ASTProvider {
 					System.setProperty("java.security.manager", "allow");
 					try {
 						SystemExitControl.disableSystemExit();
+						installedSystemExitInterceptor = true;
 					} catch (UnsupportedOperationException uoe) {
 						uoe.printStackTrace();
 						captures = StdIoInterceptor.performDefaultCapture(() -> {
@@ -128,33 +130,51 @@ public class ASTProvider {
 							System.err.println("Example:");
 							System.err.println(
 									"   java -Djava.security.manager=allow -jar path/to/code-prober.jar path/to/your/analyzer-or-compiler.jar");
+							System.err.println("Alternatively, avoid calling System.exit() if running in CodeProber.");
+							System.err.println(
+									"This can be determined by checking if the system property CODEPROBER is true");
+							System.err.println("For example, use the following 'customExit' method instead of System.exit:");
+							System.err.println("  static void customExit() {");
+							System.err.println(
+									"    if (System.getProperty(\"CODEPROBER\", \"false\").equals(\"true\")) { throw new Error(\"Simulated exit\"); }");
+							System.err.println("    else { System.exit(1); }");
+							System.err.println("  }");
+							System.setProperty("CODEPROBER", "true");
 						});
-						return new ParseResult(null, captures);
+//						return new ParseResult(null, captures);
 					}
 
 					final AtomicReference<Exception> innerError = new AtomicReference<>();
-					captures = StdIoInterceptor.performDefaultCapture(() -> {
+					final List<RpcBodyLine> mainCaptures = StdIoInterceptor.performDefaultCapture(() -> {
 						try {
 							ljar.mainMth.invoke(null, new Object[] { args });
 						} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
 							innerError.set(e);
 						}
 					});
+					if (captures != null) {
+						mainCaptures.addAll(captures);
+					} else {
+						captures = mainCaptures;
+					}
 					if (innerError.get() != null) {
 						throw innerError.get();
 					}
 				} catch (InvocationTargetException e) {
-					System.out.println("ASTPRovider caught " + e);
-					e.printStackTrace();
-					System.out.println("target: " + e.getTargetException());
-					if (!(e.getTargetException() instanceof SystemExitControl.ExitTrappedException)) {
+					System.out.println("ASTPRovider caught " + e.getTargetException());
+					final Throwable target = e.getTargetException();
+					final boolean expectedException = target instanceof SystemExitControl.ExitTrappedException || target instanceof Error;
+					if (!expectedException) {
 						e.printStackTrace();
 						System.err.println(
 								"compiler error : " + (e.getMessage() != null ? e.getMessage() : e.getCause()));
 						return new ParseResult(null, captures);
 					}
 				} finally {
-					SystemExitControl.enableSystemExit();
+					if (installedSystemExitInterceptor) {
+						SystemExitControl.enableSystemExit();
+					}
+
 					System.out.printf("Compiler finished after : %d ms%n", (System.currentTimeMillis() - start));
 				}
 				Object root = ljar.drAstField.get(ljar.mainClazz);
@@ -192,7 +212,9 @@ public class ASTProvider {
 			} catch (IllegalAccessException e) {
 				e.printStackTrace();
 			} finally {
-				SystemExitControl.enableSystemExit();
+				if (installedSystemExitInterceptor) {
+					SystemExitControl.enableSystemExit();
+				}
 			}
 		} catch (NoSuchMethodException e) {
 			System.err.println("Could not find the compiler's main method.");
@@ -210,7 +232,9 @@ public class ASTProvider {
 		} catch (Throwable e) {
 			e.printStackTrace();
 		}
-		SystemExitControl.enableSystemExit();
+		if (installedSystemExitInterceptor) {
+			SystemExitControl.enableSystemExit();
+		}
 		return new ParseResult(null, null);
 	}
 }

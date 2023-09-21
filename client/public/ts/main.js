@@ -3226,7 +3226,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         const csx = 1920 / cv.clientWidth;
                         const trx1 = trn.x;
                         const z1 = trn.scale;
-                        const z2 = Math.max(0.1, Math.min(10, trn.scale + (e.deltaY > 0 ? -1 : 1) / 10.0));
+                        const z2 = Math.max(0.1, Math.min(10, trn.scale * (e.deltaY > 0 ? 1.02 : 0.98)));
                         /*
                           -- We want to modify trn.x so that transforming {e.offsetX, e.offsetY} gets the same result before and after zooming.
                           -- For trn.x we want this relation to hold:
