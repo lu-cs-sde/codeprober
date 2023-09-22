@@ -29,8 +29,6 @@ import codeprober.protocol.data.CompleteReq;
 import codeprober.protocol.data.CompleteRes;
 import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
-import codeprober.protocol.data.FetchReq;
-import codeprober.protocol.data.FetchRes;
 import codeprober.protocol.data.GetTestSuiteReq;
 import codeprober.protocol.data.GetTestSuiteRes;
 import codeprober.protocol.data.HoverReq;
@@ -49,7 +47,6 @@ import codeprober.protocol.data.RequestAdapter;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.requesthandler.CompleteHandler;
 import codeprober.requesthandler.EvaluatePropertyHandler;
-import codeprober.requesthandler.FetchHandler;
 import codeprober.requesthandler.HoverHandler;
 import codeprober.requesthandler.LazyParser;
 import codeprober.requesthandler.LazyParser.ParsedAst;
@@ -253,11 +250,6 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 								.put("node", req.locator.result.type));
 					}
 					return EvaluatePropertyHandler.apply(req, lp);
-				}
-
-				@Override
-				protected FetchRes handleFetch(FetchReq req) {
-					return FetchHandler.apply(req);
 				}
 
 				@Override

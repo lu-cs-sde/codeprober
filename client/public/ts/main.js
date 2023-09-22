@@ -716,6 +716,7 @@ define("model/repositoryUrl", ["require", "exports"], function (require, exports
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.rawUrl = exports.repositoryUrl = void 0;
+    // This file should be kept in sync with server/src/codeprober/server/WebServer.java
     const repositoryUrl = `https://github.com/lu-cs-sde/codeprober`;
     exports.repositoryUrl = repositoryUrl;
     const rawUrl = (resource) => `https://raw.githubusercontent.com/lu-cs-sde/codeprober/master/${resource}`;
@@ -12847,13 +12848,9 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
             return;
         }
         const pollNewVersion = async () => {
-            var _a;
             let fetched;
             try {
-                fetched = (_a = (await sendRequest({
-                    type: 'Fetch',
-                    url: (0, repositoryUrl_2.rawUrl)('VERSION'),
-                }))) === null || _a === void 0 ? void 0 : _a.result;
+                fetched = await (await fetch('LATEST_VERSION')).text();
             }
             catch (e) {
                 console.warn('Error when fetching version', e);

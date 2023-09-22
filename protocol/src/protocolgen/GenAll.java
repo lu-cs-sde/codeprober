@@ -6,7 +6,6 @@ import java.util.List;
 import protocolgen.spec.AsyncRpcUpdate;
 import protocolgen.spec.Complete;
 import protocolgen.spec.EvaluateProperty;
-import protocolgen.spec.Fetch;
 import protocolgen.spec.GetTestSuite;
 import protocolgen.spec.GetWorkerStatus;
 import protocolgen.spec.Hover;
@@ -49,7 +48,6 @@ public class GenAll {
 		rpcs.add(UnsubscribeFromWorkerStatus.class);
 		rpcs.add(StopJob.class);
 		rpcs.add(PollWorkerStatus.class);
-		rpcs.add(Fetch.class);
 
 		// Client->Server, 'LSP'
 		rpcs.add(Hover.class);

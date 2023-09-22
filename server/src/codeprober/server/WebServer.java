@@ -1,13 +1,17 @@
 package codeprober.server;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -254,8 +258,38 @@ public class WebServer {
 			out.flush();
 			return;
 		}
+		if (path.equals("/LATEST_VERSION")) {
+			// Also a special magical resource, don't actually read from classPath/file system
+			// This URL should be kept in sync with client/src/model/repositoryUrl.ts
+			final URL url = new URL("https://raw.githubusercontent.com/lu-cs-sde/codeprober/master/VERSION");
+			final HttpURLConnection con = (HttpURLConnection) url.openConnection();
+			con.setRequestMethod("GET");
+			con.setConnectTimeout(1000);
+			con.setReadTimeout(1000);
 
-//				Integer sizeHint = null;
+			final int status = con.getResponseCode();
+			if (status != 200) {
+				throw new RuntimeException("Unexpected status code " + status);
+			}
+			final BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+			String inputLine;
+			final StringBuffer content = new StringBuffer();
+			while ((inputLine = in.readLine()) != null) {
+				content.append(inputLine + "\n");
+			}
+			con.disconnect();
+
+			out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
+			out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
+			out.write(("\r\n").getBytes("UTF-8"));
+
+			final String fullVersionFile = content.toString();
+			final String[] lines = fullVersionFile.split("\n");
+			out.write(lines[lines.length - 1].getBytes("UTF-8"));
+			out.flush();
+			return;
+		}
+
 		final InputStream stream;
 		if (srcDirectoryOverride != null) {
 			final File f = new File(srcDirectoryOverride, path);

@@ -34,10 +34,7 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
   const pollNewVersion = async (): Promise<'done' | 'again'> => {
     let fetched: string | undefined;
     try {
-      fetched = (await sendRequest<FetchReq, FetchRes>({
-        type: 'Fetch',
-        url: rawUrl('VERSION'),
-      }))?.result;
+      fetched = await (await fetch('LATEST_VERSION')).text();
     } catch (e) {
       console.warn('Error when fetching version', e);
       return 'done';
