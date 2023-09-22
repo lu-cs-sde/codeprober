@@ -1,6 +1,5 @@
 import ModalEnv from '../model/ModalEnv';
-import { repositoryUrl, rawUrl } from "../model/repositoryUrl";
-import { FetchReq, FetchRes } from '../protocol';
+import { repositoryUrl } from "../model/repositoryUrl";
 
 const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolean, ourBuildTime: number | undefined, disableVersionCheckerByDefault: boolean | undefined, sendRequest: ModalEnv['performTypedRpc']) => {
 
