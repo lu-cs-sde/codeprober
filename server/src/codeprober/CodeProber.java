@@ -25,6 +25,7 @@ import codeprober.server.ServerToClientMessagePusher;
 import codeprober.server.WebServer;
 import codeprober.server.WebSocketServer;
 import codeprober.toolglue.UnderlyingTool;
+import codeprober.toolglue.UnderlyingToolProxy;
 import codeprober.util.FileMonitor;
 import codeprober.util.ParsedArgs;
 import codeprober.util.ParsedArgs.ConcurrencyMode;
@@ -32,11 +33,6 @@ import codeprober.util.SessionLogger;
 import codeprober.util.VersionInfo;
 
 public class CodeProber {
-
-	public static void printUsage() {
-		System.out.println(
-				"Usage: java -jar code-prober.jar [--test] path/to/your/analyzer-or-compiler.jar [args-to-forward-to-your-main]");
-	}
 
 	public static void flog(String msg) {
 		final String flogPath = System.getenv("FLOG_PATH");
@@ -54,18 +50,14 @@ public class CodeProber {
 
 	public static void main(String[] mainArgs) throws IOException {
 		System.out.println("Starting server, version: " + VersionInfo.getInstance().toString() + "..");
-		if (mainArgs.length == 0 || (mainArgs.length == 1 && mainArgs[0].equals("--help"))) {
-			printUsage();
-			System.exit(1);
-		}
-
 		final ParsedArgs parsedArgs = ParsedArgs.parse(mainArgs);
 
 		final SessionLogger sessionLogger = SessionLogger.init();
 		if (sessionLogger != null) {
 			System.out.println("Logging anonymous session data to " + sessionLogger.getTargetDirectory());
 		}
-		final JsonRequestHandler defaultHandler = new DefaultRequestHandler(UnderlyingTool.fromJar(parsedArgs.jarPath),
+		final UnderlyingToolProxy underlyingTool = new UnderlyingToolProxy();
+		final JsonRequestHandler defaultHandler = new DefaultRequestHandler(underlyingTool,
 				parsedArgs.extraArgs, sessionLogger);
 		final JsonRequestHandler userFacingHandler;
 		flog(Arrays.toString(mainArgs));
@@ -188,8 +180,27 @@ public class CodeProber {
 		final Function<ClientRequest, JSONObject> topHandler = JsonRequestHandler
 				.createTopRequestHandler(unwrappedHandler);
 
+		final AtomicBoolean needsTool = new AtomicBoolean(true);
+		final Consumer<String> setUnderlyingJarPath = (jarPath) -> {
+			needsTool.set(false);
+			underlyingTool.setProxyTarget(UnderlyingTool.fromJar(jarPath));
+			new FileMonitor(new File(jarPath)) {
+				public void onChange() {
+					System.out.println("Jar changed!");
+					if (sessionLogger != null) {
+						sessionLogger.log(new JSONObject() //
+								.put("t", "Refresh"));
+					}
+					msgPusher.onJarChange();
+				};
+			}.start();
+		};
+		if (parsedArgs.jarPath != null) {
+			setUnderlyingJarPath.accept(parsedArgs.jarPath);
+		}
+
 		final Runnable onSomeClientDisconnected = userFacingHandler::onOneOrMoreClientsDisconnected;
-		new Thread(() -> WebServer.start(parsedArgs, msgPusher, unwrappedHandler, onSomeClientDisconnected)).start();
+		new Thread(() -> WebServer.start(parsedArgs, msgPusher, unwrappedHandler, onSomeClientDisconnected, needsTool, setUnderlyingJarPath)).start();
 		if (!WebSocketServer.shouldDelegateWebsocketToHttp() && WebSocketServer.getPort() != WebServer.getPort()) {
 			new Thread(() -> WebSocketServer.start(parsedArgs, msgPusher, topHandler, onSomeClientDisconnected))
 					.start();
@@ -198,16 +209,5 @@ public class CodeProber {
 		} else {
 			// WebSocket port is same as HTTP port. No need to print anything
 		}
-
-		new FileMonitor(new File(parsedArgs.jarPath)) {
-			public void onChange() {
-				System.out.println("Jar changed!");
-				if (sessionLogger != null) {
-					sessionLogger.log(new JSONObject() //
-							.put("t", "Refresh"));
-				}
-				msgPusher.onJarChange();
-			};
-		}.start();
 	}
 }

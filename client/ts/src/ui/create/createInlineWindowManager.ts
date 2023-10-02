@@ -27,6 +27,7 @@ const createInlineArea = (args: {
   let { inlineRoot, expansionAreaInsideTheRoot, bumpContainingWindowIntoScreen } = args;
 
   const applyActiveRootStyling = (from: string) => {
+    inlineRoot.classList.add('inline-window-active');
     inlineRoot.style.border = '1px solid black';
     inlineRoot.style.paddingTop = '0.25rem';
     inlineRoot.style.marginTop = '0.25rem';
@@ -83,6 +84,7 @@ const createInlineArea = (args: {
           if (parent) parent.removeChild(localDiv);
           --activeSubWindowCount;
           if (activeSubWindowCount === 0) {
+            inlineRoot.classList.remove('inline-window-active');
             inlineRoot.style.border = 'none';
             inlineRoot.style.paddingTop = '0';
             inlineRoot.style.marginTop = '0';

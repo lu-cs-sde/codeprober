@@ -135,12 +135,6 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 				}
 			}
 		}
-		int numActive = 0;
-		for (Worker w : workers) {
-			if (w.job != null) {
-				++numActive;
-			}
-		}
 	}
 
 	@Override

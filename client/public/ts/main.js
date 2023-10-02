@@ -992,7 +992,7 @@ define("ui/create/createTextSpanIndicator", ["require", "exports", "settings", "
     registerOnHover_1 = __importDefault(registerOnHover_1);
     const createTextSpanIndicator = (args) => {
         var _a;
-        const { span, marginLeft, onHover, onClick } = args;
+        const { span, marginLeft, marginRight, onHover, onClick } = args;
         const indicator = document.createElement('span');
         indicator.style.fontSize = '0.75rem';
         indicator.style.color = 'gray';
@@ -1003,7 +1003,9 @@ define("ui/create/createTextSpanIndicator", ["require", "exports", "settings", "
             indicator.style.marginTop = 'auto';
             indicator.style.marginBottom = 'auto';
         }
-        indicator.style.marginRight = '0.25rem';
+        if (marginRight) {
+            indicator.style.marginRight = '0.25rem';
+        }
         const ext = args.external ? '↰' : '';
         const warn = span.lineStart === 0 && span.colStart === 0 && span.lineEnd === 0 && span.colEnd === 0 ? '⚠️' : '';
         switch ((_a = args.styleOverride) !== null && _a !== void 0 ? _a : settings_1.default.getLocationStyle()) {
@@ -10163,6 +10165,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
         const createNodeNode = (target, locator, nestingLevel, bodyPath, includePositionIndicator = true) => {
             const { start, end, type, label } = locator.result;
             const container = document.createElement('div');
+            container.classList.add('node-ref');
             if (extras.decorator) {
                 applyDecoratorClass(container, nestingLevel <= 1, extras.decorator(bodyPath));
             }
@@ -10171,18 +10174,18 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                 lineStart: (start >>> 12), colStart: (start & 0xFFF),
                 lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
             };
-            if (includePositionIndicator) {
-                container.appendChild((0, createTextSpanIndicator_5.default)({
-                    span,
-                    marginLeft: false,
-                    autoVerticalMargin: true,
-                }));
-            }
             const typeNode = document.createElement('span');
             typeNode.classList.add('syntax-type');
             typeNode.innerText = label !== null && label !== void 0 ? label : (0, trimTypeName_3.default)(type);
             typeNode.style.margin = 'auto 0';
             container.appendChild(typeNode);
+            if (includePositionIndicator) {
+                container.appendChild((0, createTextSpanIndicator_5.default)({
+                    span,
+                    marginLeft: true,
+                    autoVerticalMargin: true,
+                }));
+            }
             container.classList.add('clickHighlightOnHover');
             container.style.width = 'fit-content';
             container.style.display = 'inline';
@@ -10240,6 +10243,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                     });
                 }
                 const outerContainer = document.createElement('div');
+                outerContainer.classList.add('inline-window-root');
                 outerContainer.style.display = 'inline-flex';
                 // outerContainer.style.marginBottom = '0.125rem';
                 outerContainer.style.flexDirection = 'column';
@@ -10970,6 +10974,7 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
     const createInlineArea = (args) => {
         let { inlineRoot, expansionAreaInsideTheRoot, bumpContainingWindowIntoScreen } = args;
         const applyActiveRootStyling = (from) => {
+            inlineRoot.classList.add('inline-window-active');
             inlineRoot.style.border = '1px solid black';
             inlineRoot.style.paddingTop = '0.25rem';
             inlineRoot.style.marginTop = '0.25rem';
@@ -11028,6 +11033,7 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
                             parent.removeChild(localDiv);
                         --activeSubWindowCount;
                         if (activeSubWindowCount === 0) {
+                            inlineRoot.classList.remove('inline-window-active');
                             inlineRoot.style.border = 'none';
                             inlineRoot.style.paddingTop = '0';
                             inlineRoot.style.marginTop = '0';

@@ -48,7 +48,6 @@ public class AddNum {
 	private void skipWhitespace() {
 		while (parseIndex < src.length()) {
 			final char ch = src.charAt(parseIndex);
-			System.out.println("Matching " + (int) ch);
 			switch (ch) {
 			case ' ': // Normal space
 			case ' ': // nbsp

@@ -26,6 +26,11 @@ public class ParsedArgs {
 		this.extraArgs = extraArgs;
 	}
 
+	public static void printUsage() {
+		System.out.println(
+				"Usage: java -jar code-prober.jar [--test] [--concurrent=N] [path/to/your/analyzer-or-compiler.jar [args-to-forward-to-your-main]]");
+	}
+
 	public static ParsedArgs parse(String[] args) {
 		boolean runTests = false;
 		AtomicReference<ConcurrencyMode> concurrency = new AtomicReference<>(ConcurrencyMode.DISABLED);
@@ -59,6 +64,11 @@ public class ParsedArgs {
 				setConcurrencyMode.accept(ConcurrencyMode.WORKER);
 				break;
 			}
+			case "--help": {
+				printUsage();
+				System.exit(1);
+				break;
+			}
 
 			default: {
 				if (args[i].startsWith("--concurrent=")) {
@@ -80,10 +90,6 @@ public class ParsedArgs {
 				}
 			}
 			}
-		}
-		if (jarPath == null) {
-			CodeProber.printUsage();
-			System.exit(0);
 		}
 		return new ParsedArgs(runTests, concurrency.get(), workerCount, jarPath, extraArgs);
 	}

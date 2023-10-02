@@ -58,6 +58,7 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
     const { start, end, type, label } = locator.result;
 
     const container = document.createElement('div');
+    container.classList.add('node-ref')
     if (extras.decorator) {
       applyDecoratorClass(container, nestingLevel <= 1, extras.decorator(bodyPath));
     }
@@ -67,19 +68,18 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
       lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
     };
 
-    if (includePositionIndicator) {
-      container.appendChild(createTextSpanIndicator({
-        span,
-        marginLeft: false,
-        autoVerticalMargin: true,
-      }));
-    }
     const typeNode = document.createElement('span');
     typeNode.classList.add('syntax-type');
     typeNode.innerText = label ?? trimTypeName(type);
     typeNode.style.margin = 'auto 0';
     container.appendChild(typeNode);
-
+    if (includePositionIndicator) {
+      container.appendChild(createTextSpanIndicator({
+        span,
+        marginLeft: true,
+        autoVerticalMargin: true,
+      }));
+    }
     container.classList.add('clickHighlightOnHover');
     container.style.width = 'fit-content';
     container.style.display = 'inline';
@@ -137,6 +137,7 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
 
 
       const outerContainer = document.createElement('div');
+      outerContainer.classList.add('inline-window-root');
       outerContainer.style.display = 'inline-flex';
       // outerContainer.style.marginBottom = '0.125rem';
       outerContainer.style.flexDirection = 'column';

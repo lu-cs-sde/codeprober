@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -13,6 +14,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -20,6 +23,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -201,7 +205,7 @@ public class WebServer {
 
 	private void handleGetRequest(Socket socket, String data, ParsedArgs parsedArgs,
 			ServerToClientMessagePusher msgPusher, Function<ClientRequest, JSONObject> onQuery,
-			Runnable onSomeClientDisconnected) throws IOException {
+			Runnable onSomeClientDisconnected, AtomicBoolean needsTool) throws IOException {
 		final OutputStream out = socket.getOutputStream();
 
 		if (data.contains("\r\nUpgrade: websocket\r\n")) {
@@ -239,6 +243,10 @@ public class WebServer {
 		String path = getReqPathMatcher.group(1).split("[?#]")[0];
 		if (path.endsWith("/")) {
 			path += "index.html";
+		}
+		if (path.equals("/index.html") && needsTool.get()) {
+			// Mask the request to upload.html. Will look like index.html in the browser, but that is OK
+			path = "/upload.html";
 		}
 
 		System.out.println("get " + path);
@@ -290,21 +298,7 @@ public class WebServer {
 			return;
 		}
 
-		final InputStream stream;
-		if (srcDirectoryOverride != null) {
-			final File f = new File(srcDirectoryOverride, path);
-			if (f.exists()) {
-				stream = new FileInputStream(f);
-//						sizeHint = (int)f.length();
-			} else {
-				stream = null;
-			}
-		} else {
-			if (path.startsWith("/")) {
-				path = path.substring(1);
-			}
-			stream = CodeProber.class.getResourceAsStream("resources/" + path);
-		}
+		final InputStream stream = openSourceFileStream(path);
 		if (stream == null) {
 			System.out.println("Found no resource for path '" + path + "' in req " + data);
 			out.write("HTTP/1.1 404 Not Found\r\n\r\n".getBytes("UTF-8"));
@@ -316,9 +310,6 @@ public class WebServer {
 		if (mimeType != null) {
 			out.write(("Content-Type: " + mimeType + "\r\n").getBytes("UTF-8"));
 		}
-		// if (sizeHint != null) {
-		// out.write(("Content-Length: " + sizeHint + "\r\n").getBytes("UTF-8"));
-		// }
 
 		out.write("\r\n".getBytes("UTF-8"));
 
@@ -331,8 +322,24 @@ public class WebServer {
 		stream.close();
 	}
 
+	private InputStream openSourceFileStream(String path) throws IOException {
+		if (srcDirectoryOverride != null) {
+			final File f = new File(srcDirectoryOverride, path);
+			if (f.exists()) {
+				return new FileInputStream(f);
+			} else {
+				return null;
+			}
+		} else {
+			if (path.startsWith("/")) {
+				path = path.substring(1);
+			}
+			return CodeProber.class.getResourceAsStream("resources/" + path);
+		}
+	}
+
 	private void handlePutRequest(Socket socket, String data, ParsedArgs args, ServerToClientMessagePusher msgPusher,
-			Function<ClientRequest, JSONObject> onQuery) throws IOException {
+			Function<ClientRequest, JSONObject> onQuery, Consumer<String> setUnderlyingJarPath) throws IOException {
 		final String[] parts = data.split("\r\n");
 		String putPath = null;
 		int contentLen = -1;
@@ -456,46 +463,19 @@ public class WebServer {
 			out.write(("Content-Length: " + response.length + "\r\n").getBytes("UTF-8"));
 			out.write(("\r\n").getBytes("UTF-8"));
 			out.write(response);
+			break;
+		}
+		case "/upload": {
+			final OutputStream out = socket.getOutputStream();
 
-//			final String remoteAddr = body.optString("session",
-//					socket.getRemoteSocketAddress().toString().split(":")[0]);
-//			final WsPutSession wps = monitor.getOrCreate(remoteAddr);
-//			wps.activeConnections.incrementAndGet();
-//			try {
-//				switch (body.getString("type")) {
-//				case "init": {
-//					response = WebSocketServer.getInitMsg(args).toString().getBytes(StandardCharsets.UTF_8);
-//					break;
-//				}
-//				case "longpoll": {
-//					final int etag = body.getInt("etag");
-//
-//					final JSONObject message = wps.pollForThreeMinutes(etag);
-//					wps.lastActivity = System.currentTimeMillis(); // Mark as active at the end of a poll
-//
-//					if (message == null) {
-//						response = new JSONObject() //
-//								.put("etag", etag).toString() //
-//								.getBytes(StandardCharsets.UTF_8);
-//					} else {
-//						response = message.toString().getBytes(StandardCharsets.UTF_8);
-//					}
-//					break;
-//				}
-//				default: {
-//					response = onQuery.apply(
-//							new ClientRequest(body, asyncMsg -> wps.addMessage(asyncMsg.toJSON()), wps.isConnected))
-//							.toString().getBytes(StandardCharsets.UTF_8);
-//					break;
-//				}
-//				}
-//			} catch (InterruptedException e) {
-//				System.err.println("/wsput request interrupted");
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			} finally {
-//				wps.activeConnections.decrementAndGet();
-//			}
+			final byte[] toolData = getBody.get();
+			final File tmp = File.createTempFile("cpr_", "_tool.jar");
+			Files.write(tmp.toPath(), toolData, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+      tmp.deleteOnExit();
+			setUnderlyingJarPath.accept(tmp.getAbsolutePath());
+			out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
+			out.write(("\r\n").getBytes("UTF-8"));
+			out.flush();
 			break;
 		}
 		default: {
@@ -505,7 +485,7 @@ public class WebServer {
 	}
 
 	private void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
-			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected)
+			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected, AtomicBoolean needsTool, Consumer<String> setUnderlyingJarPath)
 			throws IOException, NoSuchAlgorithmException {
 		System.out.println("Incoming HTTP request from: " + socket.getRemoteSocketAddress());
 
@@ -564,12 +544,12 @@ public class WebServer {
 		final String headers = new String(headerBaos.toByteArray(), StandardCharsets.UTF_8);
 		final Matcher get = Pattern.compile("^GET").matcher(headers);
 		if (get.find()) {
-			handleGetRequest(socket, headers, args, msgPusher, onQuery, onSomeClientDisconnected);
+			handleGetRequest(socket, headers, args, msgPusher, onQuery, onSomeClientDisconnected, needsTool);
 			return;
 		}
 		final Matcher put = Pattern.compile("^PUT").matcher(headers);
 		if (put.find()) {
-			handlePutRequest(socket, headers, args, msgPusher, onQuery);
+			handlePutRequest(socket, headers, args, msgPusher, onQuery, setUnderlyingJarPath);
 			return;
 		}
 		System.out.println("Not sure how to handle request " + headers);
@@ -589,7 +569,7 @@ public class WebServer {
 	}
 
 	public static void start(ParsedArgs args, ServerToClientMessagePusher msgPusher,
-			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected) {
+			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected, AtomicBoolean needsTool, Consumer<String> setUnderlyingJarPath) {
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, WebSocketServer.createServerFilter())) {
 			System.out.println(
@@ -619,7 +599,7 @@ public class WebServer {
 					Socket s = server.accept();
 					new Thread(() -> {
 						try {
-							ws.handleRequest(s, args, msgPusher, onQuery, onSomeClientDisconnected);
+							ws.handleRequest(s, args, msgPusher, onQuery, onSomeClientDisconnected, needsTool, setUnderlyingJarPath);
 						} catch (IOException | NoSuchAlgorithmException e) {
 							System.out.println("Error while handling request");
 							e.printStackTrace();

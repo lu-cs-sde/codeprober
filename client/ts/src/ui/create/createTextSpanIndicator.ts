@@ -6,6 +6,7 @@ type TextSpanStyle = 'full' | 'full-compact' | 'lines' | 'lines-compact' | 'star
 interface TextSpanIndicatorArgs {
   span: Span;
   marginLeft?: boolean;
+  marginRight?: boolean;
   autoVerticalMargin?: boolean;
   onHover?: (isHovered: boolean) => void;
   onClick?: () => void;
@@ -13,7 +14,7 @@ interface TextSpanIndicatorArgs {
   external?: boolean;
 }
 const createTextSpanIndicator = (args: TextSpanIndicatorArgs) => {
-  const { span, marginLeft, onHover, onClick } = args;
+  const { span, marginLeft, marginRight, onHover, onClick } = args;
   const indicator = document.createElement('span');
   indicator.style.fontSize = '0.75rem';
   indicator.style.color = 'gray';
@@ -24,7 +25,9 @@ const createTextSpanIndicator = (args: TextSpanIndicatorArgs) => {
     indicator.style.marginTop = 'auto';
     indicator.style.marginBottom = 'auto';
   }
-  indicator.style.marginRight = '0.25rem';
+  if (marginRight) {
+    indicator.style.marginRight = '0.25rem';
+  }
 
   const ext = args.external ? '↰' : '';
   const warn = span.lineStart === 0 && span.colStart === 0 && span.lineEnd === 0 && span.colEnd === 0 ? '⚠️' : '';

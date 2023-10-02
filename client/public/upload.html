@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CodeProber</title>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+  <link rel="icon" href="favicon.png" type="image/png" sizes="64x64" />
+
+  <script>
+    function setStatus(msg) {
+      document.getElementById('status').innerText = msg;
+    }
+    function dropHandler(/** @type DragEvent */ev) {
+      document.getElementById('drop_zone').classList.remove('active');
+      // Prevent default behavior (Prevent file from being opened)
+      ev.preventDefault();
+
+      /** @type {File[]} */
+      const files = [];
+      if (ev.dataTransfer.items) {
+        // Use DataTransferItemList interface to access the file(s)
+        [...ev.dataTransfer.items].forEach((item, i) => {
+          // If dropped items aren't files, reject them
+          if (item.kind === "file") {
+            files.push(item.getAsFile());
+          }
+        });
+      } else {
+        // Use DataTransfer interface to access the file(s)
+        [...ev.dataTransfer.files].forEach((file, i) => {
+          files.push(file);
+        });
+      }
+      if (files.length == 0) {
+        setStatus('Please upload your tool file ("compiler.jar" or similar)');
+      } else if (files.length > 1) {
+        setStatus('Please only drop a single file');
+      } else {
+        setStatus('Uploading..');
+        // const body = new FormData();
+        // body.append('files', files[0], files[0].name);
+        fetch('upload', {
+          method: 'PUT',
+          headers: new Headers({ 'Content-Type': 'application/octet-stream' }),
+          body: files[0],
+        })
+        .then(result => {
+          if (result.status == 200) {
+            window.location = '/';
+          } else {
+            setStatus(`Upload error: ${result.status}`);
+          }
+        })
+        .catch(error => {
+          setStatus(`Upload error: ${error}`);
+        });
+      }
+    }
+    function dragOverHandler(ev) {
+      // Prevent default behavior (Prevent file from being opened)
+      ev.preventDefault();
+    }
+    function dragStartHandler(ev) {
+      document.getElementById('drop_zone').classList.add('active');
+    }
+    function dragEndHandler(ev) {
+      document.getElementById('drop_zone').classList.remove('active');
+    }
+  </script>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      height: 99vh;
+      margin: 0;
+      padding: 0;
+    }
+    #status {
+      text-align: center;
+      position: absolute;
+      top: 1rem;
+      left: 0;
+      right: 0;
+      width: 100%;
+    }
+    #drop_zone {
+      position: relative;
+      padding: 2rem;
+      border: 4px dashed gray;
+      width: 70vw;
+      height: 70vh;
+      text-align: center;
+      margin: auto;
+      display: flex;
+      justify-content: center;
+      flex-direction: column;
+      transition: box-shadow .2s, background .2s, border-color .2s;
+    }
+    .active {
+      box-shadow: 0px 0px 5rem inset #0f04;
+      background: #0f01;
+    }
+    p, pre {
+      pointer-events: none;
+    }
+    @media (prefers-color-scheme: dark) {
+      html {
+        background: black;
+        color: white;;
+      }
+    }
+  </style>
+</head>
+<body>
+  <form>
+    <div
+    id="drop_zone"
+    ondrop="dropHandler(event);"
+    ondragover="dragOverHandler(event);"
+    ondragenter="dragStartHandler(event);"
+    ondragleave="dragEndHandler(event);"
+    >
+    <p id="status"></p>
+      <p>
+        CodeProber was started without a tool, it needs to be specified before you can proceed.
+        <br>
+        You can drag-and-drop the tool into this square, or specify the tool on the command line, like this:
+        <pre>java -jar code-prober.jar your-tool-here.jar</pre>
+      </p>
+    </div>
+  </form>
+</body>
+</html>
