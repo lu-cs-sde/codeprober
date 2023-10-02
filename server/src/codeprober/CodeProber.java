@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -57,8 +58,11 @@ public class CodeProber {
 			System.out.println("Logging anonymous session data to " + sessionLogger.getTargetDirectory());
 		}
 		final UnderlyingToolProxy underlyingTool = new UnderlyingToolProxy();
-		final JsonRequestHandler defaultHandler = new DefaultRequestHandler(underlyingTool,
-				parsedArgs.extraArgs, sessionLogger);
+		if (parsedArgs.jarPath != null) {
+			underlyingTool.setProxyTarget(UnderlyingTool.fromJar(parsedArgs.jarPath));
+		}
+		final JsonRequestHandler defaultHandler = new DefaultRequestHandler(underlyingTool, parsedArgs.extraArgs,
+				sessionLogger);
 		final JsonRequestHandler userFacingHandler;
 		flog(Arrays.toString(mainArgs));
 
@@ -180,11 +184,12 @@ public class CodeProber {
 		final Function<ClientRequest, JSONObject> topHandler = JsonRequestHandler
 				.createTopRequestHandler(unwrappedHandler);
 
-		final AtomicBoolean needsTool = new AtomicBoolean(true);
-		final Consumer<String> setUnderlyingJarPath = (jarPath) -> {
-			needsTool.set(false);
-			underlyingTool.setProxyTarget(UnderlyingTool.fromJar(jarPath));
-			new FileMonitor(new File(jarPath)) {
+		final AtomicReference<FileMonitor> lastMonitor = new AtomicReference<>(null);
+		final Consumer<String> monitorPath = (jarPath) -> {
+			if (lastMonitor.get() != null) {
+				lastMonitor.getAndSet(null).stop();
+			}
+			final FileMonitor fm = new FileMonitor(new File(jarPath)) {
 				public void onChange() {
 					System.out.println("Jar changed!");
 					if (sessionLogger != null) {
@@ -193,14 +198,23 @@ public class CodeProber {
 					}
 					msgPusher.onJarChange();
 				};
-			}.start();
+			};
+			lastMonitor.set(fm);
+			fm.start();
+		};
+		final AtomicBoolean needsTool = new AtomicBoolean(parsedArgs.jarPath == null);
+		final Consumer<String> setUnderlyingJarPath = (jarPath) -> {
+			needsTool.set(false);
+			underlyingTool.setProxyTarget(UnderlyingTool.fromJar(jarPath));
+			monitorPath.accept(jarPath);
 		};
 		if (parsedArgs.jarPath != null) {
-			setUnderlyingJarPath.accept(parsedArgs.jarPath);
+			monitorPath.accept(parsedArgs.jarPath);
 		}
 
 		final Runnable onSomeClientDisconnected = userFacingHandler::onOneOrMoreClientsDisconnected;
-		new Thread(() -> WebServer.start(parsedArgs, msgPusher, unwrappedHandler, onSomeClientDisconnected, needsTool, setUnderlyingJarPath)).start();
+		new Thread(() -> WebServer.start(parsedArgs, msgPusher, unwrappedHandler, onSomeClientDisconnected, needsTool,
+				setUnderlyingJarPath)).start();
 		if (!WebSocketServer.shouldDelegateWebsocketToHttp() && WebSocketServer.getPort() != WebServer.getPort()) {
 			new Thread(() -> WebSocketServer.start(parsedArgs, msgPusher, topHandler, onSomeClientDisconnected))
 					.start();

@@ -158,16 +158,11 @@ interface SubmitWorkerTaskReq {
 interface SubmitWorkerTaskRes {
   ok: boolean;
 }
-type TestSuiteListOrError = (
-    { type: 'err'; value: ('NO_TEST_DIR_SET'| 'ERROR_WHEN_LISTING_TEST_DIR'); }
-  | { type: 'suites'; value: string[]; }
-);
-interface ParsingRequestData {
-  posRecovery: ('FAIL'| 'SEQUENCE_PARENT_CHILD'| 'SEQUENCE_CHILD_PARENT'| 'PARENT'| 'CHILD'| 'ALTERNATE_PARENT_CHILD');
-  cache: ('FULL'| 'PARTIAL'| 'NONE'| 'PURGE');
-  text: string;
-  mainArgs?: string[];
-  tmpSuffix: string;
+interface AsyncRpcUpdate {
+  type: "asyncUpdate";
+  job: number;
+  isFinalUpdate: boolean;
+  value: AsyncRpcUpdateValue;
 }
 type LongPollResponse = (
     { type: 'etag'; value: number; }
@@ -177,48 +172,21 @@ interface NodeLocator {
   result: TALStep;
   steps: NodeLocatorStep[];
 }
-interface AsyncRpcUpdate {
-  type: "asyncUpdate";
-  job: number;
-  isFinalUpdate: boolean;
-  value: AsyncRpcUpdateValue;
-}
 interface Property {
   name: string;
   args?: PropertyArg[];
   astChildName?: string;
 }
-type PropertyEvaluationResult = (
-    { type: 'job'; value: number; }
-  | { type: 'sync'; value: SynchronousEvaluationResult; }
-);
-interface ListedTreeNode {
-  type: "node";
-  locator: NodeLocator;
-  name?: string;
-  children: ListedTreeChildNode;
-}
-interface Diagnostic {
-  type: ('ERROR'| 'WARNING'| 'INFO'| 'HINT'| 'LINE_PP'| 'LINE_AA'| 'LINE_AP'| 'LINE_PA');
-  start: number;
-  end: number;
-  msg: string;
-}
 interface TestSuite {
   v: number;
   cases: TestCase[];
 }
-interface InitInfo {
-  type: "init";
-  version: {
-    hash: string;
-    clean: boolean;
-    buildTimeSeconds?: number;
-  };
-  changeBufferTime?: number;
-  workerProcessCount?: number;
-  disableVersionCheckerByDefault?: boolean;
-  backingFile?: BackingFile;
+interface ParsingRequestData {
+  posRecovery: ('FAIL'| 'SEQUENCE_PARENT_CHILD'| 'SEQUENCE_CHILD_PARENT'| 'PARENT'| 'CHILD'| 'ALTERNATE_PARENT_CHILD');
+  cache: ('FULL'| 'PARTIAL'| 'NONE'| 'PURGE');
+  text: string;
+  mainArgs?: string[];
+  tmpSuffix: string;
 }
 type RpcBodyLine = (
     { type: 'plain'; value: string; }
@@ -235,6 +203,12 @@ type TopRequestResponseData = (
     { type: 'success'; value: { [key: string]: any }; }
   | { type: 'failureMsg'; value: string; }
 );
+interface ListedTreeNode {
+  type: "node";
+  locator: NodeLocator;
+  name?: string;
+  children: ListedTreeChildNode;
+}
 interface Refresh {
   type: "refresh";
 }
@@ -242,38 +216,31 @@ type TestSuiteOrError = (
     { type: 'err'; value: ('NO_TEST_DIR_SET'| 'NO_SUCH_TEST_SUITE'| 'ERROR_WHEN_READING_FILE'); }
   | { type: 'contents'; value: TestSuite; }
 );
-type ListedTreeChildNode = (
-    { type: 'children'; value: ListedTreeNode[]; }
-  | { type: 'placeholder'; value: number; }
+type TestSuiteListOrError = (
+    { type: 'err'; value: ('NO_TEST_DIR_SET'| 'ERROR_WHEN_LISTING_TEST_DIR'); }
+  | { type: 'suites'; value: string[]; }
 );
-interface TALStep {
-  type: string;
-  label?: string;
+interface Diagnostic {
+  type: ('ERROR'| 'WARNING'| 'INFO'| 'HINT'| 'LINE_PP'| 'LINE_AA'| 'LINE_AP'| 'LINE_PA');
   start: number;
   end: number;
-  depth: number;
-  external?: boolean;
+  msg: string;
 }
-interface SynchronousEvaluationResult {
-  body: RpcBodyLine[];
-  totalTime: number;
-  parseTime: number;
-  createLocatorTime: number;
-  applyLocatorTime: number;
-  attrEvalTime: number;
-  listNodesTime: number;
-  listPropertiesTime: number;
-  errors?: Diagnostic[];
-  args?: PropertyArg[];
-  locator?: NodeLocator;
+interface InitInfo {
+  type: "init";
+  version: {
+    hash: string;
+    clean: boolean;
+    buildTimeSeconds?: number;
+  };
+  changeBufferTime?: number;
+  workerProcessCount?: number;
+  disableVersionCheckerByDefault?: boolean;
+  backingFile?: BackingFile;
 }
-type PropertyArg = (
-    { type: 'string'; value: string; }
-  | { type: 'integer'; value: number; }
-  | { type: 'bool'; value: boolean; }
-  | { type: 'collection'; value: PropertyArgCollection; }
-  | { type: 'outputstream'; value: string; }
-  | { type: 'nodeLocator'; value: NullableNodeLocator; }
+type PropertyEvaluationResult = (
+    { type: 'job'; value: number; }
+  | { type: 'sync'; value: SynchronousEvaluationResult; }
 );
 interface BackingFile {
   path: string;
@@ -293,6 +260,45 @@ interface HighlightableMessage {
   end: number;
   msg: string;
 }
+interface TALStep {
+  type: string;
+  label?: string;
+  start: number;
+  end: number;
+  depth: number;
+  external?: boolean;
+}
+type PropertyArg = (
+    { type: 'string'; value: string; }
+  | { type: 'integer'; value: number; }
+  | { type: 'bool'; value: boolean; }
+  | { type: 'collection'; value: PropertyArgCollection; }
+  | { type: 'outputstream'; value: string; }
+  | { type: 'nodeLocator'; value: NullableNodeLocator; }
+);
+type ListedTreeChildNode = (
+    { type: 'children'; value: ListedTreeNode[]; }
+  | { type: 'placeholder'; value: number; }
+);
+interface SynchronousEvaluationResult {
+  body: RpcBodyLine[];
+  totalTime: number;
+  parseTime: number;
+  createLocatorTime: number;
+  applyLocatorTime: number;
+  attrEvalTime: number;
+  listNodesTime: number;
+  listPropertiesTime: number;
+  errors?: Diagnostic[];
+  args?: PropertyArg[];
+  locator?: NodeLocator;
+}
+type AsyncRpcUpdateValue = (
+    { type: 'status'; value: string; }
+  | { type: 'workerStackTrace'; value: string[]; }
+  | { type: 'workerStatuses'; value: string[]; }
+  | { type: 'workerTaskDone'; value: WorkerTaskDone; }
+);
 interface Tracing {
   node: NodeLocator;
   prop: Property;
@@ -304,18 +310,12 @@ type NodeLocatorStep = (
   | { type: 'nta'; value: FNStep; }
   | { type: 'tal'; value: TALStep; }
 );
-type AsyncRpcUpdateValue = (
-    { type: 'status'; value: string; }
-  | { type: 'workerStackTrace'; value: string[]; }
-  | { type: 'workerStatuses'; value: string[]; }
-  | { type: 'workerTaskDone'; value: WorkerTaskDone; }
-);
+interface FNStep {
+  property: Property;
+}
 interface PropertyArgCollection {
   type: string;
   entries: PropertyArg[];
-}
-interface FNStep {
-  property: Property;
 }
 interface NullableNodeLocator {
   type: string;
@@ -333,4 +333,4 @@ interface NestedTest {
 }
 
 
-export { PutTestSuiteRes, TestSuiteOrError, PutTestSuiteReq, PollWorkerStatusReq, ParsingRequestData, HighlightableMessage, PollWorkerStatusRes, ListedTreeNode, TestSuite, TestSuiteListOrError, NestedTest, ListTreeRes, AsyncRpcUpdateValue, ListTreeReq, TopRequestResponseData, TALStep, GetTestSuiteRes, PropertyArgCollection, WsPutLongpollReq, HoverReq, WsPutLongpollRes, InitInfo, HoverRes, TunneledWsPutRequestReq, TunneledWsPutRequestRes, GetTestSuiteReq, RpcBodyLine, GetWorkerStatusRes, ListTestSuitesReq, GetWorkerStatusReq, Tracing, TopRequestRes, EvaluatePropertyReq, ListTestSuitesRes, SynchronousEvaluationResult, TopRequestReq, EvaluatePropertyRes, AsyncRpcUpdate, PropertyEvaluationResult, Diagnostic, WsPutInitRes, WsPutInitReq, Refresh, WorkerTaskDone, FNStep, LongPollResponse, SubscribeToWorkerStatusRes, BackingFile, SubscribeToWorkerStatusReq, SubmitWorkerTaskRes, StopJobRes, SubmitWorkerTaskReq, StopJobReq, Property, NullableNodeLocator, UnsubscribeFromWorkerStatusReq, CompleteRes, CompleteReq, UnsubscribeFromWorkerStatusRes, ListNodesReq, NodeLocator, ListNodesRes, ListedTreeChildNode, PropertyArg, TestCase, ListPropertiesReq, NodeLocatorStep, ListPropertiesRes }
+export { PutTestSuiteRes, TestSuiteOrError, PutTestSuiteReq, PollWorkerStatusReq, ParsingRequestData, HighlightableMessage, PollWorkerStatusRes, ListedTreeNode, TestSuite, TestSuiteListOrError, NestedTest, ListTreeRes, AsyncRpcUpdateValue, ListTreeReq, TopRequestResponseData, TALStep, GetTestSuiteRes, PropertyArgCollection, WsPutLongpollReq, HoverReq, WsPutLongpollRes, InitInfo, HoverRes, TunneledWsPutRequestReq, TunneledWsPutRequestRes, GetTestSuiteReq, RpcBodyLine, GetWorkerStatusRes, ListTestSuitesReq, GetWorkerStatusReq, Tracing, TopRequestRes, EvaluatePropertyReq, ListTestSuitesRes, SynchronousEvaluationResult, TopRequestReq, EvaluatePropertyRes, AsyncRpcUpdate, PropertyEvaluationResult, Diagnostic, WsPutInitRes, WsPutInitReq, Refresh, WorkerTaskDone, FNStep, LongPollResponse, SubscribeToWorkerStatusRes, BackingFile, SubscribeToWorkerStatusReq, SubmitWorkerTaskRes, StopJobRes, SubmitWorkerTaskReq, StopJobReq, Property, NullableNodeLocator, UnsubscribeFromWorkerStatusReq, CompleteRes, CompleteReq, UnsubscribeFromWorkerStatusRes, ListNodesReq, NodeLocator, ListNodesRes, TestCase, PropertyArg, ListedTreeChildNode, ListPropertiesReq, NodeLocatorStep, ListPropertiesRes }
