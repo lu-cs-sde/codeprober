@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import codeprober.AstInfo;
 import codeprober.ast.ASTNodeAnnotation.Attribute;
@@ -89,12 +90,36 @@ public class TestData {
 			return this;
 		}
 
+		private Node onDemandNTA_value;
+
+		@Attribute
+		public Node onDemandNTA() {
+			// This println is used for test assertions, do not remove it
+			System.out.println("Calling onDemandNTA");
+			if (onDemandNTA_value == null) {
+				onDemandNTA_value = new Foo(0, 0).add(new Bar(0, 0));
+				onDemandNTA_value.parent = this;
+			}
+			return onDemandNTA_value;
+		}
+
+		public void flushTreeCache() {
+			onDemandNTA_value = null;
+			for (Node n : children) {
+				n.flushTreeCache();
+			}
+		}
+
 		@Attribute
 		public Node parameterizedNTA(int arg1, Node arg2) {
 			final List<Object> argList = new ArrayList<>();
 			argList.add(arg1);
 			argList.add(arg2);
 			return parameterizedNTA_int_Node_values.get(argList);
+		}
+
+		public void cpr_setTraceReceiver(Consumer<Object[]> recv) {
+			// No-op
 		}
 
 		public int timesTwo(int v) {

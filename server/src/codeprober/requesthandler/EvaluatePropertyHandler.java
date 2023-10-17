@@ -6,6 +6,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -167,8 +168,8 @@ public class EvaluatePropertyHandler {
 //			return new EvaluatePropertyRes(PropertyEvaluationResult.fromSync(new SynchronousEvaluationResult(parsed.captures, 0, 0, 0, 0, 0, null, null, null)))
 		} else {
 			final TracingBuilder traceBuilder = new TracingBuilder(parsed.info);
-			final Consumer<ResolvedNode> evaluateAttr = (match) -> {
-
+			final AtomicBoolean ignoreStdio = new AtomicBoolean(false);
+			final Runnable evaluateAttr = () -> {
 				if (req.captureTraces != null && req.captureTraces.booleanValue()) {
 					if (parsed.info.hasOverride1(parsed.info.ast.underlyingAstNode.getClass(), "cpr_setTraceReceiver",
 							Consumer.class)) {
@@ -194,6 +195,21 @@ public class EvaluatePropertyHandler {
 					}
 
 				}
+				final ResolvedNode match;
+				ignoreStdio.set(true);
+				try {
+					match = ApplyLocator.toNode(parsed.info, req.locator,
+							req.skipResultLocator == null ? true : !req.skipResultLocator);
+				} finally {
+					ignoreStdio.set(false);
+				}
+				if (match == null) {
+					body.add(RpcBodyLine
+							.fromPlain("No matching node found\n\nTry remaking the probe\nat a different line/column"));
+					return;
+				}
+				newLocator.set(match.nodeLocator);
+
 //				if (parsed.info.tracingRegistration != null) {
 //					parsed.info.tracingRegistration.accept(traceBuilder);
 //				}
@@ -317,7 +333,8 @@ public class EvaluatePropertyHandler {
 				} catch (InvokeProblem e) {
 					Throwable cause = e.getCause();
 					if (cause instanceof NoSuchMethodException) {
-						body.add(RpcBodyLine.fromPlain(String.format("No such attribute '%s' on %s", req.property.name, match.node.underlyingAstNode.getClass().getName())));
+						body.add(RpcBodyLine.fromPlain(String.format("No such attribute '%s' on %s", req.property.name,
+								match.node.underlyingAstNode.getClass().getName())));
 					} else {
 						if (cause instanceof InvocationTargetException && cause.getCause() != null) {
 							cause = cause.getCause();
@@ -338,25 +355,16 @@ public class EvaluatePropertyHandler {
 			diagnostics.addAll(
 					StdIoInterceptor.performCaptured((stdout, line) -> MagicStdoutMessageParser.parse(line), () -> {
 						try {
-							final ResolvedNode match = ApplyLocator.toNode(parsed.info, req.locator,
-									req.skipResultLocator == null ? true : !req.skipResultLocator);
-							if (match == null) {
-								body.add(RpcBodyLine.fromPlain(
-										"No matching node found\n\nTry remaking the probe\nat a different line/column"));
-								return;
-							}
-
-							newLocator.set(match.nodeLocator);
-
 							if (req.captureStdout) {
 								// TODO add messages live instead of after everything finishes
 								final BiFunction<Boolean, String, RpcBodyLine> encoder = StdIoInterceptor
 										.createDefaultLineEncoder();
 								StdIoInterceptor.performLiveCaptured((stdout, line) -> {
+									if (ignoreStdio.get()) { return; }
 									body.add(encoder.apply(stdout, line));
-								}, () -> evaluateAttr.accept(match));
+								}, () -> evaluateAttr.run());
 							} else {
-								evaluateAttr.accept(match);
+								evaluateAttr.run();
 							}
 						} catch (RuntimeException e) {
 							if (e.getCause() instanceof ClassNotFoundException) {
