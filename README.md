@@ -70,7 +70,11 @@ CodeProber should run on any OS on Java 8 and above. However, sometimes things d
 
 ### CodeProber is running, but I cannot access localhost:8000 in my browser
 
-By default, CodeProber only accepts requests from localhost. When you run CodeProber inside a container (for example WSL or Docker) then requests from your host machine can appear as remote, not local. To solve this, add the `PERMIT_REMOTE_CONNECTIONS` environment variable mentioned above.
+By default, CodeProber only accepts requests from localhost. When you run CodeProber inside a container (for example WSL or Docker) then requests from your host machine can appear as remote, not local. To solve this you have two options:
+
+1) Use the URL printed to the terminal when you start CodeProber. It contains an authorization key that enables non-local access.
+   If connecting to a non-localhost url, please make sure the "?auth=some_key_here" part of the URL printed to the terminal is included.
+2) Add the `PERMIT_REMOTE_CONNECTIONS` environment variable mentioned above.
 
 ### System.exit/SecurityManager problem
 

@@ -4,12 +4,13 @@ import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
@@ -18,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -245,7 +247,8 @@ public class WebServer {
 			path += "index.html";
 		}
 		if (path.equals("/index.html") && needsTool.get()) {
-			// Mask the request to upload.html. Will look like index.html in the browser, but that is OK
+			// Mask the request to upload.html. Will look like index.html in the browser,
+			// but that is OK
 			path = "/upload.html";
 		}
 
@@ -267,7 +270,8 @@ public class WebServer {
 			return;
 		}
 		if (path.equals("/LATEST_VERSION")) {
-			// Also a special magical resource, don't actually read from classPath/file system
+			// Also a special magical resource, don't actually read from classPath/file
+			// system
 			// This URL should be kept in sync with client/src/model/repositoryUrl.ts
 			final URL url = new URL("https://raw.githubusercontent.com/lu-cs-sde/codeprober/master/VERSION");
 			final HttpURLConnection con = (HttpURLConnection) url.openConnection();
@@ -471,7 +475,7 @@ public class WebServer {
 			final byte[] toolData = getBody.get();
 			final File tmp = File.createTempFile("cpr_", "_tool.jar");
 			Files.write(tmp.toPath(), toolData, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-      tmp.deleteOnExit();
+			tmp.deleteOnExit();
 			setUnderlyingJarPath.accept(tmp.getAbsolutePath());
 			out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
 			out.write(("\r\n").getBytes("UTF-8"));
@@ -485,8 +489,8 @@ public class WebServer {
 	}
 
 	private void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
-			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected, AtomicBoolean needsTool, Consumer<String> setUnderlyingJarPath)
-			throws IOException, NoSuchAlgorithmException {
+			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected, AtomicBoolean needsTool,
+			Consumer<String> setUnderlyingJarPath) throws IOException, NoSuchAlgorithmException {
 		System.out.println("Incoming HTTP request from: " + socket.getRemoteSocketAddress());
 
 		final InputStream in = socket.getInputStream();
@@ -542,6 +546,13 @@ public class WebServer {
 		}
 
 		final String headers = new String(headerBaos.toByteArray(), StandardCharsets.UTF_8);
+		final InetAddress incomingAddress = socket.getInetAddress();
+		if (!WebSocketServer.shouldAcceptRemoteConnections() && !incomingAddress.isLoopbackAddress()) {
+			if (handleAuthCookieRelatedRequest(headers, socket.getOutputStream())) {
+				return;
+			}
+		}
+
 		final Matcher get = Pattern.compile("^GET").matcher(headers);
 		if (get.find()) {
 			handleGetRequest(socket, headers, args, msgPusher, onQuery, onSomeClientDisconnected, needsTool);
@@ -553,6 +564,99 @@ public class WebServer {
 			return;
 		}
 		System.out.println("Not sure how to handle request " + headers);
+	}
+
+	static boolean handleAuthCookieRelatedRequest(String headers, OutputStream out)
+			throws UnsupportedEncodingException, IOException {
+		final String[] newAuthUrlAndToken = extractNewAuthToken(headers);
+		if (newAuthUrlAndToken != null) {
+			out.write("HTTP/1.1 303 See Other\r\n".getBytes("UTF-8"));
+			out.write(String
+					.format("Set-Cookie: cpr-auth=%s; HttpOnly; Max-Age=%d\r\n", newAuthUrlAndToken[1], 3600 * 24 * 365)
+					.getBytes("UTF-8"));
+			out.write(String.format("Location: %s\r\n", newAuthUrlAndToken[0]).getBytes("UTF-8"));
+			out.write(("\r\n").getBytes("UTF-8"));
+			return true;
+		}
+		final String authCookie = extractAuthCookie(headers);
+		if (authCookie == null) {
+			out.write("HTTP/1.1 403 Forbidden\r\n".getBytes("UTF-8"));
+			out.write("Content-Type: text/plain\r\n".getBytes("UTF-8"));
+			out.write(("\r\n").getBytes("UTF-8"));
+			out.write(
+					"Missing auth header. Use the url displayed where you start CodeProber. Should be in the format 'http://localhost:8000?auth=auth-key-here'\n\nTo disable authentication, start CodeProber with PERMIT_REMOTE_CONNECTIONS set to true."
+							.getBytes("UTF-8"));
+			return true;
+		}
+		if (!authCookie.equals(WebServer.validAuthKey)) {
+			out.write("HTTP/1.1 403 Forbidden\r\n".getBytes("UTF-8"));
+			out.write("Content-Type: text/plain\r\n".getBytes("UTF-8"));
+			out.write(("\r\n").getBytes("UTF-8"));
+			out.write(
+					"Invalid auth header. Use the url displayed where you start CodeProber. Should be in the format 'http://localhost:8000?auth=auth-key-here'\n\nTo disable authentication, start CodeProber with PERMIT_REMOTE_CONNECTIONS set to true."
+							.getBytes("UTF-8"));
+			return true;
+		}
+		return false;
+
+	}
+
+	private static String[] extractNewAuthToken(String headers) {
+		final Matcher getReqPathMatcher = Pattern.compile("^GET (.*) HTTP").matcher(headers);
+		if (!getReqPathMatcher.find()) {
+			return null;
+		}
+
+		final String[] pathAndSearch = getReqPathMatcher.group(1).split("[?]");
+		if (pathAndSearch.length == 1) {
+			return null;
+		}
+
+		final String search = pathAndSearch[1];
+		final String[] searchParts = search.split("&");
+		for (String part : searchParts) {
+			if (part.startsWith("auth=")) {
+				final String authVal = part.substring("auth=".length());
+				if (Pattern.compile("[a-zA-Z0-9-]+").matcher(authVal).matches()) {
+					final String newSearch;
+					if (search.contains(part + "&")) {
+						newSearch = "?" + search.replace(part + "&", "");
+					} else if (search.contains("&" + part)) {
+						newSearch = "?" + search.replace("&" + part, "");
+					} else {
+						newSearch = "";
+					}
+
+					return new String[] { pathAndSearch[0] + newSearch, authVal };
+				} else {
+					System.err.println("Got invalid authVal '" + authVal + "'");
+					return null;
+				}
+			}
+		}
+		return null;
+	}
+
+	private static String extractAuthCookie(String headers) {
+		final String cookieNeedle = "\r\nCookie:";
+		final int cookieIdx = headers.indexOf(cookieNeedle);
+		if (cookieIdx == -1) {
+			return null;
+		}
+		int cookieEnd = headers.indexOf("\r\n", cookieIdx + cookieNeedle.length());
+		if (cookieEnd == -1) {
+			// Assume the cookie string goes all the way to the end of the headers
+			cookieEnd = headers.length();
+		}
+		final String cookieData = headers.substring(cookieIdx + cookieNeedle.length(), cookieEnd);
+		for (String part : cookieData.split(";")) {
+			part = part.trim();
+			if (part.startsWith("cpr-auth=")) {
+				final String authVal = part.substring("cpr-auth=".length());
+				return authVal;
+			}
+		}
+		return null;
 	}
 
 	public static int getPort() {
@@ -568,12 +672,25 @@ public class WebServer {
 		return 8000;
 	}
 
+	private static String validAuthKey;
+	static {
+		String keyTail = Base64.getEncoder().withoutPadding()
+				.encodeToString(((Math.random() * Integer.MAX_VALUE) + "_" + (Math.random() * Integer.MAX_VALUE))
+						.getBytes(StandardCharsets.UTF_8));
+		if (keyTail.length() > 8) {
+			keyTail = keyTail.substring(0, 8);
+		}
+		validAuthKey= "key-" + keyTail;
+
+	}
 	public static void start(ParsedArgs args, ServerToClientMessagePusher msgPusher,
-			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected, AtomicBoolean needsTool, Consumer<String> setUnderlyingJarPath) {
+			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected, AtomicBoolean needsTool,
+			Consumer<String> setUnderlyingJarPath) {
+
 		final int port = getPort();
-		try (ServerSocket server = new ServerSocket(port, 0, WebSocketServer.createServerFilter())) {
+		try (ServerSocket server = new ServerSocket(port, 0, null)) {
 			System.out.println(
-					"Started web server on port " + port + ", visit http://localhost:" + port + "/ in your browser");
+					"Started web server on port " + port + ", visit 'http://localhost:" + port + "?auth=" + validAuthKey +" in your browser");
 			final WebServer ws = new WebServer();
 			new Thread(() -> {
 				while (true) {
@@ -599,7 +716,8 @@ public class WebServer {
 					Socket s = server.accept();
 					new Thread(() -> {
 						try {
-							ws.handleRequest(s, args, msgPusher, onQuery, onSomeClientDisconnected, needsTool, setUnderlyingJarPath);
+							ws.handleRequest(s, args, msgPusher, onQuery, onSomeClientDisconnected, needsTool,
+									setUnderlyingJarPath);
 						} catch (IOException | NoSuchAlgorithmException e) {
 							System.out.println("Error while handling request");
 							e.printStackTrace();

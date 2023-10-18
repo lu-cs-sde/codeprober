@@ -8,7 +8,6 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.MessageDigest;
@@ -166,6 +165,12 @@ public class WebSocketServer {
 			throws IOException, NoSuchAlgorithmException {
 		final InputStream in = socket.getInputStream();
 		final OutputStream out = socket.getOutputStream();
+		final InetAddress incomingAddress = socket.getInetAddress();
+		if (!shouldAcceptRemoteConnections() && !incomingAddress.isLoopbackAddress()) {
+			if (WebServer.handleAuthCookieRelatedRequest(data, socket.getOutputStream())) {
+				return;
+			}
+		}
 
 		Matcher get = Pattern.compile("^GET").matcher(data);
 		if (get.find()) {
@@ -305,17 +310,8 @@ public class WebSocketServer {
 		System.out.println("Not a get request.. ? From " + socket.getRemoteSocketAddress() + " :: " + data);
 	}
 
-	public static InetAddress createServerFilter() {
-		if ("true".equals(System.getenv("PERMIT_REMOTE_CONNECTIONS"))) {
-			return null;
-		}
-		try {
-			return InetAddress.getByName(null);
-		} catch (UnknownHostException e) {
-			System.out.println("'Should never happen' - failed to resolve null address");
-			e.printStackTrace();
-			return null;
-		}
+	public static boolean shouldAcceptRemoteConnections() {
+		return "true".equals(System.getenv("PERMIT_REMOTE_CONNECTIONS"));
 	}
 
 	public static boolean shouldDelegateWebsocketToHttp() {
@@ -339,7 +335,7 @@ public class WebSocketServer {
 	public static void start(ParsedArgs args, ServerToClientMessagePusher msgPusher,
 			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected) {
 		final int port = getPort();
-		try (ServerSocket server = new ServerSocket(port, 0, createServerFilter())) {
+		try (ServerSocket server = new ServerSocket(port, 0, null)) {
 			System.out.println("Started WebSocket server on port " + port);
 			while (true) {
 				Socket s = server.accept();
