@@ -11878,7 +11878,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         localDiagnostics.push(...((_a = parsed.errors) !== null && _a !== void 0 ? _a : []).map((err) => {
                             return ({ ...err, source: (0, createMinimizedProbeModal_1.createDiagnosticSource)(locator.get(), property) });
                         }));
-                        console.log('localDiags:', localDiagnostics);
                         // parsed.errors?.forEach(({severity, start: errStart, end: errEnd, msg }) => {
                         //   localErrors.push({ severity, errStart, errEnd, msg });
                         // })

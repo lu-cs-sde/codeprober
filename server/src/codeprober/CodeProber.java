@@ -187,7 +187,7 @@ public class CodeProber {
 		final AtomicReference<FileMonitor> lastMonitor = new AtomicReference<>(null);
 		final Consumer<String> monitorPath = (jarPath) -> {
 			if (lastMonitor.get() != null) {
-				lastMonitor.getAndSet(null).stop();
+				lastMonitor.getAndSet(null).stopThread();
 			}
 			final FileMonitor fm = new FileMonitor(new File(jarPath)) {
 				public void onChange() {

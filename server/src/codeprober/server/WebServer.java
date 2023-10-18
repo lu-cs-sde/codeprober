@@ -210,7 +210,7 @@ public class WebServer {
 			Runnable onSomeClientDisconnected, AtomicBoolean needsTool) throws IOException {
 		final OutputStream out = socket.getOutputStream();
 
-		if (data.contains("\r\nUpgrade: websocket\r\n")) {
+		if (data.contains("\r\nUpgrade: websocket\r\n") || data.endsWith("\r\nUpgrade: websocket")) {
 			final AtomicBoolean connectionIsAlive = new AtomicBoolean(true);
 			try {
 				try {
@@ -546,11 +546,8 @@ public class WebServer {
 		}
 
 		final String headers = new String(headerBaos.toByteArray(), StandardCharsets.UTF_8);
-		final InetAddress incomingAddress = socket.getInetAddress();
-		if (!WebSocketServer.shouldAcceptRemoteConnections() && !incomingAddress.isLoopbackAddress()) {
-			if (handleAuthCookieRelatedRequest(headers, socket.getOutputStream())) {
-				return;
-			}
+		if (handleAuthCookieRelatedRequest(headers, socket.getInetAddress(), socket.getOutputStream())) {
+			return;
 		}
 
 		final Matcher get = Pattern.compile("^GET").matcher(headers);
@@ -566,7 +563,7 @@ public class WebServer {
 		System.out.println("Not sure how to handle request " + headers);
 	}
 
-	static boolean handleAuthCookieRelatedRequest(String headers, OutputStream out)
+	static boolean handleAuthCookieRelatedRequest(String headers, InetAddress incomingAddress, OutputStream out)
 			throws UnsupportedEncodingException, IOException {
 		final String[] newAuthUrlAndToken = extractNewAuthToken(headers);
 		if (newAuthUrlAndToken != null) {
@@ -577,6 +574,14 @@ public class WebServer {
 			out.write(String.format("Location: %s\r\n", newAuthUrlAndToken[0]).getBytes("UTF-8"));
 			out.write(("\r\n").getBytes("UTF-8"));
 			return true;
+		}
+		if (incomingAddress.isLoopbackAddress()) {
+			// Always accept localhost connections
+			return false;
+		}
+		if (WebSocketServer.shouldAcceptRemoteConnections()) {
+			// User specifically configured remote connections to be acceptable
+			return false;
 		}
 		final String authCookie = extractAuthCookie(headers);
 		if (authCookie == null) {
@@ -659,11 +664,30 @@ public class WebServer {
 		return null;
 	}
 
+	private static Integer actualPort = null;
+
 	public static int getPort() {
-		final String portOverride = System.getenv("WEB_SERVER_PORT");
+		if (actualPort != null) {
+			return actualPort;
+		}
+		final String specificPortOverride = System.getenv("WEB_SERVER_PORT");
+		if (specificPortOverride != null) {
+			try {
+				return Integer.parseInt(specificPortOverride);
+			} catch (NumberFormatException e) {
+				System.out.println("Invalid web port override '" + specificPortOverride + "', ignoring");
+				e.printStackTrace();
+			}
+		}
+		return getFallbackPort();
+	}
+
+	public static int getFallbackPort() {
+		final String portOverride = System.getenv("PORT");
 		if (portOverride != null) {
 			try {
-				return Integer.parseInt(portOverride);
+				final int parsed = Integer.parseInt(portOverride);
+				return (parsed == 0 && actualPort != null) ? actualPort : parsed;
 			} catch (NumberFormatException e) {
 				System.out.println("Invalid web port override '" + portOverride + "', ignoring");
 				e.printStackTrace();
@@ -677,20 +701,24 @@ public class WebServer {
 		String keyTail = Base64.getEncoder().withoutPadding()
 				.encodeToString(((Math.random() * Integer.MAX_VALUE) + "_" + (Math.random() * Integer.MAX_VALUE))
 						.getBytes(StandardCharsets.UTF_8));
-		if (keyTail.length() > 8) {
-			keyTail = keyTail.substring(0, 8);
+		if (keyTail.length() > 12) {
+			keyTail = keyTail.substring(0, 12);
 		}
-		validAuthKey= "key-" + keyTail;
+		validAuthKey = "key-" + keyTail;
 
 	}
+
 	public static void start(ParsedArgs args, ServerToClientMessagePusher msgPusher,
 			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected, AtomicBoolean needsTool,
 			Consumer<String> setUnderlyingJarPath) {
 
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, null)) {
-			System.out.println(
-					"Started web server on port " + port + ", visit 'http://localhost:" + port + "?auth=" + validAuthKey +" in your browser");
+			// if port=0, then the port number is automatically allocated.
+			// Use 'actualPort' to get the port that was really opened, as 0 is invalid.
+			actualPort = server.getLocalPort();
+			System.out.printf("Started web server on port %d, visit 'http://localhost:%d?auth=%s' in your browser",
+					actualPort, actualPort, validAuthKey);
 			final WebServer ws = new WebServer();
 			new Thread(() -> {
 				while (true) {
@@ -739,8 +767,8 @@ public class WebServer {
 		} catch (IOException e) {
 			e.printStackTrace();
 			if (e.getMessage().contains("Address already in use")) {
-				System.out.println(
-						"You can run parallell CodeProber instances, but each instance must have unique WEB_SERVER_PORT and WEBSOCKET_SERVER_PORT");
+				System.out
+						.println("You can run parallell CodeProber instances, but each instance must have unique PORT");
 				System.exit(1);
 			}
 			throw new RuntimeException(e);

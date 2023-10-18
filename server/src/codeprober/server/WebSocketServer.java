@@ -5,7 +5,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -155,8 +154,11 @@ public class WebSocketServer {
 			throws IOException, NoSuchAlgorithmException {
 		final InputStream in = socket.getInputStream();
 		@SuppressWarnings("resource")
-		Scanner s = new Scanner(in, "UTF-8");
-		String data = s.useDelimiter("\\r\\n\\r\\n").next();
+		final Scanner s = new Scanner(in, "UTF-8");
+		final String data = s.useDelimiter("\\r\\n\\r\\n").next();
+		if (WebServer.handleAuthCookieRelatedRequest(data, socket.getInetAddress(), socket.getOutputStream())) {
+			return;
+		}
 		handleRequestWithPreparsedData(socket, args, msgPusher, onQuery, connectionIsAlive, data);
 	}
 
@@ -165,12 +167,6 @@ public class WebSocketServer {
 			throws IOException, NoSuchAlgorithmException {
 		final InputStream in = socket.getInputStream();
 		final OutputStream out = socket.getOutputStream();
-		final InetAddress incomingAddress = socket.getInetAddress();
-		if (!shouldAcceptRemoteConnections() && !incomingAddress.isLoopbackAddress()) {
-			if (WebServer.handleAuthCookieRelatedRequest(data, socket.getOutputStream())) {
-				return;
-			}
-		}
 
 		Matcher get = Pattern.compile("^GET").matcher(data);
 		if (get.find()) {
@@ -319,7 +315,17 @@ public class WebSocketServer {
 		return portOverride != null && portOverride.toLowerCase(Locale.ENGLISH).equals("http");
 	}
 
+	/**
+	 * If the port is set to 0, then the system will automatically assign a port.
+	 * livePort is set to whichever port was given to us. If null, then a websocket
+	 * server hasn't been started yet.
+	 */
+	private static Integer livePort;
+
 	public static int getPort() {
+		if (livePort != null) {
+			return livePort;
+		}
 		final String portOverride = System.getenv("WEBSOCKET_SERVER_PORT");
 		if (portOverride != null) {
 			try {
@@ -329,14 +335,15 @@ public class WebSocketServer {
 				e.printStackTrace();
 			}
 		}
-		return 8080;
+		return WebServer.getFallbackPort();
 	}
 
 	public static void start(ParsedArgs args, ServerToClientMessagePusher msgPusher,
 			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected) {
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, null)) {
-			System.out.println("Started WebSocket server on port " + port);
+			livePort = server.getLocalPort();
+			System.out.println("Started WebSocket server on port " + livePort);
 			while (true) {
 				Socket s = server.accept();
 				System.out.println("New WS connection from " + s.getRemoteSocketAddress());

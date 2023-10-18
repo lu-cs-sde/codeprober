@@ -405,7 +405,6 @@ const displayProbeModal = (
             localDiagnostics.push(...(parsed.errors ?? []).map((err): SourcedDiagnostic => {
               return ({ ...err, source: createDiagnosticSource(locator.get(), property) });
             }));
-            console.log('localDiags:', localDiagnostics);
             // parsed.errors?.forEach(({severity, start: errStart, end: errEnd, msg }) => {
             //   localErrors.push({ severity, errStart, errEnd, msg });
             // })
