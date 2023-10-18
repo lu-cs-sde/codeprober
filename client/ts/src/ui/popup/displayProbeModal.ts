@@ -8,7 +8,7 @@ import ModalEnv, { JobId } from '../../model/ModalEnv';
 import displayTestAdditionModal from './displayTestAdditionModal';
 import renderProbeModalTitleLeft from '../renderProbeModalTitleLeft';
 import settings from '../../settings';
-import { Property, EvaluatePropertyReq, EvaluatePropertyRes, RpcBodyLine, StopJobReq, StopJobRes, SynchronousEvaluationResult, PollWorkerStatusReq, PollWorkerStatusRes, Tracing } from '../../protocol';
+import { Property, RpcBodyLine, StopJobReq, StopJobRes, SynchronousEvaluationResult, Tracing } from '../../protocol';
 import displayAttributeModal from './displayAttributeModal';
 import displayAstModal from './displayAstModal';
 import createInlineWindowManager, { InlineWindowManager } from '../create/createInlineWindowManager';
@@ -25,6 +25,7 @@ const searchProbePropertyName = `m:NodesWithProperty`;
 
 interface OptionalArgs {
   showDiagnostics?: boolean;
+  stickyHighlight?: string;
 }
 const displayProbeModal = (
   env: ModalEnv,
@@ -39,7 +40,7 @@ const displayProbeModal = (
   let diagnosticsGetter: SourcedDiagnostic[] | (() => SourcedDiagnostic[]) = localDiagnostics;
   let showDiagnostics = optionalArgs.showDiagnostics ?? true;
   let updateMarkers = env.updateMarkers;
-  const stickyController = createStickyHighlightController(env);
+  const stickyController = createStickyHighlightController(env, optionalArgs.stickyHighlight ?? '');
   let activelyLoadingJob: OngoingPropertyEvaluation | null = null;
   let loading = false;
   let isCleanedUp = false;
@@ -139,7 +140,7 @@ const displayProbeModal = (
                   displayProbeModal(env,
                     { x: pos.x + 10, y: pos.y + 10 },
                     locator.createMutableClone(), property, inlineWindowManager.getWindowStates(),
-                    { showDiagnostics }
+                    { showDiagnostics, stickyHighlight: stickyController.getActiveColor(), }
                     );
                 },
               },
@@ -156,7 +157,7 @@ const displayProbeModal = (
               invoke: () => {
                 const states = inlineWindowManager.getWindowStates();
                 cleanup();
-                displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, states, { showDiagnostics });
+                displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, states, { showDiagnostics, stickyHighlight: stickyController.getActiveColor(), });
               },
             }]
         ),
@@ -404,6 +405,7 @@ const displayProbeModal = (
             localDiagnostics.push(...(parsed.errors ?? []).map((err): SourcedDiagnostic => {
               return ({ ...err, source: createDiagnosticSource(locator.get(), property) });
             }));
+            console.log('localDiags:', localDiagnostics);
             // parsed.errors?.forEach(({severity, start: errStart, end: errEnd, msg }) => {
             //   localErrors.push({ severity, errStart, errEnd, msg });
             // })
@@ -467,7 +469,7 @@ const displayProbeModal = (
                       switch (nest.data.type) {
                         case 'probe': {
                           const dat = nest.data;
-                          displayProbeModal(nestedEnv, null, immutLoc, dat.property, dat.nested);
+                          displayProbeModal(nestedEnv, null, immutLoc, dat.property, dat.nested, { stickyHighlight: nest.data.stickyHighlight });
                           break;
                         }
                         case 'ast': {
@@ -601,6 +603,7 @@ const displayProbeModal = (
       property,
       nested: inlineWindowManager.getWindowStates(),
       showDiagnostics: showDiagnostics && undefined, // Only include if necessary to reduce serialized form size
+      stickyHighlight: stickyController.getActiveColor(),
     };
   };
   // if (saveWindowState) {

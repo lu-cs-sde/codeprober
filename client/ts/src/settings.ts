@@ -62,7 +62,6 @@ const settings = {
 
         history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
         try {
-          // windowStates = JSON.parse(decodeURIComponent(settingsMatch[0].slice('?ws='.length)));
           settingsObj = JSON.parse(decodeURIComponent(settingsMatch[0].slice(`?settings=`.length)))
           clearHashFromLocation();
           if (settingsObj) {

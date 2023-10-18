@@ -895,7 +895,6 @@ define("settings", ["require", "exports", "model/syntaxHighlighting", "ui/UIElem
                         : `${location.search.slice(0, settingsMatch.index)}${location.search.slice(settingsMatch.index + settingsMatch[0].length)}`;
                     history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
                     try {
-                        // windowStates = JSON.parse(decodeURIComponent(settingsMatch[0].slice('?ws='.length)));
                         settingsObj = JSON.parse(decodeURIComponent(settingsMatch[0].slice(`?settings=`.length)));
                         clearHashFromLocation();
                         if (settingsObj) {
@@ -2951,9 +2950,13 @@ define("ui/create/createStickyHighlightController", ["require", "exports", "ui/s
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     startEndToSpan_3 = __importDefault(startEndToSpan_3);
-    const createStickyHighlightController = (env) => {
+    const createStickyHighlightController = (env, initialColorClass = '') => {
         const stickyId = `sticky-highlight-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-        let activeStickyColorClass = '';
+        let activeStickyColorClass = initialColorClass;
+        if (activeStickyColorClass && !/monaco-rag-highlight-sticky-\d/.test(activeStickyColorClass)) {
+            console.warn('Invalid initial sticky color:', activeStickyColorClass);
+            activeStickyColorClass = '';
+        }
         let currentTarget = null;
         let currentLocator = null;
         const applySticky = () => {
@@ -2969,24 +2972,27 @@ define("ui/create/createStickyHighlightController", ["require", "exports", "ui/s
             currentTarget.classList.add(`monaco-rag-highlight-sticky`);
             currentTarget.classList.add(activeStickyColorClass);
         };
+        const pickNewColor = () => {
+            for (let i = 0; i < 10; ++i) {
+                document.querySelector;
+                activeStickyColorClass = `monaco-rag-highlight-sticky-${i}`;
+                if (!!document.querySelector(`.${activeStickyColorClass}`)) {
+                    activeStickyColorClass = '';
+                }
+                else {
+                    break;
+                }
+            }
+            if (!activeStickyColorClass) {
+                // More than 10 colors active, pick one pseudorandomly instead
+                activeStickyColorClass = `monaco-rag-highlight-sticky-${(Math.random() * 10) | 0}`;
+            }
+        };
         return {
             onClick: () => {
                 var _a, _b;
                 if (!activeStickyColorClass) {
-                    for (let i = 0; i < 10; ++i) {
-                        document.querySelector;
-                        activeStickyColorClass = `monaco-rag-highlight-sticky-${i}`;
-                        if (!!document.querySelector(`.${activeStickyColorClass}`)) {
-                            activeStickyColorClass = '';
-                        }
-                        else {
-                            break;
-                        }
-                    }
-                    if (!activeStickyColorClass) {
-                        // More than 10 colors active, pick one pseudorandomly instead
-                        activeStickyColorClass = `monaco-rag-highlight-sticky-${(Math.random() * 10) | 0}`;
-                    }
+                    pickNewColor();
                     applySticky();
                 }
                 else {
@@ -3012,7 +3018,8 @@ define("ui/create/createStickyHighlightController", ["require", "exports", "ui/s
                 else {
                     env.clearStickyHighlight(stickyId);
                 }
-            }
+            },
+            getActiveColor: () => activeStickyColorClass || undefined,
         };
     };
     exports.default = createStickyHighlightController;
@@ -11516,13 +11523,13 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     const searchProbePropertyName = `m:NodesWithProperty`;
     exports.searchProbePropertyName = searchProbePropertyName;
     const displayProbeModal = (env, modalPos, locator, property, nestedWindows, optionalArgs = {}) => {
-        var _a;
+        var _a, _b;
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localDiagnostics = [];
         let diagnosticsGetter = localDiagnostics;
         let showDiagnostics = (_a = optionalArgs.showDiagnostics) !== null && _a !== void 0 ? _a : true;
         let updateMarkers = env.updateMarkers;
-        const stickyController = (0, createStickyHighlightController_2.default)(env);
+        const stickyController = (0, createStickyHighlightController_2.default)(env, (_b = optionalArgs.stickyHighlight) !== null && _b !== void 0 ? _b : '');
         let activelyLoadingJob = null;
         let loading = false;
         let isCleanedUp = false;
@@ -11610,7 +11617,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                 title: 'Duplicate window',
                                 invoke: () => {
                                     const pos = queryWindow.getPos();
-                                    displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator.createMutableClone(), property, inlineWindowManager.getWindowStates(), { showDiagnostics });
+                                    displayProbeModal(env, { x: pos.x + 10, y: pos.y + 10 }, locator.createMutableClone(), property, inlineWindowManager.getWindowStates(), { showDiagnostics, stickyHighlight: stickyController.getActiveColor(), });
                                 },
                             },
                             {
@@ -11626,7 +11633,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                 invoke: () => {
                                     const states = inlineWindowManager.getWindowStates();
                                     cleanup();
-                                    displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, states, { showDiagnostics });
+                                    displayProbeModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), property, states, { showDiagnostics, stickyHighlight: stickyController.getActiveColor(), });
                                 },
                             }]),
                     {
@@ -11871,6 +11878,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         localDiagnostics.push(...((_a = parsed.errors) !== null && _a !== void 0 ? _a : []).map((err) => {
                             return ({ ...err, source: (0, createMinimizedProbeModal_1.createDiagnosticSource)(locator.get(), property) });
                         }));
+                        console.log('localDiags:', localDiagnostics);
                         // parsed.errors?.forEach(({severity, start: errStart, end: errEnd, msg }) => {
                         //   localErrors.push({ severity, errStart, errEnd, msg });
                         // })
@@ -11932,7 +11940,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                             switch (nest.data.type) {
                                                 case 'probe': {
                                                     const dat = nest.data;
-                                                    displayProbeModal(nestedEnv, null, immutLoc, dat.property, dat.nested);
+                                                    displayProbeModal(nestedEnv, null, immutLoc, dat.property, dat.nested, { stickyHighlight: nest.data.stickyHighlight });
                                                     break;
                                                 }
                                                 case 'ast': {
@@ -12065,7 +12073,8 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 locator: locator.get(),
                 property,
                 nested: inlineWindowManager.getWindowStates(),
-                showDiagnostics: showDiagnostics && undefined, // Only include if necessary to reduce serialized form size
+                showDiagnostics: showDiagnostics && undefined,
+                stickyHighlight: stickyController.getActiveColor(),
             };
         };
         // if (saveWindowState) {
@@ -14438,7 +14447,8 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                                 const lineEnd = (end >>> 12);
                                 const colEnd = end & 0xFFF;
                                 activeMarkers.push(markText({
-                                    severity, lineStart, colStart, lineEnd, colEnd, message: msg,
+                                    severity: `${severity}`.toLocaleLowerCase('en-GB'),
+                                    lineStart, colStart, lineEnd, colEnd, message: msg,
                                     source: sources.length === 0 ? undefined : sources.join(', ')
                                 }));
                             });
@@ -14688,7 +14698,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             switch (state.data.type) {
                                 case 'probe': {
                                     const data = state.data;
-                                    (0, displayProbeModal_6.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_9.createMutableLocator)(data.locator), data.property, data.nested, { showDiagnostics: data.showDiagnostics });
+                                    (0, displayProbeModal_6.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_9.createMutableLocator)(data.locator), data.property, data.nested, { showDiagnostics: data.showDiagnostics, stickyHighlight: data.stickyHighlight });
                                     break;
                                 }
                                 case 'ast': {

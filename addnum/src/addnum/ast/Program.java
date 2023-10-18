@@ -1,7 +1,10 @@
 package addnum.ast;
 
 import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.List;
 
+import addnum.ast.ASTNodeAnnotation.Attribute;
 import addnum.ast.ASTNodeAnnotation.Child;
 
 public class Program extends Node {
@@ -26,4 +29,23 @@ public class Program extends Node {
 		rootNode().prettyPrint(out);
 	}
 
+	@Attribute
+	public List<Diagnostic> highlight(int needle) {
+		final List<Diagnostic> ret = new ArrayList<>();
+
+		final List<Node> toVisit = new ArrayList<>();
+		toVisit.add(this);
+
+		while (!toVisit.isEmpty()) {
+			final Node last = toVisit.remove(toVisit.size() - 1);
+			if (last.value() == needle) {
+				ret.add(new Diagnostic(last, String.format("INFO@%d;%d;value=%d",last.getStart(), last.getEnd(), needle)));
+			}
+			for (Node child : last) {
+				toVisit.add(child);
+			}
+		}
+
+		return ret;
+	}
 }

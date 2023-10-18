@@ -7,11 +7,16 @@ interface StickyHighlightController {
   onClick: () => void;
   cleanup: () => void;
   configure: (target: HTMLElement, locator: UpdatableNodeLocator) => void;
+  getActiveColor: () => string | undefined;
 }
 
-const createStickyHighlightController = (env: ModalEnv): StickyHighlightController => {
+const createStickyHighlightController = (env: ModalEnv, initialColorClass = ''): StickyHighlightController => {
   const stickyId = `sticky-highlight-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-  let activeStickyColorClass = '';
+  let activeStickyColorClass = initialColorClass;
+  if (activeStickyColorClass && !/monaco-rag-highlight-sticky-\d/.test(activeStickyColorClass)) {
+    console.warn('Invalid initial sticky color:', activeStickyColorClass);
+    activeStickyColorClass = '';
+  }
 
   let currentTarget: HTMLElement | null = null;
   let currentLocator: UpdatableNodeLocator | null = null;
@@ -30,22 +35,26 @@ const createStickyHighlightController = (env: ModalEnv): StickyHighlightControll
     currentTarget.classList.add(activeStickyColorClass);
   };
 
+  const pickNewColor = () => {
+    for (let i = 0; i < 10; ++i) {
+      document.querySelector
+      activeStickyColorClass = `monaco-rag-highlight-sticky-${i}`;
+      if (!!document.querySelector(`.${activeStickyColorClass}`)) {
+        activeStickyColorClass = '';
+      } else {
+        break;
+      }
+    }
+    if (!activeStickyColorClass) {
+      // More than 10 colors active, pick one pseudorandomly instead
+      activeStickyColorClass = `monaco-rag-highlight-sticky-${(Math.random() * 10)|0}`;
+    }
+  };
+
   return {
     onClick: () => {
       if (!activeStickyColorClass) {
-        for (let i = 0; i < 10; ++i) {
-          document.querySelector
-          activeStickyColorClass = `monaco-rag-highlight-sticky-${i}`;
-          if (!!document.querySelector(`.${activeStickyColorClass}`)) {
-            activeStickyColorClass = '';
-          } else {
-            break;
-          }
-        }
-        if (!activeStickyColorClass) {
-          // More than 10 colors active, pick one pseudorandomly instead
-          activeStickyColorClass = `monaco-rag-highlight-sticky-${(Math.random() * 10)|0}`;
-        }
+        pickNewColor();
         applySticky();
       } else {
         env.clearStickyHighlight(stickyId);
@@ -69,7 +78,8 @@ const createStickyHighlightController = (env: ModalEnv): StickyHighlightControll
       } else {
         env.clearStickyHighlight(stickyId);
       }
-    }
+    },
+    getActiveColor: () => activeStickyColorClass || undefined,
   }
 }
 

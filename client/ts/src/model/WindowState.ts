@@ -6,6 +6,7 @@ interface WindowStateDataProbe {
   property: Property;
   nested: NestedWindows;
   showDiagnostics?: boolean;
+  stickyHighlight?: string;
 }
 interface WindowStateDataAst {
   type: 'ast';

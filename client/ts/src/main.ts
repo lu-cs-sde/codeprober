@@ -253,7 +253,8 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
               const lineEnd = (end >>> 12);
               const colEnd = end & 0xFFF;
               activeMarkers.push(markText({
-                severity, lineStart, colStart, lineEnd, colEnd, message: msg,
+                severity: `${severity}`.toLocaleLowerCase('en-GB'),
+                lineStart, colStart, lineEnd, colEnd, message: msg,
                 source: sources.length === 0 ? undefined: sources.join(', ') }));
             })
 
@@ -545,7 +546,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
                   createMutableLocator(data.locator),
                   data.property,
                   data.nested,
-                  { showDiagnostics: data.showDiagnostics },
+                  { showDiagnostics: data.showDiagnostics, stickyHighlight: data.stickyHighlight },
                 );
                 break;
               }

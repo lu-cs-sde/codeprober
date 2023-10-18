@@ -2,13 +2,13 @@ package addnum.ast;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 import addnum.ast.ASTNodeAnnotation.Attribute;
 
-public abstract class Node {
+public abstract class Node implements Iterable<Node> {
 
 	private final int start, end;
 	protected Node parent;
@@ -57,4 +57,8 @@ public abstract class Node {
 		return children.get(idx);
 	}
 
+	@Override
+	public Iterator<Node> iterator() {
+		return children.iterator();
+	}
 }
