@@ -29,16 +29,22 @@ public class ASTProvider {
 		public final CompilerClassLoader classLoader;
 		public final Class<?> mainClazz;
 		public final JarFile jar;
+
+		// A method that directly returns an AST. Might be null, has prio over mainMth/drAstField.
+		public final Method parseMth;
+
+		// The main method and AST root field. Is null if parseMth is non-null.
 		public final Method mainMth;
 		public final Field drAstField;
 
 		public LoadedJar(String jarPath, long jarLastModified, CompilerClassLoader classLoader, Class<?> mainClazz,
-				JarFile jar, Method mainMth, Field drAstField) {
+				JarFile jar, Method parseMth, Method mainMth, Field drAstField) {
 			this.jarPath = jarPath;
 			this.jarLastModified = jarLastModified;
 			this.classLoader = classLoader;
 			this.mainClazz = mainClazz;
 			this.jar = jar;
+			this.parseMth = parseMth;
 			this.mainMth = mainMth;
 			this.drAstField = drAstField;
 		}
@@ -75,23 +81,33 @@ public class ASTProvider {
 		JarFile jar = new JarFile(jarFile);
 		String mainClassName = jar.getManifest().getMainAttributes().getValue("Main-Class");
 		Class<?> klass = Class.forName(mainClassName, true, urlClassLoader);
-		Method mainMethod = klass.getMethod("main", String[].class);
+		Method parseMethod = null;
+		Method mainMethod = null;
 		Field rootField = null;
-
-		// Support two declarations: primarily 'CodeProber_root_node' but fall back to
-		// 'DrAST_root_node'.
 		try {
-			rootField = klass.getField("CodeProber_root_node");
-		} catch (NoSuchFieldException e) {
-			rootField = klass.getField("DrAST_root_node");
+			parseMethod = klass.getMethod("CodeProber_parse", String[].class);
+		} catch (NoSuchMethodException e) {
+			// OK, this is optional
 		}
-		if (rootField == null) {
-			jar.close();
-			throw new NoSuchFieldException("Neither CodeProber_root_node nor DrAST_root_node defined");
-		}
-		rootField.setAccessible(true);
+		if (parseMethod == null) {
+			mainMethod = klass.getMethod("main", String[].class);
 
-		lastJar = new LoadedJar(jarPath, jarLastMod, urlClassLoader, klass, jar, mainMethod, rootField);
+			// Support two declarations: primarily 'CodeProber_root_node' but fall back to
+			// 'DrAST_root_node'.
+			try {
+				rootField = klass.getField("CodeProber_root_node");
+			} catch (NoSuchFieldException e) {
+				rootField = klass.getField("DrAST_root_node");
+			}
+			if (rootField == null) {
+				jar.close();
+				throw new NoSuchFieldException(
+						"CodeProber_parse method not found, and neither the CodeProber_root_node nor DrAST_root_node field(s) are defined");
+			}
+			rootField.setAccessible(true);
+		}
+
+		lastJar = new LoadedJar(jarPath, jarLastMod, urlClassLoader, klass, jar, parseMethod, mainMethod, rootField);
 		return lastJar;
 	}
 
@@ -114,8 +130,9 @@ public class ASTProvider {
 			// root.
 			try {
 				long start = System.currentTimeMillis();
-				Object prevRoot = ljar.drAstField.get(ljar.mainClazz);
+				Object prevRoot = ljar.drAstField == null ? null : ljar.drAstField.get(ljar.mainClazz);
 				List<RpcBodyLine> captures = null;
+				final AtomicReference<Object> parseMthReturnValue = new AtomicReference<>(null);
 				try {
 					System.setProperty("java.security.manager", "allow");
 					try {
@@ -133,7 +150,8 @@ public class ASTProvider {
 							System.err.println("Alternatively, avoid calling System.exit() if running in CodeProber.");
 							System.err.println(
 									"This can be determined by checking if the system property CODEPROBER is true");
-							System.err.println("For example, use the following 'customExit' method instead of System.exit:");
+							System.err.println(
+									"For example, use the following 'customExit' method instead of System.exit:");
 							System.err.println("  static void customExit() {");
 							System.err.println(
 									"    if (System.getProperty(\"CODEPROBER\", \"false\").equals(\"true\")) { throw new Error(\"Simulated exit\"); }");
@@ -146,6 +164,14 @@ public class ASTProvider {
 
 					final AtomicReference<Exception> innerError = new AtomicReference<>();
 					final List<RpcBodyLine> mainCaptures = StdIoInterceptor.performDefaultCapture(() -> {
+						if (ljar.parseMth != null) {
+							try {
+								parseMthReturnValue.set(ljar.parseMth.invoke(null, new Object[] { args }));
+							} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+								innerError.set(e);
+							}
+							return;
+						}
 						try {
 							ljar.mainMth.invoke(null, new Object[] { args });
 						} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
@@ -163,7 +189,8 @@ public class ASTProvider {
 				} catch (InvocationTargetException e) {
 					System.out.println("ASTPRovider caught " + e.getTargetException());
 					final Throwable target = e.getTargetException();
-					final boolean expectedException = target instanceof SystemExitControl.ExitTrappedException || target instanceof Error;
+					final boolean expectedException = target instanceof SystemExitControl.ExitTrappedException
+							|| target instanceof Error;
 					if (!expectedException) {
 						e.printStackTrace();
 						System.err.println(
@@ -177,19 +204,25 @@ public class ASTProvider {
 
 					System.out.printf("Compiler finished after : %d ms%n", (System.currentTimeMillis() - start));
 				}
-				Object root = ljar.drAstField.get(ljar.mainClazz);
+				final Object root = ljar.parseMth != null //
+						? parseMthReturnValue.get()
+						: ljar.drAstField.get(ljar.mainClazz);
 				if (root == null) {
 					if (captures == null) {
 						captures = new ArrayList<>();
 					}
 					captures.addAll(StdIoInterceptor.performDefaultCapture(() -> {
-						System.err.println("Compiler exited, but no 'CodeProber_root_node' found.");
-						System.err.println(
-								"If parsing failed, you can draw 'red squigglies' in the code to indicate where it failed.");
-						System.err.println("See overflow menu (⠇) -> \"Magic output messages help\".");
-						System.err.println(
-								"If parsing succeeded, make sure you declare and assign the following field in your main class:");
-						System.err.println("'public static Object CodeProber_root_node'");
+						if (ljar.parseMth != null) {
+							System.err.println("CodeProber_parse returned null");
+						} else {
+							System.err.println("Compiler exited, but no 'CodeProber_root_node' found.");
+							System.err.println(
+									"If parsing failed, you can draw 'red squigglies' in the code to indicate where it failed.");
+							System.err.println("See overflow menu (⠇) -> \"Magic output messages help\".");
+							System.err.println(
+									"If parsing succeeded, make sure you declare and assign the following field in your main class:");
+							System.err.println("'public static Object CodeProber_root_node'");
+						}
 					}));
 				} else if (root == prevRoot) {
 					// Parse ended without unexpected error (System.exit is expected), but nothing

@@ -12,8 +12,6 @@ import addnum.ast.Program;
 
 public class AddNum {
 
-	public static Object CodeProber_root_node;
-
 	private int line = 1, column = 1;
 	private int parseIndex = 0;
 	private final String src;
@@ -22,13 +20,20 @@ public class AddNum {
 		this.src = src;
 	}
 
+	public static Object CodeProber_parse(String[] args) throws IOException {
+		return parse(args[args.length - 1]);
+	}
+
+	static Program parse(String sourceFile) throws IOException {
+		final String src = Files.readAllLines(new File(sourceFile).toPath()).stream().collect(Collectors.joining("\n"));
+		return new Program(new AddNum(src).parseTop());
+	}
+
 	public static void main(String[] args) throws IOException {
 		System.out.println("Started AddNum");
 		try {
-			final String src = Files.readAllLines(new File(args[0]).toPath()).stream()
-					.collect(Collectors.joining("\n"));
-			System.out.println("parsing " + src);
-			CodeProber_root_node = new Program(new AddNum(src).parseTop());
+			Program root = parse(args[args.length - 1]);
+			System.out.println("Value: " + root.rootNode().value());
 		} catch (Exception e) {
 			e.printStackTrace();
 			System.exit(1);

@@ -27,7 +27,27 @@ When the page is loaded, you'll find a `Help` button on the right side which can
 To use CodeProber, you must have a compiler or analyzer that follows certain conventions.
 Any tool built using [JastAdd](https://jastadd.cs.lth.se/web/) follow these conventions automatically. Support for non-JastAdd tools (and formalizing the conventions) is planned future work (also, see 'I didn't use JastAdd' below).
 
-Even if you built your tool with JastAdd, there are ~2 lines of code you need to add.
+Even if you built your tool with JastAdd, you must add some way for CodeProber to transform a source file into an AST.
+There are two options.
+
+The first option is preferered, and it is to add a method `CodeProber_parse` method in your main class.
+It can look like this:
+
+```java
+public static Object CodeProber_parse(String[] args) throws Throwable {
+  // 'args' has at least one entry.
+  // First are all args (see "args-to-forward-to-compiler-on-each-request" above).
+  // The last entry in the array is path to a source file containing the CodeProber editor text.
+  String sourceFile = args[args.length - 1];
+  // "parse" is expected to take the path to a source file and transform it to the root of an AST
+  return parse(sourceFile);
+}
+```
+CodeProber will invoke this and use the return value as the entry point into your AST.
+
+The second option is for CodeProber to use your normal main method as an entry point.
+Since main cannot return anything, the resulting AST must instead be assigned to a static field within your main class.
+In total, there are therefore two changes that are required:
 In your main java file, add the following declaration:
 
 ```java
@@ -41,12 +61,17 @@ Program myAst = parse(...);
 CodeProber_root_node = myAst;
 ```
 
-The `CodeProber_root_node` variable will be used by CodeProber as an entry point for most of its functionality.
+The `CodeProber_root_node` variable will be used by CodeProber as an entry point.
+Since many tools perform semantic analysis and call System.exit in main if an error is encountered, CodeProber attempts to install a System.exit interceptor when using the main method.
+This has issues on newer versions of java (see "System.exit/SecurityManager problem" below).
+If you have problems with this, consider using `CodeProber_parse` instead, which doesn't rely on intercepting System.exit.
+
+If you define both `CodeProber_parse` and `CodeProber_root_node`, then `CodeProber_parse` takes precedence.
 
 If you previously used `DrAST` (https://bitbucket.org/jastadd/drast/src/master/), then you likely have `DrAST_root_node` declared and assigned.
-CodeProber will use this as a fallback if `CodeProber_root_node` is not defined, so you don't have to do any changes.
-However, the help/warning messages inside `CodeProber` that reference the root node will all reference `CodeProber_root_node`, even if you don't have it.
-So for a more consistent experience, consider adding a specific declaration for CodeProber.
+CodeProber will use this as a fallback if neither `CodeProber_parse` nor `CodeProber_root_node` is not defined, so you don't have to do any changes.
+However, the help/warning messages inside `CodeProber` that reference the root node will reference `CodeProber_root_node`, even if you don't have it.
+So for a more consistent experience, consider adding a specific declaration for CodeProber (or even better, use `CodeProber_parse`).
 
 ### Environment variables
 
