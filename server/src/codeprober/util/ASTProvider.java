@@ -258,8 +258,11 @@ public class ASTProvider {
 			System.err.println("Could not find the AST root declaration.");
 			final List<RpcBodyLine> userHelp = StdIoInterceptor.performDefaultCapture(() -> {
 				System.err.println(
-						"'CodeProber_root_node' not found. Make sure you declare and assign the following field in your main class:");
-				System.err.println("'public static Object CodeProber_root_node'");
+						"Neither 'CodeProber_parse' nor 'CodeProber_root_node' found. Please add the following function to your main class:");
+        System.err.println("  public static Object CodeProber_parse(String[] args) { return parse(args[args.length - 1]); }");
+        System.err.println("Alternatively, declare the following field in your main class:");
+				System.err.println("  public static Object CodeProber_root_node;");
+        System.err.println("See CodeProber's README for more information.");
 			});
 			return new ParseResult(null, userHelp);
 		} catch (FileNotFoundException e) {

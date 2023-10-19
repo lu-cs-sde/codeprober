@@ -162,7 +162,7 @@ If you want to "deploy" a new version, i.e make the tiny "New version available"
 
 ## I didn't use JastAdd, what now?
 
-It is possible that your AST will just "magically" work with CodeProber. Assign `CodeProber_root_node` as described above and just try running with it.
+It is possible that your AST will just "magically" work with CodeProber. Add `CodeProber_parse` or `CodeProber_root_node` as described above and just try running with it.
 CodeProber has a few different styles of ASTs it tries to detect and interact with.
 
 If that doesn't work, the quickest way to get started is to use the [minimal-prober-wrapper example implementation](minimal-probe-wrapper).
@@ -180,7 +180,7 @@ def find_super(type)
     return type
 ```
 
-`find_super` is called with `CodeProber_root_node`. In other words, it finds the top supertype that belongs to the same package as `CodeProber_root_node`.
+`find_super` is called with your AST root (returned from `CodeProber_parse` or `CodeProber_root_node`). In other words, it finds the top supertype that belongs to the same package as the AST root.
 If your native AST structure uses a hierarchy of packages rather than a single flat package, then this will likely cause problems so you should probably rely on a wrapper type instead.
 
 ## Tracing
