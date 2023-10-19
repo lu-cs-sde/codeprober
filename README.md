@@ -36,7 +36,7 @@ It can look like this:
 ```java
 public static Object CodeProber_parse(String[] args) throws Throwable {
   // 'args' has at least one entry.
-  // First are all args (see "args-to-forward-to-compiler-on-each-request" above).
+  // First are all optional args (see "args-to-forward-to-compiler-on-each-request" above).
   // The last entry in the array is path to a source file containing the CodeProber editor text.
   String sourceFile = args[args.length - 1];
   // "parse" is expected to take the path to a source file and transform it to the root of an AST
@@ -104,7 +104,7 @@ By default, CodeProber only accepts requests from localhost. When you run CodePr
 
 ### System.exit/SecurityManager problem
 
-If you run Java version 17+ then you'll likely run into error messages that mention "Failed installing System.exit interceptor".
+If you run Java version 17+ then you may run into error messages that mention "Failed installing System.exit interceptor".
 For many language tools, the main function behaves like this:
 
 1) Parse the incoming document
@@ -117,6 +117,9 @@ As of Java 17, this feature is disabled by default. You can re-enable it by addi
 ```bash
 java -Djava.security.manager=allow -jar code-prober.jar path/to/your/analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
 ```
+
+Alterntiavely, add a `CodeProber_parse` method as mentioned above in the `Compatibility` section.
+Here, CodeProber does not use a System.exit interceptor, so this issue will not appear.
 
 For more information about this issue, see https://openjdk.org/jeps/411 and https://bugs.openjdk.org/browse/JDK-8199704.
 

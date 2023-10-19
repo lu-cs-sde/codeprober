@@ -30,7 +30,8 @@ public class ASTProvider {
 		public final Class<?> mainClazz;
 		public final JarFile jar;
 
-		// A method that directly returns an AST. Might be null, has prio over mainMth/drAstField.
+		// A method that directly returns an AST. Might be null, has prio over
+		// mainMth/drAstField.
 		public final Method parseMth;
 
 		// The main method and AST root field. Is null if parseMth is non-null.
@@ -134,32 +135,34 @@ public class ASTProvider {
 				List<RpcBodyLine> captures = null;
 				final AtomicReference<Object> parseMthReturnValue = new AtomicReference<>(null);
 				try {
-					System.setProperty("java.security.manager", "allow");
-					try {
-						SystemExitControl.disableSystemExit();
-						installedSystemExitInterceptor = true;
-					} catch (UnsupportedOperationException uoe) {
-						uoe.printStackTrace();
-						captures = StdIoInterceptor.performDefaultCapture(() -> {
-							System.err.println("Failed installing System.exit interceptor");
-							System.err.println(
-									"Restart code-prober.jar with the system property 'java.security.manager=allow'");
-							System.err.println("Example:");
-							System.err.println(
-									"   java -Djava.security.manager=allow -jar path/to/code-prober.jar path/to/your/analyzer-or-compiler.jar");
-							System.err.println("Alternatively, avoid calling System.exit() if running in CodeProber.");
-							System.err.println(
-									"This can be determined by checking if the system property CODEPROBER is true");
-							System.err.println(
-									"For example, use the following 'customExit' method instead of System.exit:");
-							System.err.println("  static void customExit() {");
-							System.err.println(
-									"    if (System.getProperty(\"CODEPROBER\", \"false\").equals(\"true\")) { throw new Error(\"Simulated exit\"); }");
-							System.err.println("    else { System.exit(1); }");
-							System.err.println("  }");
-							System.setProperty("CODEPROBER", "true");
-						});
-//						return new ParseResult(null, captures);
+					if (ljar.parseMth == null) {
+						System.setProperty("java.security.manager", "allow");
+						try {
+							SystemExitControl.disableSystemExit();
+							installedSystemExitInterceptor = true;
+						} catch (UnsupportedOperationException uoe) {
+							uoe.printStackTrace();
+							captures = StdIoInterceptor.performDefaultCapture(() -> {
+								System.err.println("Failed installing System.exit interceptor");
+								System.err.println(
+										"Restart code-prober.jar with the system property 'java.security.manager=allow'");
+								System.err.println("Example:");
+								System.err.println(
+										"   java -Djava.security.manager=allow -jar path/to/code-prober.jar path/to/your/analyzer-or-compiler.jar");
+								System.err.println(
+										"Alternatively, avoid calling System.exit() if running in CodeProber.");
+								System.err.println(
+										"This can be determined by checking if the system property CODEPROBER is true");
+								System.err.println(
+										"For example, use the following 'customExit' method instead of System.exit:");
+								System.err.println("  static void customExit() {");
+								System.err.println(
+										"    if (System.getProperty(\"CODEPROBER\", \"false\").equals(\"true\")) { throw new Error(\"Simulated exit\"); }");
+								System.err.println("    else { System.exit(1); }");
+								System.err.println("  }");
+								System.setProperty("CODEPROBER", "true");
+							});
+						}
 					}
 
 					final AtomicReference<Exception> innerError = new AtomicReference<>();
