@@ -471,7 +471,7 @@ window.defineEditor(
       markText: ({ severity, lineStart, colStart, lineEnd, colEnd, source, message }) => {
         const problemId = `problem_${++problemIdGenerator}`;
 
-        if (/^LINE_[PA]{2}$/.test(severity)) {
+        if (/^LINE_[PA]{2}$/i.test(severity)) {
 
           coolMarkerDescriptors[problemId] = { style: [...severity.slice('LINE_'.length)], start: (lineStart << 12) + colStart, end: (lineEnd << 12) + colEnd, message };
           refreshCoolMarkers();
