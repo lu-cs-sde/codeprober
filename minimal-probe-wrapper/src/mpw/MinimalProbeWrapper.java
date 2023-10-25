@@ -13,7 +13,7 @@ public class MinimalProbeWrapper {
     // or via "Override main args" in the CodeProber client.
     final File srcFile = new File(args[args.length - 1]);
 
-    // Here we would typically parse 'src' into an AST, and set the result of that parse to CodeProber_root_node.
+    // Here we would typically parse 'src' into an AST and return it.
     // However in this minimal implementation there is no parser, so we just keep 'src' as-is.
     final String src = Files.readAllLines(srcFile.toPath()).stream().collect(Collectors.joining("\n"));
     return new RootNode(src);
