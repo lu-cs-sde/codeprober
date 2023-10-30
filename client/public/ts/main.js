@@ -187,10 +187,6 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
         });
         const wsHandler = {
             on: (id, cb) => messageHandlers[id] = cb,
-            // sendRpc: (msg) => {
-            //   console.log('todo send normal rpc messages, wrapped in rpc something something');
-            //   // return Promise.reject('todo');
-            // },
             sendRpc: async (msg) => {
                 const wrapped = {
                     type: 'wsput:tunnel',
@@ -223,13 +219,6 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
                     etag: prevEtagValue,
                 };
                 const result = await sendRpc(longPollRequest, { timeout: 10 * 60 * 1000 });
-                // const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
-                //   id: -1, type: 'longpoll', etag: prevEtagValue, session
-                // }) });
-                // if (!rawFetchResult.ok) {
-                //   throw new Error(`Fetch result: ${rawFetchResult.status}`);
-                // }
-                // const pollResult = await rawFetchResult.json();
                 if (result.data) {
                     switch (result.data.type) {
                         case 'etag': {
@@ -14352,6 +14341,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         locIndicator.innerText = `(${backingFile.path})`;
                         inputLabel.appendChild(locIndicator);
                     }
+                    wsHandler.on('backing_file_update', ({ contents }) => modalEnv.setLocalState(contents));
                 }
                 const onChange = (newValue, adjusters) => {
                     settings_9.default.setEditorContents(newValue);

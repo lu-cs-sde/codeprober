@@ -30,12 +30,14 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import codeprober.CodeProber;
 import codeprober.protocol.ClientRequest;
+import codeprober.protocol.data.BackingFileUpdated;
 import codeprober.protocol.data.LongPollResponse;
 import codeprober.protocol.data.RequestAdapter;
 import codeprober.protocol.data.TopRequestReq;
@@ -118,6 +120,13 @@ public class WebServer {
 			}
 		}
 
+		public void broadcastMessage(JSONObject json) {
+			System.out.println("Broadcasting " + json);
+			for (WsPutSession wps : sessions) {
+				wps.addMessage(json);
+			}
+		}
+
 		public synchronized WsPutSession getOrCreate(String id) {
 			for (WsPutSession wps : sessions) {
 				if (wps.id.equals(id)) {
@@ -170,7 +179,6 @@ public class WebServer {
 			}
 			return removedAny;
 		}
-
 	}
 
 	private static String guessMimeType(String path) {
@@ -735,8 +743,20 @@ public class WebServer {
 					}
 				}
 			}).start();
-			msgPusher.addJarChangeListener(() -> {
-				ws.monitor.onServerEvent(msgPusher.getEventCounter());
+			msgPusher.addChangeListener((event) -> {
+				switch (event) {
+				case JAR_CHANGED: {
+					ws.monitor.onServerEvent(msgPusher.getEventCounter());
+					break;
+				}
+				default: {
+					final JSONObject msg = event.getUpdateMessage();
+					if (msg != null) {
+						ws.monitor.broadcastMessage(msg);
+					}
+					break;
+				}
+				}
 			});
 			try {
 

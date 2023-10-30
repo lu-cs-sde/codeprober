@@ -79,14 +79,13 @@ public abstract class FileMonitor extends Thread {
 
 				for (WatchEvent<?> event : key.pollEvents()) {
 					WatchEvent.Kind<?> kind = event.kind();
-					System.out.println("got event : " + kind);
 
 					@SuppressWarnings("unchecked")
 					WatchEvent<Path> ev = (WatchEvent<Path>) event;
 					Path filename = ev.context();
 
 					if (kind == StandardWatchEventKinds.OVERFLOW) {
-						System.out.println("overflow!");
+						System.out.println("FileMonitor overflow!");
 						Thread.yield();
 						continue;
 					} else if (kind == java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY

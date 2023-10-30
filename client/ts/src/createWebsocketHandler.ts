@@ -173,11 +173,6 @@ const createWebsocketOverHttpHandler = (
 
   const wsHandler: WebsocketHandler = {
     on: (id, cb) => messageHandlers[id] = cb,
-    // sendRpc: (msg) => {
-    //   console.log('todo send normal rpc messages, wrapped in rpc something something');
-    //   // return Promise.reject('todo');
-
-    // },
     sendRpc: async (msg) => {
       const wrapped: TunneledWsPutRequestReq = {
         type: 'wsput:tunnel',
@@ -211,13 +206,6 @@ const createWebsocketOverHttpHandler = (
         etag: prevEtagValue,
       };
       const result: WsPutLongpollRes = await sendRpc(longPollRequest, { timeout: 10 * 60 * 1000 });
-      // const rawFetchResult = await fetch('/wsput', { method: 'PUT', body: JSON.stringify({
-      //   id: -1, type: 'longpoll', etag: prevEtagValue, session
-      // }) });
-      // if (!rawFetchResult.ok) {
-      //   throw new Error(`Fetch result: ${rawFetchResult.status}`);
-      // }
-      // const pollResult = await rawFetchResult.json();
       if (result.data) {
         switch (result.data.type) {
           case 'etag': {

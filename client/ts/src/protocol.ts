@@ -14,6 +14,10 @@ interface BackingFile {
   path: string;
   value: string;
 }
+interface BackingFileUpdated {
+  type: "backing_file_update";
+  contents: string;
+}
 interface CompleteReq {
   type: "ide:complete";
   src: ParsingRequestData;
@@ -337,6 +341,7 @@ export {
    AsyncRpcUpdate
  , AsyncRpcUpdateValue
  , BackingFile
+ , BackingFileUpdated
  , CompleteReq
  , CompleteRes
  , Diagnostic

@@ -28,6 +28,7 @@ import codeprober.requesthandler.RequestHandlerMonitor;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.server.BackingFileSettings;
 import codeprober.server.CodespacesCompat;
+import codeprober.server.ServerToClientEvent;
 import codeprober.server.ServerToClientMessagePusher;
 import codeprober.server.WebServer;
 import codeprober.server.WebSocketServer;
@@ -72,6 +73,7 @@ public class CodeProber {
 		final JsonRequestHandler userFacingHandler;
 		flog(Arrays.toString(mainArgs));
 
+		final ServerToClientMessagePusher msgPusher = new ServerToClientMessagePusher();
 		final File backingFile = BackingFileSettings.getRealFileToBeUsedInRequests();
 		if (backingFile != null) {
 			if (parsedArgs.concurrencyMode != ConcurrencyMode.DISABLED) {
@@ -85,6 +87,12 @@ public class CodeProber {
 			System.out.println("Using backing file " + backingFile);
 			System.out.println(
 					"CAUTION: Any edits made inside CodeProber will immediately be saved to that file. Make sure important source files are in git.");
+			if (!backingFile.exists()) {
+				System.out.println("Backing file doesn't exist, initializing to an empty file");
+				backingFile.createNewFile();
+			}
+
+			BackingFileSettings.monitorBackingFileChanges(() -> msgPusher.onChange(ServerToClientEvent.BACKING_FILE_CHANGED));
 		}
 
 		switch (parsedArgs.concurrencyMode) {
@@ -210,7 +218,6 @@ public class CodeProber {
 		CodespacesCompat.shouldApplyCompatHacks();
 		CodespacesCompat.getChangeBufferTime();
 
-		final ServerToClientMessagePusher msgPusher = new ServerToClientMessagePusher();
 		final RequestHandlerMonitor monitor = new RequestHandlerMonitor(userFacingHandler::handleRequest);
 		final Function<ClientRequest, JSONObject> unwrappedHandler = monitor::submit;
 		final Function<ClientRequest, JSONObject> topHandler = JsonRequestHandler
@@ -228,7 +235,7 @@ public class CodeProber {
 						sessionLogger.log(new JSONObject() //
 								.put("t", "Refresh"));
 					}
-					msgPusher.onJarChange();
+					msgPusher.onChange(ServerToClientEvent.JAR_CHANGED);
 				};
 			};
 			lastMonitor.set(fm);

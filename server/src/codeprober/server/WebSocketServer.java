@@ -8,7 +8,6 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -20,7 +19,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import org.json.JSONObject;
 
@@ -28,7 +26,6 @@ import codeprober.protocol.ClientRequest;
 import codeprober.protocol.data.AsyncRpcUpdate;
 import codeprober.protocol.data.BackingFile;
 import codeprober.protocol.data.InitInfo;
-import codeprober.protocol.data.Refresh;
 import codeprober.protocol.data.protocolgen_spec_InitInfo_1;
 import codeprober.util.ParsedArgs;
 import codeprober.util.VersionInfo;
@@ -127,16 +124,15 @@ public class WebSocketServer {
 
 		final File backingFile = BackingFileSettings.getRealFileToBeUsedInRequests();
 		String backingFileContents = null;
-		if (backingFile != null && backingFile.exists()) {
-			try {
-				backingFileContents = Files.readAllLines(backingFile.toPath()).stream()
-						.collect(Collectors.joining("\n"));
-			} catch (IOException e) {
-				System.err.println("Failed reading initial state of backing file " + backingFile
-						+ ", perhaps there are permission problems?");
-				e.printStackTrace();
-				System.err.println("Proceeding with empty initial state");
+		if (backingFile != null) {
+			if (!backingFile.exists()) {
+				System.out.println("Backing file does not exist yet. Proceeding with empty initial state");
 				backingFileContents = "";
+			} else {
+				backingFileContents = BackingFileSettings.readBackingFileContents();
+				if (backingFileContents == null) {
+					backingFileContents = "";
+				}
 			}
 		}
 
@@ -180,19 +176,22 @@ public class WebSocketServer {
 				out.write(response, 0, response.length);
 				out.flush();
 
-				final Runnable onJarChange = () -> {
-					final Refresh refreshMsg = new Refresh();
+				final Consumer<ServerToClientEvent> onJarChange = (event) -> {
+					final JSONObject message = event.getUpdateMessage();
+					if (message == null) {
+						return;
+					}
 					try {
 						// No synchronized() needed, it is done in the write method
-						writeWsMessage(out, refreshMsg.toJSON().toString());
+						writeWsMessage(out, message.toString());
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
 
 				};
-				msgPusher.addJarChangeListener(onJarChange);
-				Runnable cleanup = () -> msgPusher.removeJarChangeListener(onJarChange);
+				msgPusher.addChangeListener(onJarChange);
+				final Runnable cleanup = () -> msgPusher.removeChangeListener(onJarChange);
 
 				writeWsMessage(out, getInitMsg(args).toJSON().toString());
 

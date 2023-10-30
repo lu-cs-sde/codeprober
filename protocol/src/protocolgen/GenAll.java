@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import protocolgen.spec.AsyncRpcUpdate;
+import protocolgen.spec.BackingFileUpdated;
 import protocolgen.spec.Complete;
 import protocolgen.spec.EvaluateProperty;
 import protocolgen.spec.GetTestSuite;
@@ -64,6 +65,7 @@ public class GenAll {
 
 		// Server->Client
 		serverToClient.add(Refresh.class);
+		serverToClient.add(BackingFileUpdated.class);
 		serverToClient.add(AsyncRpcUpdate.class);
 
 		GenJava.gen(rpcs, serverToClient);

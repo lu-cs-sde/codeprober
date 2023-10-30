@@ -160,9 +160,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			final File backingFile = BackingFileSettings.getRealFileToBeUsedInRequests();
 			if (backingFile != null) {
 				try {
-
-					Files.write(backingFile.toPath(), inputText.getBytes(StandardCharsets.UTF_8),
-							StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+					BackingFileSettings.write(inputText);
 					// Do NOT set 'tmp' to backingFile, as that would cause it to be deleted.
 					return backingFile;
 				} catch (IOException e) {

@@ -142,6 +142,7 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
           locIndicator.innerText = `(${backingFile.path})`;
           inputLabel.appendChild(locIndicator);
         }
+        wsHandler.on('backing_file_update', ({ contents }) => modalEnv.setLocalState(contents));
       }
 
       const onChange = (newValue: string, adjusters?: LocationAdjuster[]) => {

@@ -3,6 +3,7 @@ package codeprober.server;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Class helping with pushing messages from the server to the client. Over
@@ -10,18 +11,18 @@ import java.util.List;
  * Over http, this is implemented with long polling.
  */
 public class ServerToClientMessagePusher {
-	private final List<Runnable> onJarChangeListeners;
+	private final List<Consumer<ServerToClientEvent>> onChangeListeners;
 	private int eventCounter;
 
 	public ServerToClientMessagePusher() {
-		this.onJarChangeListeners = Collections.<Runnable>synchronizedList(new ArrayList<>());
+		this.onChangeListeners = Collections.<Consumer<ServerToClientEvent>>synchronizedList(new ArrayList<>());
 		this.eventCounter = 1;
 	}
 
-	public void onJarChange() {
+	public void onChange(ServerToClientEvent event) {
 		this.eventCounter++;
-		synchronized (onJarChangeListeners) {
-			onJarChangeListeners.forEach(Runnable::run);
+		synchronized (onChangeListeners) {
+			onChangeListeners.forEach(l -> l.accept(event));
 		}
 		synchronized (this) {
 			notifyAll();
@@ -32,25 +33,11 @@ public class ServerToClientMessagePusher {
 		return eventCounter;
 	}
 
-	public synchronized int pollEvent(int prevEventCtr) {
-		if (prevEventCtr == eventCounter) {
-			try {
-				// 5 minutes
-				wait(5 * 60 * 1000);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		}
-		System.out.println("pollEvent done, " + prevEventCtr + " -> " + eventCounter);
-		return eventCounter;
+	public void addChangeListener(Consumer<ServerToClientEvent> r) {
+		onChangeListeners.add(r);
 	}
 
-	public void addJarChangeListener(Runnable r) {
-		onJarChangeListeners.add(r);
-	}
-
-	public void removeJarChangeListener(Runnable r) {
-		onJarChangeListeners.remove(r);
+	public void removeChangeListener(Consumer<ServerToClientEvent> r) {
+		onChangeListeners.remove(r);
 	}
 }
