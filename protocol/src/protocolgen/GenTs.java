@@ -7,10 +7,15 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import org.json.JSONObject;
@@ -33,16 +38,21 @@ public class GenTs {
 		}
 		gt.drainRequests();
 
-		String fullFile = gt.target
-				+ String.format("\n\nexport { %s }\n", gt.namesToExport.stream().collect(Collectors.joining(", ")));
+		StringBuilder fullFile = new StringBuilder();
+		final ArrayList<Entry<String, StringBuilder>> entries = new ArrayList<>(gt.target.entrySet());
+		entries.sort((a, b) -> a.getKey().compareTo(b.getKey()));
+		for (Entry<String, StringBuilder> ent : entries) {
+			fullFile.append(ent.getValue().toString());
+		}
+		fullFile.append(String.format("\n\nexport {\n   %s\n}\n", gt.namesToExport.stream().collect(Collectors.joining("\n , "))));
 
-		Files.write(gt.getDstFile().toPath(), fullFile.getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE,
+		Files.write(gt.getDstFile().toPath(), fullFile.toString().getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE,
 				StandardOpenOption.TRUNCATE_EXISTING);
 		System.out.println("Done");
 	}
 
-	private final StringBuilder target = new StringBuilder();
-	private final Set<String> namesToExport = new HashSet<>();
+	private final Map<String, StringBuilder> target = new HashMap<>();
+	private final Set<String> namesToExport = new TreeSet<>();
 
 	private File getDstFile() throws Exception {
 		final String prop = System.getProperty("TS_DST_FILE");
@@ -56,12 +66,34 @@ public class GenTs {
 		return dstFile;
 	}
 
-	private void println(String line) {
-		print(line + "\n");
+//	private void println(String line) {
+//		print(line + "\n");
+//	}
+//
+//	private void print(String msg) {
+//		target.append(msg);
+//	}
+
+	private Output addOutputEntry(String name) {
+		final StringBuilder sb = new StringBuilder();
+		target.put(name, sb);
+		return new Output(sb);
 	}
 
-	private void print(String msg) {
-		target.append(msg);
+	private class Output {
+		private StringBuilder sb;
+
+		public Output(StringBuilder sb) {
+			this.sb = sb;
+		}
+
+		public void print(String msg) {
+			this.sb.append(msg);
+		}
+
+		public void println(String line) {
+			print(line + "\n");
+		}
 	}
 
 	private void drainRequests() throws Exception {
@@ -79,33 +111,35 @@ public class GenTs {
 						req = clazz.newInstance();
 						// Fall down to 'if streamableunion' below
 					} else {
-						println("interface " + clazz.getSimpleName() + " {");
+						final Output out = addOutputEntry(clazz.getSimpleName());
+						out.println("interface " + clazz.getSimpleName() + " {");
 						namesToExport.add(clazz.getSimpleName());
-						genTypescriptDef("  ", (Streamable) clazz.newInstance());
-						println("}");
+						genTypescriptDef(out, "  ", (Streamable) clazz.newInstance());
+						out.println("}");
 						continue;
 					}
 				}
 
 				if (req instanceof StreamableUnion) {
 					StreamableUnion su = (StreamableUnion) req;
-					print(String.format("type %s = (\n", su.getClass().getSimpleName()));
+					final Output out = addOutputEntry(su.getClass().getSimpleName());
+					out.print(String.format("type %s = (\n", su.getClass().getSimpleName()));
 					namesToExport.add(su.getClass().getSimpleName());
 					boolean first = true;
 					for (Field f : su.getClass().getFields()) {
 						f.setAccessible(true);
 						final String fname = f.getName();
 						if (first) {
-							print("    ");
+							out.print("    ");
 							first = false;
 						} else {
-							print("  | ");
+							out.print("  | ");
 						}
-						print("{ type: '" + fname + "'; value: ");
-						genTypescriptRef("", f.get(su));
-						println("; }");
+						out.print("{ type: '" + fname + "'; value: ");
+						genTypescriptRef(out, "", f.get(su));
+						out.println("; }");
 					}
-					println(");");
+					out.println(");");
 				} else {
 					throw new Error("Bad request '" + req + "'");
 				}
@@ -113,91 +147,92 @@ public class GenTs {
 		}
 	}
 
-	private Set<Object> requestedTypes = new HashSet<>();
+	private Set<Object> requestedTypes = new LinkedHashSet<>();
 
 	private <Arg extends Streamable, Res extends Streamable> void genTypescriptDef(Rpc rpc) throws Exception {
 		final String sn = rpc.getClass().getSimpleName();
-		println("interface " + sn + "Req {");
-		genTypescriptDef("  ", rpc.getRequestType());
-		println("}");
-		println("interface " + sn + "Res {");
-		genTypescriptDef("  ", rpc.getResponseType());
-		println("}");
+		final Output out = addOutputEntry(sn);
+		out.println("interface " + sn + "Req {");
+		genTypescriptDef(out, "  ", rpc.getRequestType());
+		out.println("}");
+		out.println("interface " + sn + "Res {");
+		genTypescriptDef(out, "  ", rpc.getResponseType());
+		out.println("}");
 
 		namesToExport.add(sn + "Req");
 		namesToExport.add(sn + "Res");
 	}
 
-	private void genTypescriptDef(String prefix, Streamable s) throws Exception {
+	private void genTypescriptDef(Output out, String prefix, Streamable s) throws Exception {
 
 		for (Field f : s.getClass().getFields()) {
 			f.setAccessible(true);
-			print(prefix + f.getName());
+			out.print(prefix + f.getName());
 			final Object val = f.get(s);
 			if (val instanceof Optional<?>) {
-				print("?: ");
-				genTypescriptRef(prefix, ((Optional<?>) val).get());
+				out.print("?: ");
+				genTypescriptRef(out, prefix, ((Optional<?>) val).get());
 			} else {
-				print(": ");
-				genTypescriptRef(prefix, val);
+				out.print(": ");
+				genTypescriptRef(out, prefix, val);
 			}
-			println(";");
+			out.println(";");
 		}
 	}
 
-	private void genTypescriptRef(String prefix, Object rawRef) throws Exception {
+	private void genTypescriptRef(Output out, String prefix, Object rawRef) throws Exception {
 		if (rawRef instanceof Class<?>) {
 			Class<?> clazz = (Class<?>) rawRef;
 			if (clazz == String.class) {
-				print("string");
+				out.print("string");
 			} else if (clazz == Integer.class) {
-				print("number");
+				out.print("number");
 			} else if (clazz == Long.class) {
-				print("number");
+				out.print("number");
 			} else if (clazz == Boolean.class) {
-				print("boolean");
+				out.print("boolean");
 			} else if (clazz.isEnum()) {
 				boolean first = true;
-				print("(");
+				out.print("(");
 				for (Object ev : clazz.getEnumConstants()) {
 					if (first) {
 						first = false;
 					} else {
-						print("| ");
+						out.print("| ");
 					}
-					print("'" + ev.toString() + "'");
+					out.print("'" + ev.toString() + "'");
 				}
-				print(")");
+				out.print(")");
 			} else if (clazz == Object.class) {
-				print("any");
+				out.print("any");
 			} else if (clazz == JSONObject.class) {
-				print("{ [key: string]: any }");
+				out.print("{ [key: string]: any }");
 			} else if (clazz == Void.class) {
-				print("null");
+				out.print("null");
 			} else {
 				if (StreamableUnion.class.isAssignableFrom(clazz)) {
 					final StreamableUnion su = (StreamableUnion) clazz.newInstance();
 					requestedTypes.add(clazz);
-					print(su.getClass().getSimpleName());
+					out.print(su.getClass().getSimpleName());
 				} else if (Streamable.class.isAssignableFrom(clazz)) {
 					requestedTypes.add(clazz);
-					print(clazz.getSimpleName());
+					out.print(clazz.getSimpleName());
 				} else {
 					throw new Exception("Invalid class " + clazz);
 				}
 			}
 		} else if (rawRef instanceof String) {
-			print("\"" + rawRef + "\"");
+			out.print("\"" + rawRef + "\"");
 		} else if (rawRef instanceof StreamableUnion) {
 			requestedTypes.add(rawRef);
-			print(((StreamableUnion) rawRef).getClass().getSimpleName());
+			out.print(((StreamableUnion) rawRef).getClass().getSimpleName());
 		} else if (rawRef instanceof Streamable) {
-			println("{");
-			genTypescriptDef(prefix + "  ", (Streamable) rawRef);
-			print(prefix + "}");
+			out.println("{");
+			genTypescriptDef(out, prefix + "  ", (Streamable) rawRef);
+			out.print(prefix + "}");
 		} else if (rawRef instanceof Optional<?>) {
-			print("undefined | ");
-			genTypescriptRef(prefix, ((Optional<?>) rawRef).get());
+			out.print("undefined | ");
+			genTypescriptRef(out, prefix, ((Optional<?>) rawRef).get());
 		} else if (rawRef instanceof Object[]) {
 			final Object[] opt = (Object[]) rawRef;
 			if (opt.length <= 1) {
@@ -205,14 +240,14 @@ public class GenTs {
 			}
 			final boolean isEnumLike = opt[0] instanceof String;
 			if (isEnumLike) {
-				print("(");
+				out.print("(");
 				for (int i = 0; i < opt.length; i++) {
 					if (i > 0) {
-						print(" | ");
+						out.print(" | ");
 					}
-					genTypescriptRef(prefix, opt[i]);
+					genTypescriptRef(out, prefix, opt[i]);
 				}
-				print(")");
+				out.print(")");
 				return;
 			}
 			throw new Exception("Unknown object array type: " + Arrays.toString(opt));
@@ -222,8 +257,8 @@ public class GenTs {
 			if (l.size() != 1) {
 				throw new Error("Lists must have a single entry, got " + l.size());
 			}
-			genTypescriptRef(prefix, l.get(0));
-			print("[]");
+			genTypescriptRef(out, prefix, l.get(0));
+			out.print("[]");
 		} else {
 			throw new Error("TODO encode " + rawRef);
 		}
