@@ -1,5 +1,4 @@
 
-
 echo "Building"
 touch DUMMY_FILE_TO_FORCE_DEV_BUILD
 sh build.sh
@@ -11,7 +10,9 @@ fi
 rm DUMMY_FILE_TO_FORCE_DEV_BUILD
 
 echo "Build success"
-echo "Running server unit tests"
+
+# -------------------------
+# Test normal JUnit tests
 cd server
 sh test.sh
 if [ "$?" -ne "0" ]; then
@@ -19,9 +20,10 @@ if [ "$?" -ne "0" ]; then
   exit 1
 fi
 cd -
-echo "Server unit tests succeeded"
+echo "Server unit tests success"
 
-
+# -------------------------
+# Test running probe tests with "--test"
 check_expected_outcome () {
   # The test suite is intentionally constructed with 1 failure so that
   # we can detect that assertions actually are performed.
@@ -36,7 +38,7 @@ check_expected_outcome () {
   fi
 }
 
-echo "Running tests three times with different configurations.."
+echo "Running AddNum test suite three times with different configurations.."
 
 # Normal, synchronous test run
 java -Dcpr.testDir=addnum/tests -jar code-prober-dev.jar --test addnum/AddNum.jar 2>/dev/null > test_log
@@ -50,4 +52,19 @@ check_expected_outcome
 java -Dcpr.testDir=addnum/tests -jar code-prober-dev.jar --test --concurrent=5 addnum/AddNum.jar 2>/dev/null> test_log
 check_expected_outcome
 
-echo "All three pass!"
+echo "AddNum test suites success"
+
+# -------------------------
+# Test "--oneshot" capability
+# List nodes at line 1 col 1 in a document containing "1+2+3"
+java -jar code-prober-dev.jar --oneshot='{"type":"rpc","id":123,"data":{"type":"wsput:tunnel","request":{"src":{"text":"1+2+3"},"pos":4097,"type":"ListNodes"}}}' --output=oneshot_res addnum/AddNum.jar 2>/dev/null> test_log
+# Check that the returned node listing is Num->Add->Add->Program as expected
+actualNodeList=$(node -e 'console.log(JSON.stringify(JSON.parse(require("fs").readFileSync("oneshot_res")).data.value.response.nodes.map(n => n.result.type.split(".").slice(-1)[0])))')
+expectedNodeList='["Num","Add","Add","Program"]'
+if [[ "$actualNodeList" != "$expectedNodeList" ]]; then
+  echo "Unexpected node list from --oneshot request"
+  echo "Expected $expectedNodeList"
+  echo "     Got $actualNodeList"
+  exit 1
+fi
+echo "Oneshot tests success"
