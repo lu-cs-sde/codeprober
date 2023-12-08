@@ -62,7 +62,10 @@ public class CodeProber {
 
 		final SessionLogger sessionLogger = SessionLogger.init();
 		if (sessionLogger != null) {
-			System.out.println("Logging anonymous session data to " + sessionLogger.getTargetDirectory());
+			System.out.println("Logging anonymous session data to " + sessionLogger.getTargetPath());
+			sessionLogger.log(new JSONObject() //
+					.put("t", "Startup") //
+					.put("v", VersionInfo.getInstance().toString()));
 		}
 		final UnderlyingToolProxy underlyingTool = new UnderlyingToolProxy();
 		if (parsedArgs.jarPath != null) {
@@ -253,10 +256,10 @@ public class CodeProber {
 
 		final Runnable onSomeClientDisconnected = userFacingHandler::onOneOrMoreClientsDisconnected;
 		new Thread(() -> WebServer.start(parsedArgs, msgPusher, unwrappedHandler, onSomeClientDisconnected, needsTool,
-				setUnderlyingJarPath)).start();
+				setUnderlyingJarPath, sessionLogger)).start();
 		if (!WebSocketServer.shouldDelegateWebsocketToHttp() && WebSocketServer.getPort() != WebServer.getPort()) {
-			new Thread(() -> WebSocketServer.start(parsedArgs, msgPusher, topHandler, onSomeClientDisconnected))
-					.start();
+			new Thread(() -> WebSocketServer.start(parsedArgs, msgPusher, topHandler, onSomeClientDisconnected,
+					sessionLogger)).start();
 		} else if (WebSocketServer.shouldDelegateWebsocketToHttp()) {
 			System.out.println("Not starting websocket server, running requests over normal HTTP requests instead.");
 		} else {

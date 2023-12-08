@@ -30,14 +30,12 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import codeprober.CodeProber;
 import codeprober.protocol.ClientRequest;
-import codeprober.protocol.data.BackingFileUpdated;
 import codeprober.protocol.data.LongPollResponse;
 import codeprober.protocol.data.RequestAdapter;
 import codeprober.protocol.data.TopRequestReq;
@@ -51,6 +49,7 @@ import codeprober.protocol.data.WsPutLongpollReq;
 import codeprober.protocol.data.WsPutLongpollRes;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.util.ParsedArgs;
+import codeprober.util.SessionLogger;
 
 public class WebServer {
 	private static class WsPutSession {
@@ -215,7 +214,7 @@ public class WebServer {
 
 	private void handleGetRequest(Socket socket, String data, ParsedArgs parsedArgs,
 			ServerToClientMessagePusher msgPusher, Function<ClientRequest, JSONObject> onQuery,
-			Runnable onSomeClientDisconnected, AtomicBoolean needsTool) throws IOException {
+			Runnable onSomeClientDisconnected, AtomicBoolean needsTool, SessionLogger logger) throws IOException {
 		final OutputStream out = socket.getOutputStream();
 
 		if (data.contains("\r\nUpgrade: websocket\r\n") || data.endsWith("\r\nUpgrade: websocket")) {
@@ -223,7 +222,7 @@ public class WebServer {
 			try {
 				try {
 					WebSocketServer.handleRequestWithPreparsedData(socket, parsedArgs, msgPusher,
-							JsonRequestHandler.createTopRequestHandler(onQuery), connectionIsAlive, data);
+							JsonRequestHandler.createTopRequestHandler(onQuery), connectionIsAlive, data, logger);
 				} catch (NoSuchAlgorithmException | IOException e) {
 					System.out.println("Failed handling HTTP->WS upgrade request");
 					System.out.printf(
@@ -351,7 +350,7 @@ public class WebServer {
 	}
 
 	private void handlePutRequest(Socket socket, String data, ParsedArgs args, ServerToClientMessagePusher msgPusher,
-			Function<ClientRequest, JSONObject> onQuery, Consumer<String> setUnderlyingJarPath) throws IOException {
+			Function<ClientRequest, JSONObject> onQuery, Consumer<String> setUnderlyingJarPath, SessionLogger logger) throws IOException {
 		final String[] parts = data.split("\r\n");
 		String putPath = null;
 		int contentLen = -1;
@@ -410,6 +409,11 @@ public class WebServer {
 					@Override
 					protected WsPutInitRes handleWsPutInit(WsPutInitReq req) {
 						final WsPutSession wps = monitor.getOrCreate(req.session);
+						if (logger != null) {
+							logger.log(new JSONObject() //
+									.put("t", "ClientConnected") //
+									.put("p", "http"));
+						}
 						wps.activeConnections.incrementAndGet();
 						try {
 							return new WsPutInitRes(WebSocketServer.getInitMsg(args));
@@ -498,7 +502,7 @@ public class WebServer {
 
 	private void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
 			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected, AtomicBoolean needsTool,
-			Consumer<String> setUnderlyingJarPath) throws IOException, NoSuchAlgorithmException {
+			Consumer<String> setUnderlyingJarPath, SessionLogger logger) throws IOException, NoSuchAlgorithmException {
 		System.out.println("Incoming HTTP request from: " + socket.getRemoteSocketAddress());
 
 		final InputStream in = socket.getInputStream();
@@ -560,12 +564,12 @@ public class WebServer {
 
 		final Matcher get = Pattern.compile("^GET").matcher(headers);
 		if (get.find()) {
-			handleGetRequest(socket, headers, args, msgPusher, onQuery, onSomeClientDisconnected, needsTool);
+			handleGetRequest(socket, headers, args, msgPusher, onQuery, onSomeClientDisconnected, needsTool, logger);
 			return;
 		}
 		final Matcher put = Pattern.compile("^PUT").matcher(headers);
 		if (put.find()) {
-			handlePutRequest(socket, headers, args, msgPusher, onQuery, setUnderlyingJarPath);
+			handlePutRequest(socket, headers, args, msgPusher, onQuery, setUnderlyingJarPath, logger);
 			return;
 		}
 		System.out.println("Not sure how to handle request " + headers);
@@ -718,7 +722,7 @@ public class WebServer {
 
 	public static void start(ParsedArgs args, ServerToClientMessagePusher msgPusher,
 			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected, AtomicBoolean needsTool,
-			Consumer<String> setUnderlyingJarPath) {
+			Consumer<String> setUnderlyingJarPath, SessionLogger logger) {
 
 		final int port = getPort();
 		try (ServerSocket server = new ServerSocket(port, 0, null)) {
@@ -765,7 +769,7 @@ public class WebServer {
 					new Thread(() -> {
 						try {
 							ws.handleRequest(s, args, msgPusher, onQuery, onSomeClientDisconnected, needsTool,
-									setUnderlyingJarPath);
+									setUnderlyingJarPath, logger);
 						} catch (IOException | NoSuchAlgorithmException e) {
 							System.out.println("Error while handling request");
 							e.printStackTrace();
