@@ -221,16 +221,6 @@ public class EvaluatePropertyHandler {
 					// Respond with new args, just like we respond with a new locator
 //					JSONArray updatedArgs = new JSONArray();
 
-					final String slowdown = System.getenv("SIMULATED_SLOWDOWN_MS");
-					if (slowdown != null) {
-						try {
-							Thread.sleep(Integer.parseInt(slowdown));
-						} catch (InterruptedException | NumberFormatException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-
 					final String queryAttrName = req.property.name;
 					if (queryAttrName.startsWith("l:")) {
 						// Special labeled zero-arg attr invocation

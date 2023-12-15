@@ -25,6 +25,7 @@ const getHelpTitle = (type: HelpType) => ({
   'customize-file-suffix': 'Temp file suffix',
   'property-list-usage': 'Property list help',
   'show-all-properties': 'Show all properties',
+  'group-properties-by-aspect': 'Group properties',
   'duplicate-probe-on-attr': 'Duplicate probe',
   'capture-stdout': 'Capture stdout',
   'capture-traces': 'Capture traces',
@@ -457,6 +458,13 @@ aspect MagicOutputDemo {
         `There is potentially a very large amount of functions shown is you check this box, which can be annoying.`,
         `In addition, some of the non-standard functions might cause mutations (like 'setChild(int, ..)'), which can cause undefined behavior when used in this tool.`,
         `In general, we recommend you keep this box unchecked, and only occasionally re-check it.`,
+      ];
+
+      case 'group-properties-by-aspect': return [
+        `Check this to group and filter property names by their containing aspect file.`,
+        `This affects the dialog where you select a property, i.e after you've selected an AST node.`,
+        ``,
+        `This is only applicable for JastAdd tools.`
       ];
 
       case 'duplicate-probe-on-attr': return [

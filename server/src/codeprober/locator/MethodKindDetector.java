@@ -56,5 +56,15 @@ public class MethodKindDetector {
 		}
 		return null;
 	}
+
+	public static String getRelatedAspect(Method m) {
+		for (Annotation a : m.getAnnotations()) {
+			final String name = a.annotationType().getName();
+			if (name.contains(".ASTNodeAnnotation$Source")) {
+				return (String) Reflect.invoke0(a, "aspect");
+			}
+		}
+		return null;
+	}
 }
 //

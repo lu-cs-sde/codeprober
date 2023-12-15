@@ -20,6 +20,7 @@ interface Settings {
   customFileSuffix?: string | null;
   locationStyle?: TextSpanStyle | null;
   hideSettingsPanel?: boolean;
+  groupPropertiesByAspect?: boolean;
 }
 
 let settingsObj: Settings | null = null;
@@ -148,6 +149,9 @@ const settings = {
 
   shouldHideSettingsPanel: () => settings.get()?.hideSettingsPanel ?? false,
   setShouldHideSettingsPanel: (shouldHide: boolean) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),
+
+  shouldGroupPropertiesByAspect: () => settings.get()?.groupPropertiesByAspect ?? false,
+  setShouldGroupPropertiesByAspect: (shouldHide: boolean) => settings.set({ ...settings.get(), groupPropertiesByAspect: shouldHide }),
 
   shouldEnableTesting: () => window.location.search.includes('enableTesting=true'),
 };

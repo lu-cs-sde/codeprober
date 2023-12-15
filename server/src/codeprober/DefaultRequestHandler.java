@@ -188,6 +188,16 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			}
 		};
 		try {
+			final String slowdown = System.getenv("SIMULATED_SLOWDOWN_MS");
+			if (slowdown != null) {
+				try {
+					Thread.sleep(Integer.parseInt(slowdown));
+				} catch (InterruptedException | NumberFormatException e) {
+					System.out.println("Interrupted while performing simulated slowdown");
+					e.printStackTrace();
+				}
+			}
+
 			final LazyParser lp = (text, cacheStrategy, mainArgs, posRecovery, tmpFileSuffix) -> {
 				final ParseResultWithExtraInfo res = doParse(text, cacheStrategy != null ? cacheStrategy.name() : null,
 						mainArgs, tmpFileSuffix, createTmpFile);

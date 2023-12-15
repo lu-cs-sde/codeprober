@@ -22,6 +22,9 @@ class UIElements {
   get showAllPropertiesCheckbox() { return document.getElementById('control-show-all-properties') as HTMLInputElement; }
   get showAllPropertiesHelpButton() { return document.getElementById('show-all-properties-help') as HTMLButtonElement; }
 
+  get groupPropertiesByAspectCheckbox() { return document.getElementById('control-group-properties-by-aspect') as HTMLInputElement; }
+  get groupPropertiesByAspectButton() { return document.getElementById('group-properties-by-aspect-help') as HTMLButtonElement; }
+
   get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr') as HTMLInputElement; }
   get duplicateProbeHelpButton() { return document.getElementById('duplicate-probe-on-attr-help') as HTMLButtonElement; }
 

@@ -120,7 +120,23 @@ const displayAttributeModal = (
         root.appendChild(encodeRpcBodyLines(env, state.body));
       } else {
 
-        const attrs = state.attrs;
+        let attrs = state.attrs;
+        const groupByAspect = settings.shouldGroupPropertiesByAspect();
+        if (groupByAspect && attrs) {
+          attrs = [...attrs].sort((a, b) => {
+            if (!!a.astChildName != !!b.astChildName) {
+              return a.astChildName ? -1 : 1;
+            }
+            if (!!a.aspect != !!b.aspect) {
+              return a.aspect ? -1 : 1;
+            }
+            if (a.aspect) {
+              const cmp = a.aspect.localeCompare(b.aspect || '', 'en-GB')
+              return cmp || formatAttr(a).localeCompare(formatAttr(b), 'en-GB');
+            }
+            return 0;
+          });
+        }
         let resortList = () => {};
         let submit = () => {};
 
@@ -174,16 +190,25 @@ const displayAttributeModal = (
             return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
           }
 
+
           const reg = filter ? new RegExp(`.*${[...filter].map(part => part.trim()).filter(Boolean).map(part => escapeRegex(part)).join('.*')}.*`, 'i') : null;
           const match = (attr: Property) => {
             if (!reg) {
               return !!attr.astChildName;
             }
-            // const formatted =
-            return reg.test(formatAttr(attr)) || (attr.astChildName && reg.test(attr.astChildName));
+            const combinedName = `${(groupByAspect ? (attr.aspect || 'No Aspect') : '')} ${attr.astChildName || ''} ${formatAttr(attr)}`;
+            return reg.test(combinedName);
           }
-          const matches = attrs.filter(match);
-          const misses = attrs.filter(a => !match(a));
+
+          const matches: Property[] = [];
+          const misses: Property[] = [];
+          attrs.forEach(prop => {
+            if (match(prop)) {
+              matches.push(prop);
+            } else {
+              misses.push(prop);
+            }
+          })
 
           const showProbe = (attr: Property) => {
             cleanup();
@@ -199,7 +224,23 @@ const displayAttributeModal = (
               }
             }
           }
+          const addAspectLabels = groupByAspect && attrs.some(attr => !!attr.aspect);
+          let lastAspect = '';
           const buildNode = (attr: Property, borderTop: boolean, highlight: boolean) => {
+            if (addAspectLabels) {
+              const newAspect = attr.aspect || '';
+              if (newAspect !== lastAspect) {
+                // console
+                const head = document.createElement('p');
+                head.style.marginBottom = '0';
+                head.style.marginTop = '0.5rem';
+                head.style.fontSize = '0.75rem';
+                head.classList.add('syntax-type');
+                head.innerText = newAspect || 'No Aspect';
+                sortedAttrs.appendChild(head);
+                lastAspect = newAspect;
+              }
+            }
             const node = document.createElement('div');
             const ourNodeIndex = nodesList.length;
             nodesList.push(node);
@@ -280,6 +321,7 @@ const displayAttributeModal = (
             sep.classList.add('search-list-separator')
             sortedAttrs.appendChild(sep);
           }
+          lastAspect = '';
           misses.forEach((attr, idx) => buildNode(attr, idx > 0, !matches.length && misses.length === 1));
         };
         resortList();

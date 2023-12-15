@@ -41,7 +41,8 @@ public class AttrsInNode {
 				continue;
 			}
 
-			ret.add(new Property(m.getName(), args, MethodKindDetector.getAstChildName(m)));
+			ret.add(new Property(m.getName(), args, MethodKindDetector.getAstChildName(m),
+					MethodKindDetector.getRelatedAspect(m)));
 		}
 		for (String filter : whitelistFilter) {
 			if (filter.startsWith("l:")) {
