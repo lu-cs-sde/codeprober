@@ -814,6 +814,7 @@ body[data-theme-light="true"] .linkedProbeCreator:hover {
 .minimizedProbeWindow {
   border: 1px solid #CCC;
   border-radius: 0.25rem;
+  min-height: 1.5rem;
 
   display: flex;
   flex-direction: row;
@@ -829,6 +830,8 @@ body[data-theme-light="true"] .minimizedProbeWindow {
 .minimizedProbeWindowOpener {
   border-top-left-radius: 0.25rem;
   border-bottom-left-radius: 0.25rem;
+  margin-top: auto;
+  margin-bottom: auto;
   cursor: pointer;
 }
 .minimizedProbeWindowOpener:hover:not(:active) {
