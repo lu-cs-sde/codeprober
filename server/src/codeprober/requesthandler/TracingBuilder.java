@@ -99,8 +99,8 @@ public class TracingBuilder implements Consumer<Object[]> {
 			// Else, the property itself did not have tracing information, but it did call
 			// multiple others that have it
 			// Wrap this property in a fake trace event
-			return new Tracing(subjectOfTheTrace, new Property("MultipleTraceEvents", new ArrayList<>(), null), result,
-					RpcBodyLine.fromPlain(""));
+			return new Tracing(subjectOfTheTrace != null ? subjectOfTheTrace : result.get(1).node,
+					new Property("MultipleTraceEvents", new ArrayList<>(), null), result, RpcBodyLine.fromPlain(""));
 		} finally {
 			CreateLocator.setMergeMethod(mergeMethod);
 		}
