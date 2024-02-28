@@ -8,6 +8,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 import codeprober.CodeProber;
+import codeprober.metaprogramming.StreamInterceptor.OtherThreadDataHandling;
 import codeprober.protocol.data.RpcBodyLine;
 
 public abstract class StdIoInterceptor {
@@ -20,14 +21,18 @@ public abstract class StdIoInterceptor {
 	}
 
 	public StdIoInterceptor(boolean autoPrintLinesToPrev) {
-		out = new StreamInterceptor(System.out, autoPrintLinesToPrev) {
+		this(autoPrintLinesToPrev, OtherThreadDataHandling.WRITE_TO_PREV);
+	}
+
+	public StdIoInterceptor(boolean autoPrintLinesToPrev, OtherThreadDataHandling otherThreadHandling) {
+		out = new StreamInterceptor(System.out, autoPrintLinesToPrev, otherThreadHandling) {
 
 			@Override
 			protected void onLine(String line) {
 				StdIoInterceptor.this.onLine(true, line);
 			}
 		};
-		err = new StreamInterceptor(System.err, autoPrintLinesToPrev) {
+		err = new StreamInterceptor(System.err, autoPrintLinesToPrev, otherThreadHandling) {
 
 			@Override
 			protected void onLine(String line) {

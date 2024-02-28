@@ -18,7 +18,7 @@ public class Add extends Node {
 		return getChild(0);
 	}
 
-	@Child(name="lhs")
+	@Child(name="rhs")
 	public Node rhs() {
 		return getChild(1);
 	}

@@ -9,6 +9,26 @@ import java.util.function.Consumer;
 
 public abstract class StreamInterceptor extends PrintStream {
 
+	/**
+	 * How to handle intercepted data in other threads.
+	 */
+	public enum OtherThreadDataHandling {
+		/**
+		 * Forward to the previous stream, usually a good option, unless you want to
+		 * intercept all data in all threads.
+		 */
+		WRITE_TO_PREV,
+		/**
+		 * Accept/merge the incoming data into ourselves (pretend it comes from our
+		 * thread). There is no guarantees about the ordering of the bytes being
+		 * written, so some messages may look strange.
+		 * <p>
+		 * Also, this will result in {@link StreamInterceptor#onLine(String)} being
+		 * called from multiple threads.
+		 */
+		MERGE;
+	}
+
 	private static class StreamInterceptorImpl extends OutputStream {
 
 		private final ByteArrayOutputStream stdOut = new ByteArrayOutputStream();
@@ -21,29 +41,65 @@ public abstract class StreamInterceptor extends PrintStream {
 
 		private boolean autoPrintLinesToPrev;
 
-		public StreamInterceptorImpl(PrintStream prev, boolean autoPrintLinesToPrev) {
+		private final OtherThreadDataHandling otherThreadHandling;
+
+		public StreamInterceptorImpl(PrintStream prev, boolean autoPrintLinesToPrev,
+				OtherThreadDataHandling otherThreadHandling) {
 			this.prev = prev;
 			this.autoPrintLinesToPrev = autoPrintLinesToPrev;
+			this.otherThreadHandling = otherThreadHandling;
 		}
 
 		@Override
 		public void write(int b) throws IOException {
-			if (Thread.currentThread() != threadFilter) {
-				prev.write(b);
-				return;
+			switch (otherThreadHandling) {
+			case WRITE_TO_PREV: // Fall through
+			default: {
+				if (Thread.currentThread() != threadFilter) {
+					prev.write(b);
+				} else if (b == '\n') {
+					consume(true);
+				} else {
+					stdOut.write(b);
+				}
+				break;
 			}
-			if (b == '\n') {
-				consume(true);
-			} else {
-				stdOut.write(b);
+			case MERGE: {
+				if (b == '\n') {
+					consume(true);
+				} else {
+					synchronized (this) {
+						stdOut.write(b);
+					}
+				}
+
+				break;
+			}
 			}
 		}
 
-		public void consume(boolean forceLine) {
+		private byte[] getDataToConsume(boolean forceLine) {
 			if (stdOut.size() == 0 && !forceLine) {
-				return;
+				return null;
 			}
 			final byte[] barr = stdOut.toByteArray();
+			stdOut.reset();
+			return barr;
+		}
+
+		public void consume(boolean forceLine) {
+			final byte[] barr;
+			if (otherThreadHandling == OtherThreadDataHandling.MERGE) {
+				synchronized (this) {
+					barr = getDataToConsume(forceLine);
+				}
+			} else {
+				barr = getDataToConsume(forceLine);
+			}
+			if (barr == null) {
+				return;
+			}
+
 			String s;
 			if (barr.length > 0 && barr[barr.length - 1] == '\r') {
 				// Running on windows, remove carriage return
@@ -51,7 +107,6 @@ public abstract class StreamInterceptor extends PrintStream {
 			} else {
 				s = new String(barr, StandardCharsets.UTF_8);
 			}
-			stdOut.reset();
 
 			if (autoPrintLinesToPrev) {
 				prev.println(s);
@@ -67,7 +122,12 @@ public abstract class StreamInterceptor extends PrintStream {
 	}
 
 	public StreamInterceptor(PrintStream prev, boolean autoPrintLinesToPrev) {
-		this(new StreamInterceptorImpl(prev, autoPrintLinesToPrev));
+		this(prev, autoPrintLinesToPrev, OtherThreadDataHandling.WRITE_TO_PREV);
+	}
+
+	public StreamInterceptor(PrintStream prev, boolean autoPrintLinesToPrev,
+			OtherThreadDataHandling otherThreadHandling) {
+		this(new StreamInterceptorImpl(prev, autoPrintLinesToPrev, otherThreadHandling));
 	}
 
 	private StreamInterceptor(StreamInterceptorImpl dst) {

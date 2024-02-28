@@ -298,6 +298,7 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 			final IpcReader stdoutReader = new IpcReader(process.getInputStream()) {
 				@Override
 				protected void onMessage(String data) {
+//					System.out.println("msg from worker: " + data);
 					JSONObject obj;
 					try {
 						obj = new JSONObject(data);
