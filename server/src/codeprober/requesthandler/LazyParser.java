@@ -12,6 +12,8 @@ public interface LazyParser {
 	ParsedAst parse(String inputText, AstCacheStrategy optCacheStrategyVal, List<String> optArgsOverrideVal,
 			PositionRecoveryStrategy posRecovery, String tmpFileSuffix);
 
+	void discardCachedAst();
+
 	default ParsedAst parse(ParsingRequestData prd) {
 		return parse(prd.text, prd.cache, prd.mainArgs, prd.posRecovery, prd.tmpSuffix);
 	}

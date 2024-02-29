@@ -24,6 +24,10 @@ public interface UnderlyingTool {
 	ParseResult parse(String[] args);
 
 	public static UnderlyingTool fromJar(String jarPath) {
-		return new UnderlyingJar(jarPath);
+		UnderlyingTool ret = new UnderlyingJar(jarPath);
+		if ("true".equals(System.getProperty("cpr.resetASTStateOnParse", "true"))) {
+			ret = new AstStateResetter(ret);
+		}
+		return ret;
 	}
 }

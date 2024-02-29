@@ -326,6 +326,14 @@ public class EvaluatePropertyHandler {
 						body.add(RpcBodyLine.fromPlain(String.format("No such attribute '%s' on %s", req.property.name,
 								match.node.underlyingAstNode.getClass().getName())));
 					} else {
+						// Some AST implementations may assume that after throwing an exception, the
+						// current process stops.
+						// This is normal for many cli tools, and therefore there is no need to "clean
+						// up" any partially invalid state.
+						// This is the case, for example, for the JastAdd circularity state.
+						// Since the cached AST may be invalid, we must discard it
+						parser.discardCachedAst();
+
 						if (cause instanceof InvocationTargetException && cause.getCause() != null) {
 							cause = cause.getCause();
 						}
@@ -350,7 +358,9 @@ public class EvaluatePropertyHandler {
 								final BiFunction<Boolean, String, RpcBodyLine> encoder = StdIoInterceptor
 										.createDefaultLineEncoder();
 								StdIoInterceptor.performLiveCaptured((stdout, line) -> {
-									if (ignoreStdio.get()) { return; }
+									if (ignoreStdio.get()) {
+										return;
+									}
 									body.add(encoder.apply(stdout, line));
 								}, () -> evaluateAttr.run());
 							} else {

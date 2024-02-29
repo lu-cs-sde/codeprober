@@ -49,7 +49,6 @@ import codeprober.requesthandler.CompleteHandler;
 import codeprober.requesthandler.EvaluatePropertyHandler;
 import codeprober.requesthandler.HoverHandler;
 import codeprober.requesthandler.LazyParser;
-import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.requesthandler.ListNodesHandler;
 import codeprober.requesthandler.ListPropertiesHandler;
 import codeprober.requesthandler.ListTreeRequestHandler;
@@ -198,13 +197,24 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				}
 			}
 
-			final LazyParser lp = (text, cacheStrategy, mainArgs, posRecovery, tmpFileSuffix) -> {
-				final ParseResultWithExtraInfo res = doParse(text, cacheStrategy != null ? cacheStrategy.name() : null,
-						mainArgs, tmpFileSuffix, createTmpFile);
-				if (res.rootNode == null) {
-					return new ParsedAst(null, res.parseTime, res.captures);
+			final LazyParser lp = new LazyParser() {
+
+				@Override
+				public ParsedAst parse(String text, AstCacheStrategy cacheStrategy, List<String> mainArgs,
+						PositionRecoveryStrategy posRecovery, String tmpFileSuffix) {
+					final ParseResultWithExtraInfo res = doParse(text,
+							cacheStrategy != null ? cacheStrategy.name() : null, mainArgs, tmpFileSuffix,
+							createTmpFile);
+					if (res.rootNode == null) {
+						return new ParsedAst(null, res.parseTime, res.captures);
+					}
+					return new ParsedAst(parsedAstToInfo(res.rootNode, posRecovery), res.parseTime, res.captures);
 				}
-				return new ParsedAst(parsedAstToInfo(res.rootNode, posRecovery), res.parseTime, res.captures);
+
+				@Override
+				public void discardCachedAst() {
+					lastParsedInput = null;
+				}
 			};
 			final AtomicBoolean addLog = new AtomicBoolean(logger != null);
 			final JSONObject handled = new RequestAdapter() {

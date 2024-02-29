@@ -129,6 +129,10 @@ public class TestData {
 		public Object cpr_lInvoke(String prop) {
 			return (getClass().getSimpleName() + ":" + prop).hashCode();
 		}
+
+		public int throwRuntimeException() {
+			throw new RuntimeException("Simulated failure");
+		}
 	}
 
 	public static class Program extends Node {
