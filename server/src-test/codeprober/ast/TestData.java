@@ -130,8 +130,14 @@ public class TestData {
 			return (getClass().getSimpleName() + ":" + prop).hashCode();
 		}
 
+		@SuppressWarnings("serial")
 		public int throwRuntimeException() {
-			throw new RuntimeException("Simulated failure");
+			throw new RuntimeException("Simulated failure") {
+				@Override
+				public void printStackTrace() {
+					// Noop to avoid cluttering the test logs with this
+				}
+			};
 		}
 	}
 
@@ -197,15 +203,37 @@ public class TestData {
 			this.noPrefixVal = noPrefixVal;
 		}
 
-		public Integer cpr_getStartLine() { return cprVal; }
-		public Integer cpr_getStartColumn() { return cprVal; }
-		public Integer cpr_getEndLine() { return cprVal; }
-		public Integer cpr_getEndColumn() { return cprVal; }
+		public Integer cpr_getStartLine() {
+			return cprVal;
+		}
 
-		public Integer getStartLine() { return noPrefixVal; }
-		public Integer getStartColumn() { return noPrefixVal; }
-		public Integer getEndLine() { return noPrefixVal; }
-		public Integer getEndColumn() { return noPrefixVal; }
+		public Integer cpr_getStartColumn() {
+			return cprVal;
+		}
+
+		public Integer cpr_getEndLine() {
+			return cprVal;
+		}
+
+		public Integer cpr_getEndColumn() {
+			return cprVal;
+		}
+
+		public Integer getStartLine() {
+			return noPrefixVal;
+		}
+
+		public Integer getStartColumn() {
+			return noPrefixVal;
+		}
+
+		public Integer getEndLine() {
+			return noPrefixVal;
+		}
+
+		public Integer getEndColumn() {
+			return noPrefixVal;
+		}
 	}
 
 	private static int lc(int line, int col) {
@@ -411,8 +439,8 @@ public class TestData {
 	 * 1       Foo {
 	 * 1         Bar {
 	 * 2           Baz {
-   * 2             nta(2, Program.child(0)) :: Foo { }
-   * 3           }
+	* 2             nta(2, Program.child(0)) :: Foo { }
+	* 3           }
 	 * 3         }
 	 * 3     )
 	 * 4   }
