@@ -26,7 +26,7 @@ const createModalTitle = (args: CreateModalTitleArgs) => {
 
   if (extraActions && extraActions.length > 0) {
     const overflowButton = document.createElement('img');
-    overflowButton.src = '/icons/more_vert_white_24dp.svg';
+    overflowButton.src = 'icons/more_vert_white_24dp.svg';
     overflowButton.classList.add('modalOverflowButton');
     overflowButton.classList.add('clickHighlightOnHover');
     overflowButton.onmousedown = (e) => { e.stopPropagation(); }

@@ -302,7 +302,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: Updata
                 right.appendChild(lbl);
 
                 const icon = document.createElement('img');
-                icon.src = '/icons/my_location_white_24dp.svg';
+                icon.src = 'icons/my_location_white_24dp.svg';
                 icon.style.height = '18px';
                 icon.style.alignSelf = 'center';
                 icon.style.margin = '0 4px 0 0';

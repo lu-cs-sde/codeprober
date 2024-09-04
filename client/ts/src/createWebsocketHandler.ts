@@ -253,5 +253,91 @@ const createWebsocketOverHttpHandler = (
   longPoller(defaultRetryBudget);
   return wsHandler;
 };
-export { WebsocketHandler, createWebsocketOverHttpHandler }
+
+interface LocalRequestHandler {
+  submit: (message: { [id: string]: any }) => Promise<{ [id: string]: any }>;
+  // onRefresh: (callback: () => void) => void;
+  on: (callbackType: string, callback: (data: any) => void) => void;
+}
+
+const createLocalRequestHandler = (
+  handler: LocalRequestHandler,
+  onClose: (didReceiveAtLeastOneMessage: boolean) => void,
+): WebsocketHandler => {
+  const pendingCallbacks: { [id: string]: HandlerFn } = {};
+  const messageHandlers: { [opName: string]: HandlerFn } = {
+    rpc: ({ id, ...res }) => {
+      const handler = pendingCallbacks[id];
+      if (handler) {
+        delete pendingCallbacks[id];
+        handler(res);
+      } else {
+        console.warn('Received RPC response for', id, ', expected one of', Object.keys(pendingCallbacks));
+      }
+    },
+  };
+
+  let didReceiveAtLeastOneMessage = false;
+  const session = `cpr_${(Number.MAX_SAFE_INTEGER * Math.random())|0}`;
+
+  const sendRpc = (msg: any, extraArgs?: { timeout: number, }): Promise<any> => new Promise(async (res, rej) => {
+
+    const attemptFetch = async () => {
+      const cleanupTimer = setTimeout(() => {
+        // cleanup();
+        rej('Timeout');
+      }, extraArgs?.timeout ?? 30000);
+      try {
+        let fetchResult;
+        try {
+          fetchResult = await handler.submit(msg);
+        } catch (e) {
+          console.warn('Failed local request handler for', msg);
+          // cleanup();
+          clearTimeout(cleanupTimer);
+          return rej(e);
+        }
+        didReceiveAtLeastOneMessage = true;
+        res(fetchResult);
+      } catch (e) {
+        console.warn('Error when performing ws-over-http request', e);
+        rej('Unknown error');
+      }
+    };
+    attemptFetch().catch(rej);
+  });
+
+  const wsHandler: WebsocketHandler = {
+    on: (id, cb) => messageHandlers[id] = cb,
+    sendRpc,
+  };
+
+  const initReq: WsPutInitReq = ({ type: 'wsput:init', session });
+  sendRpc(initReq)
+    .then((init: WsPutInitRes) => {
+      if (messageHandlers['init']) {
+        messageHandlers['init'](init.info);
+      } else {
+        console.warn('Got init message, but no handler for it')
+      }
+    })
+    .catch(err => {
+      console.warn('Failed to get init message', err);
+    })
+
+    handler.on('refresh', (data) => {
+      if (messageHandlers['refresh']) {
+        messageHandlers['refresh'](data || {});
+      }
+    });
+    handler.on('asyncUpdate', (data) => {
+      if (messageHandlers['asyncUpdate']) {
+        messageHandlers['asyncUpdate'](data || {});
+      }
+    });
+  return wsHandler;
+};
+
+
+export { WebsocketHandler, createWebsocketOverHttpHandler, LocalRequestHandler, createLocalRequestHandler }
 export default createWebsocketHandler;

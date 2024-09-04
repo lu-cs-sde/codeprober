@@ -8,14 +8,21 @@ echo "Gathering sources.."
 find src -name "*.java" > sources.txt
 
 echo "Building.."
+if [[ "$(uname -a)" == "CYGWIN"* ]]; then
+	# Required for building on CYGWIN. Not sure if same is needed for WSL
+	SEP=";"
+else
+	SEP=":"
+fi
 # "Our own" class files
-javac @sources.txt -cp libs/json.jar:libs/junit-4.13.2.jar:libs/hamcrest-2.2.jar -d build_tmp -source 8 -target 8
+javac @sources.txt -cp "libs/json.jar$(echo $SEP)libs/junit-4.13.2.jar$(echo $SEP)libs/hamcrest-2.2.jar" -d build_tmp -source 8 -target 8
 # Third party class files
 unzip libs/json.jar '*.class' -x */* -d build_tmp
 unzip libs/junit-4.13.2.jar '*.class' -x */* -d build_tmp
 unzip libs/hamcrest-2.2.jar '*.class' -x */* -d build_tmp
 # Resources
-cp -r src/codeprober/resources build_tmp/codeprober/
+mkdir build_tmp/codeprober/resources/
+cp -r ../client/public/* build_tmp/codeprober/resources/
 
 cd build_tmp
 

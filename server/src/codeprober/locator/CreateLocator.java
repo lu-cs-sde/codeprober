@@ -29,6 +29,8 @@ import codeprober.protocol.data.Property;
 import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.TALStep;
 import codeprober.util.BenchmarkTimer;
+import codeprober.metaprogramming.Reflect;
+import codeprober.metaprogramming.InvokeProblem;
 
 public class CreateLocator {
 
@@ -398,6 +400,41 @@ public class CreateLocator {
 	private static boolean extractNtaEdge(AstInfo info, AstNode astNode, List<StepWithTarget> out,
 			final TypeAtLoc target, final AstNode parent)
 			throws IllegalAccessException, NoSuchFieldException, NoSuchMethodException, InvocationTargetException {
+
+		final String manualParentConnectionOverride = "cpr_describeParentConnection";
+		if (info.hasOverride0(astNode.underlyingAstNode.getClass(), manualParentConnectionOverride)) {
+			try {
+				Object val = Reflect.invoke0(astNode.underlyingAstNode, manualParentConnectionOverride);
+				if (val == null) {
+					// OK, the description failed, proceed with normal NTA guessing algorithm below
+				} else if (!(val instanceof Object[])) {
+					System.err.println("Got unexpected value from " + manualParentConnectionOverride);
+					System.err.println("Expected Object[], was " + (val == null ? "null" : val.getClass()));
+				} else {
+					final Object[] parts = (Object[]) val;
+					switch (parts.length) {
+					case 1: {
+						// FN step, format: ["name_of_property"]
+						final String propName = String.valueOf(parts[0]);
+
+						out.add(new StepWithTarget(NodeLocatorStep.fromNta(new FNStep(new Property(propName))), parent,
+								astNode));
+
+						extractStepsTo(info, parent, out);
+						return true;
+					}
+					default: {
+						System.err.println("Unknown shape of parent connection array. Expected 1 or 2 elements, got "
+								+ parts.length);
+						break;
+					}
+					}
+				}
+			} catch (InvokeProblem ip) {
+				System.err.println("Error when invoking " + manualParentConnectionOverride);
+				ip.printStackTrace();
+			}
+		}
 		for (Method m : parent.underlyingAstNode.getClass().getMethods()) {
 			if (!MethodKindDetector.isNta(m)) {
 				continue;
@@ -473,8 +510,10 @@ public class CreateLocator {
 				if (cachedNtaValue != astNode.underlyingAstNode) {
 					continue;
 				}
-				out.add(new StepWithTarget(NodeLocatorStep
-						.fromNta(new FNStep(new Property(m.getName(), Collections.<PropertyArg>emptyList(), null))), parent, astNode));
+				out.add(new StepWithTarget(
+						NodeLocatorStep.fromNta(
+								new FNStep(new Property(m.getName(), Collections.<PropertyArg>emptyList(), null))),
+						parent, astNode));
 				extractStepsTo(info, parent, out);
 				return true;
 			}
@@ -524,13 +563,19 @@ public class CreateLocator {
 						// "bounce" off the child node for the proxy-reasons listed above.
 						final AstNode bounceChild = new AstNode(ent.getValue());
 
-						out.add(new StepWithTarget(NodeLocatorStep.fromNta(
-								new FNStep(new Property("getParent", Collections.<PropertyArg>emptyList(), null))), bounceChild, astNode));
-						out.add(new StepWithTarget(NodeLocatorStep
-								.fromNta(new FNStep(new Property(m.getName(), serializableParams, null))), parent, bounceChild));
+						out.add(new StepWithTarget(
+								NodeLocatorStep.fromNta(new FNStep(
+										new Property("getParent", Collections.<PropertyArg>emptyList(), null))),
+								bounceChild, astNode));
+						out.add(new StepWithTarget(
+								NodeLocatorStep
+										.fromNta(new FNStep(new Property(m.getName(), serializableParams, null))),
+								parent, bounceChild));
 					} else {
-						out.add(new StepWithTarget(NodeLocatorStep
-								.fromNta(new FNStep(new Property(m.getName(), serializableParams, null))), parent, astNode));
+						out.add(new StepWithTarget(
+								NodeLocatorStep
+										.fromNta(new FNStep(new Property(m.getName(), serializableParams, null))),
+								parent, astNode));
 					}
 					extractStepsTo(info, parent, out);
 					return true;

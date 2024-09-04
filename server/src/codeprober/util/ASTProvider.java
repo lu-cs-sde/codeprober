@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -71,17 +72,25 @@ public class ASTProvider {
 		if (hasUnchangedJar(jarPath)) {
 			return lastJar;
 		}
+		final File jarFile = new File(jarPath);
 		if (lastJar != null) {
 			lastJar.jar.close();
+			try {
+				// Helps close the previous jar file
+				// This is part of a bugfix for Windows, cannot remember the exact symptom
+				URLConnection connection = jarFile.toURI().toURL().openConnection();
+				connection.setDefaultUseCaches(false);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 		}
-		final File jarFile = new File(jarPath);
 		final long jarLastMod = jarFile.lastModified();
 		CompilerClassLoader urlClassLoader = new CompilerClassLoader(jarFile.toURI().toURL());
 
 		// Find and instantiate the main class from the Jar file.
 		JarFile jar = new JarFile(jarFile);
 		String mainClassName = jar.getManifest().getMainAttributes().getValue("Main-Class");
-		Class<?> klass = Class.forName(mainClassName, true, urlClassLoader);
+		Class<?> klass = Class.forName(mainClassName, false, urlClassLoader);
 		Method parseMethod = null;
 		Method mainMethod = null;
 		Field rootField = null;
@@ -195,6 +204,7 @@ public class ASTProvider {
 					}
 				} catch (InvocationTargetException e) {
 					System.out.println("ASTPRovider caught " + e.getTargetException());
+					e.printStackTrace();
 					final Throwable target = e.getTargetException();
 					final boolean expectedException = target instanceof SystemExitControl.ExitTrappedException
 							|| target instanceof Error;
@@ -265,10 +275,11 @@ public class ASTProvider {
 			final List<RpcBodyLine> userHelp = StdIoInterceptor.performDefaultCapture(() -> {
 				System.err.println(
 						"Neither 'CodeProber_parse' nor 'CodeProber_root_node' found. Please add the following function to your main class:");
-        System.err.println("  public static Object CodeProber_parse(String[] args) { return parse(args[args.length - 1]); }");
-        System.err.println("Alternatively, declare the following field in your main class:");
+				System.err.println(
+						"  public static Object CodeProber_parse(String[] args) { return parse(args[args.length - 1]); }");
+				System.err.println("Alternatively, declare the following field in your main class:");
 				System.err.println("  public static Object CodeProber_root_node;");
-        System.err.println("See CodeProber's README for more information.");
+				System.err.println("See CodeProber's README for more information.");
 			});
 			return new ParseResult(null, userHelp);
 		} catch (FileNotFoundException e) {

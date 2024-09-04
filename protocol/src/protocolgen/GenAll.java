@@ -70,5 +70,6 @@ public class GenAll {
 
 		GenJava.gen(rpcs, serverToClient);
 		GenTs.gen(rpcs, serverToClient);
+		GenKl.gen(rpcs, serverToClient);
 	}
 }

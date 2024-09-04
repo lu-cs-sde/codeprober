@@ -32,7 +32,7 @@ define("protocol", ["require", "exports"], function (require, exports) {
 define("createWebsocketHandler", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createWebsocketOverHttpHandler = void 0;
+    exports.createLocalRequestHandler = exports.createWebsocketOverHttpHandler = void 0;
     let rpcIdGenerator = 1;
     const createWebsocketHandler = (socket, onClose) => {
         const pendingCallbacks = {};
@@ -270,6 +270,80 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
         return wsHandler;
     };
     exports.createWebsocketOverHttpHandler = createWebsocketOverHttpHandler;
+    const createLocalRequestHandler = (handler, onClose) => {
+        const pendingCallbacks = {};
+        const messageHandlers = {
+            rpc: ({ id, ...res }) => {
+                const handler = pendingCallbacks[id];
+                if (handler) {
+                    delete pendingCallbacks[id];
+                    handler(res);
+                }
+                else {
+                    console.warn('Received RPC response for', id, ', expected one of', Object.keys(pendingCallbacks));
+                }
+            },
+        };
+        let didReceiveAtLeastOneMessage = false;
+        const session = `cpr_${(Number.MAX_SAFE_INTEGER * Math.random()) | 0}`;
+        const sendRpc = (msg, extraArgs) => new Promise(async (res, rej) => {
+            const attemptFetch = async () => {
+                var _a;
+                const cleanupTimer = setTimeout(() => {
+                    // cleanup();
+                    rej('Timeout');
+                }, (_a = extraArgs === null || extraArgs === void 0 ? void 0 : extraArgs.timeout) !== null && _a !== void 0 ? _a : 30000);
+                try {
+                    let fetchResult;
+                    try {
+                        fetchResult = await handler.submit(msg);
+                    }
+                    catch (e) {
+                        console.warn('Failed local request handler for', msg);
+                        // cleanup();
+                        clearTimeout(cleanupTimer);
+                        return rej(e);
+                    }
+                    didReceiveAtLeastOneMessage = true;
+                    res(fetchResult);
+                }
+                catch (e) {
+                    console.warn('Error when performing ws-over-http request', e);
+                    rej('Unknown error');
+                }
+            };
+            attemptFetch().catch(rej);
+        });
+        const wsHandler = {
+            on: (id, cb) => messageHandlers[id] = cb,
+            sendRpc,
+        };
+        const initReq = ({ type: 'wsput:init', session });
+        sendRpc(initReq)
+            .then((init) => {
+            if (messageHandlers['init']) {
+                messageHandlers['init'](init.info);
+            }
+            else {
+                console.warn('Got init message, but no handler for it');
+            }
+        })
+            .catch(err => {
+            console.warn('Failed to get init message', err);
+        });
+        handler.on('refresh', (data) => {
+            if (messageHandlers['refresh']) {
+                messageHandlers['refresh'](data || {});
+            }
+        });
+        handler.on('asyncUpdate', (data) => {
+            if (messageHandlers['asyncUpdate']) {
+                messageHandlers['asyncUpdate'](data || {});
+            }
+        });
+        return wsHandler;
+    };
+    exports.createLocalRequestHandler = createLocalRequestHandler;
     exports.default = createWebsocketHandler;
 });
 define("hacks", ["require", "exports"], function (require, exports) {
@@ -556,7 +630,7 @@ define("ui/create/createModalTitle", ["require", "exports", "ui/create/showWindo
         buttons.classList.add('button-holder');
         if (extraActions && extraActions.length > 0) {
             const overflowButton = document.createElement('img');
-            overflowButton.src = '/icons/more_vert_white_24dp.svg';
+            overflowButton.src = 'icons/more_vert_white_24dp.svg';
             overflowButton.classList.add('modalOverflowButton');
             overflowButton.classList.add('clickHighlightOnHover');
             overflowButton.onmousedown = (e) => { e.stopPropagation(); };
@@ -2851,7 +2925,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
                                 lbl.style.margin = 'auto';
                                 right.appendChild(lbl);
                                 const icon = document.createElement('img');
-                                icon.src = '/icons/my_location_white_24dp.svg';
+                                icon.src = 'icons/my_location_white_24dp.svg';
                                 icon.style.height = '18px';
                                 icon.style.alignSelf = 'center';
                                 icon.style.margin = '0 4px 0 0';
@@ -12156,6 +12230,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
             delete env.onChangeListeners[queryId];
             delete env.probeMarkers[queryId];
             popup.remove();
+            env.updateMarkers();
         };
         const popup = (0, showWindow_4.default)({
             rootStyle: `
@@ -14350,15 +14425,22 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     return (0, createWebsocketHandler_1.createWebsocketOverHttpHandler)(addConnectionCloseNotice_1.default);
                 }
                 if (typeof wsPort == 'object') {
-                    // Codespaces-compat
-                    const needle = `-${wsPort.from}.`;
-                    if (location.hostname.includes(needle) && !location.port) {
-                        return (0, createWebsocketHandler_1.default)(new WebSocket(`wss://${location.hostname.replace(needle, `-${wsPort.to}.`)}`), addConnectionCloseNotice_1.default);
-                    }
-                    else {
-                        // Else, we are running Codespaces locally from a 'native' (non-web) editor.
-                        // We only need to do the compat layer if running Codespaces from the web.
-                        // Fall down to default impl below.
+                    switch (wsPort.type) {
+                        case 'codespaces-compat': {
+                            const needle = `-${wsPort.from}.`;
+                            if (location.hostname.includes(needle) && !location.port) {
+                                return (0, createWebsocketHandler_1.default)(new WebSocket(`wss://${location.hostname.replace(needle, `-${wsPort.to}.`)}`), addConnectionCloseNotice_1.default);
+                            }
+                            else {
+                                // Else, we are running Codespaces locally from a 'native' (non-web) editor.
+                                // We only need to do the compat layer if running Codespaces from the web.
+                                // Fall down to default impl below.
+                            }
+                            break;
+                        }
+                        case 'local-request-handler': {
+                            return (0, createWebsocketHandler_1.createLocalRequestHandler)(wsPort.handler, addConnectionCloseNotice_1.default);
+                        }
                     }
                 }
                 return (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:${wsPort}`), addConnectionCloseNotice_1.default);
@@ -14798,6 +14880,10 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     };
     window.initCodeProber = () => {
         (async () => {
+            if (window.CPR_REQUEST_HANDLER) {
+                // In-browser request handler available, us that instead.
+                return doMain({ type: 'local-request-handler', handler: window.CPR_REQUEST_HANDLER });
+            }
             const socketRes = await fetch('/WS_PORT');
             if (socketRes.status !== 200) {
                 throw new Error(`Unexpected status code when fetch websocket port ${socketRes.status}`);
