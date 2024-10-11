@@ -225,7 +225,12 @@ public class CodeProber {
 			if (lastMonitor.get() != null) {
 				lastMonitor.getAndSet(null).stopThread();
 			}
-			final FileMonitor fm = new FileMonitor(new File(jarPath)) {
+			final File jarFile = new File(jarPath);
+			if (!jarFile.exists()) {
+				System.err.println("⚠ Invalid jar path '" + jarPath
+						+ "'. No such file exists. Please restart with a new path, or create the file before trying to create a probe.");
+			}
+			final FileMonitor fm = new FileMonitor(jarFile) {
 				public void onChange() {
 					System.out.println("Jar changed!");
 					if (sessionLogger != null) {
