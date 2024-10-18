@@ -280,7 +280,7 @@ public class WebServer {
 			// Also a special magical resource, don't actually read from classPath/file
 			// system
 			// This URL should be kept in sync with client/src/model/repositoryUrl.ts
-			final URL url = new URL("https://raw.githubusercontent.com/lu-cs-sde/codeprober/master/VERSION");
+			final URL url = new URL("https://api.github.com/repos/lu-cs-sde/codeprober/releases/latest");
 			final HttpURLConnection con = (HttpURLConnection) url.openConnection();
 			con.setRequestMethod("GET");
 			con.setConnectTimeout(1000);
@@ -298,13 +298,25 @@ public class WebServer {
 			}
 			con.disconnect();
 
+			String tagName;
+			final String fullVersionFile = content.toString();
+			try {
+				final JSONObject parsed = new JSONObject(fullVersionFile);
+				tagName = parsed.getString("tag_name");
+			} catch (JSONException e) {
+				System.err.println("Unxpected response from releases/latest");
+				e.printStackTrace();
+				out.write("HTTP/1.1 502 Bad Gateway\r\n".getBytes("UTF-8"));
+				out.write("\r\n".getBytes("UTF-8"));
+				return;
+			}
+
 			out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
 			out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
 			out.write(("\r\n").getBytes("UTF-8"));
 
-			final String fullVersionFile = content.toString();
-			final String[] lines = fullVersionFile.split("\n");
-			out.write(lines[lines.length - 1].getBytes("UTF-8"));
+			// final String[] lines = fullVersionFile.split("\n");
+			out.write(tagName.getBytes("UTF-8"));
 			out.flush();
 			return;
 		}
@@ -350,7 +362,8 @@ public class WebServer {
 	}
 
 	private void handlePutRequest(Socket socket, String data, ParsedArgs args, ServerToClientMessagePusher msgPusher,
-			Function<ClientRequest, JSONObject> onQuery, Consumer<String> setUnderlyingJarPath, SessionLogger logger) throws IOException {
+			Function<ClientRequest, JSONObject> onQuery, Consumer<String> setUnderlyingJarPath, SessionLogger logger)
+			throws IOException {
 		final String[] parts = data.split("\r\n");
 		String putPath = null;
 		int contentLen = -1;

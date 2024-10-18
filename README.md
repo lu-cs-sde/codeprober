@@ -8,15 +8,15 @@ Installation & getting started: https://www.youtube.com/watch?v=1beyfNhUQEg
 
 ## Getting started
 
-1) Download [code-prober.jar](https://github.com/lu-cs-sde/codeprober/raw/master/code-prober.jar) from this repository.
+1) Download [CodeProber.jar](https://github.com/lu-cs-sde/codeprober/releases/latest) from the latest release.
 2) Start like this:
     ```
-    java -jar code-prober.jar your-analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
+    java -jar CodeProber.jar your-analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
     ```
 
-For example, if you have code-prober.jar in your downloads directory, and your tool is called `compiler.jar` and is located in your home directory, then run:
+For example, if you have CodeProber.jar in your downloads directory, and your tool is called `compiler.jar` and is located in your home directory, then run:
 ```
-java -jar ~/Downloads/code-prober.jar ~/compiler.jar
+java -jar ~/Downloads/CodeProber.jar ~/compiler.jar
 ```
 
 Once started, you should open http://localhost:8000 in your browser.
@@ -87,7 +87,7 @@ There are a few optional environment variables that can be set.
 
 Example invocation where some of these are set:
 ```sh
-PORT=8005 WEB_RESOURCES_OVERRIDE=client/public/ java -jar code-prober.jar /path/to/your/compiler/or/analyzer.jar
+PORT=8005 WEB_RESOURCES_OVERRIDE=client/public/ java -jar CodeProber.jar /path/to/your/compiler/or/analyzer.jar
 ```
 
 ## Troubleshooting
@@ -115,7 +115,7 @@ To avoid the System.exit call killing the CodeProber process, CodeProber uses `S
 As of Java 17, this feature is disabled by default. You can re-enable it by adding the system property 'java.security.manager=allow'. I.e run CodeProber with:
 
 ```bash
-java -Djava.security.manager=allow -jar code-prober.jar path/to/your/analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
+java -Djava.security.manager=allow -jar CodeProber.jar path/to/your/analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
 ```
 
 Alterntiavely, add a `CodeProber_parse` method as mentioned above in the `Compatibility` section.
@@ -125,7 +125,7 @@ For more information about this issue, see https://openjdk.org/jeps/411 and http
 
 ### My problem isn't listed above
 
-Check the terminal where you started code-prober.jar If no message there helps you, please open an issue in this repository!
+Check the terminal where you started CodeProber.jar If no message there helps you, please open an issue in this repository!
 
 ## Building - Client
 
@@ -150,15 +150,14 @@ cd server
 ./build.sh
 ```
 
-If your git status is non-clean (any untracked/staged/modified files present), then this will generate a single file: `code-prober-dev.jar`.
+This will generate `Codeprober.jar`.
 
-If your git status is clean, then this will instead generate two files: `code-prober.jar` and `VERSION`.
-
-`code-prober.jar` is the tool itself.
-
-`VERSION` is a file containing the current git hash. This is used by the client to detect when new versions are available.
-
-If you want to "deploy" a new version, i.e make the tiny "New version available" prompt appear in the corner for everybody using the tool, then you must first commit your changes, make sure `git status` says `working tree clean`, and then build, and commit again.
+Release builds are performed via releases in Github.
+Create a new release and publish it.
+Within a few minutes, a Github action runner (`.github/workflows/release-build.yml`) will push a freshly built and tested `CodeProber.jar` to your release.
+If no jar file is pushed, then the release build failed.
+Please look at the action runner log to debug why.
+Release builds can be retried by editing the release in any way.
 
 ## I didn't use JastAdd, what now?
 
@@ -235,7 +234,7 @@ recv.accept(new Object[]{ "COMPUTE_END", someAstNode, "foo()", null, "ResultValu
 
 ### Tracing locator issues
 
-Tracing can be tricky to get right. You may get errors in the terminal where you started `code-prober.jar` stating something like:
+Tracing can be tricky to get right. You may get errors in the terminal where you started `CodeProber.jar` stating something like:
 ```
 Failed creating locator for AstNode< [..]
 ```

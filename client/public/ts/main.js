@@ -704,12 +704,10 @@ define("model/adjustLocator", ["require", "exports", "model/adjustTypeAtLoc"], f
 define("model/repositoryUrl", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.rawUrl = exports.repositoryUrl = void 0;
+    exports.repositoryUrl = void 0;
     // This file should be kept in sync with server/src/codeprober/server/WebServer.java
     const repositoryUrl = `https://github.com/lu-cs-sde/codeprober`;
     exports.repositoryUrl = repositoryUrl;
-    const rawUrl = (resource) => `https://raw.githubusercontent.com/lu-cs-sde/codeprober/master/${resource}`;
-    exports.rawUrl = rawUrl;
 });
 define("model/syntaxHighlighting", ["require", "exports"], function (require, exports) {
     "use strict";
@@ -1152,7 +1150,7 @@ encode(value):
                 return [
                     `Right click on some text in the editor and click 'Create Probe' to get started.`,
                     `If you get the message 'Node listing failed', then it likely means that something went wrong during parsing.`,
-                    `Look at the terminal where you started code-prober.jar for more information.`,
+                    `Look at the terminal where you started CodeProber.jar for more information.`,
                     ``,
                     `There are a number of 'magic' attributes you can add to your AST nodes to modify their behavior in this tool.`,
                     `All magic attributes are prefixed with 'cpr_' (CodePRober_) to avoid colliding with your own functionality.`,
@@ -1442,7 +1440,7 @@ aspect MagicOutputDemo {
                 `When your underlying tool is invoked, the path to a temporary file is sent as an arg to the main method.`,
                 `Optionally, some extra args are also included.`,
                 `By default, the extra args are defined when you start the CodeProber server.`,
-                `For example, running 'java -jar code-prober-jar path/to/your/tool.jar foo bar baz', will set the extra args array to [foo, bar, baz].`,
+                `For example, running 'java -jar CodeProber.jar path/to/your/tool.jar foo bar baz', will set the extra args array to [foo, bar, baz].`,
                 `By checking 'Override main args' and clicking "Edit", you can override those extra args.`,
                 ``,
                 `Args are separated by spaces and/or newlines.`,
@@ -1503,7 +1501,7 @@ aspect MagicOutputDemo {
                     joinElements(`Captured messages are displayed with a `, styled('blue', 'captured-stdout'), ` color if they were printed to stdout, and a `, styled('red', 'captured-stderr'), ` color if they were printed to stderr.`),
                     ``,
                     `Note that only messages printed during property evaluation are captured.`,
-                    `Messages printed during parsing are not shown here, but can still be seen in the terminal where you started code-prober.jar.`,
+                    `Messages printed during parsing are not shown here, but can still be seen in the terminal where you started CodeProber.jar.`,
                     `An exception to this is when parsing fails, in which case messages during parsing are displayed (even if this checkbox is unchecked).`,
                 ];
             }
@@ -12922,7 +12920,7 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
                 return 'again';
             }
             const a = document.createElement('a');
-            a.href = `${repositoryUrl_2.repositoryUrl}/blob/master/code-prober.jar`;
+            a.href = `${repositoryUrl_2.repositoryUrl}/releases/latest/`;
             a.target = '_blank';
             a.text = 'New version available';
             elem.appendChild(document.createElement('br'));

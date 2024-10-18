@@ -51,7 +51,7 @@ const showVersionInfo = (elem: HTMLDivElement, ourHash: string, ourClean: boolea
     }
 
     const a = document.createElement('a');
-    a.href = `${repositoryUrl}/blob/master/code-prober.jar`;
+    a.href = `${repositoryUrl}/releases/latest/`;
     a.target = '_blank';
     a.text = 'New version available';
     elem.appendChild(document.createElement('br'));

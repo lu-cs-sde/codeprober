@@ -124,7 +124,7 @@ public class EncodeResponseValue {
 					out.add(RpcBodyLine
 							.fromPlain("If that helps, then you maybe have a caching problem somewhere in the AST."));
 					out.add(RpcBodyLine.fromPlain(
-							"If that doesn't help, then please look at any error messages in the terminal where you started code-prober.jar."));
+							"If that doesn't help, then please look at any error messages in the terminal where you started CodeProber.jar."));
 					out.add(RpcBodyLine.fromPlain(
 							"If that doesn't help either, then you may have found a bug. Please report it!"));
 				}

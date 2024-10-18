@@ -31,7 +31,7 @@ public class ParsedArgs {
 
 	public static void printUsage() {
 		System.out.println(
-				"Usage: java -jar code-prober.jar [--test] [--concurrent=N] [path/to/your/analyzer-or-compiler.jar [args-to-forward-to-your-main]]");
+				"Usage: java -jar CodeProber.jar [--test] [--concurrent=N] [path/to/your/analyzer-or-compiler.jar [args-to-forward-to-your-main]]");
 	}
 
 	public static ParsedArgs parse(String[] args) {

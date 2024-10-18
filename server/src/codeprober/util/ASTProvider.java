@@ -145,10 +145,10 @@ public class ASTProvider {
 							captures = StdIoInterceptor.performDefaultCapture(() -> {
 								System.err.println("Failed installing System.exit interceptor");
 								System.err.println(
-										"Restart code-prober.jar with the system property 'java.security.manager=allow'");
+										"Restart CodeProber.jar with the system property 'java.security.manager=allow'");
 								System.err.println("Example:");
 								System.err.println(
-										"   java -Djava.security.manager=allow -jar path/to/code-prober.jar path/to/your/analyzer-or-compiler.jar");
+										"   java -Djava.security.manager=allow -jar path/to/CodeProber.jar path/to/your/analyzer-or-compiler.jar");
 								System.err.println(
 										"Alternatively, avoid calling System.exit() if running in CodeProber.");
 								System.err.println(

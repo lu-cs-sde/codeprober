@@ -1,0 +1,17 @@
+
+name: Release builder
+
+on:
+  release:
+    types: [published, edited]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - run: bash .github/release.sh
+      env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER_REPO: ${{ github.repository }}
+          ASSETS_URL: ${{ github.event.release.assets_url }}

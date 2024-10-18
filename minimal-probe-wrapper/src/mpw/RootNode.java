@@ -42,7 +42,7 @@ public class RootNode {
     // Send the string out, collect the response and return it synchronously from here.
     // If this is a slow process but your tool is able to handle requests concurrently,
     // consider setting "--concurrent=N" when launching CodeProber. E.g:
-    //   java -jar code-prober.jar --concurrent=4 my-minimal-wrapper.jar
+    //   java -jar CodeProber.jar --concurrent=4 my-minimal-wrapper.jar
     // The command above will configure CodeProber to evaluate properties in up to 4 separate background processes,
     // which can speed up user interaction in the tool, especially with multiple active probes.
   }
