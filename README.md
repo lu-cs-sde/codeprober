@@ -8,15 +8,15 @@ Installation & getting started: https://www.youtube.com/watch?v=1beyfNhUQEg
 
 ## Getting started
 
-1) Download [CodeProber.jar](https://github.com/lu-cs-sde/codeprober/releases/latest) from the latest release.
+1) Download [codeprober.jar](https://github.com/lu-cs-sde/codeprober/releases/latest) from the latest release.
 2) Start like this:
     ```
-    java -jar CodeProber.jar your-analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
+    java -jar codeprober.jar your-analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
     ```
 
-For example, if you have CodeProber.jar in your downloads directory, and your tool is called `compiler.jar` and is located in your home directory, then run:
+For example, if you have codeprober.jar in your downloads directory, and your tool is called `compiler.jar` and is located in your home directory, then run:
 ```
-java -jar ~/Downloads/CodeProber.jar ~/compiler.jar
+java -jar ~/Downloads/codeprober.jar ~/compiler.jar
 ```
 
 Once started, you should open http://localhost:8000 in your browser.
@@ -87,7 +87,7 @@ There are a few optional environment variables that can be set.
 
 Example invocation where some of these are set:
 ```sh
-PORT=8005 WEB_RESOURCES_OVERRIDE=client/public/ java -jar CodeProber.jar /path/to/your/compiler/or/analyzer.jar
+PORT=8005 WEB_RESOURCES_OVERRIDE=client/public/ java -jar codeprober.jar /path/to/your/compiler/or/analyzer.jar
 ```
 
 ## Troubleshooting
@@ -115,7 +115,7 @@ To avoid the System.exit call killing the CodeProber process, CodeProber uses `S
 As of Java 17, this feature is disabled by default. You can re-enable it by adding the system property 'java.security.manager=allow'. I.e run CodeProber with:
 
 ```bash
-java -Djava.security.manager=allow -jar CodeProber.jar path/to/your/analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
+java -Djava.security.manager=allow -jar codeprober.jar path/to/your/analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
 ```
 
 Alterntiavely, add a `CodeProber_parse` method as mentioned above in the `Compatibility` section.
@@ -125,7 +125,7 @@ For more information about this issue, see https://openjdk.org/jeps/411 and http
 
 ### My problem isn't listed above
 
-Check the terminal where you started CodeProber.jar If no message there helps you, please open an issue in this repository!
+Check the terminal where you started codeprober.jar If no message there helps you, please open an issue in this repository!
 
 ## Building - Client
 
@@ -150,11 +150,11 @@ cd server
 ./build.sh
 ```
 
-This will generate `Codeprober.jar`.
+This will generate `codeprober.jar`.
 
 Release builds are performed via releases in Github.
 Create a new release and publish it.
-Within a few minutes, a Github action runner (`.github/workflows/release-build.yml`) will push a freshly built and tested `CodeProber.jar` to your release.
+Within a few minutes, a Github action runner (`.github/workflows/release-build.yml`) will push a freshly built and tested `codeprober.jar` to your release.
 If no jar file is pushed, then the release build failed.
 Please look at the action runner log to debug why.
 Release builds can be retried by editing the release in any way.
@@ -234,7 +234,7 @@ recv.accept(new Object[]{ "COMPUTE_END", someAstNode, "foo()", null, "ResultValu
 
 ### Tracing locator issues
 
-Tracing can be tricky to get right. You may get errors in the terminal where you started `CodeProber.jar` stating something like:
+Tracing can be tricky to get right. You may get errors in the terminal where you started `codeprober.jar` stating something like:
 ```
 Failed creating locator for AstNode< [..]
 ```

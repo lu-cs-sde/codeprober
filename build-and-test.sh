@@ -38,7 +38,7 @@ check_expected_outcome () {
   fi
 }
 
-CPR_JAR="CodeProber.jar"
+CPR_JAR="codeprober.jar"
 
 echo "Running AddNum test suite three times with different configurations, using jar file: $CPR_JAR"
 

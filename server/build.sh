@@ -22,7 +22,6 @@ cd build_tmp
 echo "Generating jar.."
 echo "Main-Class: codeprober.CodeProber" >> Manifest.txt
 
-echo "PREVERSION: $CPR_VERSION"
 if [ -z "$CPR_VERSION" ]; then
   CPR_VERSION=$(git rev-parse --short HEAD)
   echo "Git-Version: $CPR_VERSION" >> cpr.properties
@@ -43,7 +42,7 @@ if hash date 2>/dev/null; then
   echo "Build-Time: $(date -u +%s)" >> cpr.properties
 fi
 
-DST=../../CodeProber.jar
+DST=../../codeprober.jar
 jar cfm $DST Manifest.txt cpr.properties **/*
 
 cd ..

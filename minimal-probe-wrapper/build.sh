@@ -20,4 +20,4 @@ cd -
 rm  -rf build_tmp
 
 echo "Done, build my-minimal-wrapper.jar"
-echo "Start with 'java -jar /path/to/CodeProber.jar /path/to/my-minimial-wrapper.jar'"
+echo "Start with 'java -jar /path/to/codeprober.jar /path/to/my-minimial-wrapper.jar'"

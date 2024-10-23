@@ -61,7 +61,7 @@ class MyWrapper {
 The live node tracking used in CodeProber doesn't work quite the same for wrapper implementations, since all node types are the same ("MyWrapper.class"), and node types are an important part of making the tracking resilient.
 One way to get very similar tracking performance is to make sure that cpr_nodeLabel is implemented on all your nodes, and then set the system property `cpr.type_identification_style` to `NODE_LABEL`. E.g:
 ```
-  java -Dcpr.type_identification_style=NODE_LABEL -jar CodeProber.jar my-minimal-wrapper.jar
+  java -Dcpr.type_identification_style=NODE_LABEL -jar codeprober.jar my-minimal-wrapper.jar
 ```
 
 `type_identification_style=NODE_LABEL` isn't as exhausively tested as the default reflection/class-based identification style. You may run into some issues. If you do and it is reproducible, please open an issue report! Our goal is to make the two styles equally viable.
