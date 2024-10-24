@@ -31,9 +31,9 @@ launchCodeProber {
 }
 ```
 
-See full list of options below
+See full list of parameters below
 
-## Options
+## Parameters
 
 The plugin contains a number of parameters, all of which are optional.
 
