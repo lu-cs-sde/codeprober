@@ -96,12 +96,16 @@ public class CodeProber {
 				backingFile.createNewFile();
 			}
 
-			BackingFileSettings.monitorBackingFileChanges(() -> msgPusher.onChange(ServerToClientEvent.BACKING_FILE_CHANGED));
+			BackingFileSettings
+					.monitorBackingFileChanges(() -> msgPusher.onChange(ServerToClientEvent.BACKING_FILE_CHANGED));
 		}
 
 		switch (parsedArgs.concurrencyMode) {
-
 		case COORDINATOR: {
+			if (parsedArgs.jarPath == null) {
+				System.err.println("Illegal mix of --concurrent and not specifying underlying tool.");
+				System.exit(1);
+			}
 			StdIoInterceptor.tag = "Coordinator";
 			try {
 				userFacingHandler = new ConcurrentCoordinator(defaultHandler, parsedArgs.jarPath, parsedArgs.extraArgs,

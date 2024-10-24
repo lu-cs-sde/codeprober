@@ -1,0 +1,131 @@
+plugins {
+  // id 'groovy'
+  id 'maven-publish'
+  id 'signing'
+  id 'java-gradle-plugin'
+  id "com.gradle.plugin-publish" version "0.18.0"
+}
+
+group = 'se.cs.lth'
+version = '1.0.0'
+
+// Ensure the plugin runs with Java 7.
+sourceCompatibility = targetCompatibility = '1.7'
+
+repositories {
+  mavenCentral()
+}
+
+configurations {
+  // extraLibs is used to pack the json files into the generated jar file
+  extraLibs
+}
+
+dependencies {
+  implementation gradleApi()
+  implementation 'org.json:json:20240303'
+  extraLibs group: 'org.json', name: 'json', version: '20240303'
+}
+
+test {
+  testLogging.exceptionFormat = "full"
+}
+
+java {
+  withJavadocJar()
+  withSourcesJar()
+}
+jar {
+  // doFirst {
+
+  // }
+  destinationDirectory = projectDir
+  // archiveFileName = 'plugin.jar'
+      duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+      from {
+        configurations.extraLibs.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+publishing {
+  publications {
+    mavenJava(MavenPublication) {
+      artifactId = 'codeprobergradle'
+      from components.java
+
+      versionMapping {
+        usage('java-api') {
+          fromResolutionOf('runtimeClasspath')
+        }
+        usage('java-runtime') {
+          fromResolutionResult()
+        }
+      }
+
+      pom {
+        name = 'CodeproberGradle'
+        description = 'A Gradle build plugin for building JastAdd projects.'
+        url = 'https://github.com/lu-cs-sde/codeprober/gradle-plugin'
+        licenses {
+          license {
+            name = 'Modified BSD License'
+            url = 'http://opensource.org/licenses/BSD-3-Clause'
+            distribution = 'repo'
+          }
+        }
+        developers {
+          developer {
+            name = 'Anton Risberg Alaküla'
+            email = 'anton.risberg_alakula@cs.lth.se'
+          }
+        }
+        scm {
+          connection = 'scm:git:https://github.com/lu-cs-sde/codeprober.git'
+          url = 'https://github.com/lu-cs-sde/codeprober.git'
+        }
+      }
+    }
+  }
+  if (project.hasProperty('ossrhUsername')) repositories {
+    maven {
+      url = 'https://oss.sonatype.org/service/local/staging/deploy/maven2'
+      credentials {
+        username = ossrhUsername
+        password = ossrhPassword
+      }
+
+      // Local repository = 'localPluginRepo'
+      // Snapshot repoitory = 'https://oss.sonatype.org/content/repositories/snapshots'
+    }
+  }
+}
+
+signing {
+  // Skip signing if there is no key configured:
+  required { project.hasProperty('signing.keyId') }
+  sign publishing.publications.mavenJava
+}
+
+pluginBundle {
+  website = 'https://github.com/jastadd/jastaddgradle'
+  vcsUrl = 'https://github.com/jastadd/jastaddgradle'
+  description = 'Modular JastAdd project build plugin.'
+  tags = [ 'jastadd', 'codegen' ]
+}
+
+gradlePlugin {
+  plugins {
+    codeproberPlugin {
+      id = 'se.lth.cs.codeprober'
+      displayName = 'CodeProber Gradle plugin'
+      description = 'Plugin for downloading and starting CodeProber with Gradle.'
+      implementationClass = 'se.lth.cs.codeprober.CodeProberPlugin'
+    }
+  }
+}
+
+javadoc {
+  if(JavaVersion.current().isJava9Compatible()) {
+    options.addBooleanOption('html5', true)
+  }
+}

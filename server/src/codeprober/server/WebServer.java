@@ -210,6 +210,8 @@ public class WebServer {
 		}
 	}
 
+	public static final boolean DEBUG_REQUESTS = "true".equals(System.getenv("DEBUG_REQUESTS"));
+
 	private final WsPutSessionMonitor monitor = new WsPutSessionMonitor();;
 
 	private void handleGetRequest(Socket socket, String data, ParsedArgs parsedArgs,
@@ -259,7 +261,9 @@ public class WebServer {
 			path = "/upload.html";
 		}
 
-		System.out.println("get " + path);
+		if (DEBUG_REQUESTS) {
+			System.out.println("[get] addr=" + socket.getRemoteSocketAddress() + " | path= " + path);
+		}
 		if (path.equals("/WS_PORT")) {
 			// Special magical resource, don't actually read from classPath/file system
 			out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
@@ -380,6 +384,9 @@ public class WebServer {
 		}
 		if (putPath == null || contentLen == -1) {
 			throw new IOException("Bad put request");
+		}
+		if (DEBUG_REQUESTS) {
+			System.out.println("[put] addr=" + socket.getRemoteSocketAddress() + " | path= " + putPath);
 		}
 
 		final int fContentLen = contentLen;
@@ -516,7 +523,6 @@ public class WebServer {
 	private void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
 			Function<ClientRequest, JSONObject> onQuery, Runnable onSomeClientDisconnected, AtomicBoolean needsTool,
 			Consumer<String> setUnderlyingJarPath, SessionLogger logger) throws IOException, NoSuchAlgorithmException {
-		System.out.println("Incoming HTTP request from: " + socket.getRemoteSocketAddress());
 
 		final InputStream in = socket.getInputStream();
 		final ByteArrayOutputStream headerBaos = new ByteArrayOutputStream();
@@ -742,7 +748,12 @@ public class WebServer {
 			// if port=0, then the port number is automatically allocated.
 			// Use 'actualPort' to get the port that was really opened, as 0 is invalid.
 			actualPort = server.getLocalPort();
-			System.out.printf("Started web server on port %d, visit 'http://localhost:%d?auth=%s' in your browser",
+			if ("true".equals(System.getenv("GRADLEPLUGIN"))) {
+				// stdout is programatically parsed by the plugin, print the port in a format it
+				// expects.
+				System.out.printf("CPRGRADLE_URL=http://localhost:%d?auth=%s%n", actualPort, validAuthKey);
+			}
+			System.out.printf("Started web server on port %d, visit 'http://localhost:%d?auth=%s' in your browser%n",
 					actualPort, actualPort, validAuthKey);
 			final WebServer ws = new WebServer();
 			new Thread(() -> {

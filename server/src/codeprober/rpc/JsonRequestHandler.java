@@ -8,6 +8,7 @@ import codeprober.protocol.ClientRequest;
 import codeprober.protocol.data.TopRequestReq;
 import codeprober.protocol.data.TopRequestRes;
 import codeprober.protocol.data.TopRequestResponseData;
+import codeprober.server.WebServer;
 
 @FunctionalInterface
 public interface JsonRequestHandler {
@@ -44,7 +45,9 @@ public interface JsonRequestHandler {
 						.fromFailureMsg("Error while processing request. See server for more info");
 			}
 
-			System.out.printf("Handled request in %.2fms\n", (System.nanoTime() - start) / 1_000_000.0);
+      if (WebServer.DEBUG_REQUESTS) {
+        System.out.printf("Handled request in %.2fms\n", (System.nanoTime() - start) / 1_000_000.0);
+      }
 			return new TopRequestRes(parsed.id, response).toJSON();
 
 		};
