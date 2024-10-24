@@ -6,8 +6,8 @@ plugins {
   id "com.gradle.plugin-publish" version "0.18.0"
 }
 
-group = 'se.cs.lth'
-version = '1.0.0'
+group = 'se.lth.cs'
+version = '0.0.1'
 
 // Ensure the plugin runs with Java 7.
 sourceCompatibility = targetCompatibility = '1.7'
@@ -64,8 +64,8 @@ publishing {
 
       pom {
         name = 'CodeproberGradle'
-        description = 'A Gradle build plugin for building JastAdd projects.'
-        url = 'https://github.com/lu-cs-sde/codeprober/gradle-plugin'
+        description = 'Plugin for configuring and running CodeProber'
+        url = 'https://github.com/lu-cs-sde/codeprober/tree/master/gradle-plugin'
         licenses {
           license {
             name = 'Modified BSD License'
@@ -107,10 +107,10 @@ signing {
 }
 
 pluginBundle {
-  website = 'https://github.com/jastadd/jastaddgradle'
-  vcsUrl = 'https://github.com/jastadd/jastaddgradle'
-  description = 'Modular JastAdd project build plugin.'
-  tags = [ 'jastadd', 'codegen' ]
+  website = 'https://github.com/lu-cs-sde/codeprober/tree/master/gradle-plugin'
+  vcsUrl = 'https://github.com/lu-cs-sde/codeprober/'
+  description = 'Plugin for configuring and running CodeProber'
+  tags = [ 'codeprober', 'jastadd' ]
 }
 
 gradlePlugin {
