@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# This file is an example/boilerplate of what is required to run `publish.sh`.
+# Copy this file to `setup.sh`, and then edit the values/commands below to work on your machine.
+# If everything is done correctly, then you should be able to run the following commands:
+#  $ source setup.sh
+#  $ aws s3 ls $S3_BUCKET_NAME
+# ..Which should list the files on the website (index.html, style.css, ...).
+
 aws() {
   docker run -v "/home/username/.aws_creds:/root/.aws" -v "$(pwd)/public:/website" --rm -it amazon/aws-cli "$@"
 }
