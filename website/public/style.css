@@ -1,0 +1,16 @@
+
+html {
+  background: #AAA;
+}
+body {
+  background: white;
+  max-width: 64rem;
+  min-height: 100vh;
+  margin: 0 auto 0 auto;
+  border-left: 1px solid darkgray;
+  border-right: 1px solid darkgray;
+}
+
+#body-spacer {
+  padding: 1rem;
+}

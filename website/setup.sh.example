@@ -1,0 +1,11 @@
+#!/bin/bash
+
+aws() {
+  docker run -v "/home/username/.aws_creds:/root/.aws" -v "$(pwd)/public:/website" --rm -it amazon/aws-cli "$@"
+}
+# The ".aws_creds" directory should contain two files: "config" and "credentials".
+# See e.g https://docs.aws.amazon.com/cli/v1/userguide/cli-configure-files.html for reference on what they are
+
+export S3_BUCKET_NAME="bucket-name-here"
+export CLOUDFRONT_DISTRIBUTION="DISTRIBUTION-ID-HERE"
+
