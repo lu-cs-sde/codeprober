@@ -1,4 +1,4 @@
-package se.lth.cs.codeprober;
+package org.codeprober;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;

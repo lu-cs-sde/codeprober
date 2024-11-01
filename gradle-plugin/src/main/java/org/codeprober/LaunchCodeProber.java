@@ -1,4 +1,4 @@
-package se.lth.cs.codeprober;
+package org.codeprober;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -227,9 +227,9 @@ public abstract class LaunchCodeProber extends JavaExec {
     apiConn.setConnectTimeout(10000);
     apiConn.setReadTimeout(10000);
 
-    final int status = apiConn.getResponseCode();
-    if (status != 200) {
-      throw new IOException("Unexpected status code " + status);
+    final int apiStatus = apiConn.getResponseCode();
+    if (apiStatus != 200) {
+      throw new IOException("Unexpected status code " + apiStatus + " when fetching information about latest CodeProber release");
     }
     final BufferedReader in = new BufferedReader(new InputStreamReader(apiConn.getInputStream()));
     String inputLine;
@@ -287,6 +287,11 @@ public abstract class LaunchCodeProber extends JavaExec {
     downloadConn.setRequestMethod("GET");
     downloadConn.setConnectTimeout(10000);
     downloadConn.setReadTimeout(10000);
+
+    final int downloadStatus = downloadConn.getResponseCode();
+    if (downloadStatus != 200) {
+      throw new IOException("Unexpected status code " + downloadStatus + " when downloading codeprober.jar");
+    }
 
     final InputStream dlStream = downloadConn.getInputStream();
 

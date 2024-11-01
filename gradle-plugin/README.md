@@ -7,7 +7,7 @@ This is a gradle plugin that simplifies fetching and starting CodeProber.
 Add the following to your build.gradle:
 ```gradle
 plugins {
-  id 'se.lth.cs.codeprober' version '1.0.0'
+  id 'org.codeprober' version '1.0.0'
 }
 ```
 
@@ -19,7 +19,7 @@ Then, launch with:
 
 CodeProber will keep running until you interrupt gradle, for example with `Ctrl+C`.
 
-For convenience, you likely want to configure launchCodeProber with a number of parameters, for example to automatically set the tool jar to explore.
+For convenience, you likely want to configure `launchCodeProber` with a number of parameters, for example to automatically set the tool jar to explore.
 For example, you may want to add the following to your `build.gradle`.
 
 ```gradle
@@ -59,7 +59,7 @@ The `String[]` args are space-separated when set in the command-line.
 If you want the space to be included in a value, you can escape it with `\`.
 For example, the following two declarations are equal:
 ```gradle
-task foo(type: se.lth.cs.codeprober.LaunchCodeProber) {
+task foo(type: org.codeprober.LaunchCodeProber) {
   toolArgs = ['foo=bar baz', 'lorem=ipsum']
 }
 ```
@@ -73,7 +73,7 @@ You can have multiple tasks in your `build.gradle` that runs CodeProber, not jus
 For example, you may want to have one that runs your CodeProber-created tests, like this:
 
 ```gradle
-task runCodeProberTests(type: se.lth.cs.codeprober.LaunchCodeProber) {
+task runCodeProberTests(type: org.codeprober.LaunchCodeProber) {
   dependsOn 'jar'
   toolJar = file(jar.archiveFile)
   jvmArgs = ['-Dcpr.testDir=my_test_dir']
@@ -83,7 +83,7 @@ task runCodeProberTests(type: se.lth.cs.codeprober.LaunchCodeProber) {
 
 You may also want a task that opens CodeProber with the contents of a specific file in the file system, like this:
 ```gradle
-task openCodeProberWithMyTestFile(type: se.lth.cs.codeprober.LaunchCodeProber) {
+task openCodeProberWithMyTestFile(type: org.LaunchCodeProber) {
   dependsOn 'jar'
   toolJar = file(jar.archiveFile)
   jvmArgs = ['-Dcpr.backing_file=tests/my_test_file.in']

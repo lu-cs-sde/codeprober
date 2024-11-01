@@ -6,7 +6,7 @@ plugins {
   id "com.gradle.plugin-publish" version "0.18.0"
 }
 
-group = 'se.lth.cs'
+group = 'org.codeprober'
 version = '0.0.1'
 
 // Ensure the plugin runs with Java 7.
@@ -98,6 +98,18 @@ publishing {
       // Snapshot repoitory = 'https://oss.sonatype.org/content/repositories/snapshots'
     }
   }
+  if (project.hasProperty('reposiliteUsername')) repositories {
+    maven {
+      url = 'https://reposilite.nas.kevlanche.com/releases'
+      credentials {
+        username = reposiliteUsername
+        password = reposilitePassword
+      }
+
+      // Local repository = 'localPluginRepo'
+      // Snapshot repoitory = 'https://oss.sonatype.org/content/repositories/snapshots'
+    }
+  }
 }
 
 signing {
@@ -116,10 +128,10 @@ pluginBundle {
 gradlePlugin {
   plugins {
     codeproberPlugin {
-      id = 'se.lth.cs.codeprober'
+      id = 'org.codeprober'
       displayName = 'CodeProber Gradle plugin'
       description = 'Plugin for downloading and starting CodeProber with Gradle.'
-      implementationClass = 'se.lth.cs.codeprober.CodeProberPlugin'
+      implementationClass = 'org.codeprober.CodeProberPlugin'
     }
   }
 }
