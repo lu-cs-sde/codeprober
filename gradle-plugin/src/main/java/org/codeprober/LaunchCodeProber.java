@@ -75,47 +75,47 @@ public abstract class LaunchCodeProber extends JavaExec {
       return cprJar;
     }
     // Else, need to download
-    final File expectedCprLocation = new File(getProject().getProjectDir(), ".codeprober" + File.separatorChar + "codeprober.jar");
-    if (expectedCprLocation.exists()) {
-      // CodeProber is already downloaded, but it may be old. Check its age
-      final long age = System.currentTimeMillis() - expectedCprLocation.lastModified();
-      if (getOverriddenCprUpdateCheck() && age > (7 * 24 * 60 * 60 * 1000)) {
-        System.out.println("Currently downloaded codeprober.jar is over a week old, checking if new version exists. Disable this by setting '-PcprUpdateCheck=false'");
-        try {
-          downloadCodeProber(expectedCprLocation);
-        } catch (IOException e) {
-          System.err.println("Error while downloading newer codeprober.jar");
-          e.printStackTrace();
-        }
-      } else {
-        System.out.println("Reusing previously downloaded " + expectedCprLocation);
-      }
-    } else {
-      // Not downloaded yet
+    final CprDownloader dl = getDownloader();
+    final File cprFile = dl.getCprDownloadLocation();
+    if (!cprFile.exists()) {
       try {
-        downloadCodeProber(expectedCprLocation);
+        dl.downloadCodeProber();
       } catch (IOException e) {
-        System.err.println("Error while downloading codeprober.jar");
+        System.err.println("Error while downloading CodeProber");
         e.printStackTrace();
       }
+    } else {
+      if (!dl.downloadedCodeProberSeemsUpToDate()) {
+        try {
+          dl.downloadCodeProber();
+        } catch (IOException e) {
+          System.err.println("Error while (re-)downloading CodeProber. Will reuse previously downloaded version");
+          e.printStackTrace();
+        }
+      }
+      if (!cprFile.exists()) {
+        throw new RuntimeException("Failed downloading codeprober.jar. Try again, or manually download it and specify with the property 'cpr'. For example: `./gradlew launchCodeProber -Pcpr=~/Downloads/codeprober.jar`");
+      }
     }
-    if (!expectedCprLocation.exists()) {
-      // System.err.println();
-      throw new RuntimeException("Failed downloading codeprober.jar. Try again, or manually download it and specify with the property 'cpr'. For example: `./gradlew launchCodeProber -Pcpr=~/Downloads/codeprober.jar`");
-    }
-    return expectedCprLocation;
+    return cprFile;
   }
 
-  // @Optional @Input
-  // public List<String> sysProps;
-  // public List<String> getSysProps() { return sysProps; }
-  // private List<String> getOverriddenSysProps() {
-  //   Object val = getProject().getProperties().get("sysProps");
-  //   if (val != null) {
-  //     return parseArgsList(val + "");
-  //   }
-  //   return sysProps;
-  // }
+  private CprDownloader getDownloader() {
+    return new CprDownloader(getProject().getProjectDir(), getOverriddenCprVersion(), getOverriddenRepoApiUrl(), getOverriddenCprUpdateCheck());
+  }
+
+
+
+  @Optional @Input
+  public String cprVersion;
+  public String getCprVersion() { return cprVersion; }
+  private String getOverriddenCprVersion() {
+    Object val = getProject().getProperties().get("cprVersion");
+    if (val != null) {
+      return val + "";
+    }
+    return cprVersion;
+  }
 
   @Optional @Input
   public List<String> cprArgs;
@@ -220,101 +220,6 @@ public abstract class LaunchCodeProber extends JavaExec {
     super.getMainClass().set("codeprober.CodeProber");
   }
 
-  private void downloadCodeProber(File dst) throws IOException {
-    System.out.println("Downloading latest CodeProber release..");
-    final HttpURLConnection apiConn = (HttpURLConnection) new URL(getOverriddenRepoApiUrl() + "/releases/latest").openConnection();
-    apiConn.setRequestMethod("GET");
-    apiConn.setConnectTimeout(10000);
-    apiConn.setReadTimeout(10000);
-
-    final int apiStatus = apiConn.getResponseCode();
-    if (apiStatus != 200) {
-      throw new IOException("Unexpected status code " + apiStatus + " when fetching information about latest CodeProber release");
-    }
-    final BufferedReader in = new BufferedReader(new InputStreamReader(apiConn.getInputStream()));
-    String inputLine;
-    final StringBuffer content = new StringBuffer();
-    while ((inputLine = in.readLine()) != null) {
-      content.append(inputLine + "\n");
-    }
-    apiConn.disconnect();
-
-    String tagName = null;
-    String assetUrl = null;
-    final String fullVersionFile = content.toString();
-    try {
-      final JSONObject parsed = new JSONObject(fullVersionFile);
-      tagName = parsed.getString("tag_name");
-      final JSONArray assets = parsed.getJSONArray("assets");
-      for (int i = 0; i < assets.length(); ++i) {
-        JSONObject asset = assets.getJSONObject(i);
-        if ("codeprober.jar".equals(asset.getString("name"))) {
-          assetUrl = asset.getString("browser_download_url");
-        }
-      }
-    } catch (JSONException e) {
-      throw new IOException("Unxpected response from releases/latest", e);
-    }
-
-    if (tagName == null || assetUrl == null) {
-      throw new IOException("codeprober.jar missing from latest release");
-    }
-    final File propFile = new File(dst.getAbsolutePath() +".props");
-
-    final Properties dlProps = new Properties();
-    if (dst.exists() && propFile.exists()) {
-      try {
-        try (FileInputStream fis = new FileInputStream(propFile)) {
-          dlProps.load(fis);
-        }
-        if (tagName.equals(dlProps.getProperty("tagName", null))) {
-          System.out.println("Latest release already downloaded");
-          // Just update the dst file to look newer, so we do not try to download it again
-          dst.setLastModified(System.currentTimeMillis());
-          return;
-        }
-        System.out.println("New release version: " + tagName +", currently downloaded version: " + dlProps.getProperty("tagName", null));
-      } catch (IOException e) {
-        System.err.println("Error when checking if currently downloaded version is up-to-date");
-        e.printStackTrace();
-        // Fall down to downloading it below
-      }
-    }
-
-    System.out.println("Found latest release at '" + assetUrl +"', downloading");
-
-    final HttpURLConnection downloadConn = (HttpURLConnection) new URL(assetUrl).openConnection();
-    downloadConn.setRequestMethod("GET");
-    downloadConn.setConnectTimeout(10000);
-    downloadConn.setReadTimeout(10000);
-
-    final int downloadStatus = downloadConn.getResponseCode();
-    if (downloadStatus != 200) {
-      throw new IOException("Unexpected status code " + downloadStatus + " when downloading codeprober.jar");
-    }
-
-    final InputStream dlStream = downloadConn.getInputStream();
-
-    dst.getParentFile().mkdirs();
-    final OutputStream fileStream = new FileOutputStream(dst);
-
-    final byte[] buf = new byte[32 * 1024];
-    int read;
-    while ((read = dlStream.read(buf)) != -1) {
-      fileStream.write(buf, 0, read);
-    }
-
-    fileStream.close();
-    downloadConn.disconnect();
-
-    System.out.println("Downloaded " + dst);
-
-    dlProps.clear();
-    dlProps.setProperty("tagName", tagName);
-    try (FileOutputStream fos = new FileOutputStream(propFile)) {
-      dlProps.store(fos, "");
-    }
-  }
 
   @Override
   public void exec() {
@@ -339,7 +244,6 @@ public abstract class LaunchCodeProber extends JavaExec {
     if (tArgs != null) {
       args.addAll(tArgs);
     }
-    System.out.println("Finished args: " + args);
     super.setArgs(args);
 
     super.getEnvironment().put("PORT",  getOverriddenPort());

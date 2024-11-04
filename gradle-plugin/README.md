@@ -7,7 +7,7 @@ This is a gradle plugin that simplifies fetching and starting CodeProber.
 Add the following to your build.gradle:
 ```gradle
 plugins {
-  id 'org.codeprober' version '1.0.0'
+  id 'org.codeprober' version '0.0.2' // Or whichever version is latest, check "https://plugins.gradle.org/plugin/org.codeprober"
 }
 ```
 
@@ -40,14 +40,15 @@ The plugin contains a number of parameters, all of which are optional.
 | Property       | Type     | Default value                                     | Description |
 | -------------- | -------- | ------------------------------------------------- | ----------- |
 | toolJar        | File     | null                                              | The tool to explore with CodeProber. This is technically optional, but you very likely want to set this. For example, you can set it based on the output of a `jar` task, as shown in basic usage above. |
-| toolArgs       | String[] | null                                              | Arguments to pass to the underlying tool. This corresponds to "`X`" in `java -jar codeprober.jar toolJar X`. |
+| toolArgs       | String[] | null                                              | Arguments to pass to the underlying tool. This corresponds to "`X`" in `java -jar cprJar toolJar X`. |
 | cprJar         | File     | null                                              | A codeprober.jar file to use. By default, this plugin will download the latest release from github and save it in `.codeprober/codeprober.jar`. |
-| cprArgs        | String[] | null                                              | Arguments to pass to CodeProber. This corresponds to "`X`" in `java -jar codeprober.jar X toolJar`. |
-| jvmArgs        | String[] | null                                              | Arguments to pass to the JVM. This corresponds to "`X`" in `java X -jar codeprober.jar toolJar`. This can for example be used to set system properties, such as `cpr.backing_file` |
-| cprUpdateCheck | boolean  | true                                              | Whether or not to periodically check for new versions of CodeProber. This is done once a week by default, i.e when the lastModified of the downloaded `codeprober.jar` is over a week old, the plugin will try to retrieve the latest jar from github. |
+| cprArgs        | String[] | null                                              | Arguments to pass to CodeProber. This corresponds to "`X`" in `java -jar cprJar X toolJar`. |
+| jvmArgs        | String[] | null                                              | Arguments to pass to the JVM. This corresponds to "`X`" in `java X -jar cprJar toolJar`. This can for example be used to set system properties, such as `cpr.backing_file` |
+| cprVersion     | String   | null                                              | The version of CodeProber to run. Should be set to the tag of a release, like "0.0.3". By default, this plugin will download the latest version of CodeProber, and periodically check for new versions (see `cprUpdateCheck`). Use this parameter to pin a specific version to use. |
+| cprUpdateCheck | boolean  | true                                              | Whether or not to periodically check for new versions of CodeProber. This is done once a week by default, i.e when the lastModified of the downloaded `codeprober.jar` is over a week old, the plugin will try to retrieve the latest jar from github. This parameter has no effect if `cprVersion` is set. |
 | openBrowser    | boolean  | true                                              | Whether to automatically open a web browser with the the CodeProber URL immediately after starting. |
 | port           | int      | 0                                                 | The port to serve requests on. If set to 0, then a random free port is automatically picked. |
-| repoApiUrl     | String   | https://api.github.com/repos/lu-cs-sde/codeprober | Base url for the API requests used for fetching and downloading CodeProber. This can be used to run CodeProber forks. Note that setting this does not remove nor invalidate the currently downloaded cache, so you may want to `rm .codeprober/codeprober.jar` after setting this, just to make sure the correct fork is downloaded. |
+| repoApiUrl     | String   | https://api.github.com/repos/lu-cs-sde/codeprober | Base url for the API requests used for fetching and downloading CodeProber. This can be used to run CodeProber forks. |
 
 All parameters can be set with project properties on the command-line, like `-Pfoo=bar`, or in the `build.gradle` file.
 For example, the customized `launchCodeProber` block in `Basic Usage` above is equivalent to the following bash command (assuming `jar.archiveFile`==`compiler.jar`):

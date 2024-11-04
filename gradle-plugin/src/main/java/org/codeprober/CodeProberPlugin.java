@@ -6,6 +6,8 @@ import org.gradle.api.Project;
 public class CodeProberPlugin implements Plugin<Project> {
   @Override
   public void apply(Project project) {
-    project.getTasks().create("launchCodeProber", LaunchCodeProber.class).setDescription("Start CodeProber and keep it running until Ctrl+C is pressed");
+    LaunchCodeProber task = project.getTasks().create("launchCodeProber", LaunchCodeProber.class);
+    task.setGroup("CodeProber");
+    task.setDescription("Start CodeProber and keep it running until Ctrl+C is pressed");
   }
 }
