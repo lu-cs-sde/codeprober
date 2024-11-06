@@ -118,11 +118,15 @@ public class ASTProvider {
 		return lastJar != null && lastJar.jarPath.equals(jarPath) && lastJar.jarLastModified == jarLastMod;
 	}
 
+	public static boolean printDebugInfo = true;
+
 	/**
 	 * Runs the target compiler.
 	 */
 	public static ParseResult parseAst(String jarPath, String[] args) {
-		System.out.println("parsing w/ args: " + Arrays.toString(args));
+		if (printDebugInfo) {
+			System.out.println("parsing w/ args: " + Arrays.toString(args));
+		}
 		boolean installedSystemExitInterceptor = false;
 		try {
 			LoadedJar ljar = loadJar(jarPath);
@@ -205,7 +209,9 @@ public class ASTProvider {
 						SystemExitControl.enableSystemExit();
 					}
 
-					System.out.printf("Compiler finished after : %d ms%n", (System.currentTimeMillis() - start));
+					if (printDebugInfo) {
+						System.out.printf("Compiler finished after : %d ms%n", (System.currentTimeMillis() - start));
+					}
 				}
 				final Object root = ljar.parseMth != null //
 						? parseMthReturnValue.get()

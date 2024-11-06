@@ -507,6 +507,15 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
         break;
       }
 
+      case 'html': {
+        const frame = document.createElement('iframe');
+        frame.src='data:text/html;charset=utf-8,' + encodeURI(line.value);
+        target.appendChild(frame);
+        target.appendChild(document.createElement('br'));
+        break;
+      }
+
+
       default: {
         console.warn('Unknown body line type', line);
         assertUnreachable(line);

@@ -1977,6 +1977,7 @@ define("model/test/rpcBodyToAssertionLine", ["require", "exports", "hacks"], fun
             case 'plain':
             case 'streamArg':
             case 'node':
+            case 'html':
                 return line;
             case 'highlightMsg':
                 return { type: 'plain', value: line.value.msg };
@@ -10640,6 +10641,13 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                     localDisableNodeExpander = false;
                     break;
                 }
+                case 'html': {
+                    const frame = document.createElement('iframe');
+                    frame.src = 'data:text/html;charset=utf-8,' + encodeURI(line.value);
+                    target.appendChild(frame);
+                    target.appendChild(document.createElement('br'));
+                    break;
+                }
                 default: {
                     console.warn('Unknown body line type', line);
                     (0, hacks_3.assertUnreachable)(line);
@@ -11358,7 +11366,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
                     property,
                     src,
                     type: 'EvaluateProperty',
-                },
+                }, 
                 // Status update stuff, can we use this here? :thinking:
                 () => { }, () => { }, () => { });
                 const cleanups = [];
@@ -11388,7 +11396,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
                                 property: nwData.property,
                                 src,
                                 type: 'EvaluateProperty',
-                            },
+                            }, 
                             // Status update stuff, can we use this here? :thinking:
                             () => { }, () => { }, () => { });
                             cleanups.push(nestedEvalProp.cancel);
@@ -11697,7 +11705,8 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     case 'stdout':
                                     case 'stderr':
                                     case 'dotGraph':
-                                    case 'streamArg': {
+                                    case 'streamArg':
+                                    case 'html': {
                                         return line.value;
                                     }
                                     case 'highlightMsg': {
@@ -14569,7 +14578,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         settings_9.default.setShouldCaptureTraces(checked);
                         notifyLocalChangeListeners();
                     },
-                },
+                }, 
                 // Hidden
                 {
                     checkbox: uiElements.autoflushTracesCheckbox,

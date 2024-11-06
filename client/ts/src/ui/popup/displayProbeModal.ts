@@ -182,7 +182,8 @@ const displayProbeModal = (
                 case 'stdout':
                 case 'stderr':
                 case 'dotGraph':
-                case 'streamArg': {
+                case 'streamArg':
+                case 'html': {
                   return line.value;
                 }
                 case 'highlightMsg': {

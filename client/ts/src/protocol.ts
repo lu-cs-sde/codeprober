@@ -216,6 +216,7 @@ type RpcBodyLine = (
   | { type: 'dotGraph'; value: string; }
   | { type: 'highlightMsg'; value: HighlightableMessage; }
   | { type: 'tracing'; value: Tracing; }
+  | { type: 'html'; value: string; }
 );
 interface StopJobReq {
   type: "Concurrent:StopJob";

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Stack;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -42,7 +43,7 @@ public class TracingBuilder implements Consumer<Object[]> {
 			return isAttached(parent);
 		}
 
-		public Tracing toTrace(String prefix) {
+		public Tracing toTrace() {
 			final AstNode astNode = new AstNode(node);
 			if (!isAttached(astNode)) {
 				// Oh dear! Pretend it did not happen
@@ -51,10 +52,11 @@ public class TracingBuilder implements Consumer<Object[]> {
 			final NodeLocator locator = CreateLocator.fromNode(info, astNode);
 			if (locator == null) {
 				System.err.println("Failed creating locator to " + node);
-				System.exit(1);
+				System.out.println("Origin property: " + property.toJSON());
+				return null;
 			}
 			final RpcBodyLine result;
-			if (value == null) {
+			if (value == null || skipEncodingResult) {
 				result = NULL_RESULT;
 			} else {
 				final List<RpcBodyLine> lines = new ArrayList<>();
@@ -62,7 +64,7 @@ public class TracingBuilder implements Consumer<Object[]> {
 				result = lines.size() == 1 ? lines.get(0) : RpcBodyLine.fromArr(lines);
 			}
 			return new Tracing(locator, property, dependencies.stream() //
-					.map(pt -> pt.toTrace(prefix + property.name + " > ")) //
+					.map(pt -> pt.toTrace()) //
 					.filter(t -> t != null) //
 					.collect(Collectors.toList()), result);
 		}
@@ -73,8 +75,25 @@ public class TracingBuilder implements Consumer<Object[]> {
 	private Stack<PendingTrace> active = new Stack<>();
 	private static RpcBodyLine NULL_RESULT = RpcBodyLine.fromPlain("null");
 
+	private Set<String> excludedAstNames = new HashSet<>();
+	private Set<String> excludedAttributes = new HashSet<>();
+	private boolean skipEncodingResult = false;
+
 	public TracingBuilder(AstInfo info) {
 		this.info = info;
+		excludedAstNames.add("ParseName"); // "Temporarily" disabled due to bug(?) in ExtendJ
+	}
+
+	public void setSkipEncodingTraceResults(boolean shouldSkip) {
+		skipEncodingResult = shouldSkip;
+	}
+
+	public void addExcludedAstType(String astName) {
+		excludedAstNames.add(astName);
+	}
+
+	public void addExcludedAttribute(String attrName) {
+		excludedAttributes.add(attrName);
 	}
 
 	private boolean recursionProtection = false;
@@ -88,7 +107,7 @@ public class TracingBuilder implements Consumer<Object[]> {
 		final LocatorMergeMethod mergeMethod = CreateLocator.getMergeMethod();
 		CreateLocator.setMergeMethod(LocatorMergeMethod.SKIP);
 		try {
-			final List<Tracing> result = completed.stream().map(pt -> pt.toTrace("")).filter(t -> t != null)
+			final List<Tracing> result = completed.stream().map(pt -> pt.toTrace()).filter(t -> t != null)
 					.collect(Collectors.toList());
 			if (result.isEmpty()) {
 				return null;
@@ -106,15 +125,18 @@ public class TracingBuilder implements Consumer<Object[]> {
 		}
 	}
 
-	private static boolean excludeAttribute(Object node, String attr) {
-		if (node.getClass().getSimpleName().equals("ParseName")) {
-			// "Temporarily" disabled due to bug(?) in ExtendJ
+	private boolean excludeAttribute(Object node, String attr) {
+		if (excludedAstNames.contains(node.getClass().getSimpleName())) {
 			return true;
 		}
 		if (attr.contains(".cpr_")) {
 			// Internal CodeProber attribute, exclude this
 			return true;
 		}
+		if (excludedAttributes.contains(attr)) {
+			return true;
+		}
+
 		return false;
 	}
 

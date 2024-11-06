@@ -307,6 +307,9 @@ public class EvaluatePropertyHandler {
 							if (value instanceof String && ((String) value).startsWith("@@DOT:")) {
 								// Hacky dot support
 								body.add(RpcBodyLine.fromDotGraph(((String) value).substring("@@DOT:".length())));
+							} else if (value instanceof String && ((String) value).startsWith("@@HTML:")) {
+								// Hacky html support
+								body.add(RpcBodyLine.fromHtml(((String) value).substring("@@HTML:".length())));
 							} else {
 								EncodeResponseValue.encodeTyped(parsed.info, body, diagnostics, value, new HashSet<>());
 							}
