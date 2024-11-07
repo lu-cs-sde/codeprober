@@ -1,7 +1,6 @@
 package codeprober.requesthandler;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -119,7 +118,7 @@ public class TracingBuilder implements Consumer<Object[]> {
 			// multiple others that have it
 			// Wrap this property in a fake trace event
 			return new Tracing(subjectOfTheTrace != null ? subjectOfTheTrace : result.get(1).node,
-					new Property("MultipleTraceEvents", new ArrayList<>(), null), result, RpcBodyLine.fromPlain(""));
+					new Property("MultipleTraceEvents"), result, RpcBodyLine.fromPlain(""));
 		} finally {
 			CreateLocator.setMergeMethod(mergeMethod);
 		}
@@ -134,6 +133,10 @@ public class TracingBuilder implements Consumer<Object[]> {
 			return true;
 		}
 		if (excludedAttributes.contains(attr)) {
+			return true;
+		}
+		final int dot = attr.indexOf('.');
+		if (dot != 1 && excludedAttributes.contains(attr.substring(dot + 1))) {
 			return true;
 		}
 
@@ -191,7 +194,7 @@ public class TracingBuilder implements Consumer<Object[]> {
 //				System.out.println(args[3]); // Params
 				// TODO handle params correctly
 				final PendingTrace tr = new PendingTrace(astNode,
-						new Property(attribute.substring(attribute.indexOf('.') + 1), Collections.emptyList(), null));
+						new Property(attribute.substring(attribute.indexOf('.') + 1)));
 
 				if (active.isEmpty()) {
 					completed.add(tr);
