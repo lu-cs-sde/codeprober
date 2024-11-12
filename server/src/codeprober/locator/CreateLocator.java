@@ -20,6 +20,7 @@ import org.json.JSONObject;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
+import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.create.CreateValue;
 import codeprober.protocol.data.FNStep;
 import codeprober.protocol.data.NodeLocator;
@@ -332,14 +333,14 @@ public class CreateLocator {
 
 		final TypeAtLoc source = TypeAtLoc.from(info, parent);
 		final TypeAtLoc target = TypeAtLoc.from(info, astNode);
-		int childIdxCounter = 0;
-		for (AstNode child : parent.getChildren(info)) {
+		final int numChildren = parent.getNumChildren(info);
+		for (int childIdx = 0; childIdx < numChildren; ++childIdx) {
+			final AstNode child = parent.getNthChild(info, childIdx);
 			if (child.sharesUnderlyingNode(astNode)) {
-				out.add(new StepWithTarget(NodeLocatorStep.fromChild(childIdxCounter), parent, astNode));
+				out.add(new StepWithTarget(NodeLocatorStep.fromChild(childIdx), parent, astNode));
 				extractStepsTo(info, parent, out);
 				return;
 			}
-			++childIdxCounter;
 		}
 		if (extractNtaEdge(info, astNode, out, target, parent)) {
 			return;
@@ -352,6 +353,23 @@ public class CreateLocator {
 			final AstNode realParent = parent.parent();
 			if (realParent != null) {
 				if (extractNtaEdge(info, astNode, out, target, realParent)) {
+					return;
+				}
+			}
+		}
+
+		final String getChildNoTransformMthName = "getChildNoTransform";
+		if (info.hasOverride1(parent.underlyingAstNode.getClass(), getChildNoTransformMthName, Integer.TYPE)) {
+			// 'child' may be the pre-transform child of parent.
+			for (int childIdx = 0; childIdx < numChildren; ++childIdx) {
+				final Object rawChild = Reflect.invokeN(parent.underlyingAstNode, getChildNoTransformMthName,
+						new Class<?>[] { Integer.TYPE }, new Object[] { childIdx });
+				if (rawChild == astNode.underlyingAstNode) {
+					out.add(new StepWithTarget(
+							NodeLocatorStep.fromNta(new FNStep(new Property(getChildNoTransformMthName,
+									Arrays.asList(PropertyArg.fromInteger(childIdx))))),
+							parent, astNode));
+					extractStepsTo(info, parent, out);
 					return;
 				}
 			}
@@ -384,7 +402,6 @@ public class CreateLocator {
 			if (!MethodKindDetector.isNta(m)) {
 				continue;
 			}
-			Field f;
 			String guessedCacheName = m.getName();
 			final Type[] genParams = m.getGenericParameterTypes();
 			for (Type t : genParams) {
@@ -436,6 +453,7 @@ public class CreateLocator {
 				}
 			}
 
+			Field f;
 			try {
 				f = m.getDeclaringClass().getDeclaredField(guessedCacheName);
 			} catch (NoSuchFieldException e) {
@@ -523,7 +541,7 @@ public class CreateLocator {
 		return false;
 	}
 
-	private static String extractSimpleNames(Type type) {
+	public static String extractSimpleNames(Type type) {
 		if (type instanceof ParameterizedType) {
 			ParameterizedType pt = (ParameterizedType) type;
 			String build = extractSimpleNames(pt.getRawType()) + "<";
@@ -553,7 +571,7 @@ public class CreateLocator {
 
 	// This function is stolen from JastAdd (src/jastadd/ast/NameBinding.jrag) so
 	// that we can mimic the cache naming convention.
-	private static String convTypeNameToSignature(String s) {
+	public static String convTypeNameToSignature(String s) {
 		s = s.replace('.', '_');
 		s = s.replace(' ', '_');
 		s = s.replace(',', '_');

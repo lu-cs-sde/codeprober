@@ -19,6 +19,7 @@ public class TestData {
 		private final int start;
 		private final int end;
 		private final List<Node> children = new ArrayList<>();
+		private Map<Integer, Node> noTransformChildren = null;
 		protected Node parent = null;
 
 		public Node(int start, int end) {
@@ -32,12 +33,25 @@ public class TestData {
 			return this;
 		}
 
+		public Node setNoTransformChild(int childIndex, Node child) {
+			if (noTransformChildren == null) {
+				noTransformChildren = new HashMap<>();
+			}
+			noTransformChildren.put(childIndex, child);
+			child.parent = this;
+			return this;
+		}
+
 		public int getNumChild() {
 			return children.size();
 		}
 
 		public Node getChild(int index) {
 			return children.get(index);
+		}
+
+		public Node getChildNoTransform(int index) {
+			return noTransformChildren == null ? null : noTransformChildren.get(index);
 		}
 
 		public int getStart() {
@@ -496,6 +510,24 @@ public class TestData {
 		return new Program(lc(1, 1), lc(1, 1)) //
 				.add(new Labeled(lc(1, 1), lc(1, 1), "Lbl1")) //
 				.add(new Labeled(lc(1, 1), lc(1, 1), "Lbl2")); //
+	}
+
+	/**
+	 * Get an AST looking like this:
+	 *
+	 * <pre>
+	 * 1 Program {
+	 * 1   Bar { } // preTransform: Bar
+	 * 1   Baz { } // preTransform: Qux
+	 * 1 }
+	 * </pre>
+	 */
+	public static Node getWithTransformedChildren() {
+		return new Program(lc(1, 1), lc(1, 1)) //
+				.add(new Foo(lc(1, 1), lc(1, 1))) //
+				.setNoTransformChild(0, new Bar(lc(1, 1), lc(1, 1))) //
+				.add(new Baz(lc(1, 1), lc(1, 1))) //
+				.setNoTransformChild(1, new Qux(lc(1, 1), lc(1, 1))); //
 	}
 
 	public static AstInfo getInfo(AstNode root) {

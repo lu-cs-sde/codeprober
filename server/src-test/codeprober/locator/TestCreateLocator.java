@@ -184,8 +184,6 @@ public class TestCreateLocator {
 		assertEquals(1, nodeLocatorSteps.size());
 		assertFooLocator.accept(nodeLocatorSteps.get(0).asTal());
 
-//		final JSONObject childStep = steps.getJSONObject(1);
-//		assertEquals("child", childStep.getString("type"));
 		assertEquals(1, steps.get(1).asChild());
 	}
 
@@ -197,10 +195,10 @@ public class TestCreateLocator {
 
 		final Node ntaArg = underlyingRoot.getChild(0);
 		final Node inner = underlyingRoot //
-      .parameterizedNTA(1, ntaArg) //
-      .getChild(0) //
-      .getChild(0) //
-      .parameterizedNTA(2, ntaArg);
+				.parameterizedNTA(1, ntaArg) //
+				.getChild(0) //
+				.getChild(0) //
+				.parameterizedNTA(2, ntaArg);
 
 		final NodeLocator locator = CreateLocator.fromNode(info, new AstNode(inner));
 
@@ -310,5 +308,35 @@ public class TestCreateLocator {
 
 		testIdentifications.accept(TypeIdentificationStyle.REFLECTION, NodeLocatorStep.Type.child);
 		testIdentifications.accept(TypeIdentificationStyle.NODE_LABEL, NodeLocatorStep.Type.tal);
+	}
+
+	@Test
+	public void testIdentifyingNoTransformChildren() {
+		final TestData.Node underlyingRoot = TestData.getWithTransformedChildren();
+		final AstNode root = new AstNode(underlyingRoot);
+		final AstInfo info = TestData.getInfo(root);
+
+		final AstNode foo = root.getNthChild(info, 0);
+		final NodeLocator fooLocator = createLocator(info, foo);
+		assertEquals(1, fooLocator.steps.size());
+		assertEquals(NodeLocatorStep.Type.tal, fooLocator.steps.get(0).type);
+
+		final AstNode bar = new AstNode(underlyingRoot.getChildNoTransform(0));
+		final NodeLocator barLocator = createLocator(info, bar);
+		assertEquals(1, barLocator.steps.size());
+		final NodeLocatorStep barStep = barLocator.steps.get(0);
+		assertEquals(NodeLocatorStep.Type.nta, barStep.type);
+		assertEquals("getChildNoTransform", barStep.asNta().property.name);
+		assertEquals(0, barStep.asNta().property.args.get(0).value);
+		assertSame(bar.underlyingAstNode, ApplyLocator.toNode(info, barLocator).node.underlyingAstNode);
+
+		final AstNode qux = new AstNode(underlyingRoot.getChildNoTransform(1));
+		final NodeLocator quxLocator = createLocator(info, qux);
+		assertEquals(1, quxLocator.steps.size());
+		final NodeLocatorStep quxStep = quxLocator.steps.get(0);
+		assertEquals(NodeLocatorStep.Type.nta, quxStep.type);
+		assertEquals("getChildNoTransform", quxStep.asNta().property.name);
+		assertEquals(1, quxStep.asNta().property.args.get(0).value);
+		assertSame(qux.underlyingAstNode, ApplyLocator.toNode(info, quxLocator).node.underlyingAstNode);
 	}
 }
