@@ -150,11 +150,11 @@ public class TracingBuilder implements Consumer<Object[]> {
 		}
 		recursionProtection = true;
 		try {
-			final String event = String.valueOf(args[0]);
 			if (args.length == 0) {
 				System.err.println("Invalid tracing information - empty array");
 				return;
 			}
+			final String event = String.valueOf(args[0]);
 			switch (event) {
 			case "COMPUTE_BEGIN": {
 				// Expected structure: Trace.Event event, ASTNode node, String attribute, Object

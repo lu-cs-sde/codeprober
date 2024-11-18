@@ -26,7 +26,7 @@ public abstract class CreateValue {
 	}
 
 	public static PropertyArg fromInstance(AstInfo info, Class<?> valueClazz, Type valueType, Object value) {
-		final PropertyArg arg = CreateType.fromClass(valueClazz, info.baseAstClazz);
+		final PropertyArg arg = CreateType.fromClass(valueClazz, info.baseAstClazz, value);
 		if (arg == null) {
 			return null;
 		}

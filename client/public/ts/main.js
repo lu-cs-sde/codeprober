@@ -469,6 +469,7 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
         contentRoot.style.position = 'relative';
         contentRoot.style.top = '0px';
         contentRoot.style.left = '0px';
+        contentRoot.style.maxHeight = '80vh';
         // contentRoot.style.display = 'contents';
         // contentRoot.style.minHeight = '4rem';
         // contentRoot.style.overflow = 'inherit';

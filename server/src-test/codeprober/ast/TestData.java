@@ -132,6 +132,28 @@ public class TestData {
 			return parameterizedNTA_int_Node_values.get(argList);
 		}
 
+		private Map<Object, Node> runnableParameterizedNTA_Runnable_values = new HashMap<>();
+
+		@SuppressWarnings("unused")
+		private final Object runnableParameterizedNTA_Runnable_proxy = new Object();
+
+		public Node setRunnableParameterizedNTA(Runnable arg, Node value) {
+			runnableParameterizedNTA_Runnable_values.put(arg, value);
+
+			// Emulate "proxy" behavior from JastAdd
+			// rather than setting parent directly on the value.
+			final Node proxy = new Node(lc(0, 0), lc(0, 0));
+			proxy.parent = this;
+			value.parent = proxy;
+
+			return this;
+		}
+
+		@Attribute
+		public Node runnableParameterizedNTA(Runnable arg) {
+			return runnableParameterizedNTA_Runnable_values.get(arg);
+		}
+
 		public void cpr_setTraceReceiver(Consumer<Object[]> recv) {
 			// No-op
 		}
@@ -200,7 +222,18 @@ public class TestData {
 		public String cpr_nodeLabel() {
 			return label;
 		}
+	}
 
+	public static class RunNode extends Node implements Runnable {
+
+		public RunNode(int start, int end) {
+			super(start, end);
+		}
+
+		@Override
+		public void run() {
+			// Noop
+		}
 	}
 
 	/**

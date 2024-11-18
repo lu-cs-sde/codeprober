@@ -339,4 +339,36 @@ public class TestCreateLocator {
 		assertEquals(1, quxStep.asNta().property.args.get(0).value);
 		assertSame(qux.underlyingAstNode, ApplyLocator.toNode(info, quxLocator).node.underlyingAstNode);
 	}
+
+	@Test
+	public void testNtaWithInterfaceArgument() {
+		final TestData.Node root = new TestData.Program(0, 0);
+		final TestData.Foo child = new TestData.Foo(0, 0);
+		final TestData.RunNode argNode = new TestData.RunNode(0, 0);
+		root.add(argNode);
+		final AstInfo info = TestData.getInfo(new AstNode(root));
+
+		root.setRunnableParameterizedNTA(argNode, child);
+		final NodeLocator locator = createLocator(info, new AstNode(child));
+
+		assertEquals(1, locator.steps.size());
+
+		final NodeLocatorStep step = locator.steps.get(0);
+		assertEquals(NodeLocatorStep.Type.nta, step.type);
+		final Property nta = step.asNta().property;
+
+		assertEquals("runnableParameterizedNTA", nta.name);
+		assertEquals(1, nta.args.size());
+
+		final PropertyArg arg = nta.args.get(0);
+		assertEquals(PropertyArg.Type.nodeLocator, arg.type);
+		assertEquals("java.lang.Runnable", arg.asNodeLocator().type);
+		final NodeLocator argLoc = arg.asNodeLocator().value;
+		assertEquals(TestData.RunNode.class.getName(), argLoc.result.type);
+		assertEquals(1, argLoc.steps.size());
+		assertEquals(NodeLocatorStep.Type.tal, argLoc.steps.get(0).type);
+		assertSame(argNode, ApplyLocator.toNode(info, argLoc).node.underlyingAstNode);
+
+		assertSame(child, ApplyLocator.toNode(info, locator).node.underlyingAstNode);
+	}
 }
