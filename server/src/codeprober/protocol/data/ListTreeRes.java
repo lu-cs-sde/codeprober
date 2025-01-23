@@ -7,15 +7,23 @@ public class ListTreeRes implements codeprober.util.JsonUtil.ToJsonable {
   public final NodeLocator locator;
   public final ListedTreeNode node;
   public ListTreeRes(java.util.List<RpcBodyLine> body, NodeLocator locator) {
-    this(body, locator, null);
+    this(body, locator, (ListedTreeNode)null);
   }
   public ListTreeRes(java.util.List<RpcBodyLine> body) {
-    this(body, null, null);
+    this(body, (NodeLocator)null, (ListedTreeNode)null);
   }
   public ListTreeRes(java.util.List<RpcBodyLine> body, NodeLocator locator, ListedTreeNode node) {
     this.body = body;
     this.locator = locator;
     this.node = node;
+  }
+  public ListTreeRes(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public ListTreeRes(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.body = codeprober.util.JsonUtil.<RpcBodyLine>readDataArr(src, () -> new RpcBodyLine(src));
+    this.locator = src.readBoolean() ? new NodeLocator(src) : null;
+    this.node = src.readBoolean() ? new ListedTreeNode(src) : null;
   }
 
   public static ListTreeRes fromJSON(JSONObject obj) {
@@ -31,5 +39,13 @@ public class ListTreeRes implements codeprober.util.JsonUtil.ToJsonable {
     if (locator != null) _ret.put("locator", locator.toJSON());
     if (node != null) _ret.put("node", node.toJSON());
     return _ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, body, ent -> ent.writeTo(dst));
+    if (locator != null) { dst.writeBoolean(true); locator.writeTo(dst);; } else { dst.writeBoolean(false); }
+    if (node != null) { dst.writeBoolean(true); node.writeTo(dst);; } else { dst.writeBoolean(false); }
   }
 }

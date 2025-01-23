@@ -4,12 +4,14 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import codeprober.AstInfo;
@@ -60,7 +62,7 @@ public class EvaluatePropertyHandler {
 		case nodeLocator: {
 			final NullableNodeLocator nl = val.asNodeLocator();
 			if (nl.value == null) {
-				return new UnpackedAttrValue(val.value, val);
+				return new UnpackedAttrValue(null, val);
 			}
 			final ResolvedNode res = ApplyLocator.toNode(info, nl.value);
 			if (res == null) {
@@ -78,8 +80,16 @@ public class EvaluatePropertyHandler {
 			for (PropertyArg sub : coll.entries) {
 				ret.add(unpackAttrValue(info, sub, streamMsgReceiver));
 			}
+			Collector<Object, ?, ? extends Collection<?>> collector;
+			switch (coll.type) {
+			case "java.util.Set":
+				collector = Collectors.toSet();
+				break;
+			default:
+				collector = Collectors.toList();
+			}
 			return new UnpackedAttrValue( //
-					ret.stream().map(x -> x.unpacked).collect(Collectors.toList()),
+					ret.stream().map(x -> x.unpacked).collect(collector),
 					PropertyArg.fromCollection(new PropertyArgCollection(coll.type,
 							ret.stream().map(x -> x.response).collect(Collectors.toList()))));
 		}

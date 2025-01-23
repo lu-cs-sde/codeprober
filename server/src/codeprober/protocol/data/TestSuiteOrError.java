@@ -8,12 +8,28 @@ public class TestSuiteOrError implements codeprober.util.JsonUtil.ToJsonable {
     err,
     contents,
   }
+  private static final Type[] typeValues = Type.values();
 
   public final Type type;
   public final Object value;
   private TestSuiteOrError(Type type, Object value) {
     this.type = type;
     this.value = value;
+  }
+  public TestSuiteOrError(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public TestSuiteOrError(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = typeValues[src.readInt()];
+    switch (this.type) {
+    case err:
+        this.value = codeprober.protocol.GetTestSuiteContentsErrorCode.values()[src.readInt()];
+        break;
+    case contents:
+    default:
+        this.value = new TestSuite(src);
+        break;
+    }
   }
   public static TestSuiteOrError fromErr(codeprober.protocol.GetTestSuiteContentsErrorCode val) { return new TestSuiteOrError(Type.err, val); }
   public static TestSuiteOrError fromContents(TestSuite val) { return new TestSuiteOrError(Type.contents, val); }
@@ -58,5 +74,20 @@ public class TestSuiteOrError implements codeprober.util.JsonUtil.ToJsonable {
       break;
     }
     return ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(type.ordinal());
+    switch (type) {
+    case err:
+      dst.writeInt(((codeprober.protocol.GetTestSuiteContentsErrorCode)value).ordinal());
+      break;
+    case contents:
+    default:
+      ((TestSuite)value).writeTo(dst);
+      break;
+    }
   }
 }

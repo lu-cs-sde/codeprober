@@ -1,11 +1,20 @@
 package codeprober.protocol.create;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
@@ -20,10 +29,20 @@ import codeprober.util.MagicStdoutMessageParser;
 
 public class EncodeResponseValue {
 
+	public static Consumer<AstNode> faultyNodeLocatorInspector = null;
+
+	public static boolean shouldSortSetAndMapContents = false;
+
+	public static BiConsumer<Object, List<RpcBodyLine>> defaultToStringOverride = null;
+
+	public static BiConsumer<Object, List<RpcBodyLine>> failedCreatingLocatorOverride = null;
+
+	private static final RpcBodyLine nullLine = RpcBodyLine.fromPlain("null");
+
 	public static void encodeTyped(AstInfo info, List<RpcBodyLine> out, List<Diagnostic> diagnostics, Object value,
 			HashSet<Object> alreadyVisitedNodes) {
 		if (value == null) {
-			out.add(RpcBodyLine.fromPlain("null"));
+			out.add(nullLine);
 			return;
 		}
 
@@ -59,7 +78,9 @@ public class EncodeResponseValue {
 //					if (((String) diagnosticValue).startsWith("))
 						final Diagnostic d = MagicStdoutMessageParser.parse(diagStr);
 						if (d != null) {
-							diagnostics.add(d);
+							if (diagnostics != null) {
+								diagnostics.add(d);
+							}
 						} else {
 							System.err.println("Invalid diagnostic string '" + diagnosticValue + "'");
 						}
@@ -116,17 +137,26 @@ public class EncodeResponseValue {
 						return;
 					}
 				} else {
-					out.add(RpcBodyLine.fromPlain("Couldn't create locator for " + node.underlyingAstNode));
-					out.add(RpcBodyLine
-							.fromPlain("This could indicate a caching issue, where a detached AST node is stored "));
-					out.add(RpcBodyLine.fromPlain("somewhere even after a re-parse or flushTreeCache() is called."));
-					out.add(RpcBodyLine.fromPlain("Try setting the 'AST caching strategy' to 'None' or 'Purge'."));
-					out.add(RpcBodyLine
-							.fromPlain("If that helps, then you maybe have a caching problem somewhere in the AST."));
-					out.add(RpcBodyLine.fromPlain(
-							"If that doesn't help, then please look at any error messages in the terminal where you started codeprober.jar."));
-					out.add(RpcBodyLine.fromPlain(
-							"If that doesn't help either, then you may have found a bug. Please report it!"));
+					if (faultyNodeLocatorInspector != null) {
+						faultyNodeLocatorInspector.accept(node);
+					}
+
+					if (failedCreatingLocatorOverride != null) {
+						failedCreatingLocatorOverride.accept(node.underlyingAstNode, out);
+					} else {
+						out.add(RpcBodyLine.fromPlain("Couldn't create locator for " + node.underlyingAstNode));
+						out.add(RpcBodyLine.fromPlain(
+								"This could indicate a caching issue, where a detached AST node is stored "));
+						out.add(RpcBodyLine
+								.fromPlain("somewhere even after a re-parse or flushTreeCache() is called."));
+						out.add(RpcBodyLine.fromPlain("Try setting the 'AST caching strategy' to 'None' or 'Purge'."));
+						out.add(RpcBodyLine.fromPlain(
+								"If that helps, then you maybe have a caching problem somewhere in the AST."));
+						out.add(RpcBodyLine.fromPlain(
+								"If that doesn't help, then please look at any error messages in the terminal where you started codeprober.jar."));
+						out.add(RpcBodyLine.fromPlain(
+								"If that doesn't help either, then you may have found a bug. Please report it!"));
+					}
 				}
 				return;
 			} catch (InvokeProblem e) {
@@ -154,10 +184,28 @@ public class EncodeResponseValue {
 			}
 			alreadyVisitedNodes.add(value);
 
-			final List<RpcBodyLine> indent = new ArrayList<>();
+			List<RpcBodyLine> indent = new ArrayList<>();
 			Iterable<?> iter = (Iterable<?>) value;
 			for (Object o : iter) {
 				encodeTyped(info, indent, diagnostics, o, alreadyVisitedNodes);
+			}
+			if (shouldSortSetAndMapContents && indent.size() > 1) {
+				// Cheating a bit here. Checking "instanceof Set" is good, checking if the name
+				// contains "Set" is a hack.
+				// This is mainly to support the "SmallSet" class in ExtendJ.
+				// TODO figure out a cleaner way to detect unordered iterables.
+				// We could consider checking "!(value instanceof List<?>)", but there may be
+				// non-List iterables where order is significant. So the current check, while
+				// hacky, is a little more conservative
+				final boolean isUnorderedIterable = value instanceof Set<?>
+						|| value.getClass().getSimpleName().contains("Set");
+				if (isUnorderedIterable) {
+					indent = indent.stream() //
+							.map(x -> new LineSorterHelper(x)) //
+							.sorted() //
+							.map(x -> x.line)
+							.collect(Collectors.toList());
+				}
 			}
 			out.add(RpcBodyLine.fromArr(indent));
 			return;
@@ -176,6 +224,32 @@ public class EncodeResponseValue {
 			out.add(RpcBodyLine.fromArr(indent));
 			return;
 		}
+		if (shouldSortSetAndMapContents && value instanceof Map<?, ?>) {
+			if (alreadyVisitedNodes.contains(value)) {
+				out.add(RpcBodyLine.fromPlain("<< reference loop to already visited value " + value + " >>"));
+				return;
+			}
+			alreadyVisitedNodes.add(value);
+
+			List<RpcBodyLine> indent = new ArrayList<>();
+//			Iterable<?> iter = (Iterable<?>) value;
+			for (Entry<?, ?> o : ((Map<?, ?>) value).entrySet()) {
+				// Version 1: encode the entire entry
+				// encodeTyped(info, indent, diagnostics, o, alreadyVisitedNodes);
+				// Version 2: Encode key/value separately
+				List<RpcBodyLine> indenterer = new ArrayList<>();
+				encodeTyped(info, indenterer, diagnostics, o.getKey(), alreadyVisitedNodes);
+				indenterer.add(RpcBodyLine.fromPlain(" = "));
+				encodeTyped(info, indenterer, diagnostics, o.getValue(), alreadyVisitedNodes);
+				indent.add(RpcBodyLine.fromArr(indenterer));
+			}
+			if (indent.size() > 1) {
+				indent = indent.stream().map(x -> new LineSorterHelper(x)).sorted().map(x -> x.line)
+						.collect(Collectors.toList());
+			}
+			out.add(RpcBodyLine.fromArr(indent));
+			return;
+		}
 		if (value instanceof Object[]) {
 			if (alreadyVisitedNodes.contains(value)) {
 				out.add(RpcBodyLine.fromPlain("<< reference loop to already visited value " + value + " >>"));
@@ -190,20 +264,73 @@ public class EncodeResponseValue {
 			out.add(RpcBodyLine.fromArr(indent));
 			return;
 		}
-		try {
-			if (value.getClass().getMethod("toString").getDeclaringClass() == Object.class) {
+		if (!(value instanceof String)) {
+			try {
+				if (value.getClass().getMethod("toString").getDeclaringClass() == Object.class) {
+					if (defaultToStringOverride != null) {
+						defaultToStringOverride.accept(value, out);
+						return;
+					}
 //				if (value.getClass().isEnum()) {
 //					out.put(value.toString());
 //				}
-				out.add(RpcBodyLine
-						.fromPlain("No toString() or cpr_getOutput() implementation in " + value.getClass().getName()));
+					out.add(RpcBodyLine.fromPlain(
+							"No toString() or cpr_getOutput() implementation in " + value.getClass().getName()));
+				}
+			} catch (NoSuchMethodException e) {
+				System.err.println("No toString implementation for " + value.getClass());
+				e.printStackTrace();
 			}
-		} catch (NoSuchMethodException e) {
-			System.err.println("No toString implementation for " + value.getClass());
-			e.printStackTrace();
 		}
-		for (String line : (value + "").split("\n")) {
+		for (String line : String.valueOf(value).split("\n")) {
 			out.add(RpcBodyLine.fromPlain(line));
+		}
+	}
+
+	private static class LineSorterHelper implements Comparable<LineSorterHelper> {
+		public final RpcBodyLine line;
+//		public final String sortString;
+		private byte[] sortArr;
+
+		public LineSorterHelper(RpcBodyLine line) {
+			this.line = line;
+//			this.sortString = line.toJSON().toString();
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			DataOutputStream dos = new DataOutputStream(baos);
+			try {
+				line.writeTo(dos);
+			} catch (IOException impossible) {
+				System.out.println("Impossible exception happened");
+				impossible.printStackTrace();
+				System.exit(1);
+			}
+			sortArr = baos.toByteArray();
+
+		}
+
+		@Override
+		public int compareTo(LineSorterHelper other) {
+			final int ourLen = sortArr.length;
+			final byte[] otherArr = other.sortArr;
+			final int otherLen = otherArr.length;
+			if (ourLen != otherLen) {
+				return ourLen < otherLen ? -1 : 1;
+			}
+
+			for (int i = 0; i < ourLen; ++i) {
+				final byte ourVal = sortArr[i];
+				final byte otherVal = otherArr[i];
+				if (ourVal != otherVal) {
+					return ourVal < otherVal ? -1 : 1;
+				}
+			}
+			return 0;
+//			return sortString.compareTo(other.sortString);
+//		     int i = Arrays.mismatch(a, b);
+//		     if (i >= 0 && i < Math.min(a.length, b.length))
+//		         return Boolean.compare(a[i], b[i]);
+//		     return a.length - b.length;
+//			return Arrays.compare(sortArr, other.sortArr);
 		}
 	}
 }

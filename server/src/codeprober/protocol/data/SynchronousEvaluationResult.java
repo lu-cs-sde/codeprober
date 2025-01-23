@@ -15,13 +15,13 @@ public class SynchronousEvaluationResult implements codeprober.util.JsonUtil.ToJ
   public final java.util.List<PropertyArg> args;
   public final NodeLocator locator;
   public SynchronousEvaluationResult(java.util.List<RpcBodyLine> body, long totalTime, long parseTime, long createLocatorTime, long applyLocatorTime, long attrEvalTime, long listNodesTime, long listPropertiesTime, java.util.List<Diagnostic> errors, java.util.List<PropertyArg> args) {
-    this(body, totalTime, parseTime, createLocatorTime, applyLocatorTime, attrEvalTime, listNodesTime, listPropertiesTime, errors, args, null);
+    this(body, totalTime, parseTime, createLocatorTime, applyLocatorTime, attrEvalTime, listNodesTime, listPropertiesTime, errors, args, (NodeLocator)null);
   }
   public SynchronousEvaluationResult(java.util.List<RpcBodyLine> body, long totalTime, long parseTime, long createLocatorTime, long applyLocatorTime, long attrEvalTime, long listNodesTime, long listPropertiesTime, java.util.List<Diagnostic> errors) {
-    this(body, totalTime, parseTime, createLocatorTime, applyLocatorTime, attrEvalTime, listNodesTime, listPropertiesTime, errors, null, null);
+    this(body, totalTime, parseTime, createLocatorTime, applyLocatorTime, attrEvalTime, listNodesTime, listPropertiesTime, errors, (java.util.List<PropertyArg>)null, (NodeLocator)null);
   }
   public SynchronousEvaluationResult(java.util.List<RpcBodyLine> body, long totalTime, long parseTime, long createLocatorTime, long applyLocatorTime, long attrEvalTime, long listNodesTime, long listPropertiesTime) {
-    this(body, totalTime, parseTime, createLocatorTime, applyLocatorTime, attrEvalTime, listNodesTime, listPropertiesTime, null, null, null);
+    this(body, totalTime, parseTime, createLocatorTime, applyLocatorTime, attrEvalTime, listNodesTime, listPropertiesTime, (java.util.List<Diagnostic>)null, (java.util.List<PropertyArg>)null, (NodeLocator)null);
   }
   public SynchronousEvaluationResult(java.util.List<RpcBodyLine> body, long totalTime, long parseTime, long createLocatorTime, long applyLocatorTime, long attrEvalTime, long listNodesTime, long listPropertiesTime, java.util.List<Diagnostic> errors, java.util.List<PropertyArg> args, NodeLocator locator) {
     this.body = body;
@@ -35,6 +35,22 @@ public class SynchronousEvaluationResult implements codeprober.util.JsonUtil.ToJ
     this.errors = errors;
     this.args = args;
     this.locator = locator;
+  }
+  public SynchronousEvaluationResult(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public SynchronousEvaluationResult(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.body = codeprober.util.JsonUtil.<RpcBodyLine>readDataArr(src, () -> new RpcBodyLine(src));
+    this.totalTime = src.readLong();
+    this.parseTime = src.readLong();
+    this.createLocatorTime = src.readLong();
+    this.applyLocatorTime = src.readLong();
+    this.attrEvalTime = src.readLong();
+    this.listNodesTime = src.readLong();
+    this.listPropertiesTime = src.readLong();
+    this.errors = src.readBoolean() ? codeprober.util.JsonUtil.<Diagnostic>readDataArr(src, () -> new Diagnostic(src)) : null;
+    this.args = src.readBoolean() ? codeprober.util.JsonUtil.<PropertyArg>readDataArr(src, () -> new PropertyArg(src)) : null;
+    this.locator = src.readBoolean() ? new NodeLocator(src) : null;
   }
 
   public static SynchronousEvaluationResult fromJSON(JSONObject obj) {
@@ -66,5 +82,21 @@ public class SynchronousEvaluationResult implements codeprober.util.JsonUtil.ToJ
     if (args != null) _ret.put("args", new org.json.JSONArray(args.stream().<Object>map(x->x.toJSON()).collect(java.util.stream.Collectors.toList())));
     if (locator != null) _ret.put("locator", locator.toJSON());
     return _ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, body, ent -> ent.writeTo(dst));
+    dst.writeLong(totalTime);
+    dst.writeLong(parseTime);
+    dst.writeLong(createLocatorTime);
+    dst.writeLong(applyLocatorTime);
+    dst.writeLong(attrEvalTime);
+    dst.writeLong(listNodesTime);
+    dst.writeLong(listPropertiesTime);
+    if (errors != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<Diagnostic>writeDataArr(dst, errors, ent -> ent.writeTo(dst));; } else { dst.writeBoolean(false); }
+    if (args != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<PropertyArg>writeDataArr(dst, args, ent -> ent.writeTo(dst));; } else { dst.writeBoolean(false); }
+    if (locator != null) { dst.writeBoolean(true); locator.writeTo(dst);; } else { dst.writeBoolean(false); }
   }
 }

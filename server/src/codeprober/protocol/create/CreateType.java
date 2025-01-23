@@ -5,7 +5,9 @@ import java.io.PrintStream;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import codeprober.AstInfo;
 import codeprober.protocol.data.NullableNodeLocator;
@@ -24,9 +26,12 @@ public abstract class CreateType {
 		if (param == String.class) {
 			return PropertyArg.fromString("");
 		}
-		if (param == Collection.class) {
+		if (param == Collection.class || param == List.class || param == ArrayList.class || param == Set.class || param == HashSet.class) {
 			return PropertyArg.fromCollection(new PropertyArgCollection(param.getName(), new ArrayList<>()));
 		}
+//		if (param == HashSet.class) {
+//			return PropertyArg.fromCollection(new PropertyArgCollection(param.getName(), new java.util.ArrayList<>()));
+//		}
 		if (param == OutputStream.class || param == PrintStream.class) {
 			return PropertyArg.fromOutputstream(param.getName());
 		}

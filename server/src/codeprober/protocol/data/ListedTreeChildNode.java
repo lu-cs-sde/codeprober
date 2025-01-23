@@ -9,12 +9,28 @@ public class ListedTreeChildNode implements codeprober.util.JsonUtil.ToJsonable 
     children,
     placeholder,
   }
+  private static final Type[] typeValues = Type.values();
 
   public final Type type;
   public final Object value;
   private ListedTreeChildNode(Type type, Object value) {
     this.type = type;
     this.value = value;
+  }
+  public ListedTreeChildNode(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public ListedTreeChildNode(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = typeValues[src.readInt()];
+    switch (this.type) {
+    case children:
+        this.value = codeprober.util.JsonUtil.<ListedTreeNode>readDataArr(src, () -> new ListedTreeNode(src));
+        break;
+    case placeholder:
+    default:
+        this.value = src.readInt();
+        break;
+    }
   }
   public static ListedTreeChildNode fromChildren(java.util.List<ListedTreeNode> val) { return new ListedTreeChildNode(Type.children, val); }
   public static ListedTreeChildNode fromPlaceholder(int val) { return new ListedTreeChildNode(Type.placeholder, val); }
@@ -59,5 +75,20 @@ public class ListedTreeChildNode implements codeprober.util.JsonUtil.ToJsonable 
       break;
     }
     return ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(type.ordinal());
+    switch (type) {
+    case children:
+      codeprober.util.JsonUtil.<ListedTreeNode>writeDataArr(dst, ((java.util.List<ListedTreeNode>)value), ent -> ent.writeTo(dst));
+      break;
+    case placeholder:
+    default:
+      dst.writeInt(((int)value));
+      break;
+    }
   }
 }

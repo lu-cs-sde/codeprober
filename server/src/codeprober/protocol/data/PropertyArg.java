@@ -12,12 +12,40 @@ public class PropertyArg implements codeprober.util.JsonUtil.ToJsonable {
     outputstream,
     nodeLocator,
   }
+  private static final Type[] typeValues = Type.values();
 
   public final Type type;
   public final Object value;
   private PropertyArg(Type type, Object value) {
     this.type = type;
     this.value = value;
+  }
+  public PropertyArg(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public PropertyArg(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = typeValues[src.readInt()];
+    switch (this.type) {
+    case string:
+        this.value = src.readUTF();
+        break;
+    case integer:
+        this.value = src.readInt();
+        break;
+    case bool:
+        this.value = src.readBoolean();
+        break;
+    case collection:
+        this.value = new PropertyArgCollection(src);
+        break;
+    case outputstream:
+        this.value = src.readUTF();
+        break;
+    case nodeLocator:
+    default:
+        this.value = new NullableNodeLocator(src);
+        break;
+    }
   }
   public static PropertyArg fromString(String val) { return new PropertyArg(Type.string, val); }
   public static PropertyArg fromInteger(int val) { return new PropertyArg(Type.integer, val); }
@@ -114,5 +142,32 @@ public class PropertyArg implements codeprober.util.JsonUtil.ToJsonable {
       break;
     }
     return ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(type.ordinal());
+    switch (type) {
+    case string:
+      dst.writeUTF(((String)value));
+      break;
+    case integer:
+      dst.writeInt(((int)value));
+      break;
+    case bool:
+      dst.writeBoolean(((boolean)value));
+      break;
+    case collection:
+      ((PropertyArgCollection)value).writeTo(dst);
+      break;
+    case outputstream:
+      dst.writeUTF(((String)value));
+      break;
+    case nodeLocator:
+    default:
+      ((NullableNodeLocator)value).writeTo(dst);
+      break;
+    }
   }
 }

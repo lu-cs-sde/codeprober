@@ -9,12 +9,28 @@ public class WorkerTaskDone implements codeprober.util.JsonUtil.ToJsonable {
     normal,
     unexpectedError,
   }
+  private static final Type[] typeValues = Type.values();
 
   public final Type type;
   public final Object value;
   private WorkerTaskDone(Type type, Object value) {
     this.type = type;
     this.value = value;
+  }
+  public WorkerTaskDone(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public WorkerTaskDone(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = typeValues[src.readInt()];
+    switch (this.type) {
+    case normal:
+        this.value = new org.json.JSONObject(src.readUTF());
+        break;
+    case unexpectedError:
+    default:
+        this.value = codeprober.util.JsonUtil.<String>readDataArr(src, () -> src.readUTF());
+        break;
+    }
   }
   public static WorkerTaskDone fromNormal(org.json.JSONObject val) { return new WorkerTaskDone(Type.normal, val); }
   public static WorkerTaskDone fromUnexpectedError(java.util.List<String> val) { return new WorkerTaskDone(Type.unexpectedError, val); }
@@ -59,5 +75,20 @@ public class WorkerTaskDone implements codeprober.util.JsonUtil.ToJsonable {
       break;
     }
     return ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(type.ordinal());
+    switch (type) {
+    case normal:
+      dst.writeUTF(((org.json.JSONObject)value).toString());
+      break;
+    case unexpectedError:
+    default:
+      codeprober.util.JsonUtil.<String>writeDataArr(dst, ((java.util.List<String>)value), ent -> dst.writeUTF(ent));
+      break;
+    }
   }
 }

@@ -97,7 +97,7 @@ public class TestRequestHandler {
 			}
 			try {
 				Files.write(f.toPath(), req.contents.toJSON().toString().getBytes(StandardCharsets.UTF_8));
-				return new PutTestSuiteRes(null);
+				return new PutTestSuiteRes();
 			} catch (IOException e) {
 				e.printStackTrace();
 				System.err.println("Failed reading contents of " + f);

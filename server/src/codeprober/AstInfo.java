@@ -1,10 +1,15 @@
 package codeprober;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
 import codeprober.ast.AstNode;
+import codeprober.locator.MethodKindDetector;
 import codeprober.metaprogramming.AstNodeApiStyle;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
@@ -25,6 +30,9 @@ public class AstInfo {
 
 	private final Map<Class<?>, Map<String, Boolean>> hasOverride0Cache = new HashMap<>();
 	private final Map<Class<?>, Map<String, Map<Class<?>, Boolean>>> hasOverride1Cache = new HashMap<>();
+	private final Map<Class<?>, Method[]> ntaMethodCache = new HashMap<>();
+	private Field childIndexField = null;
+	private boolean childIndexFieldLoaded = false;
 
 	public AstInfo(AstNode ast, PositionRecoveryStrategy recoveryStrategy, AstNodeApiStyle astApiStyle,
 			TypeIdentificationStyle typeIdentificationStyle) {
@@ -51,6 +59,23 @@ public class AstInfo {
 			baseAstType = parentType;
 		}
 		this.baseAstClazz = baseAstType;
+	}
+
+	public Field getChildIndexField() {
+		if (!childIndexFieldLoaded) {
+			childIndexFieldLoaded = true;
+			try {
+				childIndexField = baseAstClazz.getDeclaredField("childIndex");
+				if (childIndexField.getType() == Integer.TYPE) {
+					childIndexField.setAccessible(true);
+				} else {
+					childIndexField = null;
+				}
+			} catch (NoSuchFieldException e) {
+				// OK, it is optional
+			}
+		}
+		return childIndexField;
 	}
 
 	public String getQualifiedAstType(String simpleName) {
@@ -128,4 +153,20 @@ public class AstInfo {
 		return fresh;
 	}
 
+	public Method[] getNtaMethods(Class<?> clazz) {
+		final Method[] cached = ntaMethodCache.get(clazz);
+		if (cached != null) {
+			return cached;
+		}
+
+		List<Method> found = new ArrayList<>();
+		for (Method m : clazz.getMethods()) {
+			if (MethodKindDetector.isNta(m)) {
+				found.add(m);
+			}
+		}
+		final Method[] arr = found.toArray(new Method[found.size()]);
+		ntaMethodCache.put(clazz, arr);
+		return arr;
+	}
 }

@@ -13,6 +13,15 @@ public class Tracing implements codeprober.util.JsonUtil.ToJsonable {
     this.dependencies = dependencies;
     this.result = result;
   }
+  public Tracing(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public Tracing(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.node = new NodeLocator(src);
+    this.prop = new Property(src);
+    this.dependencies = codeprober.util.JsonUtil.<Tracing>readDataArr(src, () -> new Tracing(src));
+    this.result = new RpcBodyLine(src);
+  }
 
   public static Tracing fromJSON(JSONObject obj) {
     return new Tracing(
@@ -29,5 +38,14 @@ public class Tracing implements codeprober.util.JsonUtil.ToJsonable {
     _ret.put("dependencies", new org.json.JSONArray(dependencies.stream().<Object>map(x->x.toJSON()).collect(java.util.stream.Collectors.toList())));
     _ret.put("result", result.toJSON());
     return _ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    node.writeTo(dst);
+    prop.writeTo(dst);
+    codeprober.util.JsonUtil.<Tracing>writeDataArr(dst, dependencies, ent -> ent.writeTo(dst));
+    result.writeTo(dst);
   }
 }

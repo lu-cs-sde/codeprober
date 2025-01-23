@@ -1,73 +1,108 @@
 package codeprober.requesthandler;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.Stack;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.locator.CreateLocator;
 import codeprober.locator.CreateLocator.LocatorMergeMethod;
+import codeprober.protocol.create.CreateValue;
 import codeprober.protocol.create.EncodeResponseValue;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.Property;
+import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.Tracing;
+import codeprober.util.BenchmarkTimer;
 
 public class TracingBuilder implements Consumer<Object[]> {
 
-	private class PendingTrace {
+	public class PendingTrace {
 		public Object node;
+		private final AstNode astNode;
+		private NodeLocator nodeLocator;
+		private RpcBodyLine encodedResult;
 		public final Property property;
 		public final List<PendingTrace> dependencies = new ArrayList<>();
 		public Object value;
+		public final Object preTraceValue;
+		public final PendingTrace parent;
+//		public boolean isCircular = false;
 
-		public PendingTrace(Object node, Property property) {
+		/**
+		 * Unused field, available for subtypes of {@link TracingBuilder} to store
+		 * arbitrary data.
+		 */
+		public Object userData = null;
+
+		public PendingTrace(Object node, Property property, Object preTraceValue, PendingTrace parent) {
 			this.node = node;
+			this.astNode = new AstNode(node);
 			this.property = property;
+			this.preTraceValue = preTraceValue;
+			this.parent = parent;
 		}
 
-		private boolean isAttached(AstNode node) {
-			if (node.underlyingAstNode == info.ast.underlyingAstNode) {
-				return true;
+		public NodeLocator getLocator() {
+			if (nodeLocator == null) {
+				nodeLocator = CreateLocator.fromNode(info, astNode);
 			}
-			final AstNode parent = node.parent();
-			if (parent == null) {
-				return false;
+			return nodeLocator;
+		}
+
+		public RpcBodyLine getEncodedResult() {
+			if (encodedResult == null) {
+				encodedResult = encodeValue(value);
 			}
-			return isAttached(parent);
+			return encodedResult;
 		}
 
 		public Tracing toTrace() {
-			final AstNode astNode = new AstNode(node);
+//			final AstNode astNode = new AstNode(node);
+			BenchmarkTimer.TRACE_CHECK_NODE_ATTACHMENT.enter();
 			if (!isAttached(astNode)) {
-				// Oh dear! Pretend it did not happen
+				// Oh dear! Pretend it did not happen;
+				BenchmarkTimer.TRACE_CHECK_NODE_ATTACHMENT.exit();
 				return null;
 			}
-			final NodeLocator locator = CreateLocator.fromNode(info, astNode);
+			BenchmarkTimer.TRACE_CHECK_NODE_ATTACHMENT.exit();
+			final NodeLocator locator = getLocator();
 			if (locator == null) {
 				System.err.println("Failed creating locator to " + node);
 				System.out.println("Origin property: " + property.toJSON());
 				return null;
 			}
-			final RpcBodyLine result;
-			if (value == null || skipEncodingResult) {
-				result = NULL_RESULT;
-			} else {
-				final List<RpcBodyLine> lines = new ArrayList<>();
-				EncodeResponseValue.encodeTyped(info, lines, new ArrayList<>(), value, new HashSet<>());
-				result = lines.size() == 1 ? lines.get(0) : RpcBodyLine.fromArr(lines);
+			final RpcBodyLine result = getEncodedResult();
+			++debDepthCounter;
+			try {
+//				if (debDepthCounter >= 100) {
+//					System.out.println("!");
+//				}
+				return new Tracing(locator, property, dependencies.stream() //
+						.map(pt -> pt.toTrace()) //
+						.filter(t -> t != null) //
+						.collect(Collectors.toList()), result);
+			} finally {
+				--debDepthCounter;
 			}
-			return new Tracing(locator, property, dependencies.stream() //
-					.map(pt -> pt.toTrace()) //
-					.filter(t -> t != null) //
-					.collect(Collectors.toList()), result);
 		}
 	}
+
+	static int debDepthCounter = 0;
 
 	private final AstInfo info;
 	private final List<PendingTrace> completed = new ArrayList<>();
@@ -77,14 +112,62 @@ public class TracingBuilder implements Consumer<Object[]> {
 	private Set<String> excludedAstNames = new HashSet<>();
 	private Set<String> excludedAttributes = new HashSet<>();
 	private boolean skipEncodingResult = false;
+	private List<PropertyArg> fallbackArgsForUnknownArgumentTypes = null;
+	private final IdentityHashMap<Object, Boolean> isAttachedCheckCache = new IdentityHashMap<>();
+	final HashSet<Object> encodeAlreadyVisitedNodesCache = new HashSet<>();
+	private final List<RpcBodyLine> encodeLinesCache = new ArrayList<>();
+
+	private static Set<String> alreadyWarnedAttributesFailedArgumentDeterming = new HashSet<>();
+
+	private boolean recursionProtection = false;
+	private boolean acceptTraces = true;
+//	private boolean nextComputeBeginIsCircular = false;
 
 	public TracingBuilder(AstInfo info) {
 		this.info = info;
 		excludedAstNames.add("ParseName"); // "Temporarily" disabled due to bug(?) in ExtendJ
 	}
 
+	public RpcBodyLine encodeValue(Object value) {
+		if (value == null || skipEncodingResult) {
+			return NULL_RESULT;
+		} else {
+			BenchmarkTimer.TRACE_ENCODE_RESPONSE_VALUE.enter();
+			encodeLinesCache.clear();
+			encodeAlreadyVisitedNodesCache.clear();
+			EncodeResponseValue.encodeTyped(info, encodeLinesCache, null, value,
+					encodeAlreadyVisitedNodesCache);
+			final RpcBodyLine ret = encodeLinesCache.size() == 1 ? encodeLinesCache.get(0)
+					: RpcBodyLine.fromArr(new ArrayList<>(encodeLinesCache));
+			BenchmarkTimer.TRACE_ENCODE_RESPONSE_VALUE.exit();
+			return ret;
+		}
+
+	}
+
+	public boolean isAttached(AstNode node) {
+		if (node.underlyingAstNode == info.ast.underlyingAstNode) {
+			return true;
+		}
+		final AstNode parent = node.parent();
+		if (parent == null) {
+			return false;
+		}
+		final Boolean cached = isAttachedCheckCache.get(parent.underlyingAstNode);
+		if (cached != null) {
+			return cached;
+		}
+		final boolean ret = isAttached(parent);
+		isAttachedCheckCache.put(parent.underlyingAstNode, ret);
+		return ret;
+	}
+
 	public void setSkipEncodingTraceResults(boolean shouldSkip) {
 		skipEncodingResult = shouldSkip;
+	}
+
+	public void setFallbackArgsForUnknownArgumentTypes(List<PropertyArg> args) {
+		fallbackArgsForUnknownArgumentTypes = args;
 	}
 
 	public void addExcludedAstType(String astName) {
@@ -94,9 +177,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 	public void addExcludedAttribute(String attrName) {
 		excludedAttributes.add(attrName);
 	}
-
-	private boolean recursionProtection = false;
-	private boolean acceptTraces = true;
 
 	public void stop() {
 		acceptTraces = false;
@@ -143,6 +223,42 @@ public class TracingBuilder implements Consumer<Object[]> {
 		return false;
 	}
 
+	/**
+	 * Called when a COMPUTE_BEGIN event happens. Can be used to compute extra
+	 * information before a traced property finishes computing. The returned value
+	 * will be passed to {@link #onComputeEnd(Object, Property, Object)}.
+	 * <p>
+	 * Default implementation always returns <code>null</code>.
+	 *
+	 * @param node     the node related to the trace.
+	 * @param property the property being computed.
+	 * @param args     the argument(s) (if any) to the property
+	 * @return a value to be passed to
+	 *         {@link #onComputeEnd(Object, Property, Object)}. If
+	 *         <code>null</code>, then
+	 *         {@link #onComputeEnd(Object, Property, Object)} will not be called.
+	 */
+	protected Object getComputeBeginInformation(Object node, Property property, Object args) {
+		return null;
+	}
+
+	/**
+	 * Called in response to a COMPUTE_END event, if a non-<code>null</code> value
+	 * was returned by
+	 * {@link #getComputeBeginInformation(Object, Property, Object)}.
+	 * <p>
+	 * Default implementation is a no-op.
+	 *
+	 * @param result           the result of the computed property.
+	 * @param computeBeginInfo the info from
+	 *                         {@link #getComputeBeginInformation(Object, Property, Object)}.
+	 */
+	protected void onComputeEnd(Object result, Object computeBeginInfo) {
+		// Noop
+	}
+
+//	int computeDepth = 0;
+
 	@Override
 	public void accept(Object[] args) {
 		if (recursionProtection || !acceptTraces) {
@@ -157,8 +273,17 @@ public class TracingBuilder implements Consumer<Object[]> {
 			final String event = String.valueOf(args[0]);
 			switch (event) {
 			case "COMPUTE_BEGIN": {
-				// Expected structure: Trace.Event event, ASTNode node, String attribute, Object
-				// params, Object value
+//				System.out.printf("%3d COMPUTE_BEGIN %s.%s%n", ++computeDepth, args[1] + "", args[2] + "");
+				/**
+				 * Expected structure:
+				 * <ul>
+				 * <li>0: Trace.Event event
+				 * <li>1: ASTNode node
+				 * <li>2: String attribute
+				 * <li>3: Object params
+				 * <li>4: Object value
+				 * </ul>
+				 */
 				if (args.length != 5) {
 					System.err.println(
 							"Invalid tracing information - expected 5 items for COMPUTE_BEGIN, got " + args.length);
@@ -169,8 +294,15 @@ public class TracingBuilder implements Consumer<Object[]> {
 				if (excludeAttribute(astNode, attribute)) {
 					return;
 				}
+//				public static PropertyArg fromInstance(AstInfo info, Class<?> valueClazz, Type valueType, Object value) {
+//				boolean markAsFailedDeterminingArgs = false;
+
+				List<PropertyArg> propArgs = null;
+				BenchmarkTimer.TRACE_CHECK_PARAMETERS.enter();
 				if (attribute.endsWith("(String)")) {
-					final String insert = String.format("\"%s\"", String.valueOf(args[3]));
+					final String argVal = String.valueOf(args[3]);
+					propArgs = Arrays.asList(PropertyArg.fromString(argVal));
+					final String insert = String.format("\"%s\"", argVal);
 					if (insert.length() <= 16) {
 						// Relatively short arg, inline the value into the attribute name.
 						attribute = String.format("%s(%s)",
@@ -179,8 +311,10 @@ public class TracingBuilder implements Consumer<Object[]> {
 				} else if (attribute.endsWith("(String,int)") && args[3] instanceof List) {
 					final List<?> argList = (List<?>) args[3];
 					if (argList.size() == 2) {
-						final String insert = String.format("\"%s\",%s", String.valueOf(argList.get(0)),
-								String.valueOf(argList.get(1)));
+						final String strArg = String.valueOf(argList.get(0));
+						final Integer intVal = (Integer) argList.get(1);
+						final String insert = String.format("\"%s\",%s", strArg, String.valueOf(intVal));
+						propArgs = Arrays.asList(PropertyArg.fromString(strArg), PropertyArg.fromInteger(intVal));
 						if (insert.length() <= 16) {
 							// Relatively short arg list, inline
 							attribute = String.format("%s(%s)",
@@ -188,23 +322,47 @@ public class TracingBuilder implements Consumer<Object[]> {
 
 						}
 					}
+				} else {
+					propArgs = decodeTraceArgs(astNode, attribute, args[3]);
 				}
+				BenchmarkTimer.TRACE_CHECK_PARAMETERS.exit();
+//				if (propArgs != null) {
+//					System.out.println("Decided that " + attribute + " contains " + propArgs.size()
+//							+ " arg(s), which are: "
+//							+ propArgs.stream().map(x -> x.toJSON().toString()).collect(Collectors.joining(",")));
+//				}
 
+				final Property prop = new Property(attribute.substring(attribute.indexOf('.') + 1), propArgs);
 //				System.out.printf("Encode %s on %s\n", attribute, astNode.getClass().getSimpleName());
 //				System.out.println(args[3]); // Params
 				// TODO handle params correctly
-				final PendingTrace tr = new PendingTrace(astNode,
-						new Property(attribute.substring(attribute.indexOf('.') + 1)));
+				final PendingTrace tr = new PendingTrace(astNode, prop,
+						getComputeBeginInformation(astNode, prop, args[3]), active.isEmpty() ? null : active.peek());
 
+//				if (nextComputeBeginIsCircular) {
+//					tr.isCircular = true;
+//					nextComputeBeginIsCircular = false;
+//				}
 				if (active.isEmpty()) {
 					completed.add(tr);
 				} else {
-					active.peek().dependencies.add(tr);
+					final PendingTrace top = active.peek();
+
+//					if (top.isCircular && !tr.isCircular
+//								&& top.astNode.underlyingAstNode == tr.astNode.underlyingAstNode
+//								&& top.property.name.equals(tr.property.name)) {
+//						//
+//					}
+//					if (top.node == tr.node && top.property.toJSON().toString().equals(tr.property.toJSON().toString())) {
+//						System.out.println("????");
+//					}
+					top.dependencies.add(tr);
 				}
 				active.push(tr);
 				break;
 			}
 			case "COMPUTE_END": {
+//				System.out.printf("%3d COMPUTE_END %s.%s%n", --computeDepth, args[1] + "", args[2] + "");
 				// Expected structure: same as COMPUTE_BEGIN
 				if (args.length != 5) {
 					System.err.println(
@@ -218,18 +376,132 @@ public class TracingBuilder implements Consumer<Object[]> {
 				}
 				final Object value = args[4];
 
+
+//				final PendingTrace top = active.peek();
+//				if (top.isCircular) {
+//					// Don't pop, a circular_exit will come soon
+//				}
+
 				final PendingTrace popped = active.pop();
+				if (popped.preTraceValue != null) {
+					onComputeEnd(value, popped.preTraceValue);
+				}
 				popped.value = value;
 				break;
 			}
 			default: {
-				System.err.printf("Unknown tracing event '%s'", event);
+//				System.err.printf("Unknown tracing event '%s'%n", event);
+				break;
 			}
 			}
 		} finally {
 			recursionProtection = false;
 		}
 
+	}
+
+	protected PendingTrace peekActiveTrace() {
+		return active.isEmpty() ? null : active.peek();
+	}
+
+	private static class ArgsKey {
+		private final Class<?> owner;
+		private final String attribute;
+		private final int numParams;
+
+		public ArgsKey(Class<?> owner, String attribute, int numParams) {
+			this.owner = owner;
+			this.attribute = attribute;
+			this.numParams = numParams;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(attribute, numParams, owner);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (obj == null)
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			ArgsKey other = (ArgsKey) obj;
+			return Objects.equals(attribute, other.attribute) && numParams == other.numParams
+					&& Objects.equals(owner, other.owner);
+		}
+	}
+
+	private final Map<ArgsKey, Function<List<?>, List<PropertyArg>>> traceArgsDecodingCache = new HashMap<>();
+
+	public List<PropertyArg> decodeTraceArgs(Object astNode, String attribute, Object rawParams) {
+		if (rawParams == null || attribute.endsWith("()")) {
+			return null;
+		}
+		final List<?> paramsAsList = attribute.contains(",") ? (List<?>) rawParams : Arrays.asList(rawParams);
+		final ArgsKey key = new ArgsKey(astNode.getClass(), attribute, paramsAsList.size());
+		if (!traceArgsDecodingCache.containsKey(key)) {
+			final String shortNeedle = attribute.substring(attribute.indexOf('.') + 1, attribute.indexOf('('));
+
+			List<Method> candidates = new ArrayList<>();
+			for (Method m : astNode.getClass().getMethods()) {
+				if (!m.getName().equals(shortNeedle)) {
+					continue;
+				}
+				if (key.numParams != m.getParameterCount()) {
+					continue;
+				}
+
+				candidates.add(m);
+			}
+			if (candidates.isEmpty()) {
+				if (alreadyWarnedAttributesFailedArgumentDeterming.add(attribute)) {
+					System.err.println("Failed determining types of arguments to " + attribute);
+				}
+				traceArgsDecodingCache.put(key, null);
+			} else {
+				traceArgsDecodingCache.put(key, args -> {
+					testCandidate: for (Method m : candidates) {
+						final Class<?>[] params = m.getParameterTypes();
+						final Type[] genParams = m.getGenericParameterTypes();
+
+						final List<PropertyArg> convArgs = new ArrayList<>();
+						for (int argIdx = 0; argIdx < args.size(); ++argIdx) {
+							final Object argVal = args.get(argIdx);
+							if (argVal != null) {
+								if (params[argIdx] == Integer.TYPE && argVal instanceof Integer) {
+									// OK
+								} else if (!params[argIdx].isInstance(argVal)) {
+									continue testCandidate;
+								}
+							}
+							final PropertyArg val = CreateValue.fromInstance(info, params[argIdx], genParams[argIdx],
+									argVal);
+							if (val == null) {
+								continue testCandidate;
+							}
+							convArgs.add(val);
+						}
+						return convArgs;
+					}
+					if (alreadyWarnedAttributesFailedArgumentDeterming.add(attribute)) {
+						System.err.println("Failed determining types of arguments to " + attribute);
+					}
+					return null;
+				});
+			}
+		}
+		final Function<List<?>, List<PropertyArg>> decoder = traceArgsDecodingCache.get(key);
+		if (decoder != null) {
+			final List<PropertyArg> decoded = decoder.apply(paramsAsList);
+			if (decoded != null) {
+				return decoded;
+			}
+		}
+
+		return fallbackArgsForUnknownArgumentTypes;
 	}
 
 }
