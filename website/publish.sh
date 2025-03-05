@@ -14,6 +14,10 @@ if [ "$S3_BUCKET_NAME" = "" ]; then
   echo "Missing 'S3_BUCKET_NAME' in setup.sh"
   exit 1
 fi
+if [ "$SRC_WEBSITE_DIR" = "" ]; then
+  echo "Missing 'SRC_WEBSITE_DIR' in setup.sh"
+  exit 1
+fi
 if [ "$CLOUDFRONT_DISTRIBUTION" = "" ]; then
   echo "Missing 'CLOUDFRONT_DISTRIBUTION' in setup.sh"
   exit 1
@@ -29,7 +33,7 @@ else
 fi
 
 
-aws s3 sync $WETNESS --delete /website s3://$S3_BUCKET_NAME
+aws s3 sync $WETNESS --delete $SRC_WEBSITE_DIR s3://$S3_BUCKET_NAME
 echo "S3 sync done"
 
 if [ "$WET_RUN" = "yes" ]; then

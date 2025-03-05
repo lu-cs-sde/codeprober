@@ -892,7 +892,7 @@ public class GenJava {
 					break;
 				case "org.json.JSONObject":
 					boxedName = ent.name;
-					comparator = "%s.toString().compareTo(%s.toString())"; // TODO not a good comparison technique
+					comparator = "%s.toString().compareTo(%s.toString())"; // TODO toString() is not a good comparison technique
 					break;
 				default: {
 					throw new Exception("Unknown primitive name " + ent.name);
