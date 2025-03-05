@@ -1,5 +1,6 @@
 package codeprober.util;
 
+import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
 
@@ -20,6 +21,14 @@ public class CompilerClassLoader extends ClassLoader {
     }
   }
 
+  @Override public InputStream getResourceAsStream(String name) {
+    final InputStream childResult = childClassLoader.getResourceAsStream(name);
+    if (childResult != null){
+      return childResult;
+    }
+    return super.getResourceAsStream(name);
+  }
+
   private static class ChildClassLoader extends URLClassLoader {
     private final DetectClass realParent;
 
@@ -38,6 +47,11 @@ public class CompilerClassLoader extends ClassLoader {
       } catch (ClassNotFoundException e) {
         return realParent.loadClass(name);
       }
+    }
+
+    // TODO handle https://bugs.openjdk.org/browse/JDK-8246714
+    @Override public InputStream getResourceAsStream(String name) {
+      return super.getResourceAsStream(name);
     }
   }
 

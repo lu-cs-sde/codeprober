@@ -60,6 +60,30 @@ public class DataDrivenListTree {
 						}
 					}
 				}
+				if (info.hasOverride1(node.underlyingAstNode.getClass(), "cpr_lGetChildName", String.class)) {
+					for (String prop : node.propertyListShow(info)) {
+						if (!prop.startsWith("l:")) {
+							continue;
+						}
+						final String withoutPrefix = prop.substring("l:".length());
+						try {
+							final String childName = (String) Reflect.invokeN(node.underlyingAstNode,
+									"cpr_lGetChildName", new Class[] { String.class }, new Object[] { withoutPrefix });
+							if (childName == null) {
+								continue;
+							}
+							final Object nodeVal = Reflect.invokeN(node.underlyingAstNode, "cpr_lInvoke",
+									new Class[] { String.class }, new Object[] { withoutPrefix });
+							if (nodeVal != null) {
+								underlyingAstNodeToName.put(nodeVal, childName);
+							}
+
+						} catch (InvokeProblem | ClassCastException e) {
+							System.out.println("Error invoking cpr_lGetChildName and/or cpr_lInvoke");
+							e.printStackTrace();
+						}
+					}
+				}
 				for (AstNode child : node.getChildren(info)) {
 					if (!child.shouldBeVisibleInAstView()
 							&& !nodesToForceExploreAndAddExtraChildren.containsKey(child.underlyingAstNode)) {

@@ -232,7 +232,18 @@ public class ApplyLocator {
 							argsValues[j] = uav.unpacked;
 							argsTypes[j] = EvaluatePropertyHandler.getValueType(info, uav.response);
 						}
-						Object match = Reflect.invokeN(matchedNode.underlyingAstNode, ntaName, argsTypes, argsValues);
+						Object match;
+						if (ntaName.startsWith("l:")) {
+							if (argsValues.length != 0) {
+								System.err.println("Unexpected args in presense of labeled attribute NTA step");
+								return null;
+							}
+							// TODO? if there are args, throw an error?
+							match = Reflect.invokeN(matchedNode.underlyingAstNode, "cpr_lInvoke",
+									new Class[] { String.class }, new Object[] { ntaName.substring(2) });
+						} else {
+							match = Reflect.invokeN(matchedNode.underlyingAstNode, ntaName, argsTypes, argsValues);
+						}
 						matchedNode = match == null ? null : new AstNode(match);
 						break;
 					}

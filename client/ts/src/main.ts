@@ -8,7 +8,7 @@ import StatisticsCollectorImpl from "./model/StatisticsCollectorImpl";
 import displayStatistics from "./ui/popup/displayStatistics";
 import displayMainArgsOverrideModal from "./ui/popup/displayMainArgsOverrideModal";
 import { getAvailableLanguages } from "./model/syntaxHighlighting";
-import createWebsocketHandler, { WebsocketHandler, createWebsocketOverHttpHandler } from "./createWebsocketHandler";
+import createWebsocketHandler, { WebsocketHandler, createWebsocketOverHttpHandler, LocalRequestHandler, createLocalRequestHandler } from "./createWebsocketHandler";
 import configureCheckboxWithHiddenButton from "./ui/configureCheckboxWithHiddenButton";
 import UIElements from "./ui/UIElements";
 import showVersionInfo from "./ui/showVersionInfo";
@@ -42,7 +42,11 @@ window.clearUserSettings = () => {
 
 // }, 1000)
 
-const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', 'from': number, to: number }) => {
+const doMain = (wsPort: number
+  | 'ws-over-http'
+  | { type: 'codespaces-compat', 'from': number, to: number }
+  | { type: 'local-request-handler', handler: LocalRequestHandler }
+) => {
   installASTEditor();
   if (settings.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
     document.body.classList.add('hide-settings');
@@ -84,17 +88,24 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
         return createWebsocketOverHttpHandler(addConnectionCloseNotice);
       }
       if (typeof wsPort == 'object') {
-        // Codespaces-compat
-        const needle = `-${wsPort.from}.`;
-        if (location.hostname.includes(needle) && !location.port) {
-          return createWebsocketHandler(
-            new WebSocket(`wss://${location.hostname.replace(needle, `-${wsPort.to}.`)}`),
-            addConnectionCloseNotice
-          );
-        } else {
-          // Else, we are running Codespaces locally from a 'native' (non-web) editor.
-          // We only need to do the compat layer if running Codespaces from the web.
-          // Fall down to default impl below.
+        switch (wsPort.type){
+          case 'codespaces-compat': {
+            const needle = `-${wsPort.from}.`;
+            if (location.hostname.includes(needle) && !location.port) {
+              return createWebsocketHandler(
+                new WebSocket(`wss://${location.hostname.replace(needle, `-${wsPort.to}.`)}`),
+                addConnectionCloseNotice
+              );
+            } else {
+              // Else, we are running Codespaces locally from a 'native' (non-web) editor.
+              // We only need to do the compat layer if running Codespaces from the web.
+              // Fall down to default impl below.
+            }
+            break;
+          }
+          case 'local-request-handler': {
+            return createLocalRequestHandler(wsPort.handler, addConnectionCloseNotice);
+          }
         }
       }
       return createWebsocketHandler(
@@ -599,6 +610,10 @@ const doMain = (wsPort: number | 'ws-over-http' | { type: 'codespaces-compat', '
 
 window.initCodeProber = () => {
   (async () => {
+    if ((window as any).CPR_REQUEST_HANDLER) {
+      // In-browser request handler available, us that instead.
+      return doMain({ type: 'local-request-handler', handler: (window as any).CPR_REQUEST_HANDLER as LocalRequestHandler })
+    }
     const socketRes = await fetch('/WS_PORT');
     if (socketRes.status !== 200) {
       throw new Error(`Unexpected status code when fetch websocket port ${socketRes.status}`);

@@ -20,6 +20,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
     delete env.onChangeListeners[queryId];
     delete env.probeMarkers[queryId];
     popup.remove();
+    env.updateMarkers();
   };
 
   const popup = showWindow({

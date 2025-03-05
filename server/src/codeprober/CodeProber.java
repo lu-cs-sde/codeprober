@@ -36,6 +36,7 @@ import codeprober.server.WebSocketServer;
 import codeprober.toolglue.UnderlyingTool;
 import codeprober.toolglue.UnderlyingToolProxy;
 import codeprober.util.FileMonitor;
+import codeprober.util.DirectoryMonitor;
 import codeprober.util.ParsedArgs;
 import codeprober.util.ParsedArgs.ConcurrencyMode;
 import codeprober.util.SessionLogger;
@@ -247,6 +248,20 @@ public class CodeProber {
 			lastMonitor.set(fm);
 			fm.start();
 		};
+    final String extraFileMonitorPath = System.getProperty("cpr.extraFileMonitorDir", null);
+    if (extraFileMonitorPath != null) {
+      final DirectoryMonitor fm = new DirectoryMonitor(new File(extraFileMonitorPath)) {
+				public void onChange() {
+					System.out.println("Extra monitor dir changed!");
+					if (sessionLogger != null) {
+						sessionLogger.log(new JSONObject() //
+								.put("t", "Refresh"));
+					}
+					msgPusher.onChange(ServerToClientEvent.JAR_CHANGED);
+				};
+			};
+			fm.start();
+    }
 		final AtomicBoolean needsTool = new AtomicBoolean(parsedArgs.jarPath == null);
 		final Consumer<String> setUnderlyingJarPath = (jarPath) -> {
 			needsTool.set(false);

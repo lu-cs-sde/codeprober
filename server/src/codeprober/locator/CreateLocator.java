@@ -21,6 +21,7 @@ import org.json.JSONObject;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
+import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.create.CreateValue;
 import codeprober.protocol.data.FNStep;
@@ -115,7 +116,8 @@ public class CreateLocator {
 
 		final Span astPos = astNode.getRecoveredSpan(info);
 		final NodeLocator ret = new NodeLocator(
-				createTALStep(astNode, astPos.start, astPos.end, edges.unmergedLength, astNode.isInsideExternalFile(info)),
+				createTALStep(astNode, astPos.start, astPos.end, edges.unmergedLength,
+						astNode.isInsideExternalFile(info)),
 				edges.mergedEdges.stream().map(x -> x.step).collect(Collectors.toList()));
 		if (identityLocatorCache != null) {
 			identityLocatorCache.put(astNode.underlyingAstNode, ret);
@@ -191,7 +193,8 @@ public class CreateLocator {
 		if (naive.isEmpty()) {
 			// Root node.. right?
 			if (astNode.underlyingAstNode != info.ast.underlyingAstNode) {
-				System.err.println("Tried creating locator to node without parent which is not the AST root:"  + astNode);
+				System.err
+						.println("Tried creating locator to node without parent which is not the AST root:" + astNode);
 				++numEncounteredUnattachedNodes;
 				return null;
 			}
@@ -203,7 +206,8 @@ public class CreateLocator {
 		}
 		Collections.reverse(naive);
 		if (naive.get(0).source.underlyingAstNode != info.ast.underlyingAstNode) {
-			System.err.println("Tried creating locator to node whose descendands does not include the AST root:"  + astNode);
+			System.err.println(
+					"Tried creating locator to node whose descendands does not include the AST root:" + astNode);
 			++numEncounteredUnattachedNodes;
 			return null;
 		}
@@ -431,7 +435,40 @@ public class CreateLocator {
 	private static boolean extractNtaEdge(AstInfo info, AstNode astNode, Field childIndexField,
 			List<StepWithTarget> out, final AstNode parent)
 			throws IllegalAccessException, NoSuchFieldException, NoSuchMethodException, InvocationTargetException {
+		final String manualParentConnectionOverride = "cpr_describeParentConnection";
+		if (info.hasOverride0(astNode.underlyingAstNode.getClass(), manualParentConnectionOverride)) {
+			try {
+				Object val = Reflect.invoke0(astNode.underlyingAstNode, manualParentConnectionOverride);
+				if (val == null) {
+					// OK, the description failed, proceed with normal NTA guessing algorithm below
+				} else if (!(val instanceof Object[])) {
+					System.err.println("Got unexpected value from " + manualParentConnectionOverride);
+					System.err.println("Expected Object[], was " + (val == null ? "null" : val.getClass()));
+				} else {
+					final Object[] parts = (Object[]) val;
+					switch (parts.length) {
+					case 1: {
+						// FN step, format: ["name_of_property"]
+						final String propName = String.valueOf(parts[0]);
 
+						out.add(new StepWithTarget(NodeLocatorStep.fromNta(new FNStep(new Property(propName))), parent,
+								astNode));
+
+						extractStepsTo(info, parent, childIndexField, out);
+						return true;
+					}
+					default: {
+						System.err.println("Unknown shape of parent connection array. Expected 1 or 2 elements, got "
+								+ parts.length);
+						break;
+					}
+					}
+				}
+			} catch (InvokeProblem ip) {
+				System.err.println("Error when invoking " + manualParentConnectionOverride);
+				ip.printStackTrace();
+			}
+		}
 		BenchmarkTimer.CREATE_LOCATOR_NTA_STEP.enter();
 		for (Method m : info.getNtaMethods(parent.underlyingAstNode.getClass())) {
 			String guessedCacheName = m.getName();
