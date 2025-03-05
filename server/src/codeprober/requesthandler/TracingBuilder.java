@@ -30,20 +30,6 @@ import codeprober.protocol.data.Tracing;
 import codeprober.util.BenchmarkTimer;
 
 public class TracingBuilder implements Consumer<Object[]> {
-//
-//	private static enum CircularTraceState {
-//		/**
-//		 * An event like CIRCULAR_CASE1_START has been received.
-//		 * <p>
-//		 * This transitions to {@link #MID_COMPUTE} when COMPUTE_BEGIN happens.
-//		 */
-//		IDLE,
-//
-//		/**
-//		 * In between compute_start and compute_end
-//		 */
-//		MID_COMPUTE,
-//	}
 
 	public class PendingTrace {
 		public Object node;
@@ -55,7 +41,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 		public Object value;
 		public final Object preTraceValue;
 		public final PendingTrace parent;
-//		public CircularTraceState circularState;
 		public final Object[] computeBeginArgs;
 
 		/**
@@ -66,7 +51,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 
 		public PendingTrace(Object node, Property property, Object preTraceValue, PendingTrace parent,
 				Object[] computeBeginArgs
-//				CircularTraceState circularState
 		) {
 			this.node = node;
 			this.astNode = new AstNode(node);
@@ -74,7 +58,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 			this.preTraceValue = preTraceValue;
 			this.parent = parent;
 			this.computeBeginArgs = computeBeginArgs;
-//			this.circularState = circularState;
 		}
 
 		public NodeLocator getLocator() {
@@ -97,14 +80,10 @@ public class TracingBuilder implements Consumer<Object[]> {
 		}
 
 		public Tracing toTrace() {
-//			final AstNode astNode = new AstNode(node);
-			BenchmarkTimer.TRACE_CHECK_NODE_ATTACHMENT.enter();
 			if (!isAttached(astNode)) {
 				// Oh dear! Pretend it did not happen;
-				BenchmarkTimer.TRACE_CHECK_NODE_ATTACHMENT.exit();
 				return null;
 			}
-			BenchmarkTimer.TRACE_CHECK_NODE_ATTACHMENT.exit();
 			final NodeLocator locator = getLocator();
 			if (locator == null) {
 				System.err.println("Failed creating locator to " + node);
@@ -112,14 +91,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 				return null;
 			}
 			final RpcBodyLine result = getEncodedResult();
-//				if (debDepthCounter >= 100) {
-//					System.out.println("!");
-//				}
-//				return new Tracing(locator, property, dependencies.stream() //
-//						.map(pt -> pt.toTrace()) //
-//						.filter(t -> t != null) //
-//						.collect(Collectors.toList()), result);
-
 			final List<Tracing> depList;
 			if (dependencies.size() == 1) {
 				// Common case shortcut
@@ -159,7 +130,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 
 	private boolean recursionProtection = false;
 	private boolean acceptTraces = true;
-//	private boolean nextComputeBeginIsCircular = false;
 
 	public TracingBuilder(AstInfo info) {
 		this.info = info;
@@ -174,16 +144,13 @@ public class TracingBuilder implements Consumer<Object[]> {
 		if (value == null || skipEncodingResult) {
 			return NULL_RESULT;
 		} else {
-			BenchmarkTimer.TRACE_ENCODE_RESPONSE_VALUE.enter();
 			encodeLinesCache.clear();
 			encodeAlreadyVisitedNodesCache.clear();
 			EncodeResponseValue.encodeTyped(info, encodeLinesCache, null, value, encodeAlreadyVisitedNodesCache);
 			final RpcBodyLine ret = encodeLinesCache.size() == 1 ? encodeLinesCache.get(0)
 					: RpcBodyLine.fromArr(new ArrayList<>(encodeLinesCache));
-			BenchmarkTimer.TRACE_ENCODE_RESPONSE_VALUE.exit();
 			return ret;
 		}
-
 	}
 
 	public boolean isAttached(AstNode node) {
@@ -307,17 +274,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 		// Noop
 	}
 
-//	int computeDepth = 0;
-//	private boolean nextComputeIsCircular = false;
-
-	private final Object[][] lastAcceptRingBuffer = new Object[2 * 8192][];
-	private int lastAcceptRingBufferNextPos;
-	private int lastAcceptRingBufferLength;
-	private int totalNumAccepts;
-
-//	public static boolean beVerboseNextAccept = false;
-	private final long creationTime = System.currentTimeMillis();
-
 	@Override
 	public void accept(Object[] args) {
 		if (recursionProtection || !acceptTraces) {
@@ -326,15 +282,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 
 		recursionProtection = true;
 		try {
-//			recordAcceptedArgs(args);
-//			if (beVerboseNextAccept) {
-//				beVerboseNextAccept = false;
-//				System.out.println("!! VERBOSE TIME !!");
-//				System.out.println("Just received " + Arrays.toString(args));
-//				System.out.println("Have received " + totalNumAccepts + " so far");
-//				System.out.println("Was created " + (System.currentTimeMillis() - creationTime) + "ms ago");
-//				dumpLastAcceptsInfo();
-//			}
 			if (args.length == 0) {
 				System.err.println("Invalid tracing information - empty array");
 				return;
@@ -342,7 +289,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 			final String event = String.valueOf(args[0]);
 			switch (event) {
 			case "COMPUTE_BEGIN": {
-//				System.out.printf("%3d COMPUTE_BEGIN %s.%s%n", ++computeDepth, args[1] + "", args[2] + "");
 				/**
 				 * Expected structure:
 				 * <ul>
@@ -363,86 +309,22 @@ public class TracingBuilder implements Consumer<Object[]> {
 				if (excludeAttribute(astNode, attribute)) {
 					return;
 				}
-//				public static PropertyArg fromInstance(AstInfo info, Class<?> valueClazz, Type valueType, Object value) {
-//				boolean markAsFailedDeterminingArgs = false;
 
 				final List<PropertyArg> propArgs = decodeTraceArgs(astNode, attribute, args[3]);
-//				System.out.println(active.size() +" > " +event +" " + astNode.getClass().getSimpleName() +" | " + attribute);
-				// TODO update client side to not require string literal in attribute name
-				// anymore
-//				BenchmarkTimer.TRACE_CHECK_PARAMETERS.enter();
-//				if (attribute.endsWith("(String)")) {
-//					final String argVal = String.valueOf(args[3]);
-//					propArgs = Arrays.asList(PropertyArg.fromString(argVal));
-//					final String insert = String.format("\"%s\"", argVal);
-//					if (insert.length() <= 16) {
-//						// Relatively short arg, inline the value into the attribute name.
-//						attribute = String.format("%s(%s)",
-//								attribute.substring(0, attribute.length() - "(String)".length()), insert);
-//					}
-//				} else if (attribute.endsWith("(String,int)") && args[3] instanceof List) {
-//					final List<?> argList = (List<?>) args[3];
-//					if (argList.size() == 2) {
-//						final String strArg = String.valueOf(argList.get(0));
-//						final Integer intVal = (Integer) argList.get(1);
-//						final String insert = String.format("\"%s\",%s", strArg, String.valueOf(intVal));
-//						propArgs = Arrays.asList(PropertyArg.fromString(strArg), PropertyArg.fromInteger(intVal));
-//						if (insert.length() <= 16) {
-//							// Relatively short arg list, inline
-//							attribute = String.format("%s(%s)",
-//									attribute.substring(0, attribute.length() - "(String,int)".length()), insert);
-//
-//						}
-//					}
-//				} else {
-//					propArgs = decodeTraceArgs(astNode, attribute, args[3]);
-//				}
-//				BenchmarkTimer.TRACE_CHECK_PARAMETERS.exit();
-//				if (propArgs != null) {
-//					System.out.println("Decided that " + attribute + " contains " + propArgs.size()
-//							+ " arg(s), which are: "
-//							+ propArgs.stream().map(x -> x.toJSON().toString()).collect(Collectors.joining(",")));
-//				}
 
 				final Property prop = new Property(attribute.substring(attribute.indexOf('.') + 1), propArgs);
 				final PendingTrace top = active.isEmpty() ? null : active.peek();
 				final PendingTrace tr;
-//				if (nextComputeIsCircular) {
-//					nextComputeIsCircular = false;
-//					tr = new PendingTrace(astNode, prop, getComputeBeginInformation(astNode, prop, args[3]), top,
-//							CircularTraceState.MID_COMPUTE);
-//				} else if (top != null && top.circularState == CircularTraceState.IDLE) {
-//					// Re-evaluating circular state, do not construct a new PendingTrace
-//					top.circularState = CircularTraceState.MID_COMPUTE;
-//					break;
-//				} else {
 				tr = new PendingTrace(astNode, prop, getComputeBeginInformation(astNode, prop, args[3]), top, args);
-//				}
 				if (top == null) {
 					completed.add(tr);
 				} else {
 					top.dependencies.add(tr);
 				}
 				active.push(tr);
-
-//				if (top != null && top.circularState == CircularTraceState.IDLE) {
-//					top.circularState = CircularTraceState.MID_COMPUTE;
-//					break;
-//				}
-//				System.out.printf("Encode %s on %s\n", attribute, astNode.getClass().getSimpleName());
-//				System.out.println(args[3]); // Params
-				// TODO handle params correctly
-//				final PendingTrace tr = new PendingTrace(astNode, prop,
-//						getComputeBeginInformation(astNode, prop, args[3]), top, null);
-
-//				if (nextComputeBeginIsCircular) {
-//					tr.isCircular = true;
-//					nextComputeBeginIsCircular = false;
-//				}
 				break;
 			}
 			case "COMPUTE_END": {
-//				System.out.printf("%3d COMPUTE_END %s.%s%n", --computeDepth, args[1] + "", args[2] + "");
 				// Expected structure: same as COMPUTE_BEGIN
 				if (args.length != 5) {
 					System.err.println(
@@ -454,11 +336,10 @@ public class TracingBuilder implements Consumer<Object[]> {
 				if (excludeAttribute(astNode, attribute)) {
 					return;
 				}
-//				System.out.println(active.size() +" < " + event +" " + astNode.getClass().getSimpleName() +" | " + attribute + (active.isEmpty() ? "" : (" " + active.peek().circularState)));
 				if (active.isEmpty()) {
 					System.out.println("!! Got COMPUTE_END on empty stack..");
 					Thread.dumpStack();
-					dumpLastAcceptsInfo();
+//					dumpLastAcceptsInfo();
 					System.exit(1);
 				}
 
@@ -473,23 +354,8 @@ public class TracingBuilder implements Consumer<Object[]> {
 					if (popped.preTraceValue != null) {
 						onComputeEnd(null, popped.preTraceValue);
 					}
-//					if (active.isEmpty()) {
-//						System.out.println("!! Empty stack after synthesizing COMPUTE_END events..");
-//						Thread.dumpStack();
-//						System.out.println("Received a total of " + totalNumAccepts + " events to this trace receiver");
-//						dumpLastAcceptsInfo();
-//
-//						System.exit(1);
-//					}
 					popped = active.pop();
 				}
-//				if (popped.circularState != null && popped.circularState == CircularTraceState.MID_COMPUTE) {
-//					// Not ended yet, wait until CIRCULAR_CASEX_RETURN
-////					System.out.println("..idle");
-//					popped.circularState = CircularTraceState.IDLE;
-//					active.push(popped);
-//					break;
-//				}
 				final Object value = args[4];
 				if (popped.preTraceValue != null) {
 					onComputeEnd(value, popped.preTraceValue);
@@ -497,39 +363,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 				popped.value = value;
 				break;
 			}
-
-//			case "CIRCULAR_CASE1_START": // Fall-through
-////			case "CIRCULAR_CASE2_START": // Fall-through
-////			case "CIRCULAR_CASE3_START":
-//			{
-//				nextComputeIsCircular = true;
-//				circularIgnoreDepth++;
-////				System.out.println(event +" " + args[2]);
-//				break;
-//			}
-//			case "CIRCULAR_CASE1_RETURN": // Fall-through
-////			case "CIRCULAR_CASE2_RETURN": // Fall-through
-////			case "CIRCULAR_CASE3_RETURN":
-//			{
-//				// Expected structure: same as COMPUTE_BEGIN
-//				final Object astNode = args[1];
-//				final String attribute = String.valueOf(args[2]);
-//				if (excludeAttribute(astNode, attribute)) {
-//					return;
-//				}
-////				System.out.println(event +" " + args[2]);
-//				final Object value = args[4];
-//				final PendingTrace popped = active.pop();
-//				if (popped.circularState != CircularTraceState.IDLE) {
-//					System.err.println("??? Wrong circular state popped: " + popped.circularState);
-//					System.exit(1);
-//				}
-//				if (popped.preTraceValue != null) {
-//					onComputeEnd(value, popped.preTraceValue);
-//				}
-//				popped.value = args[4];
-//				break;
-//			}
 			default: {
 //				System.err.printf("Unknown tracing event '%s'%n", event);
 				break;
@@ -539,52 +372,6 @@ public class TracingBuilder implements Consumer<Object[]> {
 			recursionProtection = false;
 		}
 
-	}
-
-	protected void recordAcceptedArgs(Object[] args) {
-		lastAcceptRingBuffer[lastAcceptRingBufferNextPos] = args;
-		lastAcceptRingBufferNextPos = (lastAcceptRingBufferNextPos + 1) % lastAcceptRingBuffer.length;
-		lastAcceptRingBufferLength = Math.min(lastAcceptRingBufferLength + 1, lastAcceptRingBuffer.length);
-		++totalNumAccepts;
-	}
-
-	private void dumpLastAcceptsInfo() {
-		System.out.println("Most recent callbacks to this tracingBuilder..");
-		int computeBalance = 0;
-		int circleBalance = 0;
-		for (int i = 0; i < lastAcceptRingBufferLength; ++i) {
-			final int pos = (lastAcceptRingBufferNextPos - 1 - i + lastAcceptRingBuffer.length)
-					% lastAcceptRingBuffer.length;
-			final Object[] recentArgs = lastAcceptRingBuffer[pos];
-//			String infoTail = "";
-			switch (String.valueOf(recentArgs[0])) {
-			case "COMPUTE_BEGIN": {
-				++computeBalance;
-				break;
-			}
-			case "COMPUTE_END": {
-				++computeBalance;
-				break;
-			}
-			case "CIRCULAR_CASE1_START": {
-				++circleBalance;
-				break;
-			}
-			case "CIRCULAR_CASE1_RETURN": {
-				--circleBalance;
-				break;
-			}
-			}
-//			if ("COMPUTE_BEGIN".equals(String.valueOf(recentArgs[0]))) {
-//				++computeBalance;
-//			} else if ("COMPUTE_END".equals(String.valueOf(recentArgs[0]))) {
-//				--computeBalance;
-//			} else {
-//				infoTail = "     <- Unknown trace event kind";
-//			}
-			String blockSign = circleBalance < 0 ? "# |" : "   ";
-			System.out.printf("#%4d | %4d | %s%s%n", i, computeBalance, blockSign, Arrays.toString(recentArgs));
-		}
 	}
 
 	protected PendingTrace peekActiveTrace() {
@@ -690,5 +477,4 @@ public class TracingBuilder implements Consumer<Object[]> {
 
 		return fallbackArgsForUnknownArgumentTypes;
 	}
-
 }

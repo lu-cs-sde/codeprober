@@ -72,19 +72,4 @@ public class JsonUtil {
 			mapper.write(arr.get(i));
 		}
 	}
-
-	public static <T> int compareList(List<T> arrA, List<T> arrB, Comparator<T> comp) {
-		final int lenA = arrA.size();
-		final int lenB = arrB.size();
-		if (lenA != lenB) {
-			return Integer.compare(lenA,  lenB);
-		}
-		for (int i = 0; i < lenA; ++i) {
-			final int cmp = comp.compare(arrA.get(i), arrB.get(i));
-			if (cmp != 0) {
-				return cmp;
-			}
-		}
-		return 0;
-	}
 }

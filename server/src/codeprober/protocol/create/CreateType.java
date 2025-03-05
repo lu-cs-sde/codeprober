@@ -29,9 +29,6 @@ public abstract class CreateType {
 		if (param == Collection.class || param == List.class || param == ArrayList.class || param == Set.class || param == HashSet.class) {
 			return PropertyArg.fromCollection(new PropertyArgCollection(param.getName(), new ArrayList<>()));
 		}
-//		if (param == HashSet.class) {
-//			return PropertyArg.fromCollection(new PropertyArgCollection(param.getName(), new java.util.ArrayList<>()));
-//		}
 		if (param == OutputStream.class || param == PrintStream.class) {
 			return PropertyArg.fromOutputstream(param.getName());
 		}

@@ -9,7 +9,6 @@ public interface BinaryInputStream {
 	boolean readBoolean() throws IOException;
 	String readUTF() throws IOException;
 
-
 	public static class DataInputStreamWrapper implements BinaryInputStream {
 
 		private final DataInputStream dis;
@@ -37,6 +36,5 @@ public interface BinaryInputStream {
 		public String readUTF() throws IOException {
 			return dis.readUTF();
 		}
-
 	}
 }

@@ -201,11 +201,6 @@ public class CreateLocator {
 		if (naive.get(naive.size() - 1) == null) {
 			return null;
 		}
-//		for (StepWithTarget edge : naive) {
-//			if (edge == null) {
-//				return null;
-//			}
-//		}
 		Collections.reverse(naive);
 		if (naive.get(0).source.underlyingAstNode != info.ast.underlyingAstNode) {
 			System.err.println("Tried creating locator to node whose descendands does not include the AST root:"  + astNode);
@@ -431,15 +426,6 @@ public class CreateLocator {
 			search = search.parent();
 			System.out.println("Grandparent.. " + search);
 		}
-
-//
-//		if (extractNtaEdge(info, astNode, childIndexField, out, parent)) {
-//			return;
-//		}
-//		addEdge.accept("UNKNOWN EDGE");
-//		if (parent != null) {
-//			extractStepsTo(parent, out);
-//		}
 	}
 
 	private static boolean extractNtaEdge(AstInfo info, AstNode astNode, Field childIndexField,
@@ -568,15 +554,6 @@ public class CreateLocator {
 						}
 						serializableParams.add(decoded);
 					}
-//					if (m.getName().equals("lookupParMethodDecl")) {
-//						if (parent.getClass().getSimpleName().contains("MethodDecl")) {
-//							MethodDecl md = (MethodDecl)parent.underlyingAstNode;
-//							if (md.name().contains("hashCode")) {
-//								System.out.println("!! time");
-//							}
-//						}
-//					}
-//					final TypeAtLoc realSource = TypeAtLoc.from(info, parent);
 					if (isTheProxyNode) {
 						// "bounce" off the child node for the proxy-reasons listed above.
 						final AstNode bounceChild = new AstNode(ent.getValue());

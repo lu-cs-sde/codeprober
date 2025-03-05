@@ -48,7 +48,6 @@ public abstract class CreateValue {
 					}
 					remapped.add(childVal);
 				}
-//				remapped.sort((a, b) -> a.compareTo(b));
 				return PropertyArg.fromCollection(new PropertyArgCollection(arg.asCollection().type, remapped));
 			}
 

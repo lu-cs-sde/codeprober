@@ -8,9 +8,6 @@ public class BenchmarkTimer {
 	public static final BenchmarkTimer EVALUATE_ATTR = new BenchmarkTimer();
 	public static final BenchmarkTimer LIST_NODES = new BenchmarkTimer();
 	public static final BenchmarkTimer LIST_PROPERTIES = new BenchmarkTimer();
-	public static final BenchmarkTimer TRACE_CHECK_NODE_ATTACHMENT = new BenchmarkTimer();
-	public static final BenchmarkTimer TRACE_ENCODE_RESPONSE_VALUE = new BenchmarkTimer();
-	public static final BenchmarkTimer TRACE_CHECK_PARAMETERS = new BenchmarkTimer();
 
 	public static void resetAll() {
 		CREATE_LOCATOR.reset();
@@ -19,9 +16,6 @@ public class BenchmarkTimer {
 		EVALUATE_ATTR.reset();
 		LIST_NODES.reset();
 		LIST_PROPERTIES.reset();
-		TRACE_CHECK_NODE_ATTACHMENT.reset();
-		TRACE_ENCODE_RESPONSE_VALUE.reset();
-		TRACE_CHECK_PARAMETERS.reset();
 	}
 
 	private int depth = 0;

@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -28,13 +29,11 @@ import codeprober.protocol.data.RpcBodyLine;
 import codeprober.util.MagicStdoutMessageParser;
 
 public class EncodeResponseValue {
-
+	// Settings and callbacks which may be set by tools using CodeProber as a library
+	// CodeProber do notwrite to these manually, so feel free to overwrite
 	public static Consumer<AstNode> faultyNodeLocatorInspector = null;
-
 	public static boolean shouldSortSetAndMapContents = false;
-
 	public static BiConsumer<Object, List<RpcBodyLine>> defaultToStringOverride = null;
-
 	public static BiConsumer<Object, List<RpcBodyLine>> failedCreatingLocatorOverride = null;
 
 	private static final RpcBodyLine nullLine = RpcBodyLine.fromPlain("null");
@@ -232,12 +231,11 @@ public class EncodeResponseValue {
 			alreadyVisitedNodes.add(value);
 
 			List<RpcBodyLine> indent = new ArrayList<>();
-//			Iterable<?> iter = (Iterable<?>) value;
 			for (Entry<?, ?> o : ((Map<?, ?>) value).entrySet()) {
 				// Version 1: encode the entire entry
 				// encodeTyped(info, indent, diagnostics, o, alreadyVisitedNodes);
 				// Version 2: Encode key/value separately
-				List<RpcBodyLine> indenterer = new ArrayList<>();
+				final List<RpcBodyLine> indenterer = new ArrayList<>();
 				encodeTyped(info, indenterer, diagnostics, o.getKey(), alreadyVisitedNodes);
 				indenterer.add(RpcBodyLine.fromPlain(" = "));
 				encodeTyped(info, indenterer, diagnostics, o.getValue(), alreadyVisitedNodes);
@@ -289,12 +287,10 @@ public class EncodeResponseValue {
 
 	private static class LineSorterHelper implements Comparable<LineSorterHelper> {
 		public final RpcBodyLine line;
-//		public final String sortString;
 		private byte[] sortArr;
 
 		public LineSorterHelper(RpcBodyLine line) {
 			this.line = line;
-//			this.sortString = line.toJSON().toString();
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
 			DataOutputStream dos = new DataOutputStream(baos);
 			try {
@@ -305,7 +301,6 @@ public class EncodeResponseValue {
 				System.exit(1);
 			}
 			sortArr = baos.toByteArray();
-
 		}
 
 		@Override
@@ -325,12 +320,16 @@ public class EncodeResponseValue {
 				}
 			}
 			return 0;
-//			return sortString.compareTo(other.sortString);
-//		     int i = Arrays.mismatch(a, b);
-//		     if (i >= 0 && i < Math.min(a.length, b.length))
-//		         return Boolean.compare(a[i], b[i]);
-//		     return a.length - b.length;
-//			return Arrays.compare(sortArr, other.sortArr);
+		}
+
+		@Override
+		public int hashCode() {
+			return Arrays.hashCode(sortArr);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof LineSorterHelper && Arrays.equals(sortArr, ((LineSorterHelper)obj).sortArr);
 		}
 	}
 }
