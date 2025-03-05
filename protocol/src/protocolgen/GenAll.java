@@ -70,6 +70,8 @@ public class GenAll {
 
 		GenJava.gen(rpcs, serverToClient);
 		GenTs.gen(rpcs, serverToClient);
-		GenKl.gen(rpcs, serverToClient);
+		if (System.getProperty("KL_DST_FILE") != null) {
+			GenKl.gen(rpcs, serverToClient);
+		}
 	}
 }
