@@ -47,6 +47,24 @@ public abstract class RequestAdapter {
       case "Concurrent:PollWorkerStatus": {
         return handlePollWorkerStatus(PollWorkerStatusReq.fromJSON(request)).toJSON();
       }
+      case "GetWorkspaceFile": {
+        return handleGetWorkspaceFile(GetWorkspaceFileReq.fromJSON(request)).toJSON();
+      }
+      case "ListWorkspaceDirectory": {
+        return handleListWorkspaceDirectory(ListWorkspaceDirectoryReq.fromJSON(request)).toJSON();
+      }
+      case "PutWorkspaceContent": {
+        return handlePutWorkspaceContent(PutWorkspaceContentReq.fromJSON(request)).toJSON();
+      }
+      case "PutWorkspaceMetadata": {
+        return handlePutWorkspaceMetadata(PutWorkspaceMetadataReq.fromJSON(request)).toJSON();
+      }
+      case "RenameWorkspacePath": {
+        return handleRenameWorkspacePath(RenameWorkspacePathReq.fromJSON(request)).toJSON();
+      }
+      case "UnlinkWorkspacePath": {
+        return handleUnlinkWorkspacePath(UnlinkWorkspacePathReq.fromJSON(request)).toJSON();
+      }
       case "ide:hover": {
         return handleHover(HoverReq.fromJSON(request)).toJSON();
       }
@@ -118,6 +136,30 @@ public abstract class RequestAdapter {
 
   protected PollWorkerStatusRes handlePollWorkerStatus(PollWorkerStatusReq req) {
     throw new JSONException("Request PollWorkerStatus is not implemented");
+  }
+
+  protected GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {
+    throw new JSONException("Request GetWorkspaceFile is not implemented");
+  }
+
+  protected ListWorkspaceDirectoryRes handleListWorkspaceDirectory(ListWorkspaceDirectoryReq req) {
+    throw new JSONException("Request ListWorkspaceDirectory is not implemented");
+  }
+
+  protected PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
+    throw new JSONException("Request PutWorkspaceContent is not implemented");
+  }
+
+  protected PutWorkspaceMetadataRes handlePutWorkspaceMetadata(PutWorkspaceMetadataReq req) {
+    throw new JSONException("Request PutWorkspaceMetadata is not implemented");
+  }
+
+  protected RenameWorkspacePathRes handleRenameWorkspacePath(RenameWorkspacePathReq req) {
+    throw new JSONException("Request RenameWorkspacePath is not implemented");
+  }
+
+  protected UnlinkWorkspacePathRes handleUnlinkWorkspacePath(UnlinkWorkspacePathReq req) {
+    throw new JSONException("Request UnlinkWorkspacePath is not implemented");
   }
 
   protected HoverRes handleHover(HoverReq req) {

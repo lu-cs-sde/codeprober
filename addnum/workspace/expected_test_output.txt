@@ -1,0 +1,15 @@
+  ❌ ts/err_ambiguous.addn
+     2 nodes of type "Num". Add [idx] to disambiguate, e.g. "Num[0]"
+  ❌ ts/err_badattrchain.addn
+     Invalid attribute chain
+  ❌ ts/err_badindex.addn
+     Invalid index
+     Invalid index
+  ❌ ts/err_empty.addn
+     No matching nodes
+  ❌ ts/err_nosuchnode.addn
+     No matching nodes
+  ✅ ts/ok_add.addn
+  ✅ ts/ok_large.addn
+  ✅ ts/ok_num.addn
+Done: 12 pass, 6 fail

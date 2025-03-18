@@ -597,6 +597,7 @@ public class GenJava {
 					print.accept(", ");
 				}
 				print.accept("null");
+				++numForwardedArgs;
 			}
 			println.accept(");");
 			println.accept("  }");

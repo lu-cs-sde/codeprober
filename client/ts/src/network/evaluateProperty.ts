@@ -9,9 +9,9 @@ interface OngoingPropertyEvaluation {
 const evaluateProperty = (
   env: ModalEnv,
   req: Omit<EvaluatePropertyReq, 'job'>,
-  onSlowResponseDetected: () => void,
-  onStatusUpdate: (status: string, stackTrace: string[] | null) => void,
-  cleanupSlownessInformation: () => void, // Only called if onSlowResponseDetected
+  onSlowResponseDetected?: () => void,
+  onStatusUpdate?: (status: string, stackTrace: string[] | null) => void,
+  cleanupSlownessInformation?: () => void, // Only called if onSlowResponseDetected
 ): OngoingPropertyEvaluation  => {
 
   let cancelled = false;
@@ -49,9 +49,9 @@ const evaluateProperty = (
         if (isDone || cancelled || !isConnectedToConcurrentCapableServer) {
           return;
         }
-        onSlowResponseDetected();
+        onSlowResponseDetected?.();
 
-        localConcurrentCleanup = () => { cleanupSlownessInformation(); };
+        localConcurrentCleanup = () => { cleanupSlownessInformation?.(); };
         const poll = () => {
           if (isDone || cancelled) {
             return;
@@ -78,12 +78,12 @@ const evaluateProperty = (
         switch (update.value.type) {
           case 'status': {
             knownStatus = update.value.value;
-            onStatusUpdate(knownStatus, knownStackTrace);
+            onStatusUpdate?.(knownStatus, knownStackTrace);
             break;
           }
           case 'workerStackTrace': {
             knownStackTrace = update.value.value;
-            onStatusUpdate(knownStatus, knownStackTrace);
+            onStatusUpdate?.(knownStatus, knownStackTrace);
             break;
           }
 

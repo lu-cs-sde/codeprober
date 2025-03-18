@@ -21,6 +21,8 @@ interface Settings {
   locationStyle?: TextSpanStyle | null;
   hideSettingsPanel?: boolean;
   groupPropertiesByAspect?: boolean;
+  activeWorkspacePath?: string;
+  shouldRerunWorkspaceTestsOnChange?: boolean;
 }
 
 let settingsObj: Settings | null = null;
@@ -152,6 +154,11 @@ const settings = {
 
   shouldGroupPropertiesByAspect: () => settings.get()?.groupPropertiesByAspect ?? false,
   setShouldGroupPropertiesByAspect: (shouldHide: boolean) => settings.set({ ...settings.get(), groupPropertiesByAspect: shouldHide }),
+
+  getActiveWorkspacePath: () => settings.get()?.activeWorkspacePath ?? null,
+  setActiveWorkspacePath: (activeWorkspacePath: string) => settings.set({ ...settings.get(), activeWorkspacePath }),
+  shouldRerunWorkspaceTestsOnChange: () => settings.get().shouldRerunWorkspaceTestsOnChange ?? false,
+  setShouldRerunWorkspaceTestsOnChange: (shouldRerunWorkspaceTestsOnChange: boolean) => settings.set({ ...settings.get(), shouldRerunWorkspaceTestsOnChange }),
 
   shouldEnableTesting: () => window.location.search.includes('enableTesting=true'),
 };

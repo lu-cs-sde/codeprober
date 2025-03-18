@@ -57,6 +57,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: Updata
 
   const createTitle = () => {
     return createModalTitle({
+      shouldAutoCloseOnWorkspaceSwitch: true,
       extraActions: [
         {
           title: 'Duplicate window',

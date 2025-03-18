@@ -36,6 +36,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
       root.appendChild(spinner);
 
       const createTitle = (status: 'ok' | 'err') => createModalTitle({
+        shouldAutoCloseOnWorkspaceSwitch: true,
         renderLeft: (container) => {
           const headType = document.createElement('span');
           headType.classList.add('syntax-stype');

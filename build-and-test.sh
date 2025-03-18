@@ -1,4 +1,4 @@
-
+a
 echo "Building"
 touch DUMMY_FILE_TO_FORCE_DEV_BUILD
 sh build.sh
@@ -40,7 +40,7 @@ check_expected_outcome () {
 
 CPR_JAR="codeprober.jar"
 
-echo "Running AddNum test suite three times with different configurations, using jar file: $CPR_JAR"
+echo "Running AddNum legacy test suite three times with different configurations, using jar file: $CPR_JAR"
 
 # Normal, synchronous test run
 java -Dcpr.testDir=addnum/tests -jar $CPR_JAR --test addnum/AddNum.jar 2>/dev/null > test_log
@@ -53,6 +53,14 @@ check_expected_outcome
 # Multiple worker processes
 java -Dcpr.testDir=addnum/tests -jar $CPR_JAR --test --concurrent=5 addnum/AddNum.jar 2>/dev/null> test_log
 check_expected_outcome
+
+echo "Running AddNum workspace-based test suite"
+cd addnum
+sh check-expected-test-output.sh
+if [ "$?" -ne "0" ]; then
+  exit 1
+fi
+cd ..
 
 echo "AddNum test suites success"
 
@@ -67,6 +75,8 @@ if [ ! "$actualNodeList" = "$expectedNodeList" ]; then
   echo "Unexpected node list from --oneshot request"
   echo "Expected $expectedNodeList"
   echo "     Got $actualNodeList"
+  echo "Test log:";
+  cat test_log
   exit 1
 fi
 echo "Oneshot tests success"

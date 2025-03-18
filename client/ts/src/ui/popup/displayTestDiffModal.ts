@@ -92,7 +92,7 @@ const displayTestDiffModal = (
                   if (tc.src.tmpSuffix && tc.src.tmpSuffix !== settings.getCurrentFileSuffix()) {
                     settings.setCustomFileSuffix(tc.src.tmpSuffix);
                   }
-                  settings.setEditorContents(tc.src.text);
+                  settings.setEditorContents(tc.src.src.value);
                   saveSelfAsProbe = true;
                   env.triggerWindowSave();
                   window.location.reload();
@@ -227,7 +227,7 @@ const displayTestDiffModal = (
             const refreshSourceButtonText = () => {
               const sourceBtn = infos.find(i => i.type === 'source')?.btn;
               if (sourceBtn) {
-                if (testCase.src.text === settings.getEditorContents()) {
+                if (testCase.src.src.value === settings.getEditorContents()) {
                   sourceBtn.innerText = `Source Code ✅`;
                 } else {
                   sourceBtn.innerText = `Source Code ⚠️`;
@@ -388,7 +388,7 @@ const displayTestDiffModal = (
                     lines = rpcLinesToAssertionLines(lines);
                   }
                   target.appendChild(encodeRpcBodyLines(env, lines, {
-                    lateInteractivityEnabledChecker: () => testCase.src.text === env.getLocalState(),
+                    lateInteractivityEnabledChecker: () => testCase.src.src.value === env.getLocalState(),
                     excludeStdIoFromPaths: true,
                     capWidths: true,
                     decorator: (line) => {
@@ -502,7 +502,7 @@ const displayTestDiffModal = (
                 wrapper.style.padding = '0.25rem';
                 contentRoot.appendChild(wrapper);
 
-                const same = testCase.src.text === env.getLocalState();
+                const same = testCase.src.src.value === env.getLocalState();
                 const addText = (msg: string) => wrapper.appendChild(document.createTextNode(msg));
                 const addHelp = (type: HelpType) => {
                   const btn = document.createElement('button');
@@ -586,7 +586,7 @@ const displayTestDiffModal = (
                   btn.style.margin = '0 0.125rem';
                   btn.innerText = `Load Source`;
                   btn.onclick = () => {
-                    env.setLocalState(testCase.src.text);
+                    env.setLocalState(testCase.src.src.value);
                   };
                   wrapper.appendChild(btn);
                   addText(`to replace CodeProber text with the test source.`);
@@ -626,7 +626,7 @@ const displayTestDiffModal = (
                 }
                 addExplanationLine('Source Code', '⬇️, related line(s) in green.');
 
-                testCase.src.text.split('\n').forEach((line, lineIdx) => {
+                testCase.src.src.value.split('\n').forEach((line, lineIdx) => {
 
 
                   const lineContainer = document.createElement('div');

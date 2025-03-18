@@ -1,0 +1,4 @@
+( 
+    1 + 2          // [[Add[1].value=10]]
+    + (3 + ((4)))  // [[Add[1].value=10]] [[Num[0].value=3]]  [[Num[1].value=4]] 
+) + (5)            // [[Add.value=15]]    [[Add[0].value=15]] [[Program.prettyPrint=(((1 + 2) + (3 + 4)) + 5)]]

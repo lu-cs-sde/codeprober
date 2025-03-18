@@ -617,7 +617,53 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
 define("ui/create/createModalTitle", ["require", "exports", "ui/create/showWindow"], function (require, exports, showWindow_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createOverflowButton = void 0;
     showWindow_1 = __importDefault(showWindow_1);
+    const createOverflowButton = (extraActions) => {
+        const overflowButton = document.createElement('img');
+        overflowButton.src = 'icons/more_vert_white_24dp.svg';
+        overflowButton.classList.add('clickHighlightOnHover');
+        overflowButton.onmousedown = (e) => { e.stopPropagation(); };
+        overflowButton.onclick = () => {
+            const cleanup = () => {
+                contextMenu.remove();
+                window.removeEventListener('mousedown', cleanup);
+            };
+            const contextMenu = (0, showWindow_1.default)({
+                onForceClose: cleanup,
+                render: (container) => {
+                    container.addEventListener('mousedown', (e) => {
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                    });
+                    const hidden = document.createElement('button');
+                    hidden.classList.add('modalCloseButton');
+                    hidden.style.display = 'none';
+                    hidden.onclick = cleanup;
+                    container.appendChild(hidden);
+                    extraActions.forEach((action) => {
+                        const row = document.createElement('div');
+                        row.classList.add('context-menu-row');
+                        row.onclick = () => {
+                            cleanup();
+                            action.invoke();
+                        };
+                        const title = document.createElement('span');
+                        title.innerText = action.title;
+                        row.appendChild(title);
+                        // const icon = document.createElement('img');
+                        // icon.src = '/icons/content_copy_white_24dp.svg';
+                        // row.appendChild(icon);
+                        // row.style.border = '1px solid red';
+                        container.appendChild(row);
+                    });
+                },
+            });
+            window.addEventListener('mousedown', cleanup);
+        };
+        return overflowButton;
+    };
+    exports.createOverflowButton = createOverflowButton;
     const createModalTitle = (args) => {
         const { renderLeft, extraActions, onClose } = args;
         const titleRowHolder = document.createElement('div');
@@ -629,55 +675,16 @@ define("ui/create/createModalTitle", ["require", "exports", "ui/create/showWindo
         const buttons = document.createElement('div');
         buttons.classList.add('button-holder');
         if (extraActions && extraActions.length > 0) {
-            const overflowButton = document.createElement('img');
-            overflowButton.src = 'icons/more_vert_white_24dp.svg';
+            const overflowButton = createOverflowButton(extraActions);
             overflowButton.classList.add('modalOverflowButton');
-            overflowButton.classList.add('clickHighlightOnHover');
-            overflowButton.onmousedown = (e) => { e.stopPropagation(); };
-            overflowButton.onclick = () => {
-                const cleanup = () => {
-                    contextMenu.remove();
-                    window.removeEventListener('mousedown', cleanup);
-                };
-                const contextMenu = (0, showWindow_1.default)({
-                    onForceClose: cleanup,
-                    render: (container) => {
-                        container.addEventListener('mousedown', (e) => {
-                            e.stopPropagation();
-                            e.stopImmediatePropagation();
-                        });
-                        const hidden = document.createElement('button');
-                        hidden.classList.add('modalCloseButton');
-                        hidden.style.display = 'none';
-                        hidden.onclick = cleanup;
-                        container.appendChild(hidden);
-                        extraActions.forEach((action) => {
-                            const row = document.createElement('div');
-                            row.classList.add('context-menu-row');
-                            row.onclick = () => {
-                                cleanup();
-                                action.invoke();
-                            };
-                            const title = document.createElement('span');
-                            title.innerText = action.title;
-                            row.appendChild(title);
-                            // const icon = document.createElement('img');
-                            // icon.src = '/icons/content_copy_white_24dp.svg';
-                            // row.appendChild(icon);
-                            // row.style.border = '1px solid red';
-                            container.appendChild(row);
-                        });
-                    },
-                });
-                window.addEventListener('mousedown', () => {
-                    cleanup();
-                });
-            };
             buttons.appendChild(overflowButton);
         }
         if (onClose) {
             const closeButton = document.createElement('div');
             closeButton.classList.add('modalCloseButton');
+            if (args.shouldAutoCloseOnWorkspaceSwitch) {
+                closeButton.classList.add('auto-click-on-workspace-switch');
+            }
             const textHolder = document.createElement('span');
             textHolder.innerText = '𝖷';
             closeButton.appendChild(textHolder);
@@ -913,6 +920,9 @@ define("ui/UIElements", ["require", "exports"], function (require, exports) {
         get autoflushTracesContainer() { return document.getElementById('container-autoflush-traces'); }
         get locationStyleSelector() { return document.getElementById('location-style'); }
         get locationStyleHelpButton() { return document.getElementById('control-location-style-help'); }
+        get workspaceHeaderLabel() { return document.getElementById('workspace-header'); }
+        get workspaceListWrapper() { return document.getElementById('workspace-wrapper'); }
+        get workspaceTestRunner() { return document.getElementById('workspace-test-runner'); }
         get generalHelpButton() { return document.getElementById('display-help'); }
         get saveAsUrlButton() { return document.getElementById('saveAsUrl'); }
         get darkModeCheckbox() { return document.getElementById('control-dark-mode'); }
@@ -1037,6 +1047,10 @@ define("settings", ["require", "exports", "model/syntaxHighlighting", "ui/UIElem
         setShouldHideSettingsPanel: (shouldHide) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),
         shouldGroupPropertiesByAspect: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.groupPropertiesByAspect) !== null && _b !== void 0 ? _b : false; },
         setShouldGroupPropertiesByAspect: (shouldHide) => settings.set({ ...settings.get(), groupPropertiesByAspect: shouldHide }),
+        getActiveWorkspacePath: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.activeWorkspacePath) !== null && _b !== void 0 ? _b : null; },
+        setActiveWorkspacePath: (activeWorkspacePath) => settings.set({ ...settings.get(), activeWorkspacePath }),
+        shouldRerunWorkspaceTestsOnChange: () => { var _a; return (_a = settings.get().shouldRerunWorkspaceTestsOnChange) !== null && _a !== void 0 ? _a : false; },
+        setShouldRerunWorkspaceTestsOnChange: (shouldRerunWorkspaceTestsOnChange) => settings.set({ ...settings.get(), shouldRerunWorkspaceTestsOnChange }),
         shouldEnableTesting: () => window.location.search.includes('enableTesting=true'),
     };
     exports.default = settings;
@@ -2710,6 +2724,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
         };
         const createTitle = () => {
             return (0, createModalTitle_2.default)({
+                shouldAutoCloseOnWorkspaceSwitch: true,
                 extraActions: [
                     {
                         title: 'Duplicate window',
@@ -3173,6 +3188,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                 // root.innerText = 'Loading..';
                 if (!extraArgs.hideTitleBar) {
                     root.appendChild((0, createModalTitle_3.default)({
+                        shouldAutoCloseOnWorkspaceSwitch: true,
                         renderLeft: (container) => {
                             const headType = document.createElement('span');
                             headType.innerText = `AST`;
@@ -3651,6 +3667,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                 while (root.firstChild)
                     root.firstChild.remove();
                 root.appendChild((0, createModalTitle_4.default)({
+                    shouldAutoCloseOnWorkspaceSwitch: true,
                     renderLeft: (container) => {
                         var _a;
                         if (env === env.getGlobalModalEnv()) {
@@ -11071,7 +11088,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
         }
         if (((_j = attr.args) === null || _j === void 0 ? void 0 : _j.length) && env && attr.name !== displayProbeModal_3.searchProbePropertyName) {
             const editButton = document.createElement('img');
-            editButton.src = '/icons/edit_white_24dp.svg';
+            editButton.src = 'icons/edit_white_24dp.svg';
             editButton.classList.add('modalEditButton');
             editButton.classList.add('clickHighlightOnHover');
             editButton.onmousedown = (e) => { e.stopPropagation(); };
@@ -11295,8 +11312,8 @@ define("network/evaluateProperty", ["require", "exports"], function (require, ex
                     if (isDone || cancelled || !isConnectedToConcurrentCapableServer) {
                         return;
                     }
-                    onSlowResponseDetected();
-                    localConcurrentCleanup = () => { cleanupSlownessInformation(); };
+                    onSlowResponseDetected === null || onSlowResponseDetected === void 0 ? void 0 : onSlowResponseDetected();
+                    localConcurrentCleanup = () => { cleanupSlownessInformation === null || cleanupSlownessInformation === void 0 ? void 0 : cleanupSlownessInformation(); };
                     const poll = () => {
                         if (isDone || cancelled) {
                             return;
@@ -11323,12 +11340,12 @@ define("network/evaluateProperty", ["require", "exports"], function (require, ex
                     switch (update.value.type) {
                         case 'status': {
                             knownStatus = update.value.value;
-                            onStatusUpdate(knownStatus, knownStackTrace);
+                            onStatusUpdate === null || onStatusUpdate === void 0 ? void 0 : onStatusUpdate(knownStatus, knownStackTrace);
                             break;
                         }
                         case 'workerStackTrace': {
                             knownStackTrace = update.value.value;
-                            onStatusUpdate(knownStatus, knownStackTrace);
+                            onStatusUpdate === null || onStatusUpdate === void 0 ? void 0 : onStatusUpdate(knownStatus, knownStackTrace);
                             break;
                         }
                         case 'workerTaskDone': {
@@ -11732,6 +11749,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
         };
         const createTitle = () => {
             const titleNode = (0, createModalTitle_6.default)({
+                shouldAutoCloseOnWorkspaceSwitch: true,
                 extraActions: [
                     ...(env.getGlobalModalEnv() === env
                         ? [
@@ -11811,7 +11829,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     }
                                 }
                             };
-                            navigator.clipboard.writeText(copyBody.map(buildLine).join('\n'));
+                            navigator.clipboard.writeText(copyBody.map(buildLine).join('\n').trim());
                         }
                     },
                     // ...((property.args?.length ?? 0) === 0 ? [
@@ -12244,6 +12262,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                 spinner.classList.add('absoluteCenter');
                 root.appendChild(spinner);
                 const createTitle = (status) => (0, createModalTitle_7.default)({
+                    shouldAutoCloseOnWorkspaceSwitch: true,
                     renderLeft: (container) => {
                         const headType = document.createElement('span');
                         headType.classList.add('syntax-stype');
@@ -13165,7 +13184,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                     if (tc.src.tmpSuffix && tc.src.tmpSuffix !== settings_7.default.getCurrentFileSuffix()) {
                                         settings_7.default.setCustomFileSuffix(tc.src.tmpSuffix);
                                     }
-                                    settings_7.default.setEditorContents(tc.src.text);
+                                    settings_7.default.setEditorContents(tc.src.src.value);
                                     saveSelfAsProbe = true;
                                     env.triggerWindowSave();
                                     window.location.reload();
@@ -13291,7 +13310,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                             var _a;
                             const sourceBtn = (_a = infos.find(i => i.type === 'source')) === null || _a === void 0 ? void 0 : _a.btn;
                             if (sourceBtn) {
-                                if (testCase.src.text === settings_7.default.getEditorContents()) {
+                                if (testCase.src.src.value === settings_7.default.getEditorContents()) {
                                     sourceBtn.innerText = `Source Code ✅`;
                                 }
                                 else {
@@ -13441,7 +13460,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                         lines = (0, rpcBodyToAssertionLine_2.rpcLinesToAssertionLines)(lines);
                                     }
                                     target.appendChild((0, encodeRpcBodyLines_5.default)(env, lines, {
-                                        lateInteractivityEnabledChecker: () => testCase.src.text === env.getLocalState(),
+                                        lateInteractivityEnabledChecker: () => testCase.src.src.value === env.getLocalState(),
                                         excludeStdIoFromPaths: true,
                                         capWidths: true,
                                         decorator: (line) => {
@@ -13543,7 +13562,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                 const wrapper = document.createElement('div');
                                 wrapper.style.padding = '0.25rem';
                                 contentRoot.appendChild(wrapper);
-                                const same = testCase.src.text === env.getLocalState();
+                                const same = testCase.src.src.value === env.getLocalState();
                                 const addText = (msg) => wrapper.appendChild(document.createTextNode(msg));
                                 const addHelp = (type) => {
                                     const btn = document.createElement('button');
@@ -13626,7 +13645,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                     btn.style.margin = '0 0.125rem';
                                     btn.innerText = `Load Source`;
                                     btn.onclick = () => {
-                                        env.setLocalState(testCase.src.text);
+                                        env.setLocalState(testCase.src.src.value);
                                     };
                                     wrapper.appendChild(btn);
                                     addText(`to replace CodeProber text with the test source.`);
@@ -13662,7 +13681,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                     // addExplanationLine('AST Node:', `${locator.result.label || locator.result.type} on line${linesTail}`);
                                 }
                                 addExplanationLine('Source Code', '⬇️, related line(s) in green.');
-                                testCase.src.text.split('\n').forEach((line, lineIdx) => {
+                                testCase.src.src.value.split('\n').forEach((line, lineIdx) => {
                                     const lineContainer = document.createElement('div');
                                     lineContainer.classList.add('test-case-source-code-line');
                                     if (!locator.result.external) {
@@ -14353,7 +14372,1117 @@ define("ui/configureCheckboxWithHiddenCheckbox", ["require", "exports"], functio
     };
     exports.default = configureCheckboxWithHiddenCheckbox;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_9, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_4, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_11, UpdatableNodeLocator_9, hacks_5, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1) {
+define("model/TextProbeManager", ["require", "exports", "hacks", "network/evaluateProperty", "settings", "model/cullingTaskSubmitterFactory"], function (require, exports, hacks_5, evaluateProperty_3, settings_9, cullingTaskSubmitterFactory_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.setupTextProbeManager = void 0;
+    evaluateProperty_3 = __importDefault(evaluateProperty_3);
+    settings_9 = __importDefault(settings_9);
+    cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
+    ;
+    const createTypedProbeRegex = () => {
+        const reg = /\[\[(\w+)(\[\d+\])?((?:\.\w+)+)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
+        return {
+            exec: (line) => {
+                const match = reg.exec(line);
+                if (!match) {
+                    return null;
+                }
+                const [full, nodeType, nodeIndex, attrNames, exclamation, tilde, expectVal] = match;
+                return {
+                    index: match.index,
+                    full,
+                    nodeType,
+                    nodeIndex: nodeIndex ? +nodeIndex.slice(1, -1) : undefined,
+                    attrNames: attrNames.slice(1).split('.'),
+                    exclamation: !!exclamation,
+                    tilde: !!tilde,
+                    expectVal: typeof expectVal === 'string' ? expectVal : undefined,
+                };
+            }
+        };
+    };
+    const createForgivingProbeRegex = () => {
+        // Neede for autocompletion
+        const reg = /\[\[(\w*)(\[\d+\])?((?:\.\w*)+)?\]\](?!\])/g;
+        return {
+            exec: (line) => {
+                const match = reg.exec(line);
+                if (!match) {
+                    return null;
+                }
+                const [full, nodeType, nodeIndex, attrNames] = match;
+                return {
+                    index: match.index,
+                    full,
+                    nodeType,
+                    nodeIndex: nodeIndex ? +nodeIndex.slice(1, -1) : undefined,
+                    attrNames: attrNames ? attrNames.slice(1).split('.') : undefined,
+                };
+            }
+        };
+    };
+    const setupTextProbeManager = (args) => {
+        const refreshDispatcher = (0, cullingTaskSubmitterFactory_2.default)(1)();
+        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const evaluateProperty = async (evalArgs) => {
+            var _a;
+            const rpcQueryStart = performance.now();
+            const res = await (0, evaluateProperty_3.default)(args.env, {
+                captureStdout: false,
+                locator: evalArgs.locator,
+                property: { name: evalArgs.prop, args: evalArgs.args },
+                src: (_a = evalArgs.parsingData) !== null && _a !== void 0 ? _a : args.env.createParsingRequestData(),
+                type: 'EvaluateProperty',
+            }).fetch();
+            if (res !== 'stopped') {
+                if (typeof res.totalTime === 'number'
+                    && typeof res.parseTime === 'number'
+                    && typeof res.createLocatorTime === 'number'
+                    && typeof res.applyLocatorTime === 'number'
+                    && typeof res.attrEvalTime === 'number') {
+                    args.env.statisticsCollector.addProbeEvaluationTime({
+                        attrEvalMs: res.attrEvalTime / 1000000,
+                        fullRpcMs: Math.max(performance.now() - rpcQueryStart),
+                        serverApplyLocatorMs: res.applyLocatorTime / 1000000,
+                        serverCreateLocatorMs: res.createLocatorTime / 1000000,
+                        serverParseOnlyMs: res.parseTime / 1000000,
+                        serverSideMs: res.totalTime / 1000000,
+                    });
+                }
+            }
+            return res;
+        };
+        const evaluatePropertyChain = async (evalArgs) => {
+            var _a;
+            const first = await evaluateProperty({ locator: evalArgs.locator, prop: evalArgs.propChain[0], parsingData: evalArgs.parsingData, });
+            if (first === 'stopped') {
+                return 'stopped';
+            }
+            let prevResult = first;
+            for (let subsequentIdx = 1; subsequentIdx < evalArgs.propChain.length; ++subsequentIdx) {
+                // Previous result must be a node locator
+                if (((_a = prevResult.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
+                    console.log('prevResult does not look like a reference attribute:', prevResult.body);
+                    return 'broken-node-chain';
+                }
+                const chainedLocator = prevResult.body[0].value;
+                const nextRes = await evaluateProperty({ locator: chainedLocator, prop: evalArgs.propChain[subsequentIdx], parsingData: evalArgs.parsingData });
+                if (nextRes === 'stopped') {
+                    return 'stopped';
+                }
+                prevResult = nextRes;
+            }
+            return prevResult;
+        };
+        const listNodes = async (listArgs) => {
+            const rootNode = { type: '<ROOT>', start: ((listArgs.zeroIndexedLine + 1) << 12) + 1, end: ((listArgs.zeroIndexedLine + 1) << 12) + 4095, depth: 0 };
+            const propResult = await evaluateProperty({
+                locator: { result: rootNode, steps: [] },
+                prop: 'm:NodesWithProperty',
+                args: [
+                    { type: 'string', value: listArgs.attrFilter },
+                    { type: 'string', value: listArgs.predicate }
+                ],
+                parsingData: listArgs.parsingData,
+            });
+            if (propResult === 'stopped') {
+                return null;
+            }
+            if (!propResult.body.length || propResult.body[0].type !== 'arr') {
+                console.error('Unexpected respose from search query:', propResult);
+                return null;
+            }
+            const queryResultList = propResult.body[0].value;
+            const ret = [];
+            queryResultList.forEach(line => {
+                if (line.type === 'node') {
+                    ret.push(line.value);
+                }
+            });
+            return ret;
+        };
+        let activeRefresh = false;
+        let repeatOnDone = false;
+        const activeStickies = [];
+        const doRefresh = async () => {
+            if (activeRefresh) {
+                repeatOnDone = true;
+                return;
+            }
+            // args.env.clearStickyHighlight(queryId);
+            activeRefresh = true;
+            repeatOnDone = false;
+            let nextStickyIndex = 0;
+            const getStickyId = () => {
+                let stickyId;
+                if (nextStickyIndex >= activeStickies.length) {
+                    stickyId = `${queryId}-${nextStickyIndex}`;
+                    activeStickies.push(stickyId);
+                }
+                else {
+                    stickyId = activeStickies[nextStickyIndex];
+                }
+                ++nextStickyIndex;
+                return stickyId;
+            };
+            const combinedResults = { numPass: 0, numFail: 0 };
+            try {
+                const preqData = args.env.createParsingRequestData();
+                const lines = args.env.getLocalState().split('\n');
+                for (let lineIdx = 0; lineIdx < lines.length; ++lineIdx) {
+                    const line = lines[lineIdx];
+                    const reg = createTypedProbeRegex();
+                    let match;
+                    while ((match = reg.exec(line)) !== null) {
+                        const matchingNodes = await listNodes({
+                            attrFilter: match.attrNames[0],
+                            predicate: `this<:${match.nodeType}&@lineSpan~=${lineIdx + 1}`,
+                            zeroIndexedLine: lineIdx,
+                            parsingData: preqData,
+                        });
+                        let numPass = 0, numFail = 0;
+                        let errMsg = null;
+                        if (!(matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes.length)) {
+                            ++numFail;
+                            errMsg = `No matching nodes`;
+                        }
+                        else {
+                            let matchedNode = null;
+                            if (match.nodeIndex !== undefined) {
+                                console.log('got nodeindex:', match.nodeIndex);
+                                if (match.nodeIndex < 0 || match.nodeIndex >= matchingNodes.length) {
+                                    ++numFail;
+                                    errMsg = `Invalid index`;
+                                }
+                                else {
+                                    matchedNode = matchingNodes[match.nodeIndex];
+                                }
+                            }
+                            else {
+                                if (matchingNodes.length === 1) {
+                                    // Only one node, no need for an index
+                                    matchedNode = matchingNodes[0];
+                                }
+                                else {
+                                    ++numFail;
+                                    errMsg = `${matchingNodes.length} nodes of type "${match.nodeType}". Add [idx] to disambiguate, e.g. "${match.nodeType}[0]"`;
+                                }
+                            }
+                            if (matchedNode) {
+                                const attrEvalResult = await evaluatePropertyChain({
+                                    locator: matchedNode,
+                                    propChain: match.attrNames,
+                                    parsingData: preqData,
+                                });
+                                if (attrEvalResult == 'stopped') {
+                                    break;
+                                }
+                                if (attrEvalResult === 'broken-node-chain') {
+                                    ++numFail;
+                                    errMsg = 'Invalid attribute chain';
+                                }
+                                else {
+                                    const cmp = evalPropertyBodyToString(attrEvalResult.body);
+                                    if (match.expectVal === undefined) {
+                                        if (!errMsg) {
+                                            // Just a probe, save the result as a message
+                                            errMsg = `Actual: ${cmp}`;
+                                        }
+                                    }
+                                    else {
+                                        const rawComparisonSuccess = match.tilde ? cmp.includes(match.expectVal) : (cmp === match.expectVal);
+                                        const adjustedComparisonSuccsess = match.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
+                                        if (adjustedComparisonSuccsess) {
+                                            ++numPass;
+                                        }
+                                        else {
+                                            console.log('fail, "', match.expectVal, '" != "', cmp, '"');
+                                            errMsg = `Actual: ${cmp}`;
+                                            ++numFail;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        console.log('combining..', numPass, numFail, errMsg);
+                        combinedResults.numPass += numPass;
+                        combinedResults.numFail += numFail;
+                        const span = { lineStart: (lineIdx + 1), colStart: match.index + 1, lineEnd: (lineIdx + 1), colEnd: (match.index + match.full.length) };
+                        const inlineTextSpan = { ...span, colStart: span.colEnd - 2, colEnd: span.colEnd - 1 };
+                        args.env.setStickyHighlight(getStickyId(), {
+                            classNames: [numFail ? 'elp-result-fail' : (numPass ? 'elp-result-success' : 'elp-result-probe')],
+                            span,
+                        });
+                        if (errMsg) {
+                            args.env.setStickyHighlight(getStickyId(), {
+                                classNames: [],
+                                span: inlineTextSpan,
+                                content: errMsg,
+                                contentClassNames: [`elp-actual-result-${numFail ? 'err' : 'probe'}`],
+                            });
+                        }
+                    }
+                }
+            }
+            catch (e) {
+                console.warn('Error during refresh', e);
+            }
+            for (let i = nextStickyIndex; i < activeStickies.length; ++i) {
+                args.env.clearStickyHighlight(activeStickies[i]);
+            }
+            activeStickies.length = nextStickyIndex;
+            activeRefresh = false;
+            args.onFinishedCheckingActiveFile(combinedResults);
+            if (repeatOnDone) {
+                refresh();
+            }
+        };
+        const refresh = () => refreshDispatcher.submit(doRefresh);
+        args.env.onChangeListeners[queryId] = refresh;
+        refresh();
+        const complete = async (line, column) => {
+            const lines = args.env.getLocalState().split('\n');
+            // Make line/col 0-indexed
+            --line;
+            --column;
+            if (line < 0 || line >= lines.length) {
+                return null;
+            }
+            const reg = createTypedProbeRegex();
+            let match;
+            const completeType = async () => {
+                const matchingNodes = await listNodes({
+                    attrFilter: '',
+                    predicate: `@lineSpan~=${line + 1}`,
+                    zeroIndexedLine: line,
+                });
+                if (matchingNodes === null) {
+                    return null;
+                }
+                const types = new Set(matchingNodes.map(loc => { var _a; return (_a = loc.result.label) !== null && _a !== void 0 ? _a : loc.result.type; }));
+                return [...types].sort().map(type => type.split('.').slice(-1)[0]);
+            };
+            const completeProp = async (nodeType, nodeIndex, prerequisiteAttrs) => {
+                var _a;
+                const parsingData = args.env.createParsingRequestData();
+                const matchingNodes = await listNodes({
+                    attrFilter: '',
+                    predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
+                    zeroIndexedLine: line,
+                    parsingData,
+                });
+                let locator = matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes[nodeIndex !== null && nodeIndex !== void 0 ? nodeIndex : 0];
+                if (!locator) {
+                    return null;
+                }
+                if (prerequisiteAttrs.length != 0) {
+                    const chainResult = await evaluatePropertyChain({ locator, propChain: prerequisiteAttrs, parsingData });
+                    if (chainResult === 'stopped' || chainResult === 'broken-node-chain') {
+                        return null;
+                    }
+                    if (((_a = chainResult.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
+                        return null;
+                    }
+                    locator = chainResult.body[0].value;
+                }
+                const props = await args.env.performTypedRpc({
+                    locator,
+                    src: parsingData,
+                    type: 'ListProperties',
+                    all: settings_9.default.shouldShowAllProperties(),
+                });
+                if (!props.properties) {
+                    return null;
+                }
+                const zeroArgPropNames = new Set(props.properties.filter(prop => { var _a, _b; return ((_b = (_a = prop.args) === null || _a === void 0 ? void 0 : _a.length) !== null && _b !== void 0 ? _b : 0) === 0; }).map(prop => prop.name));
+                return [...zeroArgPropNames].sort();
+            };
+            const completeExpectedValue = async (nodeType, nodeIndex, attrNames) => {
+                const parsingData = args.env.createParsingRequestData();
+                const matchingNodes = await listNodes({
+                    attrFilter: '',
+                    predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
+                    zeroIndexedLine: line,
+                    parsingData,
+                });
+                let locator = matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes[nodeIndex !== null && nodeIndex !== void 0 ? nodeIndex : 0];
+                if (!locator) {
+                    return null;
+                }
+                const attrEvalResult = await evaluatePropertyChain({
+                    locator,
+                    propChain: attrNames,
+                    parsingData,
+                });
+                if (attrEvalResult == 'stopped' || attrEvalResult === 'broken-node-chain') {
+                    return null;
+                }
+                const cmp = evalPropertyBodyToString(attrEvalResult.body);
+                return [cmp];
+            };
+            while ((match = reg.exec(lines[line])) !== null) {
+                if (match.index >= column) {
+                    // Cursor is before the match
+                    continue;
+                }
+                if (match.index + match.full.length <= column) {
+                    // Cursor is before the match
+                    continue;
+                }
+                const typeStart = match.index + 2;
+                const typeEnd = typeStart + match.nodeType.length;
+                if (column >= typeStart && column <= typeEnd) {
+                    return completeType();
+                }
+                let attrSearchStart = typeEnd;
+                for (let attrIdx = 0; attrIdx < match.attrNames.length; ++attrIdx) {
+                    const attrStart = lines[line].indexOf('.', attrSearchStart) + 1;
+                    ;
+                    const attrEnd = attrStart + match.attrNames[attrIdx].length;
+                    attrSearchStart = attrEnd;
+                    if (column >= attrStart && column <= attrEnd) {
+                        return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx));
+                    }
+                }
+                if (match.expectVal !== undefined) {
+                    const expectStart = lines[line].indexOf('=', attrSearchStart) + 1;
+                    ;
+                    const expectEnd = expectStart + match.expectVal.length;
+                    if (column >= expectStart && column <= expectEnd) {
+                        return completeExpectedValue(match.nodeType, match.nodeIndex, match.attrNames);
+                    }
+                }
+            }
+            const forgivingReg = createForgivingProbeRegex();
+            while ((match = forgivingReg.exec(lines[line])) !== null) {
+                if (match.index >= column) {
+                    // Cursor is before the match
+                    continue;
+                }
+                if (match.index + match.full.length <= column) {
+                    // Cursor is before the match
+                    continue;
+                }
+                const typeStart = match.index + 2;
+                const typeEnd = typeStart + match.nodeType.length;
+                if (column >= typeStart && column <= typeEnd) {
+                    return completeType();
+                }
+                if (match.attrNames) {
+                    let attrSearchStart = typeEnd;
+                    for (let attrIdx = 0; attrIdx < match.attrNames.length; ++attrIdx) {
+                        const attrStart = lines[line].indexOf('.', attrSearchStart) + 1;
+                        ;
+                        const attrEnd = attrStart + match.attrNames[attrIdx].length;
+                        attrSearchStart = attrEnd;
+                        if (column >= attrStart && column <= attrEnd) {
+                            return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx));
+                        }
+                    }
+                }
+            }
+            return null;
+        };
+        const checkFile = async (requestSrc, knownSrc) => {
+            var _a;
+            const ret = {
+                numPass: 0,
+                numFail: 0,
+            };
+            const parsingData = {
+                ...args.env.createParsingRequestData(),
+                src: requestSrc,
+            };
+            const lines = knownSrc.split('\n');
+            for (let lineIdx = 0; lineIdx < lines.length; ++lineIdx) {
+                const reg = createTypedProbeRegex();
+                let match;
+                while ((match = reg.exec(lines[lineIdx])) != null) {
+                    if (match.expectVal === undefined) {
+                        // Just a probe, no assertion, no need to check
+                        continue;
+                    }
+                    const allNodes = await listNodes({
+                        attrFilter: match.attrNames[0],
+                        predicate: `this<:${match.nodeType}&@lineSpan~=${lineIdx + 1}`,
+                        zeroIndexedLine: lineIdx,
+                        parsingData,
+                    });
+                    if (!(allNodes === null || allNodes === void 0 ? void 0 : allNodes.length)) {
+                        ret.numFail++;
+                        continue;
+                    }
+                    if (match.nodeIndex === undefined && allNodes.length !== 1) {
+                        // Must have explicit index when >1 node
+                        ++ret.numFail;
+                        continue;
+                    }
+                    const locator = allNodes[(_a = match.nodeIndex) !== null && _a !== void 0 ? _a : 0];
+                    if (!locator) {
+                        // Invalid index
+                        ++ret.numFail;
+                        continue;
+                    }
+                    // for (let i = 0; i < nodes.length; ++i) {
+                    const evalRes = await evaluatePropertyChain({ locator, propChain: match.attrNames, parsingData });
+                    if (evalRes === 'stopped') {
+                        // TODO is this a failure?
+                        continue;
+                    }
+                    if (evalRes === 'broken-node-chain') {
+                        ret.numFail++;
+                        continue;
+                    }
+                    const cmp = evalPropertyBodyToString(evalRes.body);
+                    const rawComparisonSuccess = match.tilde ? cmp.includes(match.expectVal) : (cmp === match.expectVal);
+                    const adjustedComparisonSuccsess = match.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
+                    if (adjustedComparisonSuccsess) {
+                        ret.numPass++;
+                    }
+                    else {
+                        ret.numFail++;
+                    }
+                    // }
+                }
+            }
+            return ret;
+        };
+        return { complete, checkFile };
+    };
+    exports.setupTextProbeManager = setupTextProbeManager;
+    const evalPropertyBodyToString = (body) => {
+        const lineToComparisonString = (line) => {
+            var _a, _b;
+            switch (line.type) {
+                case 'plain':
+                case 'stdout':
+                case 'stderr':
+                case 'streamArg':
+                case 'dotGraph':
+                case 'html':
+                    return line.value;
+                case 'arr':
+                    let mapped = [];
+                    for (let idx = 0; idx < line.value.length; ++idx) {
+                        if (line.value[idx].type === 'node' && ((_a = line.value[idx + 1]) === null || _a === void 0 ? void 0 : _a.type) === 'plain' && line.value[idx + 1].value === '\n') {
+                            const justNode = lineToComparisonString(line.value[idx]);
+                            if (line.value.length === 2) {
+                                return justNode;
+                            }
+                            mapped.push(justNode);
+                            ++idx;
+                        }
+                        else {
+                            mapped.push(lineToComparisonString(line.value[idx]));
+                        }
+                    }
+                    return `[${mapped.join(', ')}]`;
+                case 'node':
+                    const ret = (_b = line.value.result.label) !== null && _b !== void 0 ? _b : line.value.result.type;
+                    return ret.slice(ret.lastIndexOf('.') + 1);
+                case 'highlightMsg':
+                    return line.value.msg;
+                case 'tracing':
+                    return lineToComparisonString(line.value.result);
+                default:
+                    (0, hacks_5.assertUnreachable)(line);
+                    return '';
+            }
+        };
+        return lineToComparisonString(body.length === 1 ? body[0] : { type: 'arr', value: body });
+    };
+});
+define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create/createModalTitle", "ui/create/showWindow", "ui/UIElements"], function (require, exports, hacks_6, settings_10, createModalTitle_14, showWindow_11, UIElements_4) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.initWorkspace = void 0;
+    settings_10 = __importDefault(settings_10);
+    createModalTitle_14 = __importStar(createModalTitle_14);
+    showWindow_11 = __importDefault(showWindow_11);
+    UIElements_4 = __importDefault(UIElements_4);
+    const uiElements = new UIElements_4.default();
+    const unsavedFileKey = '%😄'; // Hopefully not colliding with anything
+    const displayTestModal = (args, workspace, extras) => {
+        const testBtn = uiElements.workspaceTestRunner;
+        let numPass = 0;
+        let numFail = 0;
+        const testDir = async (statusLbl, failureLog, path = null, testRunMonitor) => {
+            const contents = await getDirContents(workspace, path !== null && path !== void 0 ? path : '');
+            if (!contents) {
+                return;
+            }
+            for (let i = 0; i < contents.files.length; ++i) {
+                const entry = contents.files[i];
+                const fullPath = `${path ? `${path}/` : ''}${entry.value}`;
+                if (testRunMonitor.shouldStop) {
+                    return;
+                }
+                switch (entry.type) {
+                    case 'directory': {
+                        await testDir(statusLbl, failureLog, fullPath, testRunMonitor);
+                        break;
+                    }
+                    case 'file': {
+                        const entry = await getFileContents(workspace, fullPath);
+                        if (entry == null) {
+                            continue;
+                        }
+                        if (testRunMonitor.shouldStop) {
+                            return;
+                        }
+                        const res = await args.textProbeManager.checkFile(
+                        // { type: 'text', value: entry.contents },
+                        { type: 'workspacePath', value: fullPath }, entry.contents);
+                        if (res === null) {
+                            continue;
+                        }
+                        numPass += res.numPass;
+                        numFail += res.numFail;
+                        if (res.numFail) {
+                            const logEntry = document.createElement('div');
+                            logEntry.classList.add('workspace-test-failure-log-entry');
+                            logEntry.innerText = `${res.numFail} failure${res.numFail > 1 ? 's' : ''} in ${fullPath}`;
+                            failureLog.appendChild(logEntry);
+                            failureLog.style.display = 'flex';
+                        }
+                        workspace.knownTestResults[fullPath] = res;
+                        statusLbl.innerText = `Running.. ${numPass} pass, ${numFail} fail`;
+                        const row = workspace.visibleRows[fullPath];
+                        if (row) {
+                            row.updateTestStatus(res);
+                        }
+                        break;
+                    }
+                    default: {
+                        (0, hacks_6.assertUnreachable)(entry);
+                        break;
+                    }
+                }
+            }
+        };
+        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        testBtn.disabled = true;
+        testBtn.textContent = 'Running..';
+        const cleanup = () => {
+            testWindow.remove();
+            delete args.env.onChangeListeners[queryId];
+        };
+        console.log('displayTestModal');
+        let currentlyRunning = false;
+        let currentTestRunMonitor = { shouldStop: false };
+        const rerun = () => {
+            if (currentlyRunning) {
+                currentTestRunMonitor.shouldStop = true;
+                return;
+            }
+            currentlyRunning = true;
+            currentTestRunMonitor.shouldStop = false;
+            numFail = 0;
+            numPass = 0;
+            testWindow.refresh();
+        };
+        let shouldAutoRerun = settings_10.default.shouldRerunWorkspaceTestsOnChange();
+        const testWindow = (0, showWindow_11.default)({
+            rootStyle: `
+      width: 32rem;
+      min-height: 8rem;
+    `,
+            onForceClose: cleanup,
+            render: (root, info) => {
+                while (root.firstChild) {
+                    root.firstChild.remove();
+                }
+                root.appendChild((0, createModalTitle_14.default)({
+                    renderLeft: (container) => {
+                        const header = document.createElement('span');
+                        header.innerText = 'Test Results';
+                        container.appendChild(header);
+                    },
+                    onClose: cleanup,
+                }).element);
+                const bodyWrapper = document.createElement('div');
+                bodyWrapper.style.padding = '0.25rem';
+                root.appendChild(bodyWrapper);
+                const statusLbl = document.createElement('div');
+                statusLbl.innerText = 'Running..';
+                bodyWrapper.appendChild(statusLbl);
+                const failureLog = document.createElement('div');
+                failureLog.style.display = 'none';
+                failureLog.classList.add('workspace-test-failure-log');
+                bodyWrapper.appendChild(failureLog);
+                const start = Date.now();
+                testDir(statusLbl, failureLog, null, currentTestRunMonitor)
+                    .catch((err) => {
+                    console.warn('Failed running tests', err);
+                })
+                    .finally(() => {
+                    currentlyRunning = false;
+                    if (currentTestRunMonitor.shouldStop) {
+                        // We tried running again during the run, rerun!
+                        rerun();
+                        return;
+                    }
+                    if (info.cancelToken.cancelled) {
+                        return;
+                    }
+                    const doneLbl = document.createElement('div');
+                    doneLbl.innerText = `Done in ${Date.now() - start}ms`;
+                    bodyWrapper.appendChild(doneLbl);
+                    testBtn.disabled = false;
+                    testBtn.innerText = 'Run Tests';
+                    const repeatBtn = document.createElement('button');
+                    repeatBtn.innerText = 'Rerun';
+                    bodyWrapper.appendChild(repeatBtn);
+                    repeatBtn.onclick = rerun;
+                    const autoRerun = document.createElement('input');
+                    autoRerun.type = 'checkbox';
+                    autoRerun.checked = shouldAutoRerun;
+                    const autoRerunId = `autorerun-id-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+                    autoRerun.id = autoRerunId;
+                    bodyWrapper.appendChild(autoRerun);
+                    const label = document.createElement('label');
+                    label.htmlFor = autoRerunId;
+                    label.innerText = 'Auto rerun on any file change';
+                    bodyWrapper.appendChild(label);
+                    autoRerun.onchange = () => {
+                        shouldAutoRerun = autoRerun.checked;
+                        settings_10.default.setShouldRerunWorkspaceTestsOnChange(shouldAutoRerun);
+                    };
+                });
+            },
+        });
+        args.env.onChangeListeners[queryId] = (_, reason) => {
+            if (reason === 'refresh-from-server'
+                || (shouldAutoRerun && !extras.shouldIgnoreChangeCallbacks)) {
+                rerun();
+            }
+        };
+    };
+    async function getFileContents(workspace, path) {
+        const cached = workspace.cachedFiles[path];
+        if (cached) {
+            return cached;
+        }
+        const fresh = await workspace.env.performTypedRpc({ type: 'GetWorkspaceFile', path });
+        if (typeof (fresh === null || fresh === void 0 ? void 0 : fresh.content) !== 'string') {
+            console.log('bad resp for gFC', path);
+            return null;
+        }
+        if (!workspace.cachedFiles[path]) {
+            workspace.cachedFiles[path] = { contents: fresh.content, windows: [] };
+        }
+        else {
+            workspace.cachedFiles[path].contents = fresh.content;
+        }
+        if (fresh.metadata) {
+            try {
+                workspace.cachedFiles[path].windows = fresh.metadata.windowStates;
+            }
+            catch (e) {
+                console.warn('Failed parsing metadata', e);
+                console.warn('Metadata: ', fresh.metadata);
+            }
+        }
+        return workspace.cachedFiles[path];
+    }
+    async function getDirContents(workspace, path) {
+        const cached = workspace.cachedDirs[path];
+        if (cached) {
+            return cached;
+        }
+        const fresh = await workspace.env.performTypedRpc({ type: 'ListWorkspaceDirectory', path: path || undefined });
+        if (!(fresh === null || fresh === void 0 ? void 0 : fresh.entries)) {
+            return null;
+        }
+        if (!workspace.cachedDirs[path]) {
+            workspace.cachedDirs[path] = { files: fresh.entries };
+        }
+        else {
+            workspace.cachedDirs[path].files = fresh.entries;
+        }
+        return workspace.cachedDirs[path];
+    }
+    const createRow = (workspace, kind, label, path, setActive) => {
+        const row = document.createElement('div');
+        row.classList.add('workspace-row');
+        row.classList.add(`workspace-${kind}`);
+        if (path === workspace.getActiveFile()) {
+            row.classList.add('workspace-row-active');
+        }
+        const changeKind = (newKind) => {
+            console.log('kind', kind, '-->', newKind);
+            row.classList.remove(`workspace-${kind}`);
+            kind = newKind;
+            row.classList.add(`workspace-${kind}`);
+        };
+        const headerLine = document.createElement('div');
+        headerLine.classList.add('workspace-row-header');
+        row.appendChild(headerLine);
+        const lbl = document.createElement('span');
+        lbl.classList.add('clickHighlightOnHover');
+        lbl.innerText = label;
+        headerLine.appendChild(lbl);
+        if (kind !== 'unsaved') {
+            const btn = (0, createModalTitle_14.createOverflowButton)([
+                {
+                    title: 'Rename',
+                    invoke: () => {
+                        const newPath = prompt(`Enter new name for ${path}`, path);
+                        if (!newPath || newPath === path) {
+                            return;
+                        }
+                        // TODO refactor remaining fetch'es to performedTypedRpc
+                        fetch(`api/workspace/rename?src=${encodeURIComponent(path)}&dst=${encodeURIComponent(newPath)}`, { method: 'PUT' })
+                            .then(res => {
+                            if (res.status === 200) {
+                                workspace.reload({ type: 'rename', src: path, dst: newPath });
+                                return;
+                            }
+                            throw new Error(`Unexpected status: ${res.status}`);
+                        })
+                            .catch(err => {
+                            console.warn('Failed renaming', path, 'to', newPath);
+                        });
+                    },
+                },
+                {
+                    title: 'Delete',
+                    invoke: () => {
+                        const sure = confirm('Are you sure? This cannot be undone');
+                        if (!sure) {
+                            return;
+                        }
+                        fetch(`api/workspace/unlink?f=${encodeURIComponent(path)}`, { method: 'PUT' })
+                            .then(res => {
+                            if (res.status === 200) {
+                                workspace.reload({ type: 'unlink', path });
+                                return;
+                            }
+                            throw new Error(`Unexpected status: ${res.status}`);
+                        })
+                            .catch(err => {
+                            console.warn('Failed removing', path);
+                        });
+                    },
+                },
+            ]);
+            btn.classList.add('workspace-row-overflow');
+            headerLine.appendChild(btn);
+        }
+        let fileList = null;
+        row.setAttribute('data-path', path);
+        const updateTestStatus = (status) => {
+            row.classList.remove('workspace-row-test-success');
+            row.classList.remove('workspace-row-test-fail');
+            if (status.numFail) {
+                row.classList.add('workspace-row-test-fail');
+            }
+            else if (status.numPass) {
+                row.classList.add('workspace-row-test-success');
+            }
+            else {
+                // No tests in the file, don't decorate it with any color
+            }
+        };
+        if (workspace.knownTestResults[path]) {
+            updateTestStatus(workspace.knownTestResults[path]);
+        }
+        workspace.visibleRows[path] = {
+            updateTestStatus,
+        };
+        const click = () => {
+            switch (kind) {
+                case 'unsaved':
+                case 'file':
+                    getFileContents(workspace, path)
+                        .then(text => {
+                        if (text !== null) {
+                            setActive(path, text);
+                        }
+                    });
+                    break;
+                case 'dir-closed':
+                    changeKind('dir-open');
+                    workspace.preOpenedFiles[path] = true;
+                    if (fileList) {
+                        fileList.style.display = 'flex';
+                    }
+                    else {
+                        fileList = document.createElement('div');
+                        fileList.classList.add('workspace-dir-filelist');
+                        if (path.split('/').length % 2 === 1) {
+                            fileList.classList.add('workspace-dir-filelist-odd');
+                        }
+                        getDirContents(workspace, path)
+                            .then(contents => {
+                            console.log('contents for', path, '==>', contents);
+                            if (contents !== null) {
+                                contents.files.forEach(file => {
+                                    fileList === null || fileList === void 0 ? void 0 : fileList.appendChild(createRow(workspace, file.type === 'directory' ? 'dir-closed' : 'file', file.value, `${path}/${file.value}`, setActive));
+                                });
+                            }
+                        })
+                            .finally(() => {
+                            fileList === null || fileList === void 0 ? void 0 : fileList.appendChild(createAddFileButton(workspace, `${path}/`, fileList, setActive));
+                            row.appendChild(fileList);
+                        });
+                    }
+                    break;
+                case 'dir-open':
+                    if (!fileList) {
+                        console.error('How can there be an open dir without a fileList??');
+                        return;
+                    }
+                    fileList.style.display = 'none';
+                    changeKind('dir-closed');
+                    workspace.preOpenedFiles[path] = false;
+                    break;
+                default:
+                    (0, hacks_6.assertUnreachable)(kind);
+            }
+        };
+        lbl.onclick = click;
+        if ((kind === 'dir-closed' && workspace.preOpenedFiles[path])
+            || (kind === 'file' && path === workspace.getActiveFile())) {
+            click();
+        }
+        return row;
+    };
+    const createAddFileButton = (workspace, basePath, tgtContainer, setActive) => {
+        const row = document.createElement('div');
+        row.classList.add('workspace-row');
+        row.classList.add(`workspace-addfile`);
+        const headerLine = document.createElement('div');
+        headerLine.classList.add('workspace-row-header');
+        row.appendChild(headerLine);
+        const lbl = document.createElement('span');
+        lbl.classList.add('clickHighlightOnHover');
+        lbl.innerText = '+';
+        headerLine.appendChild(lbl);
+        row.onclick = () => {
+            const name = prompt(`Name the new file${basePath ? ` in ${basePath}` : ''}`);
+            if (name) {
+                const subPath = `${basePath}${name}`;
+                if (name.includes('/')) {
+                    // A little lazy, but lets just rename everything
+                    console.log('putting empty file...');
+                    fetch(`api/workspace/contents?f=${encodeURIComponent(subPath)}`, { method: 'PUT', body: '' })
+                        .then(() => {
+                        console.log('then...');
+                    })
+                        .finally(() => {
+                        console.log('reload...pls');
+                        workspace.reload({ type: 'rename', src: workspace.getActiveFile(), dst: subPath });
+                    });
+                }
+                else {
+                    tgtContainer.appendChild(createRow(workspace, 'file', name, subPath, setActive));
+                    setActive(subPath, { contents: '', windows: [] });
+                }
+            }
+        };
+        return row;
+    };
+    const initWorkspace = async (args) => {
+        let activeFile = unsavedFileKey;
+        const workspaceList = uiElements.workspaceListWrapper;
+        let setActiveFile = (path, data) => { };
+        const workspace = {
+            env: args.env,
+            cachedFiles: {},
+            cachedDirs: {},
+            preOpenedFiles: {},
+            visibleRows: {},
+            knownTestResults: {},
+            getActiveFile: () => activeFile,
+            activeFileIsTempFile: () => activeFile === unsavedFileKey,
+            onActiveFileChange: (contents) => {
+                if (workspace.cachedFiles[activeFile]) {
+                    if (workspace.cachedFiles[activeFile].contents == contents) {
+                        // Ignore it
+                        return;
+                    }
+                    workspace.cachedFiles[activeFile].contents = contents;
+                }
+                if (activeFile !== unsavedFileKey) {
+                    const path = activeFile;
+                    args.env.performTypedRpc({ type: 'PutWorkspaceContent', path, content: contents })
+                        .then((res) => {
+                        if (!res.ok) {
+                            console.warn('Failed updating content for', path);
+                        }
+                    });
+                }
+            },
+            onActiveWindowsChange: (states) => {
+                if (workspace.cachedFiles[activeFile]) {
+                    workspace.cachedFiles[activeFile].windows = states;
+                }
+                if (activeFile !== unsavedFileKey) {
+                    const payload = {
+                        windowStates: states,
+                    };
+                    const path = activeFile;
+                    args.env.performTypedRpc({ type: 'PutWorkspaceMetadata', path, metadata: payload })
+                        .then((res) => {
+                        if (!res.ok) {
+                            console.warn('Failed updating metadata for', path);
+                        }
+                    })
+                        .catch(console.error);
+                }
+            },
+            reload: (reason) => {
+                const preActive = activeFile;
+                Object.keys(workspace.cachedFiles).forEach(key => {
+                    if (key !== unsavedFileKey) {
+                        delete workspace.cachedFiles[key];
+                    }
+                });
+                Object.keys(workspace.cachedDirs).forEach(key => delete workspace.cachedDirs[key]);
+                let newActiveFileName = preActive;
+                if (reason) {
+                    switch (reason.type) {
+                        case 'rename': {
+                            if (preActive.startsWith(reason.src)) {
+                                newActiveFileName = `${reason.dst}${preActive.slice(reason.src.length)}`;
+                            }
+                            break;
+                        }
+                        case 'unlink': {
+                            if (preActive.startsWith(reason.path)) {
+                                newActiveFileName = unsavedFileKey;
+                            }
+                            break;
+                        }
+                    }
+                }
+                while (workspaceList.firstChild) {
+                    workspaceList.firstChild.remove();
+                }
+                performSetup()
+                    .then((ws) => {
+                    if (ws == null) {
+                        throw new Error('No workspace active after reload');
+                    }
+                    return getFileContents(workspace, newActiveFileName);
+                })
+                    .then(contents => {
+                    if (contents) {
+                        setActiveFile(newActiveFileName, contents);
+                    }
+                    else {
+                        throw new Error(`Failed getting ${newActiveFileName} contents after reload`);
+                    }
+                })
+                    .catch((err) => {
+                    console.error('Failed reloading workspace', err);
+                });
+            },
+            onActiveFileChecked: (res) => {
+                workspace.knownTestResults[activeFile] = res;
+                if (workspace.visibleRows[activeFile]) {
+                    workspace.visibleRows[activeFile].updateTestStatus(res);
+                }
+            },
+            onServerNotifyPathsChanged: async (paths) => {
+                // Poll all changed paths
+                let anyChange = false;
+                let activeFileAtTimeofNewContent = activeFile;
+                let newLocalFileContent = null;
+                for (let i = 0; i < paths.length; ++i) {
+                    const path = paths[i];
+                    if (workspace.cachedFiles[path]) {
+                        const prevContent = workspace.cachedFiles[path];
+                        delete workspace.cachedFiles[path];
+                        const newContent = await getFileContents(workspace, path);
+                        if (!newContent) {
+                            continue;
+                        }
+                        if (prevContent.contents !== newContent.contents) {
+                            anyChange = true;
+                            if (path === activeFile) {
+                                activeFileAtTimeofNewContent = activeFile;
+                                newLocalFileContent = newContent.contents;
+                            }
+                        }
+                    }
+                }
+                if (newLocalFileContent !== null && activeFile === activeFileAtTimeofNewContent) {
+                    // This will naturally trigger a "onChange"
+                    args.env.setLocalState(newLocalFileContent);
+                }
+                else if (anyChange) {
+                    // Manually notify of a change, for example to get tests to re-run
+                    args.notifySomeWorkspacePathChanged();
+                }
+            }
+        };
+        {
+            const fromSettings = settings_10.default.getActiveWorkspacePath();
+            if (fromSettings !== null) {
+                if ((await getFileContents(workspace, fromSettings)) !== null) {
+                    activeFile = fromSettings;
+                    const parts = fromSettings.split('/');
+                    for (let i = 0; i < parts.length - 1; ++i) {
+                        workspace.preOpenedFiles[parts.slice(0, i + 1).join('/')] = true;
+                    }
+                }
+            }
+        }
+        const testModalExtras = { shouldIgnoreChangeCallbacks: false };
+        uiElements.workspaceTestRunner.onclick = () => displayTestModal(args, workspace, testModalExtras);
+        workspace.cachedFiles[unsavedFileKey] = {
+            contents: args.initialLocalContent,
+            windows: settings_10.default.getProbeWindowStates(),
+        };
+        const performSetup = async () => {
+            const initialListingRes = await args.env.performTypedRpc({ type: 'ListWorkspaceDirectory', });
+            if (!initialListingRes.entries) {
+                // We expect empty array if there is a workspace, but it is empty
+                // No array at all means there is no workspace to work with
+                return null;
+            }
+            document.body.classList.add('workspace-visible');
+            uiElements.workspaceHeaderLabel.style.display = 'flex';
+            workspaceList.style.display = 'flex';
+            const setActiveStyling = (activePath) => {
+                document.querySelectorAll('.workspace-row').forEach(elem => {
+                    if (elem.getAttribute('data-path') === activePath) {
+                        elem.classList.add('workspace-row-active');
+                    }
+                    else {
+                        elem.classList.remove('workspace-row-active');
+                    }
+                });
+            };
+            setActiveFile = (path, data) => {
+                activeFile = path;
+                document.querySelectorAll('.auto-click-on-workspace-switch').forEach(btn => {
+                    btn.click();
+                });
+                testModalExtras.shouldIgnoreChangeCallbacks = true;
+                args.setLocalContent(data.contents);
+                args.setLocalWindows(data.windows);
+                setActiveStyling(path);
+                args.onActiveFileChanged();
+                settings_10.default.setActiveWorkspacePath(path);
+                testModalExtras.shouldIgnoreChangeCallbacks = false;
+            };
+            workspaceList.appendChild(createRow(workspace, 'unsaved', 'Temp file (browser only)', unsavedFileKey, setActiveFile));
+            initialListingRes.entries.forEach((file) => {
+                workspaceList.appendChild(createRow(workspace, file.type === 'directory' ? 'dir-closed' : 'file', file.value, file.value, setActiveFile));
+            });
+            workspaceList.appendChild(createAddFileButton(workspace, '', workspaceList, setActiveFile));
+            setActiveStyling(unsavedFileKey);
+            return workspace;
+        };
+        return performSetup();
+    };
+    exports.initWorkspace = initWorkspace;
+});
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox", "model/Workspace", "model/TextProbeManager"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_11, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_5, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_3, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_12, UpdatableNodeLocator_9, hacks_7, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1, Workspace_1, TextProbeManager_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -14361,27 +15490,27 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_5 = __importDefault(displayHelp_5);
     displayAttributeModal_7 = __importDefault(displayAttributeModal_7);
-    settings_9 = __importDefault(settings_9);
+    settings_11 = __importDefault(settings_11);
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
     displayStatistics_1 = __importDefault(displayStatistics_1);
     displayMainArgsOverrideModal_1 = __importDefault(displayMainArgsOverrideModal_1);
     createWebsocketHandler_1 = __importStar(createWebsocketHandler_1);
     configureCheckboxWithHiddenButton_1 = __importDefault(configureCheckboxWithHiddenButton_1);
-    UIElements_4 = __importDefault(UIElements_4);
+    UIElements_5 = __importDefault(UIElements_5);
     showVersionInfo_1 = __importDefault(showVersionInfo_1);
     runBgProbe_1 = __importDefault(runBgProbe_1);
-    cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
+    cullingTaskSubmitterFactory_3 = __importDefault(cullingTaskSubmitterFactory_3);
     displayAstModal_4 = __importDefault(displayAstModal_4);
     displayTestSuiteListModal_1 = __importDefault(displayTestSuiteListModal_1);
     displayWorkerStatus_1 = __importDefault(displayWorkerStatus_1);
-    showWindow_11 = __importDefault(showWindow_11);
+    showWindow_12 = __importDefault(showWindow_12);
     createMinimizedProbeModal_2 = __importDefault(createMinimizedProbeModal_2);
     getEditorDefinitionPlace_2 = __importDefault(getEditorDefinitionPlace_2);
     installASTEditor_1 = __importDefault(installASTEditor_1);
     configureCheckboxWithHiddenCheckbox_1 = __importDefault(configureCheckboxWithHiddenCheckbox_1);
-    const uiElements = new UIElements_4.default();
+    const uiElements = new UIElements_5.default();
     window.clearUserSettings = () => {
-        settings_9.default.set({});
+        settings_11.default.set({});
         location.reload();
     };
     // setTimeout(() => {
@@ -14389,25 +15518,36 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     // }, 1000)
     const doMain = (wsPort) => {
         (0, installASTEditor_1.default)();
-        if (settings_9.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
+        if (settings_11.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
             document.body.classList.add('hide-settings');
         }
-        if (!settings_9.default.shouldEnableTesting()) {
+        if (!settings_11.default.shouldEnableTesting()) {
             uiElements.showTests.style.display = 'none';
         }
-        let getLocalState = () => { var _a; return (_a = settings_9.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
+        let getLocalState = () => { var _a; return (_a = settings_11.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
         let basicHighlight = null;
         const stickyHighlights = {};
         let updateSpanHighlight = (span, stickies) => { };
         const onChangeListeners = {};
         const probeWindowStateSavers = {};
-        const spammyOperationDebouncer = (0, cullingTaskSubmitterFactory_2.default)(10);
+        const spammyOperationDebouncer = (0, cullingTaskSubmitterFactory_3.default)(10);
         const windowSaveDebouncer = spammyOperationDebouncer();
+        const getCurrentWindowStates = () => {
+            const states = [];
+            Object.values(probeWindowStateSavers).forEach(v => v(states));
+            return states;
+        };
+        let activeWorkspace = null;
+        let activeTextProbeManager = null;
         const triggerWindowSave = () => {
             windowSaveDebouncer.submit(() => {
-                const states = [];
-                Object.values(probeWindowStateSavers).forEach(v => v(states));
-                settings_9.default.setProbeWindowStates(states);
+                const states = getCurrentWindowStates();
+                if (!activeWorkspace || activeWorkspace.activeFileIsTempFile()) {
+                    settings_11.default.setProbeWindowStates(states);
+                }
+                if (activeWorkspace) {
+                    activeWorkspace.onActiveWindowsChange(states);
+                }
             });
         };
         const notifyLocalChangeListeners = (adjusters, reason) => {
@@ -14419,7 +15559,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 location.search = "editor=" + editorType;
                 return;
             }
-            document.body.setAttribute('data-theme-light', `${settings_9.default.isLightTheme()}`);
+            document.body.setAttribute('data-theme-light', `${settings_11.default.isLightTheme()}`);
             const wsHandler = (() => {
                 if (wsPort == 'ws-over-http') {
                     return (0, createWebsocketHandler_1.createWebsocketOverHttpHandler)(addConnectionCloseNotice_1.default);
@@ -14445,11 +15585,13 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 }
                 return (0, createWebsocketHandler_1.default)(new WebSocket(`ws://${location.hostname}:${wsPort}`), addConnectionCloseNotice_1.default);
             })();
+            const installWsNotificationHandler = (s, callback) => {
+                wsHandler.on(s, callback);
+            };
+            // const foo = <T extends { type: string }>(s: T['type'], callback: (t: T) => void) => {
             const jobUpdateHandlers = {};
-            wsHandler.on('asyncUpdate', (rawData) => {
-                const data = rawData; // Ideally stricly parse this, but this works
+            installWsNotificationHandler('asyncUpdate', (data) => {
                 const { job, isFinalUpdate, value } = data;
-                // console.log('jobUpdate for', job, '; result:', result);
                 if (!job || value === undefined) {
                     console.warn('Invalid job update', data);
                     return;
@@ -14464,13 +15606,37 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 }
                 handler(data);
             });
+            const loadWindowState = (modalEnv, state) => {
+                switch (state.data.type) {
+                    case 'probe': {
+                        const data = state.data;
+                        (0, displayProbeModal_6.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_9.createMutableLocator)(data.locator), data.property, data.nested, { showDiagnostics: data.showDiagnostics, stickyHighlight: data.stickyHighlight });
+                        break;
+                    }
+                    case 'ast': {
+                        (0, displayAstModal_4.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_9.createMutableLocator)(state.data.locator), state.data.direction, {
+                            initialTransform: state.data.transform,
+                        });
+                        break;
+                    }
+                    case 'minimized-probe': {
+                        modalEnv.minimize(state.data.data);
+                        break;
+                    }
+                    default: {
+                        (0, hacks_7.assertUnreachable)(state.data);
+                        break;
+                    }
+                }
+            };
             const rootElem = document.getElementById('root');
             const initHandler = (info) => {
                 const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile } = info;
                 console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
                 rootElem.style.display = "grid";
+                let shouldTryInitializingWorkspace = false;
                 if (backingFile) {
-                    settings_9.default.setEditorContents(backingFile.value);
+                    settings_11.default.setEditorContents(backingFile.value);
                     const inputLabel = document.querySelector('#input-header > span');
                     if (!inputLabel) {
                         console.warn('Could not find input header');
@@ -14483,10 +15649,18 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         locIndicator.innerText = `(${backingFile.path})`;
                         inputLabel.appendChild(locIndicator);
                     }
-                    wsHandler.on('backing_file_update', ({ contents }) => modalEnv.setLocalState(contents));
+                    installWsNotificationHandler('backing_file_update', ({ contents }) => modalEnv.setLocalState(contents));
+                }
+                else {
+                    shouldTryInitializingWorkspace = true;
                 }
                 const onChange = (newValue, adjusters) => {
-                    settings_9.default.setEditorContents(newValue);
+                    if (!activeWorkspace || activeWorkspace.activeFileIsTempFile()) {
+                        settings_11.default.setEditorContents(newValue);
+                    }
+                    if (activeWorkspace) {
+                        activeWorkspace.onActiveFileChange(newValue);
+                    }
                     notifyLocalChangeListeners(adjusters);
                 };
                 let setLocalState = (value) => { };
@@ -14496,11 +15670,11 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     remove: () => { },
                 });
                 const darkModeCheckbox = uiElements.darkModeCheckbox;
-                darkModeCheckbox.checked = !settings_9.default.isLightTheme();
+                darkModeCheckbox.checked = !settings_11.default.isLightTheme();
                 const themeChangeListeners = {};
                 darkModeCheckbox.oninput = (e) => {
                     let lightTheme = !darkModeCheckbox.checked;
-                    settings_9.default.setLightTheme(lightTheme);
+                    settings_11.default.setLightTheme(lightTheme);
                     document.body.setAttribute('data-theme-light', `${lightTheme}`);
                     Object.values(themeChangeListeners).forEach(cb => cb(lightTheme));
                 };
@@ -14524,8 +15698,8 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 if ((0, getEditorDefinitionPlace_2.default)().definedEditors[editorType]) {
                     const { preload, init, } = (0, getEditorDefinitionPlace_2.default)().definedEditors[editorType];
                     (0, getEditorDefinitionPlace_2.default)().loadPreload(preload, () => {
-                        var _a;
-                        const res = init((_a = settings_9.default.getEditorContents()) !== null && _a !== void 0 ? _a : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_9.default.getSyntaxHighlighting());
+                        var _a, _b;
+                        const res = init((_a = settings_11.default.getEditorContents()) !== null && _a !== void 0 ? _a : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_11.default.getSyntaxHighlighting());
                         setLocalState = res.setLocalState || setLocalState;
                         getLocalState = res.getLocalState || getLocalState;
                         updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
@@ -14536,7 +15710,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         }
                         if (res.themeToggler) {
                             themeChangeListeners['main-editor'] = (light) => res.themeToggler(light);
-                            res.themeToggler(settings_9.default.isLightTheme());
+                            res.themeToggler(settings_11.default.isLightTheme());
                             // defineThemeToggler(res.themeToggler);
                         }
                         syntaxHighlightingToggler = res.syntaxHighlightingToggler;
@@ -14546,6 +15720,64 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                                 (0, runBgProbe_1.default)(modalEnv, { result: { start: 0, end: 0, type: '<ROOT>', depth: 0 }, steps: [] }, { name: kv.slice(needle.length), });
                             }
                         });
+                        activeTextProbeManager = (0, TextProbeManager_1.setupTextProbeManager)({
+                            env: modalEnv,
+                            onFinishedCheckingActiveFile: (res) => {
+                                if (activeWorkspace) {
+                                    activeWorkspace.onActiveFileChecked(res);
+                                }
+                            },
+                        });
+                        if (shouldTryInitializingWorkspace) {
+                            const inputLabel = document.querySelector('#input-header > span');
+                            let cachedLocIndicator = null;
+                            const getLocIndicator = () => {
+                                if (!cachedLocIndicator) {
+                                    const locIndicator = document.createElement('span');
+                                    locIndicator.style.marginLeft = '0.25rem';
+                                    locIndicator.classList.add('syntax-string');
+                                    inputLabel.appendChild(locIndicator);
+                                    cachedLocIndicator = locIndicator;
+                                }
+                                return cachedLocIndicator;
+                            };
+                            const onActiveFileChanged = () => {
+                                if (!activeWorkspace) {
+                                    return;
+                                }
+                                if (activeWorkspace.activeFileIsTempFile()) {
+                                    getLocIndicator().innerText = `(Temp file)`;
+                                }
+                                else {
+                                    getLocIndicator().innerText = `(${activeWorkspace.getActiveFile()})`;
+                                }
+                            };
+                            (0, Workspace_1.initWorkspace)({
+                                env: modalEnv,
+                                initialLocalContent: (_b = settings_11.default.getEditorContents()) !== null && _b !== void 0 ? _b : '',
+                                setLocalContent: contents => setLocalState(contents),
+                                onActiveFileChanged,
+                                getCurrentWindows: getCurrentWindowStates,
+                                setLocalWindows: (states) => {
+                                    states.forEach(state => loadWindowState(modalEnv, state));
+                                },
+                                textProbeManager: activeTextProbeManager,
+                                notifySomeWorkspacePathChanged: () => notifyLocalChangeListeners(undefined, 'workspace_path_updated'),
+                            })
+                                .then((ws) => {
+                                if (ws) {
+                                    activeWorkspace = ws;
+                                    onActiveFileChanged();
+                                    installWsNotificationHandler('workspace_paths_updated', ({ paths }) => {
+                                        console.log('TODO ws path updates for', paths);
+                                        ws.onServerNotifyPathsChanged(paths);
+                                    });
+                                }
+                            })
+                                .catch((err) => {
+                                console.warn('Failed initializing workspace', err);
+                            });
+                        }
                     });
                 }
                 else {
@@ -14592,25 +15824,25 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     input.checked = initial;
                     input.oninput = () => { update(input.checked); notifyLocalChangeListeners(); };
                 };
-                setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_9.default.shouldCaptureStdio(), cb => settings_9.default.setShouldCaptureStdio(cb));
-                setupSimpleCheckbox(uiElements.captureTracesCheckbox, settings_9.default.shouldCaptureTraces(), cb => settings_9.default.setShouldCaptureTraces(cb));
-                setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_9.default.shouldDuplicateProbeOnAttrClick(), cb => settings_9.default.setShouldDuplicateProbeOnAttrClick(cb));
-                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_9.default.shouldShowAllProperties(), cb => settings_9.default.setShouldShowAllProperties(cb));
-                setupSimpleCheckbox(uiElements.groupPropertiesByAspectCheckbox, settings_9.default.shouldGroupPropertiesByAspect(), cb => settings_9.default.setShouldGroupPropertiesByAspect(cb));
+                setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_11.default.shouldCaptureStdio(), cb => settings_11.default.setShouldCaptureStdio(cb));
+                setupSimpleCheckbox(uiElements.captureTracesCheckbox, settings_11.default.shouldCaptureTraces(), cb => settings_11.default.setShouldCaptureTraces(cb));
+                setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_11.default.shouldDuplicateProbeOnAttrClick(), cb => settings_11.default.setShouldDuplicateProbeOnAttrClick(cb));
+                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_11.default.shouldShowAllProperties(), cb => settings_11.default.setShouldShowAllProperties(cb));
+                setupSimpleCheckbox(uiElements.groupPropertiesByAspectCheckbox, settings_11.default.shouldGroupPropertiesByAspect(), cb => settings_11.default.setShouldGroupPropertiesByAspect(cb));
                 const setupSimpleSelector = (input, initial, update) => {
                     input.value = initial;
                     input.oninput = () => { update(input.value); notifyLocalChangeListeners(); };
                 };
-                setupSimpleSelector(uiElements.astCacheStrategySelector, settings_9.default.getAstCacheStrategy(), cb => settings_9.default.setAstCacheStrategy(cb));
-                setupSimpleSelector(uiElements.positionRecoverySelector, settings_9.default.getPositionRecoveryStrategy(), cb => settings_9.default.setPositionRecoveryStrategy(cb));
-                setupSimpleSelector(uiElements.locationStyleSelector, `${settings_9.default.getLocationStyle()}`, cb => settings_9.default.setLocationStyle(cb));
+                setupSimpleSelector(uiElements.astCacheStrategySelector, settings_11.default.getAstCacheStrategy(), cb => settings_11.default.setAstCacheStrategy(cb));
+                setupSimpleSelector(uiElements.positionRecoverySelector, settings_11.default.getPositionRecoveryStrategy(), cb => settings_11.default.setPositionRecoveryStrategy(cb));
+                setupSimpleSelector(uiElements.locationStyleSelector, `${settings_11.default.getLocationStyle()}`, cb => settings_11.default.setLocationStyle(cb));
                 uiElements.settingsHider.onclick = () => {
                     document.body.classList.add('hide-settings');
-                    settings_9.default.setShouldHideSettingsPanel(true);
+                    settings_11.default.setShouldHideSettingsPanel(true);
                 };
                 uiElements.settingsRevealer.onclick = () => {
                     document.body.classList.remove('hide-settings');
-                    settings_9.default.setShouldHideSettingsPanel(false);
+                    settings_11.default.setShouldHideSettingsPanel(false);
                 };
                 const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
                 syntaxHighlightingSelector.innerHTML = '';
@@ -14620,54 +15852,54 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     option.innerText = alias;
                     syntaxHighlightingSelector.appendChild(option);
                 });
-                setupSimpleSelector(syntaxHighlightingSelector, settings_9.default.getSyntaxHighlighting(), cb => {
-                    settings_9.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
-                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_9.default.getSyntaxHighlighting());
+                setupSimpleSelector(syntaxHighlightingSelector, settings_11.default.getSyntaxHighlighting(), cb => {
+                    settings_11.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
+                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_11.default.getSyntaxHighlighting());
                 });
                 const overrideCfg = (0, configureCheckboxWithHiddenButton_1.default)(uiElements.shouldOverrideMainArgsCheckbox, uiElements.configureMainArgsOverrideButton, (checked) => {
-                    settings_9.default.setMainArgsOverride(checked ? [] : null);
+                    settings_11.default.setMainArgsOverride(checked ? [] : null);
                     overrideCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }, onClose => (0, displayMainArgsOverrideModal_1.default)(onClose, () => {
                     overrideCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }), () => {
-                    const overrides = settings_9.default.getMainArgsOverride();
+                    const overrides = settings_11.default.getMainArgsOverride();
                     return overrides === null ? null : `Edit (${overrides.length})`;
                 });
                 const suffixCfg = (0, configureCheckboxWithHiddenButton_1.default)(uiElements.shouldCustomizeFileSuffixCheckbox, uiElements.configureCustomFileSuffixButton, (checked) => {
-                    settings_9.default.setCustomFileSuffix(checked ? settings_9.default.getCurrentFileSuffix() : null);
+                    settings_11.default.setCustomFileSuffix(checked ? settings_11.default.getCurrentFileSuffix() : null);
                     suffixCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }, onClose => {
-                    const newVal = prompt('Enter new suffix', settings_9.default.getCurrentFileSuffix());
+                    const newVal = prompt('Enter new suffix', settings_11.default.getCurrentFileSuffix());
                     if (newVal !== null) {
-                        settings_9.default.setCustomFileSuffix(newVal);
+                        settings_11.default.setCustomFileSuffix(newVal);
                         suffixCfg.refreshButton();
                         notifyLocalChangeListeners();
                     }
                     onClose();
                     return { forceClose: () => { }, };
                 }, () => {
-                    const overrides = settings_9.default.getCustomFileSuffix();
-                    return overrides === null ? null : `Edit (${settings_9.default.getCurrentFileSuffix()})`;
+                    const overrides = settings_11.default.getCustomFileSuffix();
+                    return overrides === null ? null : `Edit (${settings_11.default.getCurrentFileSuffix()})`;
                 });
                 (0, configureCheckboxWithHiddenCheckbox_1.default)(
                 // Outer
                 {
                     checkbox: uiElements.captureTracesCheckbox,
-                    initiallyChecked: settings_9.default.shouldCaptureTraces(),
+                    initiallyChecked: settings_11.default.shouldCaptureTraces(),
                     onChange: (checked) => {
-                        settings_9.default.setShouldCaptureTraces(checked);
+                        settings_11.default.setShouldCaptureTraces(checked);
                         notifyLocalChangeListeners();
                     },
                 }, 
                 // Hidden
                 {
                     checkbox: uiElements.autoflushTracesCheckbox,
-                    initiallyChecked: settings_9.default.shouldAutoflushTraces(),
+                    initiallyChecked: settings_11.default.shouldAutoflushTraces(),
                     onChange: (checked) => {
-                        settings_9.default.setShouldAutoflushTraces(checked);
+                        settings_11.default.setShouldAutoflushTraces(checked);
                         notifyLocalChangeListeners();
                     },
                     container: uiElements.autoflushTracesContainer,
@@ -14684,23 +15916,30 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 const testManager = (0, TestManager_1.createTestManager)(() => modalEnv, createJobId);
                 let jobIdGenerator = 0;
-                const createCullingTaskSubmitter = (0, cullingTaskSubmitterFactory_2.default)(changeBufferTime);
+                const createCullingTaskSubmitter = (0, cullingTaskSubmitterFactory_3.default)(changeBufferTime);
                 const modalEnv = {
-                    showWindow: showWindow_11.default,
+                    showWindow: showWindow_12.default,
                     performTypedRpc: (req) => wsHandler.sendRpc(req),
                     createParsingRequestData: () => {
                         var _a;
-                        return ({
+                        let src;
+                        if (activeWorkspace && !activeWorkspace.activeFileIsTempFile()) {
+                            src = { type: 'workspacePath', value: activeWorkspace.getActiveFile() };
+                        }
+                        else {
+                            src = { type: 'text', value: getLocalState() };
+                        }
+                        return {
                             posRecovery: uiElements.positionRecoverySelector.value,
                             cache: uiElements.astCacheStrategySelector.value,
-                            text: getLocalState(),
-                            stdout: settings_9.default.shouldCaptureStdio(),
-                            mainArgs: (_a = settings_9.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : undefined,
-                            tmpSuffix: settings_9.default.getCurrentFileSuffix(),
-                        });
+                            src,
+                            stdout: settings_11.default.shouldCaptureStdio(),
+                            mainArgs: (_a = settings_11.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : undefined,
+                            tmpSuffix: settings_11.default.getCurrentFileSuffix(),
+                        };
                     },
                     probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
-                    themeIsLight: () => settings_9.default.isLightTheme(),
+                    themeIsLight: () => settings_11.default.isLightTheme(),
                     getLocalState: () => getLocalState(),
                     setLocalState: (newVal) => setLocalState(newVal),
                     captureStdout: () => uiElements.captureStdoutCheckbox.checked,
@@ -14744,9 +15983,13 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     (0, displayTestSuiteListModal_1.default)(modalEnv, () => { uiElements.showTests.disabled = false; }, workerProcessCount);
                 };
                 (0, showVersionInfo_1.default)(uiElements.versionInfo, hash, clean, buildTimeSeconds, disableVersionCheckerByDefault, modalEnv.performTypedRpc);
+                const deferLspToBackend = location.search.includes('debug=true');
                 window.HandleLspLikeInteraction = async (type, pos) => {
                     switch (type) {
                         case 'hover': {
+                            if (!deferLspToBackend) {
+                                return null;
+                            }
                             const req = {
                                 type: 'ide:hover',
                                 src: modalEnv.createParsingRequestData(),
@@ -14764,6 +16007,15 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             return { contents: ret };
                         }
                         case 'complete': {
+                            if (activeTextProbeManager) {
+                                const res = await activeTextProbeManager.complete(pos.line, pos.column);
+                                if (res) {
+                                    return { suggestions: res.map(line => ({ label: line, insertText: line, kind: 3 })) };
+                                }
+                            }
+                            if (!deferLspToBackend) {
+                                return null;
+                            }
                             const req = {
                                 type: 'ide:complete',
                                 src: modalEnv.createParsingRequestData(),
@@ -14781,7 +16033,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             return { suggestions: ret };
                         }
                         default: {
-                            (0, hacks_5.assertUnreachable)(type);
+                            (0, hacks_7.assertUnreachable)(type);
                             return null;
                         }
                     }
@@ -14808,7 +16060,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 setTimeout(() => {
                     try {
-                        let windowStates = settings_9.default.getProbeWindowStates();
+                        let windowStates = settings_11.default.getProbeWindowStates();
                         // let wsMatch: RegExpExecArray | null;
                         // if ((wsMatch = /[?&]?ws=[^?&]+/.exec(location.search)) != null) {
                         //   const trimmedSearch = wsMatch.index === 0
@@ -14827,29 +16079,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         //     console.warn('Invalid windowState in hash', e);
                         //   }
                         // }
-                        windowStates.forEach((state) => {
-                            switch (state.data.type) {
-                                case 'probe': {
-                                    const data = state.data;
-                                    (0, displayProbeModal_6.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_9.createMutableLocator)(data.locator), data.property, data.nested, { showDiagnostics: data.showDiagnostics, stickyHighlight: data.stickyHighlight });
-                                    break;
-                                }
-                                case 'ast': {
-                                    (0, displayAstModal_4.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_9.createMutableLocator)(state.data.locator), state.data.direction, {
-                                        initialTransform: state.data.transform,
-                                    });
-                                    break;
-                                }
-                                case 'minimized-probe': {
-                                    modalEnv.minimize(state.data.data);
-                                    break;
-                                }
-                                default: {
-                                    (0, hacks_5.assertUnreachable)(state.data);
-                                    break;
-                                }
-                            }
-                        });
+                        windowStates.forEach(state => loadWindowState(modalEnv, state));
                     }
                     catch (e) {
                         console.warn('Invalid probe window state?', e);
@@ -14866,7 +16096,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
             };
             wsHandler.on('init', initHandler);
-            wsHandler.on('refresh', () => {
+            installWsNotificationHandler('refresh', () => {
                 console.log('notifying of refresh..');
                 notifyLocalChangeListeners(undefined, 'refresh-from-server');
             });

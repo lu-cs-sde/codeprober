@@ -14,11 +14,13 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Iterator;
 import java.util.List;
@@ -48,6 +50,7 @@ import codeprober.protocol.data.WsPutInitRes;
 import codeprober.protocol.data.WsPutLongpollReq;
 import codeprober.protocol.data.WsPutLongpollRes;
 import codeprober.rpc.JsonRequestHandler;
+import codeprober.server.WorkspaceApi.Responder;
 import codeprober.util.ParsedArgs;
 import codeprober.util.SessionLogger;
 
@@ -212,7 +215,7 @@ public class WebServer {
 
 	public static final boolean DEBUG_REQUESTS = "true".equals(System.getenv("DEBUG_REQUESTS"));
 
-	private final WsPutSessionMonitor monitor = new WsPutSessionMonitor();;
+	private final WsPutSessionMonitor monitor = new WsPutSessionMonitor();
 
 	private void handleGetRequest(Socket socket, String data, ParsedArgs parsedArgs,
 			ServerToClientMessagePusher msgPusher, Function<ClientRequest, JSONObject> onQuery,
@@ -251,7 +254,8 @@ public class WebServer {
 			return;
 		}
 
-		String path = getReqPathMatcher.group(1).split("[?#]")[0];
+		final String[] pathAndQueries = getReqPathMatcher.group(1).split("[?&#]");
+		String path = pathAndQueries[0];
 		if (path.endsWith("/")) {
 			path += "index.html";
 		}
@@ -314,14 +318,20 @@ public class WebServer {
 				out.write("\r\n".getBytes("UTF-8"));
 				return;
 			}
+			final byte[] respBytes = tagName.getBytes("UTF-8");
 
-			out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
-			out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
-			out.write(("\r\n").getBytes("UTF-8"));
-
-			// final String[] lines = fullVersionFile.split("\n");
-			out.write(tagName.getBytes("UTF-8"));
-			out.flush();
+			write200(out, respBytes);
+			return;
+		}
+		if (path.equals("/api/workspace")) {
+			final WorkspaceApi api = new WorkspaceApi(Responder.fromOutputStream(socket.getOutputStream()));
+			api.getWorkspace();
+			return;
+		}
+		if (path.equals("/api/workspace/contents")) {
+			final WorkspaceApi api = new WorkspaceApi(Responder.fromOutputStream(socket.getOutputStream()));
+			final String wsPath = findAndDecodeFilePathQueryParam(pathAndQueries, "f=");
+			api.getContents(wsPath);
 			return;
 		}
 
@@ -365,6 +375,17 @@ public class WebServer {
 		}
 	}
 
+	private static String decodeURIComponent(String comp) {
+		// https://stackoverflow.com/a/6926987
+		try {
+			return URLDecoder.decode(comp.replace("+", "%2B"), StandardCharsets.UTF_8.name()).replace("%2B", "+");
+		} catch (UnsupportedEncodingException impossible) {
+			System.out.println("UTF-8 not supported??");
+			impossible.printStackTrace();
+			return comp;
+		}
+	}
+
 	private void handlePutRequest(Socket socket, String data, ParsedArgs args, ServerToClientMessagePusher msgPusher,
 			Function<ClientRequest, JSONObject> onQuery, Consumer<String> setUnderlyingJarPath, SessionLogger logger)
 			throws IOException {
@@ -388,6 +409,9 @@ public class WebServer {
 		if (DEBUG_REQUESTS) {
 			System.out.println("[put] addr=" + socket.getRemoteSocketAddress() + " | path= " + putPath);
 		}
+
+		final String[] pathAndQueries = putPath.split("[?&#]");
+		putPath = pathAndQueries[0];
 
 		final int fContentLen = contentLen;
 		Supplier<byte[]> getBody = () -> {
@@ -479,26 +503,18 @@ public class WebServer {
 				System.out.println("Malformed wsput request");
 				e.printStackTrace(System.out);
 //				System.out.println("Bad request: " + body);
-				out.write("HTTP/1.1 400 Bad Request\r\n".getBytes("UTF-8"));
-				out.write(("\r\n").getBytes("UTF-8"));
+				write400(out);
 				return;
 			}
 
 			if (responseObj == null) {
 				System.out.println("Bad request: " + body);
-				out.write("HTTP/1.1 400 Bad Request\r\n".getBytes("UTF-8"));
-//				out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
-//				out.write(("Content-Length: " + response.length + "\r\n").getBytes("UTF-8"));
-				out.write(("\r\n").getBytes("UTF-8"));
+				write400(out);
 				return;
 			}
 
 			final byte[] response = responseObj.toString().getBytes(StandardCharsets.UTF_8);
-			out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
-			out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
-			out.write(("Content-Length: " + response.length + "\r\n").getBytes("UTF-8"));
-			out.write(("\r\n").getBytes("UTF-8"));
-			out.write(response);
+			write200(out, response);
 			break;
 		}
 		case "/upload": {
@@ -509,15 +525,83 @@ public class WebServer {
 			Files.write(tmp.toPath(), toolData, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 			tmp.deleteOnExit();
 			setUnderlyingJarPath.accept(tmp.getAbsolutePath());
-			out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
-			out.write(("\r\n").getBytes("UTF-8"));
-			out.flush();
+			write200(out);
 			break;
+		}
+
+		case "/api/workspace/contents": {
+			final WorkspaceApi api = new WorkspaceApi(Responder.fromOutputStream(socket.getOutputStream()));
+			final String wsPath = findAndDecodeFilePathQueryParam(pathAndQueries, "f=");
+			api.putContents(wsPath, fContentLen, socket::getInputStream);
+			System.out.println("done..?");
+			return;
+		}
+		case "/api/workspace/metadata": {
+			final WorkspaceApi api = new WorkspaceApi(Responder.fromOutputStream(socket.getOutputStream()));
+			final String wsPath = findAndDecodeFilePathQueryParam(pathAndQueries, "f=");
+			api.putMetadata(wsPath, fContentLen, socket::getInputStream);
+			return;
+		}
+		case "/api/workspace/rename": {
+			final WorkspaceApi api = new WorkspaceApi(Responder.fromOutputStream(socket.getOutputStream()));
+			System.out.println("Searching in " + Arrays.toString(pathAndQueries));
+			final String srcPath = findAndDecodeFilePathQueryParam(pathAndQueries, "src=");
+			final String dstPath = findAndDecodeFilePathQueryParam(pathAndQueries, "dst=");
+			api.rename(srcPath, dstPath);
+			return;
+		}
+		case "/api/workspace/unlink": {
+			final WorkspaceApi api = new WorkspaceApi(Responder.fromOutputStream(socket.getOutputStream()));
+			api.unlink(findAndDecodeFilePathQueryParam(pathAndQueries, "f="));
+			return;
 		}
 		default: {
 			throw new IOException("Unsupported PUT path " + putPath);
 		}
 		}
+	}
+
+	static void write400(OutputStream out) throws IOException {
+		out.write("HTTP/1.1 400 Bad Request\r\n".getBytes("UTF-8"));
+		out.write(("\r\n").getBytes("UTF-8"));
+		out.flush();
+	}
+
+	static void write200(OutputStream out) throws IOException {
+		out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
+		out.write(("\r\n").getBytes("UTF-8"));
+		out.flush();
+	}
+
+	static void write200(OutputStream out, byte[] data) throws IOException {
+		out.write("HTTP/1.1 200 OK\r\n".getBytes("UTF-8"));
+		out.write(("Content-Type: text/plain\r\n").getBytes("UTF-8"));
+		out.write(("Content-Length: " + data.length + "\r\n").getBytes("UTF-8"));
+		out.write(("\r\n").getBytes("UTF-8"));
+		out.write(data);
+		out.flush();
+	}
+
+	private static String findAndDecodeFilePathQueryParam(String[] pathAndQueries, String needle) {
+		String val = findAndDecodeQueryParam(pathAndQueries, needle);
+		if (val == null) {
+			return null;
+		}
+		if (File.separatorChar != '/') {
+			// Windows
+			return val.replace('/', File.separatorChar);
+		}
+		return val;
+	}
+
+	private static String findAndDecodeQueryParam(String[] pathAndQueries, String needle) {
+		for (int i = 1 /* Start at 1 to skip path */; i < pathAndQueries.length; ++i) {
+			final String ent = pathAndQueries[i];
+			if (ent.startsWith(needle)) {
+				return decodeURIComponent(ent.substring(needle.length()));
+			}
+		}
+		return null;
 	}
 
 	private void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
@@ -772,7 +856,7 @@ public class WebServer {
 				}
 			}).start();
 			msgPusher.addChangeListener((event) -> {
-				switch (event) {
+				switch (event.type) {
 				case JAR_CHANGED: {
 					ws.monitor.onServerEvent(msgPusher.getEventCounter());
 					break;

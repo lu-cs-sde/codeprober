@@ -129,6 +129,7 @@ const displayProbeModal = (
   };
   const createTitle = () => {
     const titleNode = createModalTitle({
+      shouldAutoCloseOnWorkspaceSwitch: true,
       extraActions: [
         ...(
           env.getGlobalModalEnv() === env
@@ -212,7 +213,7 @@ const displayProbeModal = (
                 }
               }
             };
-            navigator.clipboard.writeText(copyBody.map(buildLine).join('\n'));
+            navigator.clipboard.writeText(copyBody.map(buildLine).join('\n').trim());
           }
         },
         // ...((property.args?.length ?? 0) === 0 ? [

@@ -72,7 +72,7 @@
 </head>
 <script>
   const loadedModules = {
-    require: () => { throw new Error("TODO implement require if needed"); },
+    require: () => { throw new Error("TODO implement require if needed"); },
   };
   function loadModule(moduleName) {
     if (loadedModules[moduleName]) {
@@ -87,8 +87,11 @@
 </script>
 
 <body onload="initCodeProber()" data-theme-light="false">
-  <div id="graph"></div>
   <div id="root" style="display: none;">
+    <span id="workspace-header" style="display: none;">
+      <span>Workspace</span>
+      <button class="dim-button" id="workspace-test-runner">Run Tests</button>
+    </span>
     <span id="input-header">
       <span>Input</span>
       <div style="display: flex; flex-direction: row;">
@@ -105,6 +108,9 @@
         <button class="dim-button" id="settings-revealer" title="Reveal settings panel">⚙</button>
       </span>
     </span>
+    <div id="workspace-wrapper" style="display: none;">
+      <!-- <div class="workspace-row workspace-file"><div class="workspace-row-header"><span class="clickHighlightOnHover">Testing</span><span>✏️</span></div></div> -->
+    </div>
     <div id="input-wrapper" style="width: 100%;">
       <textarea id="input" style="width: 48vw;"></textarea>
     </div>

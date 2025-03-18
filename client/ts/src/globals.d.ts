@@ -45,6 +45,8 @@ interface ProbeStatisticsCollector {
 interface StickyHighlight {
   classNames: string[];
   span: Span;
+  content?: string;
+  contentClassNames?: string[];
 }
 interface CullingTaskSubmitter {
   submit: (callback: () => void) => void;

@@ -141,27 +141,29 @@ public class EvaluatePropertyHandler {
 		final AtomicReference<NodeLocator> newLocator = new AtomicReference<>(null);
 		final AtomicReference<List<PropertyArg>> updatedArgsPtr = new AtomicReference<>();
 		if (parsed.info == null) {
-			for (RpcBodyLine line : parsed.captures) {
-				body.add(line);
+			if (parsed.captures != null) {
+				for (RpcBodyLine line : parsed.captures) {
+					body.add(line);
 
-				switch (line.type) {
-				case stdout: {
-					final Diagnostic diagnostic = MagicStdoutMessageParser.parse(line.asStdout());
-					if (diagnostic != null) {
-						diagnostics.add(diagnostic);
+					switch (line.type) {
+					case stdout: {
+						final Diagnostic diagnostic = MagicStdoutMessageParser.parse(line.asStdout());
+						if (diagnostic != null) {
+							diagnostics.add(diagnostic);
+						}
+						break;
 					}
-					break;
-				}
 
-				case stderr:
-					final Diagnostic diagnostic = MagicStdoutMessageParser.parse(line.asStderr());
-					if (diagnostic != null) {
-						diagnostics.add(diagnostic);
+					case stderr:
+						final Diagnostic diagnostic = MagicStdoutMessageParser.parse(line.asStderr());
+						if (diagnostic != null) {
+							diagnostics.add(diagnostic);
+						}
+						break;
+
+					default:
+						break;
 					}
-					break;
-
-				default:
-					break;
 				}
 			}
 
@@ -235,7 +237,7 @@ public class EvaluatePropertyHandler {
 						// Meta-attr, not actually in target AST
 						switch (queryAttrName) {
 						case "m:NodesWithProperty": {
-							if (req.property.args.size() == 0) {
+							if (req.property.args == null || req.property.args.size() == 0) {
 								throw new IllegalArgumentException(
 										"Need at least one argument for m:NodesWithProperty");
 							}

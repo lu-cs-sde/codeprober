@@ -51,7 +51,7 @@ public class AddNum {
 	}
 
 	private void skipWhitespace() {
-		while (parseIndex < src.length()) {
+		outerLoop: while (parseIndex < src.length()) {
 			final char ch = src.charAt(parseIndex);
 			switch (ch) {
 			case ' ': // Normal space
@@ -64,6 +64,22 @@ public class AddNum {
 			case '\n': {
 				column = 1;
 				++line;
+				break;
+			}
+			case '/': {
+				if (parseIndex + 1 < src.length() && src.charAt(parseIndex + 1) == '/') {
+					++parseIndex;
+					while (parseIndex < src.length()) {
+						if (src.charAt(parseIndex++) == '\n') {
+							column = 1;
+							++line;
+							continue outerLoop;
+						}
+						++column;
+					}
+				} else {
+					return;
+				}
 				break;
 			}
 

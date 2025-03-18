@@ -19,6 +19,7 @@ import codeprober.protocol.data.NestedTest;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.NodeLocatorStep;
 import codeprober.protocol.data.ParsingRequestData;
+import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.Property;
 import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.RpcBodyLine;
@@ -59,8 +60,8 @@ public class GenerateAddNumTestFiles {
 	}
 
 	private static ParsingRequestData src(String text) {
-		return new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD, AstCacheStrategy.PARTIAL, text,
-				Collections.emptyList(), ".addnum");
+		return new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD, AstCacheStrategy.PARTIAL,
+				ParsingSource.fromText(text), Collections.emptyList(), ".addnum");
 	}
 
 	private static NodeLocator root() {
