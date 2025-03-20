@@ -8,7 +8,7 @@ echo "Gathering sources.."
 find src -name "*.java" > sources.txt
 
 echo "Building.."
-if [[ "$(uname -a)" == "CYGWIN"* ]]; then
+if [ "$(uname -a)" == "CYGWIN"* ]; then
 	# Required for building on CYGWIN. Not sure if same is needed for WSL
 	SEP=";"
 else
