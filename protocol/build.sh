@@ -16,7 +16,7 @@ fi
 echo "Building.."
 javac @sources.txt -cp ../codeprober.jar -d build_tmp -source 8 -target 8
 
-if [ "$(uname -a)" == "CYGWIN"* ]; then
+if [[ "$(uname -a)" =~ "CYGWIN"* ]]; then
 	# Required for building on CYGWIN. Not sure if same is needed for WSL
 	SEP=";"
 else
