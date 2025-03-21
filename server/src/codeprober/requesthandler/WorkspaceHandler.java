@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -278,11 +279,17 @@ public class WorkspaceHandler {
 	public static RenameWorkspacePathRes handleRenameWorkspacePath(RenameWorkspacePathReq req) {
 		final File workspaceRootFile = getWorkspaceRoot(false);
 		if (workspaceRootFile == null) {
+			if (debugApiFailureReasons) {
+				System.out.println("Workspace not configured");
+			}
 			return new RenameWorkspacePathRes(false);
 		}
 		final File srcFile = pathToValidFile(workspaceRootFile, req.srcPath);
 		final File dstFile = pathToValidFile(workspaceRootFile, req.dstPath);
 		if (srcFile == null || dstFile == null) {
+			if (debugApiFailureReasons) {
+				System.out.println("Invalid rename paths. src=" + req.srcPath + ", dst=" + req.dstPath);
+			}
 			return new RenameWorkspacePathRes(false);
 		}
 		if (!srcFile.exists()) {
@@ -292,10 +299,17 @@ public class WorkspaceHandler {
 			return new RenameWorkspacePathRes(false);
 		}
 		if (dstFile.exists()) {
-			if (debugApiFailureReasons) {
-				System.out.println("Rename dst file already exists");
+			if (!req.srcPath.equals(req.dstPath)
+					&& req.srcPath.toLowerCase(Locale.ENGLISH).equals(req.dstPath.toLowerCase(Locale.ENGLISH))) {
+				// Case change. On some file systems (looking at you Apple), the target file is
+				// considered to already exist, because of case-insensitivity. Go ahead with the
+				// rename anyway.
+			} else {
+				if (debugApiFailureReasons) {
+					System.out.println("Rename dst file already exists");
+				}
+				return new RenameWorkspacePathRes(false);
 			}
-			return new RenameWorkspacePathRes(false);
 		}
 		if (!dstFile.getAbsoluteFile().getParentFile().exists()) {
 			// Target dir nonexisting
@@ -342,6 +356,7 @@ public class WorkspaceHandler {
 	}
 
 	private static Map<String, Integer> workspaceFileWriteCounters = new HashMap<>();
+
 	public static int getWorkspaceFileWriteCounter(File f) {
 		final String key = f.getAbsolutePath();
 		final Integer ret = workspaceFileWriteCounters.get(key);

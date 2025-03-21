@@ -208,6 +208,14 @@
           <label for='location-style'>Location style</label>
           <button onClick="displayHelp('location-style')" id="control-location-style-help" style="border-radius: 50%; ">?</button>
         </div>
+        <div>
+          <select id="textprobe-style">
+            <option value="angle-brackets">[[A[i].b=c]]</option>
+            <option value="disabled">Disabled</option>
+          </select>
+          <label for='textprobe-style'>TextProbe style</label>
+          <button onClick="displayHelp('textprobe-style')" id="control-textprobe-style-help" style="border-radius: 50%; ">?</button>
+        </div>
         <button id="display-help" onclick="displayHelp('general')">Help</button>
         <button id="clear-settings" onclick="clearUserSettings()">Clear state and reload</button>
         <button id="saveAsUrl" onclick="saveStateAsUrl()">Save probe state as URL</button>

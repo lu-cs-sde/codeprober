@@ -30,7 +30,7 @@ import getEditorDefinitionPlace from './model/getEditorDefinitionPlace';
 import installASTEditor from './ui/installASTEditor';
 import configureCheckboxWithHiddenCheckbox from './ui/configureCheckboxWithHiddenCheckbox';
 import Workspace, { initWorkspace } from './model/Workspace';
-import TextProbeManager, { setupTextProbeManager } from './model/TextProbeManager';
+import TextProbeManager, { setupTextProbeManager, TextProbeStyle } from './model/TextProbeManager';
 
 const uiElements = new UIElements();
 
@@ -407,6 +407,7 @@ const doMain = (wsPort: number
       setupSimpleSelector(uiElements.astCacheStrategySelector, settings.getAstCacheStrategy(), cb => settings.setAstCacheStrategy(cb));
       setupSimpleSelector(uiElements.positionRecoverySelector, settings.getPositionRecoveryStrategy(), cb => settings.setPositionRecoveryStrategy(cb));
       setupSimpleSelector(uiElements.locationStyleSelector, `${settings.getLocationStyle()}`, cb => settings.setLocationStyle(cb as TextSpanStyle));
+      setupSimpleSelector(uiElements.textprobeStyleSelector, `${settings.getTextProbeStyle()}`, cb => settings.setTextProbeStyle(cb as TextProbeStyle));
 
       uiElements.settingsHider.onclick = () => {
         document.body.classList.add('hide-settings');
@@ -662,6 +663,7 @@ const doMain = (wsPort: number
           case 'capture-stdout': return common('capture-stdout', uiElements.captureStdoutHelpButton);
           case 'capture-traces': return common('capture-traces', uiElements.captureTracesHelpButton);
           case 'location-style': return common('location-style', uiElements.locationStyleHelpButton);
+          case 'textprobe-style': return common('textprobe-style', uiElements.textprobeStyleHelpButton);
           default: return console.error('Unknown help type', type);
         }
       }

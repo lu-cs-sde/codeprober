@@ -1,4 +1,5 @@
 import { getAppropriateFileSuffix } from "./model/syntaxHighlighting";
+import { TextProbeStyle } from './model/TextProbeManager';
 import WindowState from './model/WindowState';
 import { TextSpanStyle } from "./ui/create/createTextSpanIndicator";
 import UIElements from './ui/UIElements';
@@ -19,6 +20,7 @@ interface Settings {
   mainArgsOverride?: string[] | null;
   customFileSuffix?: string | null;
   locationStyle?: TextSpanStyle | null;
+  textProbeStyle?: TextProbeStyle | null;
   hideSettingsPanel?: boolean;
   groupPropertiesByAspect?: boolean;
   activeWorkspacePath?: string;
@@ -148,6 +150,9 @@ const settings = {
 
   getLocationStyle: () => settings.get().locationStyle ?? 'full',
   setLocationStyle: (locationStyle: TextSpanStyle | null) => settings.set({ ...settings.get(), locationStyle }),
+
+  getTextProbeStyle: () => settings.get().textProbeStyle ?? 'angle-brackets',
+  setTextProbeStyle: (textProbeStyle: TextProbeStyle | null) => settings.set({ ...settings.get(), textProbeStyle }),
 
   shouldHideSettingsPanel: () => settings.get()?.hideSettingsPanel ?? false,
   setShouldHideSettingsPanel: (shouldHide: boolean) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),

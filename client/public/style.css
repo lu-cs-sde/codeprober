@@ -76,8 +76,8 @@ body.hide-settings #workspace-wrapper { grid-area: w2 }
 #workspace-test-runner {
   cursor: pointer;
   border-radius: 0.25rem;
-  margin-top: auto;
-  margin-bottom: auto;
+  margin-top: 0.125rem;
+  margin-bottom: 0.125rem;
   margin-right: 0.25rem;
   width: 5rem;
 }

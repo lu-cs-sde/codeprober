@@ -30,6 +30,7 @@ const getHelpTitle = (type: HelpType) => ({
   'capture-stdout': 'Capture stdout',
   'capture-traces': 'Capture traces',
   'location-style': 'Location styles',
+  'textprobe-style': 'TextProbe styles',
   'ast': 'AST',
   'test-code-vs-codeprober-code': 'Test code vs CodeProber code',
 })[type];
@@ -525,7 +526,6 @@ aspect MagicOutputDemo {
       }
 
       case 'location-style': {
-
         const sp: Span = { lineStart: 1, colStart: 2, lineEnd: 3, colEnd: 4 };
         const createExplanationPanel = (entries: [string, TextSpanStyle, Span][]) => {
           const settingsExplanation = document.createElement('div');
@@ -572,6 +572,161 @@ aspect MagicOutputDemo {
           ``,
           `Note that this setting doesn't affect the hover highlighting. The exact line/column is highlighted, even if the indicator only shows the start line for example.`,
         ];
+      }
+
+      case 'textprobe-style': {
+        type PatternEntry = string | [string, string];
+        const parted = (parts: PatternEntry[]) => {
+          const ret = document.createElement('div');
+          const addPart = (text: string, clazz: string = '') => {
+            const part = document.createElement('span');
+            part.innerText = text;
+            if (clazz) {
+              if (clazz.trim()) {
+                part.classList.add(clazz);
+              }
+              if (clazz === ' ' || clazz.startsWith('syntax-')) {
+                part.style.fontFamily = 'monospace';
+              }
+            }
+            ret.appendChild(part);
+          };
+
+          parts.forEach(p => typeof p === 'string' ? addPart(p) : addPart(p[0], p[1]));
+          return ret;
+        }
+        const ol = (items: (string | HTMLElement)[]) => {
+          const ret = document.createElement('ol');
+          items.forEach(itm => {
+            const li = document.createElement('li');
+            if (typeof itm === 'string') {
+              li.innerText = itm;
+            } else {
+              li.appendChild(itm);
+            }
+            ret.appendChild(li);
+          });
+          return ret;
+        }
+
+        const patternExpl = parted([
+          '[[',
+          ['A', 'syntax-type'],
+          '[',
+          ['i', 'syntax-int'],
+          '].',
+          ['b', 'syntax-attr'],
+          '=',
+          ['c', 'syntax-string'],
+          ']]',
+        ]);
+        patternExpl.style.padding = '0.25rem';
+        patternExpl.style.margin = '0.25rem 0 0.25rem 2rem';
+        patternExpl.style.outline = '1px dashed gray';
+        patternExpl.style.fontFamily = 'monospace';
+        patternExpl.style.display = 'inline-block';
+
+        const example = (pattern: string, explanation: string) => {
+          const ret = document.createElement('div');
+          ret.style.marginLeft = '2rem';
+          ret.style.marginBottom = '0.25rem';
+
+          const patternNode = parted([pattern, ' ']);
+          // patternNode.style.display = 'inline';
+          ret.appendChild(patternNode);
+
+          const explNode = parted([[explanation, 'stream-arg-msg']]);
+          // explNode.style.display = 'inline';
+          explNode.style.fontStyle = 'italic';
+          ret.appendChild(explNode);
+
+          return ret;
+        }
+        return [
+          `CodeProber supports probes that exist purely in textual form inside the text editor. These 'text probes' are specified with the follwing pattern by default:`,
+          patternExpl,
+          `The above pattern tells CodeProber to do the following:`,
+          ol([
+            parted([
+              `Find all nodes on the line where the text probe is specified that are of (sub-)type `,
+              ['A', 'syntax-type'],
+              `, using a left-to-right depth-first search.`,
+            ]),
+            parted([
+              `Select the `,
+              ['i', 'syntax-int'],
+              `:th node in the resulting list.`,
+            ]),
+            parted([
+              `Evaluate `,
+              ['b', 'syntax-attr'],
+              ` on the node.`,
+            ]),
+            parted([
+              `Compare the result of `,
+              ['b', 'syntax-attr'],
+              ` with `,
+              ['c', 'syntax-string'],
+              `.`,
+            ])
+          ]),
+          parted([
+            '"',
+            ['[', ' '],
+            ['i', 'syntax-int'],
+            [']', ' '],
+            '"  is optional if there is only one node on the given line that matches (sub-)type ',
+            ['A', 'syntax-type'],
+            '.',
+          ]),
+          parted([
+            '"',
+            ['.', ' '],
+            ['b', 'syntax-attr'],
+            `" can be a list of multiple properties, like "`,
+            ['.', ' '], ['b', 'syntax-attr'],
+            ['.', ' '], ['x', 'syntax-attr'],
+            ['.', ' '], ['y', 'syntax-attr'],
+            ['.', ' '], ['z', 'syntax-attr'],
+            `". All non-last properties must resolve to an AST node reference, similar to nested probes.`,
+          ]),
+          parted([
+            '"',
+            ['=', ' '],
+            ['c', 'syntax-string'],
+            '" is optional.',
+          ]),
+          ``,
+          parted([
+            `If a comparison is included ("`,
+            ['=', ' '],
+            ['c', 'syntax-string'],
+            `"), then the text probe is highlighted `,
+            ['green', 'elp-result-success'],
+            ` or `,
+            ['red', 'elp-result-fail'],
+            ` depending on if the comparison succeeded or not.`
+          ]),
+          `Comparisons can include '!' and/or '~' before the equals sign. Adding '!' means 'not', i.e. invert the comparison. '~' means 'contains', i.e. do a substring comparison.`,
+          ``,
+          `Some example text probes and their possible meanings are listed below`,
+          ``,
+          example('[[CallExpr.type=int]]', 'The function call on this line has type int.'),
+          example('[[Program.errors=[]]]', 'There are no errors in this program.'),
+          example('[[Program.errors~=duplicate definition]]', 'There is at least one error containing the message "duplicate definition"'),
+          example('[[IfStmt.getCond.expectedType=bool]]', 'The expected type of the if-condition is boolean'),
+          example('[[Expr[2].prettyPrint=abc]]', 'Pretty-printing the third Expr on this line results in "abc"'),
+          ``,
+          `The exact meaning of text probes depend on the underlying tool (compiler/analyzer) being explored in CodeProber, just as with normal probes.`,
+          ``,
+          `CodeProber has no knowledge of the syntax of the underlying tool, therefore it will search for text probes everywhere, including possibly in normal program code. In some languages, text like "[[A.b]]" is a valid expression that you may want to write.`,
+          `When something is intended to be interpreted as a text probe, consider putting them  in a comment (e.g. prefix with "//", "#" or similar).`,
+          `When something is intended to be an expression in the language, you have two main options:`,
+          ol([
+            `Add whitespace somewhere. For example, "[[ A.b ]]" is not interpreted as a text probe`,
+            `Disable text probe support entirely by changing "TextProbe style" to "Disabled" in the settings panel`,
+          ]),
+        ]
       }
 
       case 'ast': {

@@ -1,5 +1,5 @@
 import { assertUnreachable } from '../hacks';
-import { GetWorkspaceFileReq, GetWorkspaceFileRes, ListWorkspaceDirectoryReq, ListWorkspaceDirectoryRes, PutWorkspaceContentReq, PutWorkspaceContentRes, PutWorkspaceMetadataReq, PutWorkspaceMetadataRes, WorkspaceEntry } from '../protocol';
+import { GetWorkspaceFileReq, GetWorkspaceFileRes, ListWorkspaceDirectoryReq, ListWorkspaceDirectoryRes, PutWorkspaceContentReq, PutWorkspaceContentRes, PutWorkspaceMetadataReq, PutWorkspaceMetadataRes, RenameWorkspacePathReq, RenameWorkspacePathRes, UnlinkWorkspacePathReq, UnlinkWorkspacePathRes, WorkspaceEntry } from '../protocol';
 import settings from '../settings';
 import createModalTitle, { createOverflowButton } from '../ui/create/createModalTitle';
 import showWindow from '../ui/create/showWindow';
@@ -189,6 +189,12 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: Workspace, extras:
         if (info.cancelToken.cancelled) {
           return;
         }
+        if (settings.getTextProbeStyle() === 'disabled') {
+          const errLbl = document.createElement('div');
+          errLbl.innerText =`Text probes are disabled, enable them in the settings panel and rerun.`;
+          errLbl.classList.add('captured-stderr');
+          bodyWrapper.appendChild(errLbl);
+        }
         const doneLbl = document.createElement('div');
         doneLbl.innerText =`Done in ${Date.now() - start}ms`;
         bodyWrapper.appendChild(doneLbl);
@@ -278,6 +284,7 @@ const createRow = (
   label: string,
   path: string,
   setActive: (path: string, contents: CachedFileEntry) => void,
+  performedTypedRpc: ModalEnv['performTypedRpc'],
 ) => {
   const row = document.createElement('div');
   row.classList.add('workspace-row');
@@ -287,7 +294,6 @@ const createRow = (
   }
 
   const changeKind = (newKind: typeof kind) => {
-    console.log('kind', kind, '-->', newKind);
     row.classList.remove(`workspace-${kind}`);
     kind = newKind;
     row.classList.add(`workspace-${kind}`);
@@ -311,18 +317,18 @@ const createRow = (
           if (!newPath || newPath === path) {
             return;
           }
-          // TODO refactor remaining fetch'es to performedTypedRpc
-          fetch(`api/workspace/rename?src=${encodeURIComponent(path)}&dst=${encodeURIComponent(newPath)}`, { method: 'PUT' })
-            .then(res => {
-              if (res.status === 200) {
+          performedTypedRpc<RenameWorkspacePathReq, RenameWorkspacePathRes>({ type: 'RenameWorkspacePath', srcPath: path, dstPath: newPath })
+            .then((res) => {
+              if (res.ok) {
                 workspace.reload({ type: 'rename', src: path, dst: newPath });
                 return;
               }
-              throw new Error(`Unexpected status: ${res.status}`);
+              throw new Error(`Got non-ok response`);
             })
-            .catch(err => {
-              console.warn('Failed renaming', path, 'to', newPath);
+            .catch((err) => {
+              console.warn('Failed renaming', path, 'to', newPath, ':', err);
             })
+
         },
       },
       {
@@ -332,17 +338,17 @@ const createRow = (
           if (!sure) {
             return;
           }
-          fetch(`api/workspace/unlink?f=${encodeURIComponent(path)}`, { method: 'PUT' })
-            .then(res => {
-              if (res.status === 200) {
+          performedTypedRpc<UnlinkWorkspacePathReq, UnlinkWorkspacePathRes>({ type: 'UnlinkWorkspacePath', path })
+            .then((res) => {
+              if (res.ok) {
                 workspace.reload({ type: 'unlink', path });
                 return;
               }
-              throw new Error(`Unexpected status: ${res.status}`);
+              throw new Error(`Got non-ok response`);
             })
             .catch(err => {
-              console.warn('Failed removing', path);
-            })
+              console.warn('Failed removing', path, ':', err);
+            });
         },
       },
     ]);
@@ -394,7 +400,7 @@ const createRow = (
           }
           getDirContents(workspace, path)
             .then(contents => {
-              console.log('contents for', path, '==>', contents);
+              // console.log('contents for', path, '==>', contents);
               if (contents !== null) {
                 contents.files.forEach(file => {
                   fileList?.appendChild(createRow(
@@ -403,6 +409,7 @@ const createRow = (
                     file.value,
                     `${path}/${file.value}`,
                     setActive,
+                    workspace.env.performTypedRpc,
                   ));
                 })
               }
@@ -454,25 +461,30 @@ const createAddFileButton = (workspace: Workspace, basePath: string, tgtContaine
   row.onclick = () => {
     const name = prompt(`Name the new file${basePath ? ` in ${basePath}` : ''}`);
     if (name) {
-      const subPath = `${basePath}${name}`
-      if (name.includes('/')) {
-        // A little lazy, but lets just rename everything
-        console.log('putting empty file...')
-        fetch(
-          `api/workspace/contents?f=${encodeURIComponent(subPath)}`,
-          { method: 'PUT', body: '' }
-        )
-          .then(() => {
-            console.log('then...');
-          })
-          .finally(() => {
-            console.log('reload...pls');
+      const subPath = `${basePath}${name}`;
+
+      // First, chec if the file exists
+      (async () => {
+        let fileAlreadyExists = !!(await getFileContents(workspace, subPath));
+        if (fileAlreadyExists) {
+          alert('File already exists');
+          return;
+        }
+        if (name.includes('/')) {
+          // A little lazy, but lets just create the new file and then reload the UI
+          console.log('putting empty file...')
+          const putRes = await workspace.env.performTypedRpc<PutWorkspaceContentReq, PutWorkspaceContentRes>({ type: 'PutWorkspaceContent', path: subPath, content: '' });
+          if (putRes.ok) {
+            // OK!
             workspace.reload({ type: 'rename', src: workspace.getActiveFile(), dst: subPath })
-          })
-      } else {
-        tgtContainer.appendChild(createRow(workspace, 'file', name, subPath, setActive));
-        setActive(subPath, { contents: '', windows: [] });
-      }
+          } else {
+            console.warn('Failed creating new empty file');
+          }
+        } else {
+          tgtContainer.appendChild(createRow(workspace, 'file', name, subPath, setActive, workspace.env.performTypedRpc,));
+          setActive(subPath, { contents: '', windows: [] });
+        }
+      })();
     }
   };
 
@@ -665,7 +677,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
       settings.setActiveWorkspacePath(path);
       testModalExtras.shouldIgnoreChangeCallbacks = false;
     }
-    workspaceList.appendChild(createRow(workspace, 'unsaved', 'Temp file (browser only)', unsavedFileKey, setActiveFile));
+    workspaceList.appendChild(createRow(workspace, 'unsaved', 'Temp file (browser only)', unsavedFileKey, setActiveFile, workspace.env.performTypedRpc));
     initialListingRes.entries.forEach((file) => {
       workspaceList.appendChild(createRow(
         workspace,
@@ -673,6 +685,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
         file.value,
         file.value,
         setActiveFile,
+        workspace.env.performTypedRpc,
       ));
     });
     workspaceList.appendChild(createAddFileButton(workspace, '', workspaceList, setActiveFile));

@@ -20,6 +20,8 @@ interface TextProbeManager {
   checkFile: (requestSrc: ParsingSource, knownSrc: string) => Promise<TextProbeCheckResults | null>,
 };
 
+type TextProbeStyle = 'angle-brackets' | 'disabled';
+
 const createTypedProbeRegex = () => {
   const reg = /\[\[(\w+)(\[\d+\])?((?:\.\w+)+)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
 
@@ -171,6 +173,14 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
   let repeatOnDone = false;
   const activeStickies: string[] = [];
   const doRefresh = async () => {
+    if (settings.getTextProbeStyle() === 'disabled') {
+      for (let i = 0; i < activeStickies.length; ++i) {
+        args.env.clearStickyHighlight(activeStickies[i]);
+      }
+      activeStickies.length = 0;
+      args.onFinishedCheckingActiveFile({ numFail: 0, numPass: 0 })
+      return;
+    }
     if (activeRefresh) {
       repeatOnDone = true;
       return;
@@ -263,7 +273,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
             }
           }
 
-          console.log('combining..', numPass, numFail, errMsg);
+          // console.log('combining..', numPass, numFail, errMsg);
           combinedResults.numPass += numPass;
           combinedResults.numFail += numFail;
 
@@ -305,6 +315,9 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
   refresh();
 
   const complete: TextProbeManager['complete'] = async (line, column) => {
+    if (settings.getTextProbeStyle() === 'disabled') {
+      return null;
+    }
     const lines = args.env.getLocalState().split('\n');
     // Make line/col 0-indexed
     --line;
@@ -454,6 +467,9 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       numPass: 0,
       numFail: 0,
     };
+    if (settings.getTextProbeStyle() === 'disabled') {
+      return ret;
+    }
     const parsingData: ParsingRequestData = {
       ...args.env.createParsingRequestData(),
       src: requestSrc,
@@ -558,5 +574,5 @@ const evalPropertyBodyToString = (body: RpcBodyLine[]): string => {
   return lineToComparisonString(body.length === 1 ? body[0] : { type: 'arr', value: body });
 }
 
-export { setupTextProbeManager, TextProbeCheckResults };
+export { setupTextProbeManager, TextProbeCheckResults, TextProbeStyle };
 export default TextProbeManager;
