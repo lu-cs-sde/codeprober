@@ -531,7 +531,6 @@ const displayTestDiffModal = (
                         inner[key] = inner[key] ?? [];
                         inner[key].push({
                           data: nestedTestToProbeData(nest),
-                          modalPos: { x: 0, y: 0 },
                         });
                       });
                       return {

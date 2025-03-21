@@ -24,6 +24,9 @@ window.defineEditor(
         enabled: !window.location.search.includes('fullscreen=true'),
       },
     });
+    window.CPR_CMD_OPEN_TEXTPROBE_ID = editor.addCommand(0, () => {
+      window.CPR_CMD_OPEN_TEXTPROBE_CALLBACK?.();
+    });
     monaco.languages.getLanguages().forEach(({ id: languageId }) => {
       monaco.languages.registerHoverProvider(languageId, {
         provideHover: async (model, position, token) => {

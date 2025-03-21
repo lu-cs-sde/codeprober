@@ -1840,16 +1840,47 @@ define("model/cullingTaskSubmitterFactory", ["require", "exports"], function (re
     };
     exports.default = createCullingTaskSubmitterFactory;
 });
-define("model/TextProbeManager", ["require", "exports", "hacks", "network/evaluateProperty", "settings", "model/cullingTaskSubmitterFactory"], function (require, exports, hacks_2, evaluateProperty_1, settings_2, cullingTaskSubmitterFactory_1) {
+define("model/UpdatableNodeLocator", ["require", "exports", "model/adjustLocator"], function (require, exports, adjustLocator_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createMutableLocator = exports.createImmutableLocator = void 0;
+    adjustLocator_1 = __importDefault(adjustLocator_1);
+    const createImmutableLocator = (source) => {
+        return {
+            get: () => source.get(),
+            set: () => { },
+            adjust: () => { },
+            isMutable: () => false,
+            createMutableClone: () => createMutableLocator(JSON.parse(JSON.stringify(source.get()))),
+        };
+    };
+    exports.createImmutableLocator = createImmutableLocator;
+    const createMutableLocator = (locator) => {
+        return {
+            get: () => locator,
+            set: (val) => {
+                locator = val;
+            },
+            adjust: (adjusters) => {
+                adjusters.forEach(adj => (0, adjustLocator_1.default)(adj, locator));
+            },
+            isMutable: () => true,
+            createMutableClone: () => createMutableLocator(JSON.parse(JSON.stringify(locator))),
+        };
+    };
+    exports.createMutableLocator = createMutableLocator;
+});
+define("model/TextProbeManager", ["require", "exports", "hacks", "network/evaluateProperty", "settings", "ui/popup/displayProbeModal", "model/cullingTaskSubmitterFactory", "model/UpdatableNodeLocator"], function (require, exports, hacks_2, evaluateProperty_1, settings_2, displayProbeModal_1, cullingTaskSubmitterFactory_1, UpdatableNodeLocator_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.setupTextProbeManager = void 0;
     evaluateProperty_1 = __importDefault(evaluateProperty_1);
     settings_2 = __importDefault(settings_2);
+    displayProbeModal_1 = __importDefault(displayProbeModal_1);
     cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
     ;
     const createTypedProbeRegex = () => {
-        const reg = /\[\[(\w+)(\[\d+\])?((?:\.\w+)+)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
+        const reg = /\[\[(\w+)(\[\d+\])?((?:\.\w*)+)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
         return {
             exec: (line) => {
                 const match = reg.exec(line);
@@ -1902,6 +1933,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                 property: { name: evalArgs.prop, args: evalArgs.args },
                 src: (_a = evalArgs.parsingData) !== null && _a !== void 0 ? _a : args.env.createParsingRequestData(),
                 type: 'EvaluateProperty',
+                skipResultLocator: true,
             }).fetch();
             if (res !== 'stopped') {
                 if (typeof res.totalTime === 'number'
@@ -1921,6 +1953,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
             }
             return res;
         };
+        const isBrokenNodeChain = (val) => val && (typeof val === 'object') && val.type === 'broken-node-chain';
         const evaluatePropertyChain = async (evalArgs) => {
             var _a;
             const first = await evaluateProperty({ locator: evalArgs.locator, prop: evalArgs.propChain[0], parsingData: evalArgs.parsingData, });
@@ -1932,7 +1965,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                 // Previous result must be a node locator
                 if (((_a = prevResult.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
                     console.log('prevResult does not look like a reference attribute:', prevResult.body);
-                    return 'broken-node-chain';
+                    return { type: 'broken-node-chain', brokenIndex: subsequentIdx - 1 };
                 }
                 const chainedLocator = prevResult.body[0].value;
                 const nextRes = await evaluateProperty({ locator: chainedLocator, prop: evalArgs.propChain[subsequentIdx], parsingData: evalArgs.parsingData });
@@ -1970,27 +2003,34 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
             });
             return ret;
         };
+        const diagnostics = [];
+        args.env.probeMarkers[queryId] = () => diagnostics;
         let activeRefresh = false;
         let repeatOnDone = false;
         const activeStickies = [];
         const doRefresh = async () => {
+            const hadDiagnosticsBefore = diagnostics.length;
             if (settings_2.default.getTextProbeStyle() === 'disabled') {
                 for (let i = 0; i < activeStickies.length; ++i) {
                     args.env.clearStickyHighlight(activeStickies[i]);
                 }
                 activeStickies.length = 0;
                 args.onFinishedCheckingActiveFile({ numFail: 0, numPass: 0 });
+                if (hadDiagnosticsBefore) {
+                    diagnostics.length = 0;
+                    args.env.updateMarkers();
+                }
                 return;
             }
             if (activeRefresh) {
                 repeatOnDone = true;
                 return;
             }
-            // args.env.clearStickyHighlight(queryId);
+            diagnostics.length = 0;
             activeRefresh = true;
             repeatOnDone = false;
             let nextStickyIndex = 0;
-            const getStickyId = () => {
+            const allocateStickyId = () => {
                 let stickyId;
                 if (nextStickyIndex >= activeStickies.length) {
                     stickyId = `${queryId}-${nextStickyIndex}`;
@@ -2010,6 +2050,9 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                     const line = lines[lineIdx];
                     const reg = createTypedProbeRegex();
                     let match;
+                    function addErr(colStart, colEnd, msg) {
+                        diagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
+                    }
                     while ((match = reg.exec(line)) !== null) {
                         const matchingNodes = await listNodes({
                             attrFilter: match.attrNames[0],
@@ -2022,14 +2065,19 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                         if (!(matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes.length)) {
                             ++numFail;
                             errMsg = `No matching nodes`;
+                            const typeStart = line.indexOf(match.nodeType, match.index);
+                            const firstAttrEnd = line.indexOf(match.attrNames[0], line.indexOf('.', typeStart)) + match.attrNames[0].length;
+                            addErr(typeStart + 1, firstAttrEnd, errMsg);
                         }
                         else {
                             let matchedNode = null;
                             if (match.nodeIndex !== undefined) {
-                                console.log('got nodeindex:', match.nodeIndex);
                                 if (match.nodeIndex < 0 || match.nodeIndex >= matchingNodes.length) {
                                     ++numFail;
                                     errMsg = `Invalid index`;
+                                    const typeEnd = line.indexOf(match.nodeType, match.index) + match.nodeType.length;
+                                    const idxStart = line.indexOf(`${match.nodeIndex}`, typeEnd);
+                                    addErr(idxStart + 1, idxStart + `${match.nodeIndex}`.length, `Bad Index`);
                                 }
                                 else {
                                     matchedNode = matchingNodes[match.nodeIndex];
@@ -2043,6 +2091,8 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                                 else {
                                     ++numFail;
                                     errMsg = `${matchingNodes.length} nodes of type "${match.nodeType}". Add [idx] to disambiguate, e.g. "${match.nodeType}[0]"`;
+                                    const typeStart = line.indexOf(match.nodeType, match.index);
+                                    addErr(typeStart + 1, line.indexOf('.', typeStart), `Ambiguous, add "[idx]" to select which "${match.nodeType}" to match. 0 ≤ idx < ${matchingNodes.length}`);
                                 }
                             }
                             if (matchedNode) {
@@ -2054,16 +2104,28 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                                 if (attrEvalResult == 'stopped') {
                                     break;
                                 }
-                                if (attrEvalResult === 'broken-node-chain') {
+                                if (isBrokenNodeChain(attrEvalResult)) {
                                     ++numFail;
                                     errMsg = 'Invalid attribute chain';
+                                    let attrStart = line.indexOf('.', match.index) + 1;
+                                    for (let i = 0; i < attrEvalResult.brokenIndex; ++i) {
+                                        attrStart = line.indexOf('.', attrStart) + 1;
+                                    }
+                                    addErr(attrStart + 1, attrStart + match.attrNames[attrEvalResult.brokenIndex].length, `No AST node returned by "${match.attrNames[attrEvalResult.brokenIndex]}"`);
                                 }
                                 else {
                                     const cmp = evalPropertyBodyToString(attrEvalResult.body);
+                                    if (attrEvalResult.body.length === 1 && attrEvalResult.body[0].type === 'plain' && attrEvalResult.body[0].value.startsWith(`No such attribute '${match.attrNames[match.attrNames.length - 1]}' on `)) {
+                                        let lastAttrStart = match.index;
+                                        for (let i = 0; i < match.attrNames.length; ++i) {
+                                            lastAttrStart = line.indexOf('.', lastAttrStart) + 1;
+                                        }
+                                        addErr(lastAttrStart + 1, lastAttrStart + match.attrNames[match.attrNames.length - 1].length, 'No such attribute');
+                                    }
                                     if (match.expectVal === undefined) {
                                         if (!errMsg) {
                                             // Just a probe, save the result as a message
-                                            errMsg = `Actual: ${cmp}`;
+                                            errMsg = `Result: ${cmp}`;
                                         }
                                     }
                                     else {
@@ -2073,7 +2135,6 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                                             ++numPass;
                                         }
                                         else {
-                                            console.log('fail, "', match.expectVal, '" != "', cmp, '"');
                                             errMsg = `Actual: ${cmp}`;
                                             ++numFail;
                                         }
@@ -2081,17 +2142,16 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                                 }
                             }
                         }
-                        // console.log('combining..', numPass, numFail, errMsg);
                         combinedResults.numPass += numPass;
                         combinedResults.numFail += numFail;
                         const span = { lineStart: (lineIdx + 1), colStart: match.index + 1, lineEnd: (lineIdx + 1), colEnd: (match.index + match.full.length) };
                         const inlineTextSpan = { ...span, colStart: span.colEnd - 2, colEnd: span.colEnd - 1 };
-                        args.env.setStickyHighlight(getStickyId(), {
+                        args.env.setStickyHighlight(allocateStickyId(), {
                             classNames: [numFail ? 'elp-result-fail' : (numPass ? 'elp-result-success' : 'elp-result-probe')],
                             span,
                         });
                         if (errMsg) {
-                            args.env.setStickyHighlight(getStickyId(), {
+                            args.env.setStickyHighlight(allocateStickyId(), {
                                 classNames: [],
                                 span: inlineTextSpan,
                                 content: errMsg,
@@ -2103,6 +2163,9 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
             }
             catch (e) {
                 console.warn('Error during refresh', e);
+            }
+            if (diagnostics.length || hadDiagnosticsBefore) {
+                args.env.updateMarkers();
             }
             for (let i = nextStickyIndex; i < activeStickies.length; ++i) {
                 args.env.clearStickyHighlight(activeStickies[i]);
@@ -2117,6 +2180,70 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
         const refresh = () => refreshDispatcher.submit(doRefresh);
         args.env.onChangeListeners[queryId] = refresh;
         refresh();
+        const hover = async (line, column) => {
+            var _a;
+            if (settings_2.default.getTextProbeStyle() === 'disabled') {
+                return null;
+            }
+            const lines = args.env.getLocalState().split('\n');
+            // Make line/col 0-indexed
+            --line;
+            --column;
+            if (line < 0 || line >= lines.length) {
+                return null;
+            }
+            const reg = createTypedProbeRegex();
+            let match;
+            while ((match = reg.exec(lines[line])) !== null) {
+                const begin = match.index;
+                if (column < begin) {
+                    continue;
+                }
+                const end = begin + match.full.length;
+                if (column >= end) {
+                    continue;
+                }
+                const fmatch = match;
+                const parsingData = args.env.createParsingRequestData();
+                const listedNodes = await listNodes({ attrFilter: fmatch.attrNames[0], predicate: `this<:${fmatch.nodeType}&@lineSpan~=${line + 1}`, zeroIndexedLine: line, parsingData });
+                const locator = listedNodes === null || listedNodes === void 0 ? void 0 : listedNodes[(_a = match.nodeIndex) !== null && _a !== void 0 ? _a : 0];
+                if (!locator) {
+                    return null;
+                }
+                window.CPR_CMD_OPEN_TEXTPROBE_CALLBACK = async () => {
+                    var _a;
+                    const nestedWindows = {};
+                    let nestTarget = nestedWindows;
+                    let nestLocator = locator;
+                    for (let chainAttrIdx = 0; chainAttrIdx < fmatch.attrNames.length; ++chainAttrIdx) {
+                        const chainAttr = fmatch.attrNames[chainAttrIdx];
+                        const res = await evaluateProperty({ locator: nestLocator, prop: chainAttr, parsingData });
+                        if (res === 'stopped' || isBrokenNodeChain(res)) {
+                            break;
+                        }
+                        if (chainAttrIdx > 0) {
+                            let newNest = {};
+                            nestTarget['[0]'] = [
+                                { data: { type: 'probe', locator, property: { name: chainAttr }, nested: newNest } },
+                            ];
+                            nestTarget = newNest;
+                        }
+                        if (((_a = res.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
+                            break;
+                        }
+                        nestLocator = res.body[0].value;
+                    }
+                    (0, displayProbeModal_1.default)(args.env, null, (0, UpdatableNodeLocator_1.createMutableLocator)(locator), { name: fmatch.attrNames[0] }, nestedWindows);
+                };
+                return {
+                    range: { startLineNumber: line + 1, startColumn: column + 1, endLineNumber: line + 1, endColumn: column + 3 },
+                    contents: [{
+                            value: `[Open Normal Probe](command:${window.CPR_CMD_OPEN_TEXTPROBE_ID})`, isTrusted: true
+                        }],
+                };
+            }
+            return null;
+        };
         const complete = async (line, column) => {
             if (settings_2.default.getTextProbeStyle() === 'disabled') {
                 return null;
@@ -2157,7 +2284,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                 }
                 if (prerequisiteAttrs.length != 0) {
                     const chainResult = await evaluatePropertyChain({ locator, propChain: prerequisiteAttrs, parsingData });
-                    if (chainResult === 'stopped' || chainResult === 'broken-node-chain') {
+                    if (chainResult === 'stopped' || isBrokenNodeChain(chainResult)) {
                         return null;
                     }
                     if (((_a = chainResult.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
@@ -2194,7 +2321,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                     propChain: attrNames,
                     parsingData,
                 });
-                if (attrEvalResult == 'stopped' || attrEvalResult === 'broken-node-chain') {
+                if (attrEvalResult == 'stopped' || isBrokenNodeChain(attrEvalResult)) {
                     return null;
                 }
                 const cmp = evalPropertyBodyToString(attrEvalResult.body);
@@ -2312,7 +2439,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                         // TODO is this a failure?
                         continue;
                     }
-                    if (evalRes === 'broken-node-chain') {
+                    if (isBrokenNodeChain(evalRes)) {
                         ret.numFail++;
                         continue;
                     }
@@ -2330,7 +2457,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
             }
             return ret;
         };
-        return { complete, checkFile };
+        return { hover, complete, checkFile };
     };
     exports.setupTextProbeManager = setupTextProbeManager;
     const evalPropertyBodyToString = (body) => {
@@ -3376,36 +3503,6 @@ aspect MagicOutputDemo {
     };
     exports.default = displayHelp;
 });
-define("model/UpdatableNodeLocator", ["require", "exports", "model/adjustLocator"], function (require, exports, adjustLocator_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createMutableLocator = exports.createImmutableLocator = void 0;
-    adjustLocator_1 = __importDefault(adjustLocator_1);
-    const createImmutableLocator = (source) => {
-        return {
-            get: () => source.get(),
-            set: () => { },
-            adjust: () => { },
-            isMutable: () => false,
-            createMutableClone: () => createMutableLocator(JSON.parse(JSON.stringify(source.get()))),
-        };
-    };
-    exports.createImmutableLocator = createImmutableLocator;
-    const createMutableLocator = (locator) => {
-        return {
-            get: () => locator,
-            set: (val) => {
-                locator = val;
-            },
-            adjust: (adjusters) => {
-                adjusters.forEach(adj => (0, adjustLocator_1.default)(adj, locator));
-            },
-            isMutable: () => true,
-            createMutableClone: () => createMutableLocator(JSON.parse(JSON.stringify(locator))),
-        };
-    };
-    exports.createMutableLocator = createMutableLocator;
-});
 define("ui/create/registerNodeSelector", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -3507,7 +3604,7 @@ define("ui/popup/formatAttr", ["require", "exports"], function (require, exports
     exports.formatAttrArgList = formatAttrArgList;
     exports.default = formatAttr;
 });
-define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/UpdatableNodeLocator", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/startEndToSpan", "ui/trimTypeName", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, hacks_3, UpdatableNodeLocator_1, createModalTitle_2, createTextSpanIndicator_2, registerNodeSelector_1, registerOnHover_2, startEndToSpan_2, trimTypeName_1, displayAttributeModal_1, displayProbeModal_1, formatAttr_1) {
+define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/UpdatableNodeLocator", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/startEndToSpan", "ui/trimTypeName", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, hacks_3, UpdatableNodeLocator_2, createModalTitle_2, createTextSpanIndicator_2, registerNodeSelector_1, registerOnHover_2, startEndToSpan_2, trimTypeName_1, displayAttributeModal_1, displayProbeModal_2, formatAttr_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createModalTitle_2 = __importDefault(createModalTitle_2);
@@ -3517,7 +3614,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
     startEndToSpan_2 = __importDefault(startEndToSpan_2);
     trimTypeName_1 = __importDefault(trimTypeName_1);
     displayAttributeModal_1 = __importDefault(displayAttributeModal_1);
-    displayProbeModal_1 = __importDefault(displayProbeModal_1);
+    displayProbeModal_2 = __importDefault(displayProbeModal_2);
     formatAttr_1 = __importStar(formatAttr_1);
     const cancelLocatorRequest = () => {
         if (!window.ActiveLocatorRequest) {
@@ -3594,14 +3691,13 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
             onForceClose: cleanup,
             render: (root) => {
                 root.appendChild(createTitle().element);
-                console.log('Show arg modal : ', JSON.stringify(attr, null, 2));
                 const attrList = document.createElement('div');
                 attrList.classList.add('attr-arg-list');
                 const argValues = [];
                 const proceed = () => {
                     var _a;
                     cleanup();
-                    (0, displayProbeModal_1.default)(env, popup.getPos(), locator, {
+                    (0, displayProbeModal_2.default)(env, popup.getPos(), locator, {
                         name: attr.name,
                         args: (_a = attr.args) === null || _a === void 0 ? void 0 : _a.map((arg, argIdx) => argValues[argIdx]),
                     }, nested);
@@ -3747,7 +3843,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
                                 const nodeWrapper = document.createElement('div');
                                 (0, registerNodeSelector_1.default)(nodeWrapper, () => pickedNode);
                                 nodeWrapper.addEventListener('click', () => {
-                                    (0, displayAttributeModal_1.default)(env, null, (0, UpdatableNodeLocator_1.createMutableLocator)(pickedNode));
+                                    (0, displayAttributeModal_1.default)(env, null, (0, UpdatableNodeLocator_2.createMutableLocator)(pickedNode));
                                 });
                                 const span = (0, startEndToSpan_2.default)(pickedNode.result.start, pickedNode.result.end);
                                 nodeWrapper.appendChild((0, createTextSpanIndicator_2.default)({
@@ -3925,7 +4021,7 @@ define("ui/create/createStickyHighlightController", ["require", "exports", "ui/s
     };
     exports.default = createStickyHighlightController;
 });
-define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_2, createTextSpanIndicator_3, cullingTaskSubmitterFactory_2, createStickyHighlightController_1, startEndToSpan_4, UpdatableNodeLocator_2) {
+define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_2, createTextSpanIndicator_3, cullingTaskSubmitterFactory_2, createStickyHighlightController_1, startEndToSpan_4, UpdatableNodeLocator_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
@@ -4232,7 +4328,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 }
                                 if (hoverClick === 'yes') {
                                     hoverClick = 'no';
-                                    (0, displayAttributeModal_2.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_2.createMutableLocator)(node.locator));
+                                    (0, displayAttributeModal_2.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(node.locator));
                                 }
                             }
                             else {
@@ -4300,7 +4396,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                         cv.style.cursor = 'pointer';
                                         if (hoverClick == 'yes') {
                                             hoverClick = 'no';
-                                            displayAstModal(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_2.createMutableLocator)(node.locator), 'downwards');
+                                            displayAstModal(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(node.locator), 'downwards');
                                         }
                                     }
                                     const msgMeasure = ctx.measureText(msg);
@@ -4440,12 +4536,12 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     };
     exports.default = displayAstModal;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_2, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, settings_4, encodeRpcBodyLines_2, trimTypeName_2, displayAstModal_1, startEndToSpan_5) {
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_3, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, settings_4, encodeRpcBodyLines_2, trimTypeName_2, displayAstModal_1, startEndToSpan_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
     createModalTitle_4 = __importDefault(createModalTitle_4);
-    displayProbeModal_2 = __importStar(displayProbeModal_2);
+    displayProbeModal_3 = __importStar(displayProbeModal_3);
     displayArgModal_1 = __importDefault(displayArgModal_1);
     formatAttr_2 = __importDefault(formatAttr_2);
     createTextSpanIndicator_4 = __importDefault(createTextSpanIndicator_4);
@@ -4641,12 +4737,12 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                         const showProbe = (attr) => {
                             cleanup();
                             if (!attr.args || attr.args.length === 0) {
-                                (0, displayProbeModal_2.default)(env, popup.getPos(), locator, { name: attr.name }, {});
+                                (0, displayProbeModal_3.default)(env, popup.getPos(), locator, { name: attr.name }, {});
                             }
                             else {
                                 if (attr.args.every(arg => arg.type === 'outputstream')) {
                                     // Shortcut directly to probe since there is nothing for user to add in arg modal
-                                    (0, displayProbeModal_2.default)(env, popup.getPos(), locator, attr, {});
+                                    (0, displayProbeModal_3.default)(env, popup.getPos(), locator, attr, {});
                                 }
                                 else {
                                     (0, displayArgModal_1.default)(env, popup.getPos(), locator, attr, {});
@@ -4746,9 +4842,9 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                                         args.push({ type: 'string', value: propAndPredicate.slice(predicateStart + 1) });
                                     }
                                 }
-                                const prop = { name: displayProbeModal_2.searchProbePropertyName, args };
+                                const prop = { name: displayProbeModal_3.searchProbePropertyName, args };
                                 cleanup();
-                                (0, displayProbeModal_2.default)(env, popup.getPos(), locator, prop, {});
+                                (0, displayProbeModal_3.default)(env, popup.getPos(), locator, prop, {});
                             };
                             const sep = document.createElement('div');
                             sep.classList.add('search-list-separator');
@@ -11087,7 +11183,7 @@ define("dependencies/graphviz/graphviz", ["require", "exports"], function (requi
     selection.prototype.graphviz = selection_graphviz;
     selection.prototype.selectWithoutDataPropagation = selection_selectWithoutDataPropagation;
 });
-define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNodeLocator", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal", "dependencies/graphviz/graphviz", "hacks", "ui/startEndToSpan"], function (require, exports, UpdatableNodeLocator_3, createTextSpanIndicator_5, registerNodeSelector_2, registerOnHover_3, trimTypeName_3, displayAttributeModal_3, graphviz_1, hacks_4, startEndToSpan_6) {
+define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNodeLocator", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal", "dependencies/graphviz/graphviz", "hacks", "ui/startEndToSpan"], function (require, exports, UpdatableNodeLocator_4, createTextSpanIndicator_5, registerNodeSelector_2, registerOnHover_3, trimTypeName_3, displayAttributeModal_3, graphviz_1, hacks_4, startEndToSpan_6) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createTextSpanIndicator_5 = __importDefault(createTextSpanIndicator_5);
@@ -11162,7 +11258,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                 var _a, _b;
                 if ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true) {
                     e.preventDefault();
-                    (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(locator));
+                    (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_4.createMutableLocator)(locator));
                 }
             });
             if (!localDisableNodeExpander && extras.nodeLocatorExpanderHandler) {
@@ -11433,7 +11529,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                             });
                             summaryPartNode.onclick = (e) => {
                                 e.preventDefault();
-                                (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(tr.node));
+                                (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_4.createMutableLocator)(tr.node));
                             };
                             const summaryPartAttr = document.createElement('span');
                             summaryPartAttr.classList.add('syntax-attr');
@@ -11833,7 +11929,7 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "ui/create/cr
     };
     exports.default = displayTestAdditionModal;
 });
-define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, createTextSpanIndicator_6, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_4, displayProbeModal_3, formatAttr_3, startEndToSpan_7, trimTypeName_4) {
+define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, createTextSpanIndicator_6, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_4, displayProbeModal_4, formatAttr_3, startEndToSpan_7, trimTypeName_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createTextSpanIndicator_6 = __importDefault(createTextSpanIndicator_6);
@@ -11853,7 +11949,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
         }
         const headAttr = document.createElement('span');
         headAttr.classList.add('syntax-attr');
-        if (attr.name === displayProbeModal_3.searchProbePropertyName) {
+        if (attr.name === displayProbeModal_4.searchProbePropertyName) {
             const propName = (_d = (_c = (_b = attr.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value) !== null && _d !== void 0 ? _d : '';
             headAttr.innerText = `.*.${propName}`;
         }
@@ -11871,7 +11967,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
             headAttr.onclick = (e) => {
                 var _a, _b, _c, _d, _e, _f, _g;
                 let initialFilter = '';
-                if (attr.name == displayProbeModal_3.searchProbePropertyName) {
+                if (attr.name == displayProbeModal_4.searchProbePropertyName) {
                     const propName = (_c = (_b = (_a = attr.args) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.value) !== null && _c !== void 0 ? _c : '';
                     if (propName) {
                         console.log('initialFilter:', propName);
@@ -11892,13 +11988,13 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
             };
         }
         container.appendChild(headAttr);
-        if (attr.name === displayProbeModal_3.searchProbePropertyName && ((_f = (_e = attr.args) === null || _e === void 0 ? void 0 : _e.length) !== null && _f !== void 0 ? _f : 0) >= 2) {
+        if (attr.name === displayProbeModal_4.searchProbePropertyName && ((_f = (_e = attr.args) === null || _e === void 0 ? void 0 : _e.length) !== null && _f !== void 0 ? _f : 0) >= 2) {
             const pred = document.createElement('span');
             pred.classList.add('syntax-int');
             pred.innerText = `?${(_h = (_g = attr.args) === null || _g === void 0 ? void 0 : _g[1]) === null || _h === void 0 ? void 0 : _h.value}`;
             container.appendChild(pred);
         }
-        if (((_j = attr.args) === null || _j === void 0 ? void 0 : _j.length) && env && attr.name !== displayProbeModal_3.searchProbePropertyName) {
+        if (((_j = attr.args) === null || _j === void 0 ? void 0 : _j.length) && env && attr.name !== displayProbeModal_4.searchProbePropertyName) {
             const editButton = document.createElement('img');
             editButton.src = 'icons/edit_white_24dp.svg';
             editButton.classList.add('modalEditButton');
@@ -12086,12 +12182,12 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
     };
     exports.default = createInlineWindowManager;
 });
-define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/startEndToSpan", "ui/create/registerOnHover"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_4, evaluateProperty_2, displayProbeModal_4, startEndToSpan_8, registerOnHover_4) {
+define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/startEndToSpan", "ui/create/registerOnHover"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_5, evaluateProperty_2, displayProbeModal_5, startEndToSpan_8, registerOnHover_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.createDiagnosticSource = void 0;
     evaluateProperty_2 = __importDefault(evaluateProperty_2);
-    displayProbeModal_4 = __importStar(displayProbeModal_4);
+    displayProbeModal_5 = __importStar(displayProbeModal_5);
     startEndToSpan_8 = __importDefault(startEndToSpan_8);
     registerOnHover_4 = __importDefault(registerOnHover_4);
     const createMinimizedProbeModal = (env, locator, property, nestedWindows, optionalArgs = {}) => {
@@ -12196,7 +12292,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
                                 }
                             });
                         });
-                        if (!((_b = nests[nwPathKey]) === null || _b === void 0 ? void 0 : _b.length) && relatedProp.name === displayProbeModal_4.searchProbePropertyName) {
+                        if (!((_b = nests[nwPathKey]) === null || _b === void 0 ? void 0 : _b.length) && relatedProp.name === displayProbeModal_5.searchProbePropertyName) {
                             const propName = `${(_d = (_c = relatedProp.args) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.value}`;
                             if (propName !== '') {
                                 nestedRequests.push(() => handleNested({
@@ -12251,10 +12347,10 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
         typeLbl.classList.add('syntax-type');
         clickableUi.appendChild(typeLbl);
         const attrLbl = document.createElement('span');
-        const fixedPropName = property.name == displayProbeModal_4.searchProbePropertyName
+        const fixedPropName = property.name == displayProbeModal_5.searchProbePropertyName
             ? `*.${(_d = (_c = property.args) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.value}`
             : property.name;
-        if (locator.steps.length === 0 && property.name == displayProbeModal_4.searchProbePropertyName) {
+        if (locator.steps.length === 0 && property.name == displayProbeModal_5.searchProbePropertyName) {
             // Hide title?
             typeLbl.style.display = 'none';
             attrLbl.innerText = fixedPropName;
@@ -12264,7 +12360,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
         }
         attrLbl.classList.add('syntax-attr');
         clickableUi.appendChild(attrLbl);
-        if (property.name == displayProbeModal_4.searchProbePropertyName && ((_f = (_e = property.args) === null || _e === void 0 ? void 0 : _e.length) !== null && _f !== void 0 ? _f : 0) >= 2) {
+        if (property.name == displayProbeModal_5.searchProbePropertyName && ((_f = (_e = property.args) === null || _e === void 0 ? void 0 : _e.length) !== null && _f !== void 0 ? _f : 0) >= 2) {
             const pred = document.createElement('span');
             pred.classList.add('syntax-int');
             pred.innerText = `[${(_h = (_g = property.args) === null || _g === void 0 ? void 0 : _g[1]) === null || _h === void 0 ? void 0 : _h.value}]`;
@@ -12292,7 +12388,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
                 ui.parentElement.removeChild(ui);
             }
             env.updateSpanHighlight(null);
-            (0, displayProbeModal_4.default)(env, null, (0, UpdatableNodeLocator_4.createMutableLocator)(locator), property, nestedWindows, { showDiagnostics });
+            (0, displayProbeModal_5.default)(env, null, (0, UpdatableNodeLocator_5.createMutableLocator)(locator), property, nestedWindows, { showDiagnostics });
             cleanup();
         };
         const squigglyCheckboxWrapper = createSquigglyCheckbox({
@@ -12314,7 +12410,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
     const createDiagnosticSource = (locator, property) => {
         var _a, _b, _c, _d, _e, _f, _g;
         let source = `${(_a = locator.result.label) !== null && _a !== void 0 ? _a : locator.result.type}`.split('.').slice(-1)[0];
-        if (property.name === displayProbeModal_4.searchProbePropertyName) {
+        if (property.name === displayProbeModal_5.searchProbePropertyName) {
             const query = (_c = (_b = property.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value;
             let tail = '';
             if (((_e = (_d = property.args) === null || _d === void 0 ? void 0 : _d.length) !== null && _e !== void 0 ? _e : 0) >= 2) {
@@ -12330,7 +12426,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
     exports.createDiagnosticSource = createDiagnosticSource;
     exports.default = createMinimizedProbeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_5, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_5, createMinimizedProbeModal_1, evaluateProperty_3, hacks_5, startEndToSpan_9) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_5, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_6, createMinimizedProbeModal_1, evaluateProperty_3, hacks_5, startEndToSpan_9) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.searchProbePropertyName = void 0;
@@ -12365,6 +12461,16 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             env.probeMarkers[queryId] = showDiagnostics ? diagnosticsGetter : [];
         };
         reinstallDiagnosticsGetter();
+        const getWindowStateData = () => {
+            return {
+                type: 'probe',
+                locator: locator.get(),
+                property,
+                nested: inlineWindowManager.getWindowStates(),
+                showDiagnostics: showDiagnostics && undefined,
+                stickyHighlight: stickyController.getActiveColor(),
+            };
+        };
         const doCreateInlineWindowManager = () => {
             if (env !== env.getGlobalModalEnv()) {
                 return {
@@ -12436,6 +12542,30 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
             return { path, property: state.property, nested, };
         };
         const createTitle = () => {
+            const isTextProbeCompatible = () => {
+                var _a, _b;
+                const checkNestCompatible = (wsd) => {
+                    if (wsd.type !== 'probe') {
+                        return false;
+                    }
+                    return checkProbeDataComptable(wsd);
+                };
+                const checkProbeDataComptable = (pd) => {
+                    var _a;
+                    if ((_a = pd.property.args) === null || _a === void 0 ? void 0 : _a.length) {
+                        return false;
+                    }
+                    if (pd.locator.steps.some(step => { var _a; return step.type === 'nta' && ((_a = step.value.property.args) === null || _a === void 0 ? void 0 : _a.length); })) {
+                        return false;
+                    }
+                    return Object.entries(pd.nested).every(([id, ent]) => id === '[0]' && ent.length === 1 && checkNestCompatible(ent[0].data));
+                };
+                if (((_b = (_a = locator.get().steps) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.type) === 'nta') {
+                    // Very first step is nta, not compatible
+                    return false;
+                }
+                return checkProbeDataComptable(getWindowStateData());
+            };
             const titleNode = (0, createModalTitle_6.default)({
                 shouldAutoCloseOnWorkspaceSwitch: true,
                 extraActions: [
@@ -12520,6 +12650,29 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             navigator.clipboard.writeText(copyBody.map(buildLine).join('\n').trim());
                         }
                     },
+                    ...(!isTextProbeCompatible() ? [] : [{
+                            title: 'Copy as text probe',
+                            invoke: () => {
+                                var _a, _b, _c;
+                                let res = [];
+                                const resType = (_a = locator.get().result.label) !== null && _a !== void 0 ? _a : locator.get().result.type;
+                                res.push(`[[${resType.slice(resType.lastIndexOf('.') + 1)}`);
+                                res.push(`.${property.name}`);
+                                let nest = inlineWindowManager.getWindowStates();
+                                while (true) {
+                                    let firstNest = (_c = (_b = nest['[0]']) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.data;
+                                    if ((firstNest === null || firstNest === void 0 ? void 0 : firstNest.type) === 'probe') {
+                                        nest = firstNest.nested;
+                                        res.push(`.${firstNest.property.name}`);
+                                    }
+                                    else {
+                                        break;
+                                    }
+                                }
+                                res.push(`]]`);
+                                navigator.clipboard.writeText(res.join(''));
+                            },
+                        }]),
                     // ...((property.args?.length ?? 0) === 0 ? [
                     //   {
                     //     title: 'Create search probe',
@@ -12755,7 +12908,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                 onCreate: ({ locator, locatorRoot, expansionArea, path: nestId, isFresh }) => {
                                     var _a, _b, _c;
                                     areasToKeep.add(JSON.stringify(nestId));
-                                    const updLocator = (_a = inlineWindowManager.getPreviouslyAssociatedLocator(nestId)) !== null && _a !== void 0 ? _a : (0, UpdatableNodeLocator_5.createMutableLocator)(locator);
+                                    const updLocator = (_a = inlineWindowManager.getPreviouslyAssociatedLocator(nestId)) !== null && _a !== void 0 ? _a : (0, UpdatableNodeLocator_6.createMutableLocator)(locator);
                                     updLocator.set(locator);
                                     const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, updLocator, queryWindow.bumpIntoScreen);
                                     const nestedEnv = area.getNestedModalEnv(env);
@@ -12763,7 +12916,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     const nests = nestedWindows[encodedId];
                                     if (nests) {
                                         delete nestedWindows[encodedId];
-                                        const immutLoc = (0, UpdatableNodeLocator_5.createImmutableLocator)(updLocator);
+                                        const immutLoc = (0, UpdatableNodeLocator_6.createImmutableLocator)(updLocator);
                                         nests.forEach(nest => {
                                             switch (nest.data.type) {
                                                 case 'probe': {
@@ -12782,7 +12935,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     if (isFresh && property.name === searchProbePropertyName) {
                                         const nestedPropName = (_c = (_b = property.args) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.value;
                                         if (nestedPropName !== '' && !(nests === null || nests === void 0 ? void 0 : nests.some((nest) => nest.data.type === 'probe' && nest.data.property.name === nestedPropName))) {
-                                            displayProbeModal(nestedEnv, null, (0, UpdatableNodeLocator_5.createImmutableLocator)(updLocator), { name: nestedPropName }, {});
+                                            displayProbeModal(nestedEnv, null, (0, UpdatableNodeLocator_6.createImmutableLocator)(updLocator), { name: nestedPropName }, {});
                                         }
                                     }
                                 },
@@ -12795,7 +12948,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     prevLocator.set(locator);
                                     const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, prevLocator, queryWindow.bumpIntoScreen);
                                     const nestedEnv = area.getNestedModalEnv(env);
-                                    (0, displayAttributeModal_5.default)(nestedEnv, null, (0, UpdatableNodeLocator_5.createImmutableLocator)(prevLocator));
+                                    (0, displayAttributeModal_5.default)(nestedEnv, null, (0, UpdatableNodeLocator_6.createImmutableLocator)(prevLocator));
                                     env.triggerWindowSave();
                                 },
                             }) : undefined,
@@ -12895,16 +13048,6 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 refresher.submit(() => queryWindow.refresh());
             }
         };
-        const getWindowStateData = () => {
-            return {
-                type: 'probe',
-                locator: locator.get(),
-                property,
-                nested: inlineWindowManager.getWindowStates(),
-                showDiagnostics: showDiagnostics && undefined,
-                stickyHighlight: stickyController.getActiveColor(),
-            };
-        };
         // if (saveWindowState) {
         env.probeWindowStateSavers[queryId] = (target) => {
             target.push({
@@ -12917,7 +13060,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     };
     exports.default = displayProbeModal;
 });
-define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_5, createModalTitle_7, displayAttributeModal_6, registerOnHover_5, showWindow_4, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5, UpdatableNodeLocator_6) {
+define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_5, createModalTitle_7, displayAttributeModal_6, registerOnHover_5, showWindow_4, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5, UpdatableNodeLocator_7) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_5 = __importDefault(createLoadingSpinner_5);
@@ -13010,7 +13153,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         node.onclick = () => {
                             cleanup();
                             env.updateSpanHighlight(null);
-                            (0, displayAttributeModal_6.default)(env, popup.getPos(), (0, UpdatableNodeLocator_6.createMutableLocator)(locator));
+                            (0, displayAttributeModal_6.default)(env, popup.getPos(), (0, UpdatableNodeLocator_7.createMutableLocator)(locator));
                         };
                         rowsContainer.appendChild(node);
                     });
@@ -13795,7 +13938,7 @@ define("model/runBgProbe", ["require", "exports", "settings"], function (require
     };
     exports.default = runInvisibleProbe;
 });
-define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_7, settings_8, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_2, displayHelp_4, displayProbeModal_5, encodeRpcBodyLines_5) {
+define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_8, settings_8, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_2, displayHelp_4, displayProbeModal_6, encodeRpcBodyLines_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     settings_8 = __importDefault(settings_8);
@@ -13806,7 +13949,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
     renderProbeModalTitleLeft_2 = __importDefault(renderProbeModalTitleLeft_2);
     UIElements_2 = __importDefault(UIElements_2);
     displayHelp_4 = __importDefault(displayHelp_4);
-    displayProbeModal_5 = __importDefault(displayProbeModal_5);
+    displayProbeModal_6 = __importDefault(displayProbeModal_6);
     encodeRpcBodyLines_5 = __importDefault(encodeRpcBodyLines_5);
     const preventDragOnClick = (elem) => {
         elem.onmousedown = (e) => {
@@ -14100,7 +14243,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                                         if (relatedNests.length === 0) {
                                                             return;
                                                         }
-                                                        const wrappedLocator = (0, UpdatableNodeLocator_7.createImmutableLocator)((0, UpdatableNodeLocator_7.createMutableLocator)(locator));
+                                                        const wrappedLocator = (0, UpdatableNodeLocator_8.createImmutableLocator)((0, UpdatableNodeLocator_8.createMutableLocator)(locator));
                                                         const area = lhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator, queryWindow.bumpIntoScreen);
                                                         // const env = area.getNestedModalEnv(modal)
                                                         relatedNests.forEach((nest, nestIdx) => {
@@ -14174,7 +14317,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                                 if (relatedNests.length === 0) {
                                                     return;
                                                 }
-                                                const wrappedLocator = (0, UpdatableNodeLocator_7.createImmutableLocator)((0, UpdatableNodeLocator_7.createMutableLocator)(locator));
+                                                const wrappedLocator = (0, UpdatableNodeLocator_8.createImmutableLocator)((0, UpdatableNodeLocator_8.createMutableLocator)(locator));
                                                 const area = rhsInlineWindowManager.getArea(path, locatorRoot, expansionArea, wrappedLocator, queryWindow.bumpIntoScreen);
                                                 // const env = area.getNestedModalEnv(modal)
                                                 relatedNests.forEach((nest, nestIdx) => {
@@ -14279,7 +14422,6 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                                 inner[key] = (_a = inner[key]) !== null && _a !== void 0 ? _a : [];
                                                 inner[key].push({
                                                     data: nestedTestToProbeData(nest),
-                                                    modalPos: { x: 0, y: 0 },
                                                 });
                                             });
                                             return {
@@ -14312,7 +14454,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                         //   //   }
                                         //   // })
                                         //   })
-                                        (0, displayProbeModal_5.default)(env, null, (0, UpdatableNodeLocator_7.createMutableLocator)(locator), property, nestedTestToProbeData({
+                                        (0, displayProbeModal_6.default)(env, null, (0, UpdatableNodeLocator_8.createMutableLocator)(locator), property, nestedTestToProbeData({
                                             path: [],
                                             expectedOutput: testCase.expectedOutput,
                                             nestedProperties: testCase.nestedProperties,
@@ -14965,7 +15107,7 @@ define("model/getEditorDefinitionPlace", ["require", "exports"], function (requi
     const getEditorDefinitionPlace = () => window;
     exports.default = getEditorDefinitionPlace;
 });
-define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionPlace", "model/UpdatableNodeLocator", "settings", "ui/popup/displayAstModal", "ui/UIElements"], function (require, exports, getEditorDefinitionPlace_1, UpdatableNodeLocator_8, settings_9, displayAstModal_3, UIElements_3) {
+define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionPlace", "model/UpdatableNodeLocator", "settings", "ui/popup/displayAstModal", "ui/UIElements"], function (require, exports, getEditorDefinitionPlace_1, UpdatableNodeLocator_9, settings_9, displayAstModal_3, UIElements_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     getEditorDefinitionPlace_1 = __importDefault(getEditorDefinitionPlace_1);
@@ -15023,7 +15165,7 @@ define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionP
                                 refresh: render
                             };
                         },
-                    }, null, (0, UpdatableNodeLocator_8.createMutableLocator)({
+                    }, null, (0, UpdatableNodeLocator_9.createMutableLocator)({
                         result: { type: '<ROOT>', start: 0, end: 0, depth: 0 },
                         steps: []
                     }), 'downwards', {
@@ -15661,11 +15803,11 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
     };
     exports.initWorkspace = initWorkspace;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox", "model/Workspace", "model/TextProbeManager"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_6, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_11, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_5, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_3, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_12, UpdatableNodeLocator_9, hacks_7, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1, Workspace_1, TextProbeManager_1) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox", "model/Workspace", "model/TextProbeManager"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_7, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_11, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_5, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_3, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_12, UpdatableNodeLocator_10, hacks_7, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1, Workspace_1, TextProbeManager_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
-    displayProbeModal_6 = __importDefault(displayProbeModal_6);
+    displayProbeModal_7 = __importDefault(displayProbeModal_7);
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_5 = __importDefault(displayHelp_5);
     displayAttributeModal_7 = __importDefault(displayAttributeModal_7);
@@ -15789,11 +15931,11 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 switch (state.data.type) {
                     case 'probe': {
                         const data = state.data;
-                        (0, displayProbeModal_6.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_9.createMutableLocator)(data.locator), data.property, data.nested, { showDiagnostics: data.showDiagnostics, stickyHighlight: data.stickyHighlight });
+                        (0, displayProbeModal_7.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_10.createMutableLocator)(data.locator), data.property, data.nested, { showDiagnostics: data.showDiagnostics, stickyHighlight: data.stickyHighlight });
                         break;
                     }
                     case 'ast': {
-                        (0, displayAstModal_4.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_9.createMutableLocator)(state.data.locator), state.data.direction, {
+                        (0, displayAstModal_4.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_10.createMutableLocator)(state.data.locator), state.data.direction, {
                             initialTransform: state.data.transform,
                         });
                         break;
@@ -15948,7 +16090,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                                     activeWorkspace = ws;
                                     onActiveFileChanged();
                                     installWsNotificationHandler('workspace_paths_updated', ({ paths }) => {
-                                        console.log('TODO ws path updates for', paths);
                                         ws.onServerNotifyPathsChanged(paths);
                                     });
                                 }
@@ -16167,6 +16308,12 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 window.HandleLspLikeInteraction = async (type, pos) => {
                     switch (type) {
                         case 'hover': {
+                            if (activeTextProbeManager) {
+                                const res = await activeTextProbeManager.hover(pos.line, pos.column);
+                                if (res) {
+                                    return res;
+                                }
+                            }
                             if (!deferLspToBackend) {
                                 return null;
                             }
@@ -16269,7 +16416,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 window.RagQuery = (line, col, autoSelectRoot) => {
                     if (autoSelectRoot) {
                         const node = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1, depth: 0 };
-                        (0, displayAttributeModal_7.default)(modalEnv, null, (0, UpdatableNodeLocator_9.createMutableLocator)({ result: node, steps: [] }));
+                        (0, displayAttributeModal_7.default)(modalEnv, null, (0, UpdatableNodeLocator_10.createMutableLocator)({ result: node, steps: [] }));
                     }
                     else {
                         (0, displayRagModal_1.default)(modalEnv, line, col);

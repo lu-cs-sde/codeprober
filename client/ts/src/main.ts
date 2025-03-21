@@ -335,7 +335,6 @@ const doMain = (wsPort: number
                   onActiveFileChanged();
 
                   installWsNotificationHandler<WorkspacePathsUpdated>('workspace_paths_updated', ({ paths }) => {
-                    console.log('TODO ws path updates for', paths);
                     ws.onServerNotifyPathsChanged(paths);
                   });
                 }
@@ -583,6 +582,12 @@ const doMain = (wsPort: number
       window.HandleLspLikeInteraction = async (type, pos) => {
         switch (type) {
           case 'hover': {
+            if (activeTextProbeManager) {
+              const res = await activeTextProbeManager.hover(pos.line, pos.column);
+              if (res) {
+                return res;
+              }
+            }
             if (!deferLspToBackend) {
               return null;
             }

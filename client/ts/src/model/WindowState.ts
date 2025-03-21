@@ -26,7 +26,7 @@ interface WindowState {
   data: WindowStateData;
 }
 
-type NestedWindows = { [key: string]: WindowState[] };
+type NestedWindows = { [key: string]: { data: WindowStateData }[], };
 
 export { WindowStateData, WindowStateDataProbe, WindowStateDataAst, NestedWindows };
 export default WindowState;

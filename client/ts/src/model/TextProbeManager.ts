@@ -2,8 +2,12 @@ import { assertUnreachable } from '../hacks';
 import doEvaluateProperty from '../network/evaluateProperty';
 import { ListPropertiesReq, ListPropertiesRes, NodeLocator, ParsingRequestData, ParsingSource, PropertyArg, RpcBodyLine, SynchronousEvaluationResult, TALStep } from '../protocol';
 import settings from '../settings';
+import displayProbeModal from '../ui/popup/displayProbeModal';
 import createCullingTaskSubmitterFactory from './cullingTaskSubmitterFactory';
 import ModalEnv from './ModalEnv'
+import SourcedDiagnostic from './SourcedDiagnostic';
+import { createMutableLocator } from './UpdatableNodeLocator';
+import { NestedWindows } from './WindowState';
 
 interface TextProbeManagerArgs {
   env: ModalEnv;
@@ -15,7 +19,19 @@ interface TextProbeCheckResults {
   numFail: number;
 }
 
+type HoverResult = {
+  range: {
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+  };
+  contents: {
+    value: string; isTrusted?: boolean;
+  }[];
+}
 interface TextProbeManager {
+  hover: (line: number, column: number) => Promise<HoverResult | null>,
   complete: (line: number, column: number) => Promise<string[] | null>,
   checkFile: (requestSrc: ParsingSource, knownSrc: string) => Promise<TextProbeCheckResults | null>,
 };
@@ -23,7 +39,7 @@ interface TextProbeManager {
 type TextProbeStyle = 'angle-brackets' | 'disabled';
 
 const createTypedProbeRegex = () => {
-  const reg = /\[\[(\w+)(\[\d+\])?((?:\.\w+)+)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
+  const reg = /\[\[(\w+)(\[\d+\])?((?:\.\w*)+)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
 
   return {
     exec: (line: string) => {
@@ -87,6 +103,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       property: { name: evalArgs.prop, args: evalArgs.args },
       src: evalArgs.parsingData ?? args.env.createParsingRequestData(),
       type: 'EvaluateProperty',
+      skipResultLocator: true,
     }).fetch();
     if (res !== 'stopped') {
       if (typeof res.totalTime === 'number'
@@ -107,11 +124,14 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
     return res;
   }
 
+  type BrokenNodeChain = { type: 'broken-node-chain', brokenIndex: number };
+  const isBrokenNodeChain = (val: any): val is BrokenNodeChain => val && (typeof val === 'object') && (val as BrokenNodeChain).type === 'broken-node-chain';
+
   const evaluatePropertyChain = async (evalArgs: {
     locator: NodeLocator;
     propChain: string[];
     parsingData?: ParsingRequestData;
-  }): Promise<SynchronousEvaluationResult | 'stopped' | 'broken-node-chain'> => {
+  }): Promise<SynchronousEvaluationResult | 'stopped' | BrokenNodeChain> => {
     const first = await evaluateProperty({ locator: evalArgs.locator, prop: evalArgs.propChain[0], parsingData: evalArgs.parsingData, });
     if (first === 'stopped') {
       return 'stopped';
@@ -121,7 +141,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       // Previous result must be a node locator
       if (prevResult.body[0]?.type !== 'node') {
         console.log('prevResult does not look like a reference attribute:', prevResult.body);
-        return 'broken-node-chain';
+        return { type: 'broken-node-chain', brokenIndex: subsequentIdx - 1 };
       }
       const chainedLocator = prevResult.body[0].value;
 
@@ -169,27 +189,35 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
     return ret;
   };
 
+  const diagnostics: SourcedDiagnostic[] = [];
+  args.env.probeMarkers[queryId] = () => diagnostics;
+
   let activeRefresh = false;
   let repeatOnDone = false;
   const activeStickies: string[] = [];
   const doRefresh = async () => {
+    const hadDiagnosticsBefore = diagnostics.length;
     if (settings.getTextProbeStyle() === 'disabled') {
       for (let i = 0; i < activeStickies.length; ++i) {
         args.env.clearStickyHighlight(activeStickies[i]);
       }
       activeStickies.length = 0;
       args.onFinishedCheckingActiveFile({ numFail: 0, numPass: 0 })
+      if (hadDiagnosticsBefore) {
+        diagnostics.length = 0;
+        args.env.updateMarkers();
+      }
       return;
     }
     if (activeRefresh) {
       repeatOnDone = true;
       return;
     }
-    // args.env.clearStickyHighlight(queryId);
+    diagnostics.length = 0;
     activeRefresh = true;
     repeatOnDone = false;
     let nextStickyIndex = 0;
-    const getStickyId = () => {
+    const allocateStickyId = () => {
       let stickyId;
       if (nextStickyIndex >= activeStickies.length) {
         stickyId = `${queryId}-${nextStickyIndex}`;
@@ -200,6 +228,8 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       ++nextStickyIndex;
       return stickyId;
     }
+
+
     const combinedResults: TextProbeCheckResults = { numPass: 0, numFail: 0 };
     try {
       const preqData = args.env.createParsingRequestData();
@@ -208,6 +238,9 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         const line = lines[lineIdx];
         const reg = createTypedProbeRegex();
         let match;
+        function addErr(colStart: number, colEnd: number, msg: string) {
+          diagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
+        }
         while ((match = reg.exec(line)) !== null) {
           const matchingNodes = await listNodes({
             attrFilter: match.attrNames[0],
@@ -220,13 +253,18 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
           if (!matchingNodes?.length) {
             ++numFail;
             errMsg = `No matching nodes`;
+            const typeStart = line.indexOf(match.nodeType, match.index);
+            const firstAttrEnd = line.indexOf(match.attrNames[0], line.indexOf('.', typeStart)) + match.attrNames[0].length;
+            addErr(typeStart + 1, firstAttrEnd, errMsg);
           } else {
             let matchedNode: NodeLocator | null = null;
             if (match.nodeIndex !== undefined) {
-              console.log('got nodeindex:', match.nodeIndex);
               if (match.nodeIndex < 0 || match.nodeIndex >= matchingNodes.length) {
                 ++numFail;
                 errMsg = `Invalid index`;
+                const typeEnd = line.indexOf(match.nodeType, match.index) + match.nodeType.length;
+                const idxStart = line.indexOf(`${match.nodeIndex}`, typeEnd);
+                addErr(idxStart + 1, idxStart + `${match.nodeIndex}`.length, `Bad Index`);
               } else {
                 matchedNode = matchingNodes[match.nodeIndex];
               }
@@ -237,6 +275,8 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
               } else {
                 ++numFail;
                 errMsg = `${matchingNodes.length} nodes of type "${match.nodeType}". Add [idx] to disambiguate, e.g. "${match.nodeType}[0]"`;
+                const typeStart = line.indexOf(match.nodeType, match.index);
+                addErr(typeStart + 1, line.indexOf('.', typeStart), `Ambiguous, add "[idx]" to select which "${match.nodeType}" to match. 0 ≤ idx < ${matchingNodes.length}`);
               }
             }
             if (matchedNode) {
@@ -248,15 +288,27 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
               if (attrEvalResult == 'stopped') {
                 break;
               }
-              if (attrEvalResult === 'broken-node-chain') {
+              if (isBrokenNodeChain(attrEvalResult)) {
                 ++numFail;
                 errMsg = 'Invalid attribute chain';
+                let attrStart = line.indexOf('.', match.index) + 1;
+                for (let i = 0; i < attrEvalResult.brokenIndex; ++i) {
+                  attrStart = line.indexOf('.', attrStart) + 1;
+                }
+                addErr(attrStart + 1, attrStart + match.attrNames[attrEvalResult.brokenIndex].length, `No AST node returned by "${match.attrNames[attrEvalResult.brokenIndex]}"`);
               } else {
                 const cmp = evalPropertyBodyToString(attrEvalResult.body)
+                if (attrEvalResult.body.length === 1 && attrEvalResult.body[0].type === 'plain' && attrEvalResult.body[0].value.startsWith(`No such attribute '${match.attrNames[match.attrNames.length - 1]}' on `)) {
+                  let lastAttrStart = match.index;
+                  for (let i = 0; i < match.attrNames.length; ++i) {
+                    lastAttrStart = line.indexOf('.', lastAttrStart) + 1;
+                  }
+                  addErr(lastAttrStart + 1, lastAttrStart + match.attrNames[match.attrNames.length - 1].length, 'No such attribute');
+                }
                 if (match.expectVal === undefined) {
                   if (!errMsg) {
                     // Just a probe, save the result as a message
-                    errMsg = `Actual: ${cmp}`;
+                    errMsg = `Result: ${cmp}`;
                   }
                 } else {
                   const rawComparisonSuccess = match.tilde ? cmp.includes(match.expectVal) : (cmp === match.expectVal);
@@ -264,7 +316,6 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
                   if (adjustedComparisonSuccsess) {
                     ++numPass;
                   } else {
-                    console.log('fail, "', match.expectVal, '" != "', cmp, '"');
                     errMsg = `Actual: ${cmp}`;
                     ++numFail;
                   }
@@ -273,18 +324,17 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
             }
           }
 
-          // console.log('combining..', numPass, numFail, errMsg);
           combinedResults.numPass += numPass;
           combinedResults.numFail += numFail;
 
           const span: Span = { lineStart: (lineIdx + 1), colStart: match.index + 1, lineEnd: (lineIdx + 1), colEnd: (match.index + match.full.length) };
           const inlineTextSpan = { ...span, colStart: span.colEnd - 2, colEnd: span.colEnd - 1 };
-          args.env.setStickyHighlight(getStickyId(), {
+          args.env.setStickyHighlight(allocateStickyId(), {
             classNames: [numFail ? 'elp-result-fail' : (numPass ? 'elp-result-success' : 'elp-result-probe')],
             span,
           });
           if (errMsg) {
-            args.env.setStickyHighlight(getStickyId(), {
+            args.env.setStickyHighlight(allocateStickyId(), {
               classNames: [],
               span: inlineTextSpan,
               content: errMsg,
@@ -296,7 +346,9 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
     } catch (e) {
       console.warn('Error during refresh', e);
     }
-
+    if (diagnostics.length || hadDiagnosticsBefore) {
+      args.env.updateMarkers();
+    }
     for (let i = nextStickyIndex; i < activeStickies.length; ++i) {
       args.env.clearStickyHighlight(activeStickies[i]);
     }
@@ -313,6 +365,72 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
 
   args.env.onChangeListeners[queryId] = refresh;
   refresh();
+
+  const hover: TextProbeManager['hover'] = async (line, column) => {
+    if (settings.getTextProbeStyle() === 'disabled') {
+      return null;
+    }
+    const lines = args.env.getLocalState().split('\n');
+    // Make line/col 0-indexed
+    --line;
+    --column;
+    if (line < 0 || line >= lines.length) {
+      return null;
+    }
+
+    const reg = createTypedProbeRegex();
+    let match;
+    while ((match = reg.exec(lines[line])) !== null) {
+      const begin = match.index;
+      if (column < begin) {
+        continue;
+      }
+      const end = begin + match.full.length;
+      if (column >= end) {
+        continue;
+      }
+      const fmatch = match;
+      const parsingData = args.env.createParsingRequestData();
+      const listedNodes = await listNodes({ attrFilter: fmatch.attrNames[0], predicate: `this<:${fmatch.nodeType}&@lineSpan~=${line + 1}`, zeroIndexedLine: line, parsingData  });
+      const locator = listedNodes?.[match.nodeIndex ?? 0];
+      if (!locator) {
+        return null;
+      }
+
+      (window as any).CPR_CMD_OPEN_TEXTPROBE_CALLBACK = async () => {
+        const nestedWindows: NestedWindows = {};
+        let nestTarget = nestedWindows;
+        let nestLocator = locator;
+        for (let chainAttrIdx = 0; chainAttrIdx < fmatch.attrNames.length; ++chainAttrIdx) {
+          const chainAttr = fmatch.attrNames[chainAttrIdx];
+          const res = await evaluateProperty({ locator: nestLocator, prop: chainAttr, parsingData  });
+          if (res === 'stopped' || isBrokenNodeChain(res)) {
+            break;
+          }
+          if (chainAttrIdx > 0) {
+            let newNest: NestedWindows = {};
+            nestTarget['[0]'] = [
+              { data: { type: 'probe', locator, property: { name: chainAttr }, nested: newNest } },
+            ];
+            nestTarget = newNest;
+          }
+          if (res.body[0]?.type !== 'node') {
+            break;
+          }
+          nestLocator = res.body[0].value;
+        }
+        displayProbeModal(args.env, null, createMutableLocator(locator), { name: fmatch.attrNames[0] }, nestedWindows);
+      };
+      return {
+        range: { startLineNumber: line + 1, startColumn: column + 1, endLineNumber: line + 1, endColumn: column + 3},
+        contents: [{
+          value: `[Open Normal Probe](command:${(window as any).CPR_CMD_OPEN_TEXTPROBE_ID})`, isTrusted: true
+        }],
+      };
+    }
+
+    return null;
+  }
 
   const complete: TextProbeManager['complete'] = async (line, column) => {
     if (settings.getTextProbeStyle() === 'disabled') {
@@ -354,7 +472,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       }
       if (prerequisiteAttrs.length != 0) {
         const chainResult = await evaluatePropertyChain({ locator, propChain: prerequisiteAttrs, parsingData });
-        if (chainResult === 'stopped' || chainResult === 'broken-node-chain') {
+        if (chainResult === 'stopped' || isBrokenNodeChain(chainResult)) {
           return null;
         }
         if (chainResult.body[0]?.type !== 'node') {
@@ -391,7 +509,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         propChain: attrNames,
         parsingData,
       });
-      if (attrEvalResult == 'stopped' || attrEvalResult === 'broken-node-chain') {
+      if (attrEvalResult == 'stopped' || isBrokenNodeChain(attrEvalResult)) {
         return null;
       }
       const cmp = evalPropertyBodyToString(attrEvalResult.body)
@@ -511,7 +629,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
             // TODO is this a failure?
             continue;
           }
-          if (evalRes === 'broken-node-chain') {
+          if (isBrokenNodeChain(evalRes)) {
             ret.numFail++;
             continue;
           }
@@ -530,8 +648,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
     return ret;
   };
 
-
-  return { complete, checkFile }
+  return { hover, complete, checkFile }
 }
 
 const evalPropertyBodyToString = (body: RpcBodyLine[]): string => {
