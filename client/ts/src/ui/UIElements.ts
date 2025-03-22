@@ -40,6 +40,13 @@ class UIElements {
   get locationStyleSelector() { return document.getElementById('location-style') as HTMLSelectElement; }
   get locationStyleHelpButton() { return document.getElementById('control-location-style-help') as HTMLButtonElement; }
 
+  get textprobeStyleSelector() { return document.getElementById('textprobe-style') as HTMLSelectElement; }
+  get textprobeStyleHelpButton() { return document.getElementById('control-textprobe-style-help') as HTMLButtonElement; }
+
+  get workspaceHeaderLabel() { return document.getElementById('workspace-header') as HTMLElement; }
+  get workspaceListWrapper() { return document.getElementById('workspace-wrapper') as HTMLElement; }
+  get workspaceTestRunner() { return document.getElementById('workspace-test-runner') as HTMLButtonElement; }
+
   get generalHelpButton() { return document.getElementById('display-help') as HTMLButtonElement; }
   get saveAsUrlButton() { return document.getElementById('saveAsUrl') as HTMLButtonElement; }
   get darkModeCheckbox() { return document.getElementById('control-dark-mode') as HTMLInputElement; }

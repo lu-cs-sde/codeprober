@@ -62,4 +62,8 @@ public class Span {
 	public boolean covers(int startPos, int endPos) {
 		return !isMeaningful() || (this.start <= startPos && this.end >= endPos);
 	}
+
+	public boolean containsLine(int line) {
+		return getStartLine() <= line && getEndLine() >= line;
+	}
 }

@@ -46,6 +46,7 @@ const displayAttributeModal = (
       while (root.firstChild) root.firstChild.remove();
 
       root.appendChild(createModalTitle({
+        shouldAutoCloseOnWorkspaceSwitch: true,
         renderLeft: (container) => {
           if (env === env.getGlobalModalEnv()) {
             const headType = document.createElement('span');

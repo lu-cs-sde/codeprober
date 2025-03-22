@@ -86,6 +86,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
 
       if (!extraArgs.hideTitleBar) {
         root.appendChild(createModalTitle({
+          shouldAutoCloseOnWorkspaceSwitch: true,
           renderLeft: (container) => {
             const headType = document.createElement('span');
             headType.innerText = `AST`;

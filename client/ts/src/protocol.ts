@@ -64,6 +64,14 @@ interface GetWorkerStatusReq {
 interface GetWorkerStatusRes {
   stackTrace: string[];
 }
+interface GetWorkspaceFileReq {
+  type: "GetWorkspaceFile";
+  path: string;
+}
+interface GetWorkspaceFileRes {
+  content?: string;
+  metadata?: { [key: string]: any };
+}
 interface HighlightableMessage {
   start: number;
   end: number;
@@ -126,6 +134,13 @@ interface ListTreeRes {
   locator?: NodeLocator;
   node?: ListedTreeNode;
 }
+interface ListWorkspaceDirectoryReq {
+  type: "ListWorkspaceDirectory";
+  path?: string;
+}
+interface ListWorkspaceDirectoryRes {
+  entries?: WorkspaceEntry[];
+}
 type ListedTreeChildNode = (
     { type: 'children'; value: ListedTreeNode[]; }
   | { type: 'placeholder'; value: number; }
@@ -162,10 +177,14 @@ interface NullableNodeLocator {
 interface ParsingRequestData {
   posRecovery: ('FAIL'| 'SEQUENCE_PARENT_CHILD'| 'SEQUENCE_CHILD_PARENT'| 'PARENT'| 'CHILD'| 'ALTERNATE_PARENT_CHILD');
   cache: ('FULL'| 'PARTIAL'| 'NONE'| 'PURGE');
-  text: string;
+  src: ParsingSource;
   mainArgs?: string[];
   tmpSuffix: string;
 }
+type ParsingSource = (
+    { type: 'text'; value: string; }
+  | { type: 'workspacePath'; value: string; }
+);
 interface PollWorkerStatusReq {
   type: "Concurrent:PollWorkerStatus";
   job: number;
@@ -203,8 +222,32 @@ interface PutTestSuiteReq {
 interface PutTestSuiteRes {
   err?: ('NO_TEST_DIR_SET'| 'ERROR_WHEN_WRITING_FILE');
 }
+interface PutWorkspaceContentReq {
+  type: "PutWorkspaceContent";
+  path: string;
+  content: string;
+}
+interface PutWorkspaceContentRes {
+  ok: boolean;
+}
+interface PutWorkspaceMetadataReq {
+  type: "PutWorkspaceMetadata";
+  path: string;
+  metadata?: { [key: string]: any };
+}
+interface PutWorkspaceMetadataRes {
+  ok: boolean;
+}
 interface Refresh {
   type: "refresh";
+}
+interface RenameWorkspacePathReq {
+  type: "RenameWorkspacePath";
+  srcPath: string;
+  dstPath: string;
+}
+interface RenameWorkspacePathRes {
+  ok: boolean;
 }
 type RpcBodyLine = (
     { type: 'plain'; value: string; }
@@ -310,6 +353,13 @@ interface TunneledWsPutRequestReq {
 interface TunneledWsPutRequestRes {
   response: { [key: string]: any };
 }
+interface UnlinkWorkspacePathReq {
+  type: "UnlinkWorkspacePath";
+  path: string;
+}
+interface UnlinkWorkspacePathRes {
+  ok: boolean;
+}
 interface UnsubscribeFromWorkerStatusReq {
   type: "Concurrent:UnsubscribeFromWorkerStatus";
   job: number;
@@ -322,6 +372,14 @@ type WorkerTaskDone = (
     { type: 'normal'; value: { [key: string]: any }; }
   | { type: 'unexpectedError'; value: string[]; }
 );
+type WorkspaceEntry = (
+    { type: 'file'; value: string; }
+  | { type: 'directory'; value: string; }
+);
+interface WorkspacePathsUpdated {
+  type: "workspace_paths_updated";
+  paths: string[];
+}
 interface WsPutInitReq {
   type: "wsput:init";
   session: string;
@@ -354,6 +412,8 @@ export {
  , GetTestSuiteRes
  , GetWorkerStatusReq
  , GetWorkerStatusRes
+ , GetWorkspaceFileReq
+ , GetWorkspaceFileRes
  , HighlightableMessage
  , HoverReq
  , HoverRes
@@ -366,6 +426,8 @@ export {
  , ListTestSuitesRes
  , ListTreeReq
  , ListTreeRes
+ , ListWorkspaceDirectoryReq
+ , ListWorkspaceDirectoryRes
  , ListedTreeChildNode
  , ListedTreeNode
  , LongPollResponse
@@ -374,6 +436,7 @@ export {
  , NodeLocatorStep
  , NullableNodeLocator
  , ParsingRequestData
+ , ParsingSource
  , PollWorkerStatusReq
  , PollWorkerStatusRes
  , Property
@@ -382,7 +445,13 @@ export {
  , PropertyEvaluationResult
  , PutTestSuiteReq
  , PutTestSuiteRes
+ , PutWorkspaceContentReq
+ , PutWorkspaceContentRes
+ , PutWorkspaceMetadataReq
+ , PutWorkspaceMetadataRes
  , Refresh
+ , RenameWorkspacePathReq
+ , RenameWorkspacePathRes
  , RpcBodyLine
  , StopJobReq
  , StopJobRes
@@ -402,9 +471,13 @@ export {
  , Tracing
  , TunneledWsPutRequestReq
  , TunneledWsPutRequestRes
+ , UnlinkWorkspacePathReq
+ , UnlinkWorkspacePathRes
  , UnsubscribeFromWorkerStatusReq
  , UnsubscribeFromWorkerStatusRes
  , WorkerTaskDone
+ , WorkspaceEntry
+ , WorkspacePathsUpdated
  , WsPutInitReq
  , WsPutInitRes
  , WsPutLongpollReq

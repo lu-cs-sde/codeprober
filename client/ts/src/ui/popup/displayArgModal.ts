@@ -57,6 +57,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: Updata
 
   const createTitle = () => {
     return createModalTitle({
+      shouldAutoCloseOnWorkspaceSwitch: true,
       extraActions: [
         {
           title: 'Duplicate window',
@@ -94,7 +95,6 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: Updata
     render: (root) => {
       root.appendChild(createTitle().element);
 
-      console.log('Show arg modal : ', JSON.stringify(attr, null, 2));
       const attrList = document.createElement('div');
       attrList.classList.add('attr-arg-list');
 

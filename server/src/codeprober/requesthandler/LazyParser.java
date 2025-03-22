@@ -5,17 +5,20 @@ import java.util.List;
 import codeprober.AstInfo;
 import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.PositionRecoveryStrategy;
+import codeprober.protocol.data.GetWorkspaceFileReq;
+import codeprober.protocol.data.GetWorkspaceFileRes;
 import codeprober.protocol.data.ParsingRequestData;
+import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.RpcBodyLine;
 
 public interface LazyParser {
-	ParsedAst parse(String inputText, AstCacheStrategy optCacheStrategyVal, List<String> optArgsOverrideVal,
+	ParsedAst parse(ParsingSource inputText, AstCacheStrategy optCacheStrategyVal, List<String> optArgsOverrideVal,
 			PositionRecoveryStrategy posRecovery, String tmpFileSuffix);
 
 	void discardCachedAst();
 
 	default ParsedAst parse(ParsingRequestData prd) {
-		return parse(prd.text, prd.cache, prd.mainArgs, prd.posRecovery, prd.tmpSuffix);
+		return parse(prd.src, prd.cache, prd.mainArgs, prd.posRecovery, prd.tmpSuffix);
 	}
 
 	static class ParsedAst {
@@ -31,6 +34,26 @@ public interface LazyParser {
 			this.info = info;
 			this.parseTimeNanos = parseTimeNanos;
 			this.captures = captures;
+		}
+	}
+
+	public static String extractText(ParsingSource src) {
+		switch (src.type) {
+		case text: {
+			return src.asText();
+		}
+		case workspacePath: {
+			final GetWorkspaceFileRes res = WorkspaceHandler
+					.handleGetWorkspaceFile(new GetWorkspaceFileReq(src.asWorkspacePath()));
+			if (res.content == null) {
+				System.err.println("Tried parsing non-existing workspace path '" + src.asWorkspacePath() + "'");
+			}
+			return res.content;
+		}
+		default: {
+			System.err.println("Unknown source type: " + src.type);
+			return null;
+		}
 		}
 	}
 }

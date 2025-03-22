@@ -26,6 +26,7 @@ import codeprober.protocol.data.TopRequestResponseData;
 import codeprober.protocol.data.TunneledWsPutRequestReq;
 import codeprober.protocol.data.TunneledWsPutRequestRes;
 import codeprober.requesthandler.RequestHandlerMonitor;
+import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.server.BackingFileSettings;
 import codeprober.server.CodespacesCompat;
@@ -33,14 +34,17 @@ import codeprober.server.ServerToClientEvent;
 import codeprober.server.ServerToClientMessagePusher;
 import codeprober.server.WebServer;
 import codeprober.server.WebSocketServer;
+import codeprober.server.WorkspaceApi;
 import codeprober.toolglue.UnderlyingTool;
 import codeprober.toolglue.UnderlyingToolProxy;
-import codeprober.util.FileMonitor;
 import codeprober.util.DirectoryMonitor;
+import codeprober.util.FileMonitor;
 import codeprober.util.ParsedArgs;
 import codeprober.util.ParsedArgs.ConcurrencyMode;
+import codeprober.util.RunWorkspaceTest;
 import codeprober.util.SessionLogger;
 import codeprober.util.VersionInfo;
+import codeprober.util.WorkspaceDirectoryMonitor;
 
 public class CodeProber {
 
@@ -180,10 +184,18 @@ public class CodeProber {
 			break;
 		}
 		if (parsedArgs.runTest) {
-			final MergedResult res = RunAllTests.run(new TestClient(userFacingHandler),
-					parsedArgs.concurrencyMode != ConcurrencyMode.DISABLED);
+			File workspace = WorkspaceHandler.getWorkspaceRoot(false);
+			if (workspace != null) {
+				// Test files in workspace
+				System.exit(RunWorkspaceTest
+						.run(userFacingHandler) == codeprober.util.RunWorkspaceTest.MergedResult.ALL_PASS ? 0 : 1);
+			} else {
+				// Run (legacy) tests inside the cpr.testDir
+				final MergedResult res = RunAllTests.run(new TestClient(userFacingHandler),
+						parsedArgs.concurrencyMode != ConcurrencyMode.DISABLED);
 //			userFacingHandler.shutdown();
-			System.exit(res == MergedResult.ALL_PASS ? 0 : 1);
+				System.exit(res == MergedResult.ALL_PASS ? 0 : 1);
+			}
 
 			return;
 		}
@@ -219,6 +231,10 @@ public class CodeProber {
 		// terminal. Do it early to inform user.
 		CodespacesCompat.shouldApplyCompatHacks();
 		CodespacesCompat.getChangeBufferTime();
+		final File workspaceRoot = WorkspaceApi.getWorkspaceRoot(true);
+		if (workspaceRoot != null) {
+			new WorkspaceDirectoryMonitor(workspaceRoot, msgPusher).start();
+		}
 
 		final RequestHandlerMonitor monitor = new RequestHandlerMonitor(userFacingHandler::handleRequest);
 		final Function<ClientRequest, JSONObject> unwrappedHandler = monitor::submit;
@@ -248,9 +264,9 @@ public class CodeProber {
 			lastMonitor.set(fm);
 			fm.start();
 		};
-    final String extraFileMonitorPath = System.getProperty("cpr.extraFileMonitorDir", null);
-    if (extraFileMonitorPath != null) {
-      final DirectoryMonitor fm = new DirectoryMonitor(new File(extraFileMonitorPath)) {
+		final String extraFileMonitorPath = System.getProperty("cpr.extraFileMonitorDir", null);
+		if (extraFileMonitorPath != null) {
+			final DirectoryMonitor fm = new DirectoryMonitor(new File(extraFileMonitorPath)) {
 				public void onChange() {
 					System.out.println("Extra monitor dir changed!");
 					if (sessionLogger != null) {
@@ -261,7 +277,7 @@ public class CodeProber {
 				};
 			};
 			fm.start();
-    }
+		}
 		final AtomicBoolean needsTool = new AtomicBoolean(parsedArgs.jarPath == null);
 		final Consumer<String> setUnderlyingJarPath = (jarPath) -> {
 			needsTool.set(false);

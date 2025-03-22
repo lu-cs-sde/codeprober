@@ -24,26 +24,28 @@ window.defineEditor(
         enabled: !window.location.search.includes('fullscreen=true'),
       },
     });
-    if (location.search.includes('debug=true')) {
-      monaco.languages.getLanguages().forEach(({ id: languageId }) => {
-        monaco.languages.registerHoverProvider(languageId, {
-          provideHover: async (model, position, token) => {
-            return window.HandleLspLikeInteraction?.(
-              'hover',
-              { line: position.lineNumber, column: position.column }
-            );
-          }
-        })
-        monaco.languages.registerCompletionItemProvider(languageId, {
-          provideCompletionItems: async (model, position, token) => {
-            return window.HandleLspLikeInteraction?.(
-              'complete',
-              { line: position.lineNumber, column: position.column }
-            );
-          }
-        })
-      });
-    }
+    window.CPR_CMD_OPEN_TEXTPROBE_ID = editor.addCommand(0, () => {
+      window.CPR_CMD_OPEN_TEXTPROBE_CALLBACK?.();
+    });
+    monaco.languages.getLanguages().forEach(({ id: languageId }) => {
+      monaco.languages.registerHoverProvider(languageId, {
+        provideHover: async (model, position, token) => {
+          return window.HandleLspLikeInteraction?.(
+            'hover',
+            { line: position.lineNumber, column: position.column }
+          );
+        }
+      })
+      monaco.languages.registerCompletionItemProvider(languageId, {
+        provideCompletionItems: async (model, position, token) => {
+          return window.HandleLspLikeInteraction?.(
+            'complete',
+            { line: position.lineNumber, column: position.column }
+          );
+        },
+        triggerCharacters: ['.', '[', '='],
+      })
+    });
 
     const coolMarkerDescriptors = {};
     let activeCoolMarkers = {};
@@ -423,16 +425,20 @@ window.defineEditor(
           options: { inlineClassName: 'monaco-rag-highlight' }
         });
       }
-      stickies.forEach(({ classNames, span }) => {
+      stickies.forEach(({ classNames, span, content, contentClassNames }) => {
         newDecorations.push({
           range: new monaco.Range(span.lineStart, span.colStart, span.lineEnd, span.colEnd + 1),
-          options: { className: classNames.join(' ') },
+          options: {
+            className: classNames.join(' '),
+            after: content ? { content, inlineClassName: (contentClassNames ?? []).join(' ') }  : undefined,
+          },
         });
       })
       lastDecorations = editor.deltaDecorations(lastDecorations, newDecorations);
     };
 
     const registerStickyMarker = (span) => {
+      console.log('regSticky..')
       let decoIds = editor.deltaDecorations([], [{
         range: new monaco.Range(span.lineStart, span.colStart, span.lineEnd, span.colEnd + 1),
         options: { inlineClassName: 'monaco-rag-highlight' },

@@ -20,6 +20,7 @@ import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.ParsingRequestData;
+import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.Property;
 import codeprober.protocol.data.TALStep;
 import codeprober.toolglue.ParseResult;
@@ -75,8 +76,8 @@ public class TestDefaultRequestHandler {
 
 	private ClientRequest constructRequest(String text, String attrName) {
 		final EvaluatePropertyReq req = new EvaluatePropertyReq( //
-				new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD, AstCacheStrategy.FULL, text,
-						null, ".tmp"), //
+				new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD, AstCacheStrategy.FULL,
+						ParsingSource.fromText(text), null, ".tmp"), //
 				new NodeLocator(new TALStep("", "", 0, 0, 0, false), Collections.emptyList()),
 				new Property(attrName, Collections.emptyList(), null),
 				false, null, null, null, null);

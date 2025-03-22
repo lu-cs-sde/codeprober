@@ -38,11 +38,23 @@ public abstract class DirectoryMonitor extends Thread {
 		stop.set(true);
 	}
 
+	protected void onChangeDetected(Path path) {
+		/* Default: noop */
+	}
+
 	public abstract void onChange();
 
 	private void registerRecursive(WatchService watchService, final Path root) throws IOException {
 		// register all subfolders
 		Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
+
+			@Override
+			public FileVisitResult visitFile(Path paramT, BasicFileAttributes paramBasicFileAttributes)
+					throws IOException {
+				lastModifieds.put(paramT, paramT.toFile().lastModified());
+				return super.visitFile(paramT, paramBasicFileAttributes);
+			}
+
 			@Override
 			public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
 				dir.register(watchService, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE,
@@ -63,6 +75,7 @@ public abstract class DirectoryMonitor extends Thread {
 				Long prev = lastModifieds.get(file);
 				if (prev == null || prev != lm) {
 					lastModifieds.put(file, lm);
+					onChangeDetected(file);
 					didChange.set(true);
 				}
 				return FileVisitResult.CONTINUE;

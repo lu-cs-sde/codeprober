@@ -1,4 +1,5 @@
 import { getAppropriateFileSuffix } from "./model/syntaxHighlighting";
+import { TextProbeStyle } from './model/TextProbeManager';
 import WindowState from './model/WindowState';
 import { TextSpanStyle } from "./ui/create/createTextSpanIndicator";
 import UIElements from './ui/UIElements';
@@ -19,8 +20,11 @@ interface Settings {
   mainArgsOverride?: string[] | null;
   customFileSuffix?: string | null;
   locationStyle?: TextSpanStyle | null;
+  textProbeStyle?: TextProbeStyle | null;
   hideSettingsPanel?: boolean;
   groupPropertiesByAspect?: boolean;
+  activeWorkspacePath?: string;
+  shouldRerunWorkspaceTestsOnChange?: boolean;
 }
 
 let settingsObj: Settings | null = null;
@@ -147,11 +151,19 @@ const settings = {
   getLocationStyle: () => settings.get().locationStyle ?? 'full',
   setLocationStyle: (locationStyle: TextSpanStyle | null) => settings.set({ ...settings.get(), locationStyle }),
 
+  getTextProbeStyle: () => settings.get().textProbeStyle ?? 'angle-brackets',
+  setTextProbeStyle: (textProbeStyle: TextProbeStyle | null) => settings.set({ ...settings.get(), textProbeStyle }),
+
   shouldHideSettingsPanel: () => settings.get()?.hideSettingsPanel ?? false,
   setShouldHideSettingsPanel: (shouldHide: boolean) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),
 
   shouldGroupPropertiesByAspect: () => settings.get()?.groupPropertiesByAspect ?? false,
   setShouldGroupPropertiesByAspect: (shouldHide: boolean) => settings.set({ ...settings.get(), groupPropertiesByAspect: shouldHide }),
+
+  getActiveWorkspacePath: () => settings.get()?.activeWorkspacePath ?? null,
+  setActiveWorkspacePath: (activeWorkspacePath: string) => settings.set({ ...settings.get(), activeWorkspacePath }),
+  shouldRerunWorkspaceTestsOnChange: () => settings.get().shouldRerunWorkspaceTestsOnChange ?? false,
+  setShouldRerunWorkspaceTestsOnChange: (shouldRerunWorkspaceTestsOnChange: boolean) => settings.set({ ...settings.get(), shouldRerunWorkspaceTestsOnChange }),
 
   shouldEnableTesting: () => window.location.search.includes('enableTesting=true'),
 };

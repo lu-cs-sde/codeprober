@@ -23,6 +23,7 @@ import codeprober.protocol.PositionRecoveryStrategy;
 import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.ParsingRequestData;
+import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.Property;
 import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.RpcBodyLine;
@@ -38,7 +39,7 @@ public class TestEvaluatePropertyHandler {
 		return new LazyParser() {
 
 			@Override
-			public ParsedAst parse(String inputText, AstCacheStrategy optCacheStrategyVal,
+			public ParsedAst parse(ParsingSource inputText, AstCacheStrategy optCacheStrategyVal,
 					List<String> optArgsOverrideVal, PositionRecoveryStrategy posRecovery, String tmpFileSuffix) {
 				return wrapped;
 			}

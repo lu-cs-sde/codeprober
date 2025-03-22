@@ -20,7 +20,7 @@ import { createTestManager } from './model/test/TestManager';
 import displayTestSuiteListModal from './ui/popup/displayTestSuiteListModal';
 import ModalEnv from './model/ModalEnv';
 import displayWorkerStatus from './ui/popup/displayWorkerStatus';
-import { AsyncRpcUpdate, CompleteReq, CompleteRes, Diagnostic, HoverReq, HoverRes, InitInfo, TALStep } from './protocol';
+import { AsyncRpcUpdate, BackingFileUpdated, CompleteReq, CompleteRes, Diagnostic, HoverReq, HoverRes, InitInfo, ParsingRequestData, Refresh, TALStep, WorkspacePathsUpdated } from './protocol';
 import showWindow from './ui/create/showWindow';
 import { createMutableLocator } from './model/UpdatableNodeLocator';
 import WindowState from './model/WindowState';
@@ -29,6 +29,8 @@ import createMinimizedProbeModal from './ui/create/createMinimizedProbeModal';
 import getEditorDefinitionPlace from './model/getEditorDefinitionPlace';
 import installASTEditor from './ui/installASTEditor';
 import configureCheckboxWithHiddenCheckbox from './ui/configureCheckboxWithHiddenCheckbox';
+import Workspace, { initWorkspace } from './model/Workspace';
+import TextProbeManager, { setupTextProbeManager, TextProbeStyle } from './model/TextProbeManager';
 
 const uiElements = new UIElements();
 
@@ -63,11 +65,22 @@ const doMain = (wsPort: number
     const probeWindowStateSavers: { [key: string]: (target: WindowState[]) => void } = {};
     const spammyOperationDebouncer = createCullingTaskSubmitterFactory(10);
     const windowSaveDebouncer = spammyOperationDebouncer();
+    const getCurrentWindowStates = () => {
+      const states: WindowState[] = [];
+      Object.values(probeWindowStateSavers).forEach(v => v(states));
+      return states;
+    };
+    let activeWorkspace: Workspace | null = null;
+    let activeTextProbeManager: TextProbeManager | null = null;
     const triggerWindowSave = () => {
       windowSaveDebouncer.submit(() => {
-        const states: WindowState[] = [];
-        Object.values(probeWindowStateSavers).forEach(v => v(states));
-        settings.setProbeWindowStates(states);
+        const states = getCurrentWindowStates();
+        if (!activeWorkspace || activeWorkspace.activeFileIsTempFile()) {
+          settings.setProbeWindowStates(states);
+        }
+        if (activeWorkspace) {
+          activeWorkspace.onActiveWindowsChange(states);
+        }
       });
     };
 
@@ -113,12 +126,14 @@ const doMain = (wsPort: number
         addConnectionCloseNotice
       );
     })();
+    const installWsNotificationHandler = <T extends { type: string }>(s: T['type'], callback: (t: T) => void) => {
+      wsHandler.on(s, callback);
+    };
 
+    // const foo = <T extends { type: string }>(s: T['type'], callback: (t: T) => void) => {
     const jobUpdateHandlers: {[id: string]: (data: AsyncRpcUpdate) => void }  = {};
-    wsHandler.on('asyncUpdate', (rawData) => {
-      const data = rawData as AsyncRpcUpdate; // Ideally stricly parse this, but this works
+    installWsNotificationHandler<AsyncRpcUpdate>('asyncUpdate', (data) => {
       const { job, isFinalUpdate, value } = data;
-      // console.log('jobUpdate for', job, '; result:', result);
       if (!job || value === undefined) {
         console.warn('Invalid job update', data);
         return;
@@ -134,12 +149,42 @@ const doMain = (wsPort: number
       handler(data);
     });
 
+    const loadWindowState = (modalEnv: ModalEnv, state: WindowState) => {
+      switch (state.data.type) {
+        case 'probe': {
+          const data = state.data;
+          displayProbeModal(modalEnv,
+            state.modalPos,
+            createMutableLocator(data.locator),
+            data.property,
+            data.nested,
+            { showDiagnostics: data.showDiagnostics, stickyHighlight: data.stickyHighlight },
+          );
+          break;
+        }
+        case 'ast': {
+          displayAstModal(modalEnv, state.modalPos, createMutableLocator(state.data.locator), state.data.direction, {
+            initialTransform: state.data.transform,
+          });
+          break;
+        }
+        case 'minimized-probe': {
+          modalEnv.minimize(state.data.data);
+          break;
+        }
+        default: {
+          assertUnreachable(state.data);
+          break;
+        }
+      }
+    };
     const rootElem = document.getElementById('root') as HTMLElement;
     const initHandler = (info: InitInfo) => {
       const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile } = info;
       console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
       rootElem.style.display = "grid";
 
+      let shouldTryInitializingWorkspace = false;
       if (backingFile) {
         settings.setEditorContents(backingFile.value);
         const inputLabel = document.querySelector('#input-header > span') as HTMLSpanElement;
@@ -153,11 +198,19 @@ const doMain = (wsPort: number
           locIndicator.innerText = `(${backingFile.path})`;
           inputLabel.appendChild(locIndicator);
         }
-        wsHandler.on('backing_file_update', ({ contents }) => modalEnv.setLocalState(contents));
+        installWsNotificationHandler<BackingFileUpdated>('backing_file_update', ({ contents }) => modalEnv.setLocalState(contents));
+      } else {
+        shouldTryInitializingWorkspace = true;
       }
 
+
       const onChange = (newValue: string, adjusters?: LocationAdjuster[]) => {
-        settings.setEditorContents(newValue);
+        if (!activeWorkspace || activeWorkspace.activeFileIsTempFile()) {
+          settings.setEditorContents(newValue);
+        }
+        if (activeWorkspace) {
+          activeWorkspace.onActiveFileChange(newValue);
+        }
         notifyLocalChangeListeners(adjusters);
       };
 
@@ -231,6 +284,66 @@ const doMain = (wsPort: number
               );
             }
           });
+          activeTextProbeManager = setupTextProbeManager({
+            env: modalEnv,
+            onFinishedCheckingActiveFile: (res) => {
+              if (activeWorkspace) {
+                activeWorkspace.onActiveFileChecked(res);
+              }
+            },
+          });
+
+          if (shouldTryInitializingWorkspace) {
+            const inputLabel = document.querySelector('#input-header > span') as HTMLSpanElement;
+            let cachedLocIndicator: HTMLSpanElement | null = null;
+            const getLocIndicator = () => {
+              if (!cachedLocIndicator) {
+                const locIndicator = document.createElement('span');
+                locIndicator.style.marginLeft = '0.25rem';
+                locIndicator.classList.add('syntax-string');
+                inputLabel.appendChild(locIndicator);
+                cachedLocIndicator = locIndicator;
+              }
+              return cachedLocIndicator
+
+            }
+            const onActiveFileChanged = () => {
+              if (!activeWorkspace) {
+                return;
+              }
+              if (activeWorkspace.activeFileIsTempFile()) {
+                getLocIndicator().innerText = `(Temp file)`;
+              } else {
+                getLocIndicator().innerText = `(${activeWorkspace.getActiveFile()})`;
+              }
+            };
+            initWorkspace({
+              env: modalEnv,
+              initialLocalContent: settings.getEditorContents() ?? '',
+              setLocalContent: contents => setLocalState(contents),
+              onActiveFileChanged,
+              getCurrentWindows: getCurrentWindowStates,
+              setLocalWindows: (states) => {
+                states.forEach(state => loadWindowState(modalEnv, state));
+              },
+              textProbeManager: activeTextProbeManager,
+              notifySomeWorkspacePathChanged: () => notifyLocalChangeListeners(undefined, 'workspace_path_updated'),
+            })
+              .then((ws) => {
+                if (ws) {
+                  activeWorkspace = ws;
+                  onActiveFileChanged();
+
+                  installWsNotificationHandler<WorkspacePathsUpdated>('workspace_paths_updated', ({ paths }) => {
+                    ws.onServerNotifyPathsChanged(paths);
+                  });
+                }
+              })
+              .catch((err) => {
+                console.warn('Failed initializing workspace', err);
+              })
+            ;
+          }
         })
 
       } else {
@@ -293,6 +406,7 @@ const doMain = (wsPort: number
       setupSimpleSelector(uiElements.astCacheStrategySelector, settings.getAstCacheStrategy(), cb => settings.setAstCacheStrategy(cb));
       setupSimpleSelector(uiElements.positionRecoverySelector, settings.getPositionRecoveryStrategy(), cb => settings.setPositionRecoveryStrategy(cb));
       setupSimpleSelector(uiElements.locationStyleSelector, `${settings.getLocationStyle()}`, cb => settings.setLocationStyle(cb as TextSpanStyle));
+      setupSimpleSelector(uiElements.textprobeStyleSelector, `${settings.getTextProbeStyle()}`, cb => settings.setTextProbeStyle(cb as TextProbeStyle));
 
       uiElements.settingsHider.onclick = () => {
         document.body.classList.add('hide-settings');
@@ -393,14 +507,22 @@ const doMain = (wsPort: number
       const modalEnv: ModalEnv = {
         showWindow,
         performTypedRpc: (req) => wsHandler.sendRpc(req),
-        createParsingRequestData: () => ({
-          posRecovery: uiElements.positionRecoverySelector.value as any,
-          cache: uiElements.astCacheStrategySelector.value as any,
-          text: getLocalState(),
-          stdout: settings.shouldCaptureStdio(),
-          mainArgs: settings.getMainArgsOverride() ?? undefined,
-          tmpSuffix: settings.getCurrentFileSuffix(),
-        }),
+        createParsingRequestData: () => {
+          let src: ParsingRequestData['src'];
+          if (activeWorkspace && !activeWorkspace.activeFileIsTempFile()) {
+            src = { type: 'workspacePath', value: activeWorkspace.getActiveFile() }
+          } else {
+            src = { type: 'text', value: getLocalState() }
+          }
+          return {
+            posRecovery: uiElements.positionRecoverySelector.value as any,
+            cache: uiElements.astCacheStrategySelector.value as any,
+            src,
+            stdout: settings.shouldCaptureStdio(),
+            mainArgs: settings.getMainArgsOverride() ?? undefined,
+            tmpSuffix: settings.getCurrentFileSuffix(),
+          };
+        },
         probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
         themeIsLight: () => settings.isLightTheme(),
         getLocalState: () => getLocalState(),
@@ -453,11 +575,22 @@ const doMain = (wsPort: number
         );
       };
 
-       showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, disableVersionCheckerByDefault, modalEnv.performTypedRpc);
+      showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, disableVersionCheckerByDefault, modalEnv.performTypedRpc);
 
+
+      const deferLspToBackend = location.search.includes('debug=true');
       window.HandleLspLikeInteraction = async (type, pos) => {
         switch (type) {
           case 'hover': {
+            if (activeTextProbeManager) {
+              const res = await activeTextProbeManager.hover(pos.line, pos.column);
+              if (res) {
+                return res;
+              }
+            }
+            if (!deferLspToBackend) {
+              return null;
+            }
             const req: HoverReq = {
               type: 'ide:hover',
               src: modalEnv.createParsingRequestData(),
@@ -477,6 +610,15 @@ const doMain = (wsPort: number
           }
 
           case 'complete': {
+            if (activeTextProbeManager) {
+              const res = await activeTextProbeManager.complete(pos.line, pos.column);
+              if (res) {
+                return { suggestions: res.map(line => ({ label: line, insertText: line, kind: 3 })) };
+              }
+            }
+            if (!deferLspToBackend) {
+              return null;
+            }
             const req: CompleteReq = {
               type: 'ide:complete',
               src: modalEnv.createParsingRequestData(),
@@ -526,6 +668,7 @@ const doMain = (wsPort: number
           case 'capture-stdout': return common('capture-stdout', uiElements.captureStdoutHelpButton);
           case 'capture-traces': return common('capture-traces', uiElements.captureTracesHelpButton);
           case 'location-style': return common('location-style', uiElements.locationStyleHelpButton);
+          case 'textprobe-style': return common('textprobe-style', uiElements.textprobeStyleHelpButton);
           default: return console.error('Unknown help type', type);
         }
       }
@@ -551,35 +694,7 @@ const doMain = (wsPort: number
           //     console.warn('Invalid windowState in hash', e);
           //   }
           // }
-          windowStates.forEach((state) => {
-            switch (state.data.type) {
-              case 'probe': {
-                const data = state.data;
-                displayProbeModal(modalEnv,
-                  state.modalPos,
-                  createMutableLocator(data.locator),
-                  data.property,
-                  data.nested,
-                  { showDiagnostics: data.showDiagnostics, stickyHighlight: data.stickyHighlight },
-                );
-                break;
-              }
-              case 'ast': {
-                displayAstModal(modalEnv, state.modalPos, createMutableLocator(state.data.locator), state.data.direction, {
-                  initialTransform: state.data.transform,
-                });
-                break;
-              }
-              case 'minimized-probe': {
-                modalEnv.minimize(state.data.data);
-                break;
-              }
-              default: {
-                assertUnreachable(state.data);
-                break;
-              }
-            }
-          });
+          windowStates.forEach(state => loadWindowState(modalEnv, state));
         }  catch (e) {
           console.warn('Invalid probe window state?', e);
         }
@@ -595,7 +710,7 @@ const doMain = (wsPort: number
       }
     };
     wsHandler.on('init', initHandler);
-    wsHandler.on('refresh', () => {
+    installWsNotificationHandler<Refresh>('refresh', () => {
       console.log('notifying of refresh..');
       notifyLocalChangeListeners(undefined, 'refresh-from-server');
     });

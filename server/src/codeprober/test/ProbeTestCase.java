@@ -17,6 +17,7 @@ import codeprober.TestClient.TestResult;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.TestCase;
 import codeprober.protocol.data.TestSuite;
+import codeprober.requesthandler.LazyParser;
 import codeprober.toolglue.UnderlyingTool;
 
 public class ProbeTestCase implements Comparable<ProbeTestCase> {
@@ -30,7 +31,7 @@ public class ProbeTestCase implements Comparable<ProbeTestCase> {
 	}
 
 	private String src() {
-		return data.src.text;
+		return LazyParser.extractText(data.src.src);
 	}
 
 	public String name() {

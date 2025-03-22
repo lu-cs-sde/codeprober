@@ -79,11 +79,21 @@ public class NodesWithProperty {
 		return ret;
 	}
 
-	private static Object invokePotentiallyLabelled(Object unerlyingAstNode, String property) {
+	private static Object invokePotentiallyLabelled(AstInfo info, AstNode node, String property) {
 		if (property.startsWith("l:")) {
-			return Reflect.invokeN(unerlyingAstNode, "cpr_lInvoke", new Class[] {String.class}, new Object[] { property.substring("l:".length()) } );
+			return Reflect.invokeN(node.underlyingAstNode, "cpr_lInvoke", new Class[] {String.class}, new Object[] { property.substring("l:".length()) } );
 		}
-		return Reflect.invoke0(unerlyingAstNode, property);
+		if (property.startsWith("@")) {
+			switch (property) {
+			case "@lineSpan": {
+				return node.getRecoveredSpan(info);
+			}
+			default: {
+				System.err.println("Invalid magic '@'-property in search query: '" + property + "'");
+			}
+			}
+		}
+		return Reflect.invoke0(node.underlyingAstNode, property);
 	}
 
 	private static int getTo(List<Object> out, AstInfo info, AstNode astNode, String propName, String predicate,
@@ -109,7 +119,7 @@ public class NodesWithProperty {
 							break;
 						}
 						default: {
-							actualValue = invokePotentiallyLabelled(astNode.underlyingAstNode, expression);
+							actualValue = invokePotentiallyLabelled(info, astNode, expression);
 							break;
 						}
 						}
@@ -157,7 +167,7 @@ public class NodesWithProperty {
 					}
 					final int eqPos = predPart.indexOf('=');
 					if (eqPos <= 0) {
-						show = (boolean) invokePotentiallyLabelled(astNode.underlyingAstNode, predPart);
+						show = (boolean) invokePotentiallyLabelled(info, astNode, predPart);
 					} else {
 						String key = predPart.substring(0, eqPos).trim();
 						boolean contains = false;
@@ -171,12 +181,24 @@ public class NodesWithProperty {
 						}
 						final String expected = (eqPos == predPart.length() - 1) ? ""
 								: predPart.substring(eqPos + 1).trim();
-						final String strInvokeVal = String.valueOf(invokePotentiallyLabelled(astNode.underlyingAstNode, key))
-								.trim();
-						if (contains) {
-							show = strInvokeVal.contains(expected);
+
+						if (contains && key.equals("@lineSpan")) {
+							// This mean 'span cover the specified line', handle separately
+							try {
+								show = astNode.getRecoveredSpan(info).containsLine(Integer.parseInt(expected));
+							} catch (NumberFormatException e) {
+								System.err.println("Expected value '" + expected +"' for line span is not an integer");
+								show = false;
+								break;
+							}
 						} else {
-							show = expected.equals(strInvokeVal);
+							final String strInvokeVal = String.valueOf(invokePotentiallyLabelled(info, astNode, key))
+									.trim();
+							if (contains) {
+								show = strInvokeVal.contains(expected);
+							} else {
+								show = expected.equals(strInvokeVal);
+							}
 						}
 						if (invert) {
 							show = !show;

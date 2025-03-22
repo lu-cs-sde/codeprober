@@ -13,7 +13,7 @@ import displayAttributeModal from './displayAttributeModal';
 import displayAstModal from './displayAstModal';
 import createInlineWindowManager, { InlineWindowManager } from '../create/createInlineWindowManager';
 import UpdatableNodeLocator, { createImmutableLocator, createMutableLocator } from '../../model/UpdatableNodeLocator';
-import { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
+import { NestedWindows, WindowStateData, WindowStateDataProbe } from '../../model/WindowState';
 import { NestedTestRequest } from '../../model/test/TestManager';
 import SourcedDiagnostic from '../../model/SourcedDiagnostic';
 import { createDiagnosticSource } from '../create/createMinimizedProbeModal';
@@ -51,6 +51,16 @@ const displayProbeModal = (
   };
   reinstallDiagnosticsGetter();
 
+  const getWindowStateData = (): WindowStateDataProbe => {
+    return {
+      type: 'probe',
+      locator: locator.get(),
+      property,
+      nested: inlineWindowManager.getWindowStates(),
+      showDiagnostics: showDiagnostics && undefined, // Only include if necessary to reduce serialized form size
+      stickyHighlight: stickyController.getActiveColor(),
+    };
+  };
   const doCreateInlineWindowManager = (): {
     inlineWindowManager: InlineWindowManager,
     shouldShowDiagnosticsToggler: boolean,
@@ -128,7 +138,26 @@ const displayProbeModal = (
     return { path, property: state.property, nested, }
   };
   const createTitle = () => {
+    const isTextProbeCompatible = () => {
+      const checkNestCompatible = (wsd: WindowStateData): boolean => {
+        if (wsd.type !== 'probe') {
+          return false;
+        }
+        return checkProbeDataComptable(wsd);
+      }
+      const checkProbeDataComptable = (pd: WindowStateDataProbe): boolean => {
+        if (pd.property.args?.length) { return false; }
+        if (pd.locator.steps.some(step => step.type === 'nta' && step.value.property.args?.length)) { return false; }
+        return Object.entries(pd.nested).every(([id, ent]) => id === '[0]' && ent.length === 1 && checkNestCompatible(ent[0].data));
+      }
+      if (locator.get().steps?.[0]?.type === 'nta') {
+        // Very first step is nta, not compatible
+        return false;
+      }
+      return checkProbeDataComptable(getWindowStateData());
+    };
     const titleNode = createModalTitle({
+      shouldAutoCloseOnWorkspaceSwitch: true,
       extraActions: [
         ...(
           env.getGlobalModalEnv() === env
@@ -212,9 +241,32 @@ const displayProbeModal = (
                 }
               }
             };
-            navigator.clipboard.writeText(copyBody.map(buildLine).join('\n'));
+
+            navigator.clipboard.writeText(copyBody.map(buildLine).join('\n').trim());
           }
         },
+        ...(!isTextProbeCompatible() ? [] : [{
+          title: 'Copy as text probe',
+          invoke: () => {
+            let res = [];
+            const resType = locator.get().result.label ?? locator.get().result.type;
+            res.push(`[[${resType.slice(resType.lastIndexOf('.') + 1)}`);
+            res.push(`.${property.name}`);
+
+            let nest: NestedWindows = inlineWindowManager.getWindowStates();
+            while (true) {
+              let firstNest = nest['[0]']?.[0]?.data;
+              if (firstNest?.type === 'probe') {
+                nest = firstNest.nested;
+                res.push(`.${firstNest.property.name}`);
+              } else {
+                break;
+              }
+            }
+            res.push(`]]`);
+            navigator.clipboard.writeText(res.join(''));
+          },
+        }]),
         // ...((property.args?.length ?? 0) === 0 ? [
         //   {
         //     title: 'Create search probe',
@@ -596,16 +648,6 @@ const displayProbeModal = (
     }
   }
 
-  const getWindowStateData = (): WindowStateDataProbe => {
-    return {
-      type: 'probe',
-      locator: locator.get(),
-      property,
-      nested: inlineWindowManager.getWindowStates(),
-      showDiagnostics: showDiagnostics && undefined, // Only include if necessary to reduce serialized form size
-      stickyHighlight: stickyController.getActiveColor(),
-    };
-  };
   // if (saveWindowState) {
     env.probeWindowStateSavers[queryId] = (target) => {
       target.push({

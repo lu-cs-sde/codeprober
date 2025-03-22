@@ -78,7 +78,7 @@ const renderProbeModalTitleLeft = (
 
   if (attr.args?.length && env && attr.name !== searchProbePropertyName) {
     const editButton = document.createElement('img');
-    editButton.src = '/icons/edit_white_24dp.svg';
+    editButton.src = 'icons/edit_white_24dp.svg';
     editButton.classList.add('modalEditButton');
     editButton.classList.add('clickHighlightOnHover');
     editButton.onmousedown = (e) => { e.stopPropagation(); }

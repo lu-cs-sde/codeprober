@@ -10,9 +10,11 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -31,6 +33,8 @@ import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
 import codeprober.protocol.data.GetTestSuiteReq;
 import codeprober.protocol.data.GetTestSuiteRes;
+import codeprober.protocol.data.GetWorkspaceFileReq;
+import codeprober.protocol.data.GetWorkspaceFileRes;
 import codeprober.protocol.data.HoverReq;
 import codeprober.protocol.data.HoverRes;
 import codeprober.protocol.data.ListNodesReq;
@@ -41,10 +45,21 @@ import codeprober.protocol.data.ListTestSuitesReq;
 import codeprober.protocol.data.ListTestSuitesRes;
 import codeprober.protocol.data.ListTreeReq;
 import codeprober.protocol.data.ListTreeRes;
+import codeprober.protocol.data.ListWorkspaceDirectoryReq;
+import codeprober.protocol.data.ListWorkspaceDirectoryRes;
+import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.PutTestSuiteReq;
 import codeprober.protocol.data.PutTestSuiteRes;
+import codeprober.protocol.data.PutWorkspaceContentReq;
+import codeprober.protocol.data.PutWorkspaceContentRes;
+import codeprober.protocol.data.PutWorkspaceMetadataReq;
+import codeprober.protocol.data.PutWorkspaceMetadataRes;
+import codeprober.protocol.data.RenameWorkspacePathReq;
+import codeprober.protocol.data.RenameWorkspacePathRes;
 import codeprober.protocol.data.RequestAdapter;
 import codeprober.protocol.data.RpcBodyLine;
+import codeprober.protocol.data.UnlinkWorkspacePathReq;
+import codeprober.protocol.data.UnlinkWorkspacePathRes;
 import codeprober.requesthandler.CompleteHandler;
 import codeprober.requesthandler.EvaluatePropertyHandler;
 import codeprober.requesthandler.HoverHandler;
@@ -53,6 +68,7 @@ import codeprober.requesthandler.ListNodesHandler;
 import codeprober.requesthandler.ListPropertiesHandler;
 import codeprober.requesthandler.ListTreeRequestHandler;
 import codeprober.requesthandler.TestRequestHandler;
+import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.server.BackingFileSettings;
 import codeprober.toolglue.ParseResult;
@@ -67,9 +83,11 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 	private final SessionLogger logger;
 
 	private AstInfo lastInfo = null;
-	private String lastParsedInput = null;
+	private ParsingSource lastParsedInput = null;
 	private String[] lastForwardArgs;
 	private Long lastToolVersionId;
+
+	private KnownFileData lastParsedWorkspaceInput;
 
 	public DefaultRequestHandler(UnderlyingTool underlyingTool) {
 		this(underlyingTool, null, null);
@@ -200,11 +218,14 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			final LazyParser lp = new LazyParser() {
 
 				@Override
-				public ParsedAst parse(String text, AstCacheStrategy cacheStrategy, List<String> mainArgs,
+				public ParsedAst parse(ParsingSource src, AstCacheStrategy cacheStrategy, List<String> mainArgs,
 						PositionRecoveryStrategy posRecovery, String tmpFileSuffix) {
-					final ParseResultWithExtraInfo res = doParse(text,
+					final ParseResultWithExtraInfo res = doParse(src,
 							cacheStrategy != null ? cacheStrategy.name() : null, mainArgs, tmpFileSuffix,
 							createTmpFile);
+					if (res == null) {
+						return new ParsedAst(null);
+					}
 					if (res.rootNode == null) {
 						return new ParsedAst(null, res.parseTime, res.captures);
 					}
@@ -280,6 +301,35 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					return CompleteHandler.apply(req, lp);
 				}
 
+				@Override
+				protected GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {
+					return WorkspaceHandler.handleGetWorkspaceFile(req);
+				};
+
+				@Override
+				protected ListWorkspaceDirectoryRes handleListWorkspaceDirectory(ListWorkspaceDirectoryReq req) {
+					return WorkspaceHandler.handleListWorkspaceDirectory(req);
+				};
+
+				@Override
+				protected PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
+					return WorkspaceHandler.handlePutWorkspaceContent(req);
+				};
+
+				@Override
+				protected PutWorkspaceMetadataRes handlePutWorkspaceMetadata(PutWorkspaceMetadataReq req) {
+					return WorkspaceHandler.handlePutWorkspaceMetadata(req);
+				};
+
+				@Override
+				protected RenameWorkspacePathRes handleRenameWorkspacePath(RenameWorkspacePathReq req) {
+					return WorkspaceHandler.handleRenameWorkspacePath(req);
+				};
+
+				protected UnlinkWorkspacePathRes handleUnlinkWorkspacePath(UnlinkWorkspacePathReq req) {
+					return WorkspaceHandler.handleUnlinkWorkspacePath(req);
+
+				};
 			}.handle(request.data);
 			if (addLog.getAndSet(false)) {
 				final String type = request.data.optString("type");
@@ -303,7 +353,47 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		}
 	}
 
-	private ParseResultWithExtraInfo doParse(final String inputText, String optCacheStrategyVal,
+	private boolean parsingSourceIsEqualToLast(ParsingSource newSrc) {
+		if (lastParsedInput == null) {
+			return newSrc == null;
+		}
+		if (lastParsedInput.type != newSrc.type) {
+			return false;
+		}
+		switch (lastParsedInput.type) {
+		case text:
+			return lastParsedInput.asText().equals(newSrc.asText());
+
+		case workspacePath:
+			final String p1Path = lastParsedInput.asWorkspacePath();
+			final String p2Path = newSrc.asWorkspacePath();
+			if (!p1Path.equals(p2Path)) {
+				return false;
+			}
+			final File wsFile = WorkspaceHandler.getWorkspaceFile(p1Path);
+			if (wsFile == null) {
+				// Both point to the same (nonexisting) file -> equal
+				return true;
+			}
+
+			if (lastParsedWorkspaceInput == null) {
+				System.err.println("?? There should be workspace input info since last input is workspace");
+				return false;
+			}
+			KnownFileData freshStat = statFile(wsFile);
+			return freshStat.equals(lastParsedWorkspaceInput);
+		default: {
+			System.err.println("Unknown ParsingSource type: " + lastParsedInput.type);
+			return false;
+		}
+		}
+	}
+
+	private KnownFileData statFile(File f) {
+		return new KnownFileData(f.lastModified(), f.length(), WorkspaceHandler.getWorkspaceFileWriteCounter(f));
+	}
+
+	private ParseResultWithExtraInfo doParse(final ParsingSource inputSource, String optCacheStrategyVal,
 			List<String> optArgsOverrideVal, String tmpFileSuffix, BiFunction<String, String, File> createTmpFile) {
 
 		final AstCacheStrategy cacheStrategy = AstCacheStrategy.fallbackParse(optCacheStrategyVal);
@@ -326,7 +416,25 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				&& !newFwdArgs //
 				&& lastToolVersionId != null && lastToolVersionId == underlyingTool.getVersionId();
 
-		if (maybeCacheAST && !lastParsedInput.equals(inputText)) {
+		final Supplier<File> convertInputToFile = () -> {
+			switch (inputSource.type) {
+			case text: {
+				return createTmpFile.apply(inputSource.asText(), tmpFileSuffix);
+			}
+			case workspacePath: {
+				final File ret = WorkspaceHandler.getWorkspaceFile(inputSource.asWorkspacePath());
+				if (ret != null) {
+					lastParsedWorkspaceInput = statFile(ret);
+				}
+				return ret;
+			}
+			default: {
+				System.err.println("Unknown input source type: " + inputSource.type);
+				return null;
+			}
+			}
+		};
+		if (maybeCacheAST && !parsingSourceIsEqualToLast(inputSource)) {
 			System.out.println("Can cache AST, but input is different..");
 			maybeCacheAST = false;
 			// Something changed, must replace the AST,
@@ -341,15 +449,17 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			}
 			if (optimizedFlusher != null) {
 				try {
-					final File tmpFile = createTmpFile.apply(inputText, tmpFileSuffix);
+					final File tmpFile = convertInputToFile.get();
+					if (tmpFile == null) {
+						System.err.println("Illegal input file");
+						return null;
+					}
 					final long flushStart = System.nanoTime();
 					final Boolean replacedOk = (Boolean) optimizedFlusher.invoke(lastInfo.ast.underlyingAstNode,
 							tmpFile.getAbsolutePath());
 					System.out.println("Tried optimized flush, result: " + replacedOk);
 					if (replacedOk) {
-
-//						handleParsedAst(lastInfo.ast.underlyingAstNode, queryObj, retBuilder, bodyBuilder);
-						lastParsedInput = inputText;
+						lastParsedInput = inputSource;
 						return new ParseResultWithExtraInfo(lastInfo.ast.underlyingAstNode, null,
 								System.nanoTime() - flushStart);
 					}
@@ -366,9 +476,6 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				if (cacheStrategy == AstCacheStrategy.PARTIAL) {
 					Reflect.invoke0(lastInfo.ast.underlyingAstNode, "flushTreeCache");
 				}
-
-//					final boolean parsed = ASTProvider.parseAst(underlyingCompilerJar, astArgs, (ast, loadCls) -> {
-//				handleParsedAst(lastInfo.ast.underlyingAstNode, queryObj, retBuilder, bodyBuilder);
 				return new ParseResultWithExtraInfo(lastInfo.ast.underlyingAstNode, null,
 						System.nanoTime() - flushStart);
 			} catch (InvokeProblem ip) {
@@ -377,10 +484,14 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				lastInfo = null;
 			}
 		}
-		lastParsedInput = inputText;
+		lastParsedInput = inputSource;
 		lastToolVersionId = underlyingTool.getVersionId();
 
-		final File tmpFile = createTmpFile.apply(inputText, tmpFileSuffix);
+		final File tmpFile = convertInputToFile.get();
+		if (tmpFile == null) {
+			System.err.println("Illegal input file");
+			return null;
+		}
 		final String[] astArgs = new String[1 + fwdArgs.length];
 		System.arraycopy(fwdArgs, 0, astArgs, 0, fwdArgs.length);
 		astArgs[fwdArgs.length] = tmpFile.getAbsolutePath();
@@ -423,5 +534,39 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			this.captures = captures != null ? captures : new ArrayList<>();
 			this.parseTime = parseTime;
 		}
+	}
+
+	private static class KnownFileData {
+		private long lastModified;
+		private long length;
+		private int workspaceWriteCounter;
+
+		public KnownFileData(long lastModified, long length, int workspaceWriteCounter) {
+			this.lastModified = lastModified;
+			this.length = length;
+			this.workspaceWriteCounter = workspaceWriteCounter;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(lastModified, length, workspaceWriteCounter);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj) {
+				return true;
+			}
+			if (obj == null) {
+				return false;
+			}
+			if (getClass() != obj.getClass()) {
+				return false;
+			}
+			KnownFileData other = (KnownFileData) obj;
+			return lastModified == other.lastModified && length == other.length
+					&& workspaceWriteCounter == other.workspaceWriteCounter;
+		}
+
 	}
 }
