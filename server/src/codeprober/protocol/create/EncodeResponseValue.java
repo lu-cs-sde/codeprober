@@ -20,6 +20,8 @@ import codeprober.util.MagicStdoutMessageParser;
 
 public class EncodeResponseValue {
 
+	public static boolean shouldExpandListNodes = true;
+
 	public static void encodeTyped(AstInfo info, List<RpcBodyLine> out, List<Diagnostic> diagnostics, Object value,
 			HashSet<Object> alreadyVisitedNodes) {
 		if (value == null) {
@@ -101,7 +103,7 @@ public class EncodeResponseValue {
 					out.add(RpcBodyLine.fromNode(locator));
 
 					out.add(RpcBodyLine.fromPlain("\n"));
-					if (node.isList() && !alreadyVisitedNodes.contains(node.underlyingAstNode)) {
+					if (shouldExpandListNodes && node.isList() && !alreadyVisitedNodes.contains(node.underlyingAstNode)) {
 						final int numEntries = node.getNumChildren(info);
 						out.add(RpcBodyLine.fromPlain(""));
 						if (numEntries == 0) {

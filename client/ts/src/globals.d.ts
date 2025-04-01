@@ -55,6 +55,12 @@ interface CullingTaskSubmitter {
 
 interface ModalPosition { x: number, y: number };
 
+interface MonacoSpan {
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber: number;
+  endColumn: number;
+}
 interface Window {
   RagQuery: (line: number, col: number, autoSelectRoot?: boolean) => void;
   displayHelp: (type: HelpType | 'probe-statistics' | 'worker-status') => void;
@@ -64,6 +70,19 @@ interface Window {
   saveStateAsUrl: () => void;
   ActiveLocatorRequest?: ActiveNodeLocatorRequest;
   HandleLspLikeInteraction: (type: 'hover' | 'complete', { line: number, column: number }) => Promise<any>;
+  OnCompletionItemFocused: null | (
+    (item: {
+      label: string;
+      insertText: string;
+      kind: number;
+      range: {
+        insert: MonacoSpan;
+        replace: MonacoSpan;
+      };
+      sortText: string;
+    }) => void
+  );
+  OnCompletionItemListClosed: null | (() => void);
 }
 
 interface ActiveNodeLocatorRequest {

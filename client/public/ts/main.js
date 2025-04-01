@@ -1870,13 +1870,14 @@ define("model/UpdatableNodeLocator", ["require", "exports", "model/adjustLocator
     };
     exports.createMutableLocator = createMutableLocator;
 });
-define("model/TextProbeManager", ["require", "exports", "hacks", "network/evaluateProperty", "settings", "ui/popup/displayProbeModal", "model/cullingTaskSubmitterFactory", "model/UpdatableNodeLocator"], function (require, exports, hacks_2, evaluateProperty_1, settings_2, displayProbeModal_1, cullingTaskSubmitterFactory_1, UpdatableNodeLocator_1) {
+define("model/TextProbeManager", ["require", "exports", "hacks", "network/evaluateProperty", "settings", "ui/create/attachDragToX", "ui/popup/displayProbeModal", "ui/startEndToSpan", "model/cullingTaskSubmitterFactory", "model/UpdatableNodeLocator"], function (require, exports, hacks_2, evaluateProperty_1, settings_2, attachDragToX_3, displayProbeModal_1, startEndToSpan_2, cullingTaskSubmitterFactory_1, UpdatableNodeLocator_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.setupTextProbeManager = void 0;
     evaluateProperty_1 = __importDefault(evaluateProperty_1);
     settings_2 = __importDefault(settings_2);
     displayProbeModal_1 = __importDefault(displayProbeModal_1);
+    startEndToSpan_2 = __importDefault(startEndToSpan_2);
     cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
     ;
     const createTypedProbeRegex = () => {
@@ -1903,7 +1904,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
     };
     const createForgivingProbeRegex = () => {
         // Neede for autocompletion
-        const reg = /\[\[(\w*)(\[\d+\])?((?:\.\w*)+)?\]\](?!\])/g;
+        const reg = /\[\[(\w*)(\[\d+\])?((?:\.\w*)*)?(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
         return {
             exec: (line) => {
                 const match = reg.exec(line);
@@ -1920,6 +1921,60 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                 };
             }
         };
+    };
+    const createSpanFlasher = (env) => {
+        let activeFlashCleanup = () => { };
+        let activeFlashSpan = null;
+        const activeSpanReferenceHoverPos = { ...attachDragToX_3.lastKnownMousePos };
+        const flash = (spans, removeHighlightsOnMove) => {
+            // Remove invalid spans
+            spans = spans.filter(x => x.lineStart && x.lineEnd);
+            const act = activeFlashSpan;
+            if (act && JSON.stringify(act) === JSON.stringify(spans) /* bit hacky comparison, but it works */) {
+                // Already flashing this, update the hover pos reference and exit
+                Object.assign(activeSpanReferenceHoverPos, attachDragToX_3.lastKnownMousePos);
+                return;
+            }
+            activeFlashSpan = spans;
+            const flashes = spans.map(span => ({
+                id: `flash-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`,
+                sticky: { span, classNames: [span.lineStart === span.lineEnd ? 'elp-flash' : 'elp-flash-multiline'] }
+            }));
+            flashes.forEach(flash => env.setStickyHighlight(flash.id, flash.sticky));
+            const cleanup = () => {
+                flashes.forEach(flash => env.clearStickyHighlight(flash.id));
+                activeFlashSpan = null;
+                window.removeEventListener('mousemove', cleanup);
+            };
+            Object.assign(activeSpanReferenceHoverPos, attachDragToX_3.lastKnownMousePos);
+            if (removeHighlightsOnMove) {
+                window.addEventListener('mousemove', (e) => {
+                    const dx = e.x - activeSpanReferenceHoverPos.x;
+                    const dy = e.y - activeSpanReferenceHoverPos.y;
+                    if (Math.hypot(dx, dy) > 24 /* arbitrary distance */) {
+                        cleanup();
+                    }
+                });
+            }
+            activeFlashCleanup();
+            activeFlashCleanup = cleanup;
+        };
+        const quickFlash = (spans) => {
+            flash(spans);
+            const cleaner = activeFlashCleanup;
+            setTimeout(() => {
+                if (activeFlashCleanup === cleaner) {
+                    activeFlashCleanup();
+                }
+                {
+                    // Else, we have been replaced by another highlight
+                }
+            }, 500);
+        };
+        const clear = () => {
+            activeFlashCleanup();
+        };
+        return { flash, clear, quickFlash };
     };
     const setupTextProbeManager = (args) => {
         const refreshDispatcher = (0, cullingTaskSubmitterFactory_1.default)(1)();
@@ -2180,7 +2235,15 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
         const refresh = () => refreshDispatcher.submit(doRefresh);
         args.env.onChangeListeners[queryId] = refresh;
         refresh();
+        const flasher = createSpanFlasher(args.env);
         const hover = async (line, column) => {
+            const res = await doHover(line, column);
+            if (res === null) {
+                flasher.clear();
+            }
+            return res;
+        };
+        const doHover = async (line, column) => {
             var _a;
             if (settings_2.default.getTextProbeStyle() === 'disabled') {
                 return null;
@@ -2209,6 +2272,72 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                 const locator = listedNodes === null || listedNodes === void 0 ? void 0 : listedNodes[(_a = match.nodeIndex) !== null && _a !== void 0 ? _a : 0];
                 if (!locator) {
                     return null;
+                }
+                const typeStart = match.index + 2;
+                const typeEnd = lines[line].indexOf('.', typeStart);
+                if (column >= typeStart && column < typeEnd) {
+                    const retFlash = [];
+                    if (!locator.result.external) {
+                        retFlash.push((0, startEndToSpan_2.default)(locator.result.start, locator.result.end));
+                    }
+                    retFlash.push({
+                        // Type in text probe
+                        lineStart: line + 1, colStart: typeStart + 1,
+                        lineEnd: line + 1, colEnd: typeEnd,
+                    });
+                    flasher.flash(retFlash, true);
+                }
+                else {
+                    let searchStart = typeEnd;
+                    let hoveringProp = false;
+                    for (let propIdx = 0; propIdx < match.attrNames.length - 1 /* -1, only want intermediate props */; ++propIdx) {
+                        const propStart = lines[line].indexOf('.', searchStart) + 1;
+                        const propEnd = propStart + match.attrNames[propIdx].length;
+                        searchStart = propEnd;
+                        if (column >= propStart && column < propEnd) {
+                            console.log('hovering intermediate prop', propIdx);
+                            hoveringProp = true;
+                            evaluatePropertyChain({ locator, parsingData, propChain: match.attrNames.slice(0, propIdx + 1) })
+                                // 'then', not 'await'. Do not want to block the hover info from appearing
+                                .then(res => {
+                                if (res === 'stopped' || isBrokenNodeChain(res) || res.body[0].type !== 'node') {
+                                    return;
+                                }
+                                const node = res.body[0].value.result;
+                                flasher.flash([
+                                    {
+                                        lineStart: line + 1, colStart: propStart + 1,
+                                        lineEnd: line + 1, colEnd: propEnd,
+                                    },
+                                    (0, startEndToSpan_2.default)(node.start, node.end)
+                                ], true);
+                            });
+                            break;
+                        }
+                    }
+                    if (!hoveringProp && match.expectVal) {
+                        const resultStart = lines[line].indexOf('=', searchStart) + 1;
+                        const resultEnd = resultStart + match.expectVal.length;
+                        if (column >= resultStart && column < resultEnd) {
+                            evaluatePropertyChain({ locator, parsingData, propChain: match.attrNames })
+                                .then(res => {
+                                if (res === 'stopped' || isBrokenNodeChain(res)) {
+                                    return;
+                                }
+                                if (res.body[0].type === 'node') {
+                                    const node = res.body[0].value.result;
+                                    const spans = [{
+                                            lineStart: line + 1, colStart: resultStart + 1,
+                                            lineEnd: line + 1, colEnd: resultEnd,
+                                        }];
+                                    if (!node.external) {
+                                        spans.push((0, startEndToSpan_2.default)(node.start, node.end));
+                                    }
+                                    flasher.flash(spans, true);
+                                }
+                            });
+                        }
+                    }
                 }
                 window.CPR_CMD_OPEN_TEXTPROBE_CALLBACK = async () => {
                     var _a;
@@ -2266,10 +2395,56 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                 if (matchingNodes === null) {
                     return null;
                 }
-                const types = new Set(matchingNodes.map(loc => { var _a; return (_a = loc.result.label) !== null && _a !== void 0 ? _a : loc.result.type; }));
-                return [...types].sort().map(type => type.split('.').slice(-1)[0]);
+                const duplicateTypes = new Set();
+                const includedTypes = new Set();
+                matchingNodes.forEach(node => {
+                    var _a;
+                    const type = (_a = node.result.label) !== null && _a !== void 0 ? _a : node.result.type;
+                    if (includedTypes.has(type)) {
+                        duplicateTypes.add(type);
+                    }
+                    includedTypes.add(type);
+                });
+                let nodeListCounter = {};
+                let lastFlash = -1;
+                window.OnCompletionItemListClosed = () => {
+                    flasher.clear();
+                };
+                window.OnCompletionItemFocused = item => {
+                    if (item.nodeIndex === 'undefined') {
+                        return;
+                    }
+                    const nodeIndex = item.nodeIndex;
+                    if (lastFlash === nodeIndex) {
+                        return;
+                    }
+                    lastFlash = nodeIndex;
+                    const node = matchingNodes[nodeIndex];
+                    if (!node) {
+                        return;
+                    }
+                    flasher.flash([(0, startEndToSpan_2.default)(node.result.start, node.result.end)]);
+                };
+                return matchingNodes.map((node, nodeIndex) => {
+                    var _a, _b;
+                    const type = (_a = node.result.label) !== null && _a !== void 0 ? _a : node.result.type;
+                    const label = type.split('.').slice(-1)[0];
+                    const ret = { kind: 3, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0') };
+                    if (!duplicateTypes.has(type)) {
+                        return { label, insertText: label, ...ret };
+                    }
+                    let idx = ((_b = nodeListCounter[type]) !== null && _b !== void 0 ? _b : -1) + 1;
+                    nodeListCounter[type] = idx;
+                    const indexed = `${label}[${idx}]`;
+                    return { label: indexed, insertText: indexed, ...ret };
+                });
+                // const types = new Set<string>(matchingNodes.map(loc => loc.result.label ?? loc.result.type));
+                // return [...types].sort().map(type => {
+                //   const label = type.split('.').slice(-1)[0];
+                //   return { label, insertText: label, kind: 3 };
+                // });
             };
-            const completeProp = async (nodeType, nodeIndex, prerequisiteAttrs) => {
+            const completeProp = async (nodeType, nodeIndex, prerequisiteAttrs, previousStepSpan) => {
                 var _a;
                 const parsingData = args.env.createParsingRequestData();
                 const matchingNodes = await listNodes({
@@ -2292,6 +2467,22 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                     }
                     locator = chainResult.body[0].value;
                 }
+                // const typeStart = match.index + 2;
+                // const typeEnd = typeStart + match.nodeType.length;
+                // const firstPropStart =
+                flasher.flash([
+                    {
+                        lineStart: line + 1, colStart: previousStepSpan[0],
+                        lineEnd: line + 1, colEnd: previousStepSpan[1],
+                    },
+                    {
+                        lineStart: locator.result.start >>> 12, colStart: locator.result.start & 0xFFF,
+                        lineEnd: locator.result.end >>> 12, colEnd: locator.result.end & 0xFFF,
+                    }
+                ]);
+                window.OnCompletionItemListClosed = () => {
+                    flasher.clear();
+                };
                 const props = await args.env.performTypedRpc({
                     locator,
                     src: parsingData,
@@ -2302,9 +2493,12 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                     return null;
                 }
                 const zeroArgPropNames = new Set(props.properties.filter(prop => { var _a, _b; return ((_b = (_a = prop.args) === null || _a === void 0 ? void 0 : _a.length) !== null && _b !== void 0 ? _b : 0) === 0; }).map(prop => prop.name));
-                return [...zeroArgPropNames].sort();
+                return [...zeroArgPropNames].sort().map(label => {
+                    return { label, insertText: label, kind: 3 };
+                });
             };
             const completeExpectedValue = async (nodeType, nodeIndex, attrNames) => {
+                var _a;
                 const parsingData = args.env.createParsingRequestData();
                 const matchingNodes = await listNodes({
                     attrFilter: '',
@@ -2324,8 +2518,17 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                 if (attrEvalResult == 'stopped' || isBrokenNodeChain(attrEvalResult)) {
                     return null;
                 }
+                if (((_a = attrEvalResult.body[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node') {
+                    const node = attrEvalResult.body[0].value.result;
+                    if (!node.external) {
+                        flasher.flash([(0, startEndToSpan_2.default)(node.start, node.end)]);
+                        window.OnCompletionItemListClosed = () => {
+                            flasher.clear();
+                        };
+                    }
+                }
                 const cmp = evalPropertyBodyToString(attrEvalResult.body);
-                return [cmp];
+                return [{ label: cmp, insertText: cmp, kind: 3 }];
             };
             while ((match = reg.exec(lines[line])) !== null) {
                 if (match.index >= column) {
@@ -2337,7 +2540,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                     continue;
                 }
                 const typeStart = match.index + 2;
-                const typeEnd = typeStart + match.nodeType.length;
+                const typeEnd = lines[line].indexOf('.', typeStart);
                 if (column >= typeStart && column <= typeEnd) {
                     return completeType();
                 }
@@ -2348,7 +2551,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                     const attrEnd = attrStart + match.attrNames[attrIdx].length;
                     attrSearchStart = attrEnd;
                     if (column >= attrStart && column <= attrEnd) {
-                        return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx));
+                        return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx), [typeStart, attrStart]);
                     }
                 }
                 if (match.expectVal !== undefined) {
@@ -2371,7 +2574,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                     continue;
                 }
                 const typeStart = match.index + 2;
-                const typeEnd = typeStart + match.nodeType.length;
+                const typeEnd = Math.max(typeStart + match.nodeType.length, lines[line].indexOf('.', typeStart));
                 if (column >= typeStart && column <= typeEnd) {
                     return completeType();
                 }
@@ -2383,7 +2586,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                         const attrEnd = attrStart + match.attrNames[attrIdx].length;
                         attrSearchStart = attrEnd;
                         if (column >= attrStart && column <= attrEnd) {
-                            return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx));
+                            return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx), [typeStart, attrStart]);
                         }
                     }
                 }
@@ -3604,14 +3807,14 @@ define("ui/popup/formatAttr", ["require", "exports"], function (require, exports
     exports.formatAttrArgList = formatAttrArgList;
     exports.default = formatAttr;
 });
-define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/UpdatableNodeLocator", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/startEndToSpan", "ui/trimTypeName", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, hacks_3, UpdatableNodeLocator_2, createModalTitle_2, createTextSpanIndicator_2, registerNodeSelector_1, registerOnHover_2, startEndToSpan_2, trimTypeName_1, displayAttributeModal_1, displayProbeModal_2, formatAttr_1) {
+define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/UpdatableNodeLocator", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/startEndToSpan", "ui/trimTypeName", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, hacks_3, UpdatableNodeLocator_2, createModalTitle_2, createTextSpanIndicator_2, registerNodeSelector_1, registerOnHover_2, startEndToSpan_3, trimTypeName_1, displayAttributeModal_1, displayProbeModal_2, formatAttr_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createModalTitle_2 = __importDefault(createModalTitle_2);
     createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
     registerNodeSelector_1 = __importDefault(registerNodeSelector_1);
     registerOnHover_2 = __importDefault(registerOnHover_2);
-    startEndToSpan_2 = __importDefault(startEndToSpan_2);
+    startEndToSpan_3 = __importDefault(startEndToSpan_3);
     trimTypeName_1 = __importDefault(trimTypeName_1);
     displayAttributeModal_1 = __importDefault(displayAttributeModal_1);
     displayProbeModal_2 = __importDefault(displayProbeModal_2);
@@ -3845,7 +4048,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
                                 nodeWrapper.addEventListener('click', () => {
                                     (0, displayAttributeModal_1.default)(env, null, (0, UpdatableNodeLocator_2.createMutableLocator)(pickedNode));
                                 });
-                                const span = (0, startEndToSpan_2.default)(pickedNode.result.start, pickedNode.result.end);
+                                const span = (0, startEndToSpan_3.default)(pickedNode.result.start, pickedNode.result.end);
                                 nodeWrapper.appendChild((0, createTextSpanIndicator_2.default)({
                                     span,
                                 }));
@@ -3943,10 +4146,10 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
     };
     exports.default = displayArgModal;
 });
-define("ui/create/createStickyHighlightController", ["require", "exports", "ui/startEndToSpan"], function (require, exports, startEndToSpan_3) {
+define("ui/create/createStickyHighlightController", ["require", "exports", "ui/startEndToSpan"], function (require, exports, startEndToSpan_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    startEndToSpan_3 = __importDefault(startEndToSpan_3);
+    startEndToSpan_4 = __importDefault(startEndToSpan_4);
     const createStickyHighlightController = (env, initialColorClass = '') => {
         const stickyId = `sticky-highlight-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let activeStickyColorClass = initialColorClass;
@@ -3964,7 +4167,7 @@ define("ui/create/createStickyHighlightController", ["require", "exports", "ui/s
                     `monaco-rag-highlight-sticky`,
                     activeStickyColorClass,
                 ],
-                span: (0, startEndToSpan_3.default)(currentLocator.get().result.start, currentLocator.get().result.end),
+                span: (0, startEndToSpan_4.default)(currentLocator.get().result.start, currentLocator.get().result.end),
             });
             currentTarget.classList.add(`monaco-rag-highlight-sticky`);
             currentTarget.classList.add(activeStickyColorClass);
@@ -4021,19 +4224,19 @@ define("ui/create/createStickyHighlightController", ["require", "exports", "ui/s
     };
     exports.default = createStickyHighlightController;
 });
-define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_2, createTextSpanIndicator_3, cullingTaskSubmitterFactory_2, createStickyHighlightController_1, startEndToSpan_4, UpdatableNodeLocator_3) {
+define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_4, displayAttributeModal_2, createTextSpanIndicator_3, cullingTaskSubmitterFactory_2, createStickyHighlightController_1, startEndToSpan_5, UpdatableNodeLocator_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
     createModalTitle_3 = __importDefault(createModalTitle_3);
     displayHelp_1 = __importDefault(displayHelp_1);
     encodeRpcBodyLines_1 = __importDefault(encodeRpcBodyLines_1);
-    attachDragToX_3 = __importDefault(attachDragToX_3);
+    attachDragToX_4 = __importDefault(attachDragToX_4);
     displayAttributeModal_2 = __importDefault(displayAttributeModal_2);
     createTextSpanIndicator_3 = __importDefault(createTextSpanIndicator_3);
     cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
     createStickyHighlightController_1 = __importDefault(createStickyHighlightController_1);
-    startEndToSpan_4 = __importDefault(startEndToSpan_4);
+    startEndToSpan_5 = __importDefault(startEndToSpan_5);
     const displayAstModal = (env, modalPos, locator, listDirection, extraArgs = {}) => {
         var _a, _b, _c, _d, _e;
         const queryId = `ast-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -4102,9 +4305,9 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                             headType.innerText = `AST`;
                             container.appendChild(headType);
                             const spanIndicator = (0, createTextSpanIndicator_3.default)({
-                                span: (0, startEndToSpan_4.default)(locator.get().result.start, locator.get().result.end),
+                                span: (0, startEndToSpan_5.default)(locator.get().result.start, locator.get().result.end),
                                 marginLeft: true,
-                                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_4.default)(locator.get().result.start, locator.get().result.end) : null),
+                                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_5.default)(locator.get().result.start, locator.get().result.end) : null),
                                 onClick: stickyController.onClick,
                             });
                             stickyController.configure(spanIndicator, locator);
@@ -4201,7 +4404,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     };
                     const dragInfo = { x: trn.x, y: trn.y }; // , sx: 1, sy: 1 };
                     let hoverClick = 'no';
-                    (0, attachDragToX_3.default)(cv, (e) => {
+                    (0, attachDragToX_4.default)(cv, (e) => {
                         bringToFront();
                         dragInfo.x = trn.x;
                         dragInfo.y = trn.y;
@@ -4536,7 +4739,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     };
     exports.default = displayAstModal;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_3, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, settings_4, encodeRpcBodyLines_2, trimTypeName_2, displayAstModal_1, startEndToSpan_5) {
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_3, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, settings_4, encodeRpcBodyLines_2, trimTypeName_2, displayAstModal_1, startEndToSpan_6) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
@@ -4550,7 +4753,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     encodeRpcBodyLines_2 = __importDefault(encodeRpcBodyLines_2);
     trimTypeName_2 = __importDefault(trimTypeName_2);
     displayAstModal_1 = __importDefault(displayAstModal_1);
-    startEndToSpan_5 = __importDefault(startEndToSpan_5);
+    startEndToSpan_6 = __importDefault(startEndToSpan_6);
     const displayAttributeModal = (env, modalPos, locator, optionalArgs = {}) => {
         var _a;
         const queryId = `attr-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -4589,9 +4792,9 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                         headAttr.innerText = `.?`;
                         container.appendChild(headAttr);
                         container.appendChild((0, createTextSpanIndicator_4.default)({
-                            span: (0, startEndToSpan_5.default)(locator.get().result.start, locator.get().result.end),
+                            span: (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end),
                             marginLeft: true,
-                            onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_5.default)(locator.get().result.start, locator.get().result.end) : null),
+                            onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end) : null),
                         }));
                     },
                     onClose: () => {
@@ -11183,7 +11386,7 @@ define("dependencies/graphviz/graphviz", ["require", "exports"], function (requi
     selection.prototype.graphviz = selection_graphviz;
     selection.prototype.selectWithoutDataPropagation = selection_selectWithoutDataPropagation;
 });
-define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNodeLocator", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal", "dependencies/graphviz/graphviz", "hacks", "ui/startEndToSpan"], function (require, exports, UpdatableNodeLocator_4, createTextSpanIndicator_5, registerNodeSelector_2, registerOnHover_3, trimTypeName_3, displayAttributeModal_3, graphviz_1, hacks_4, startEndToSpan_6) {
+define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNodeLocator", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal", "dependencies/graphviz/graphviz", "hacks", "ui/startEndToSpan"], function (require, exports, UpdatableNodeLocator_4, createTextSpanIndicator_5, registerNodeSelector_2, registerOnHover_3, trimTypeName_3, displayAttributeModal_3, graphviz_1, hacks_4, startEndToSpan_7) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createTextSpanIndicator_5 = __importDefault(createTextSpanIndicator_5);
@@ -11191,7 +11394,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
     registerOnHover_3 = __importDefault(registerOnHover_3);
     trimTypeName_3 = __importDefault(trimTypeName_3);
     displayAttributeModal_3 = __importDefault(displayAttributeModal_3);
-    startEndToSpan_6 = __importDefault(startEndToSpan_6);
+    startEndToSpan_7 = __importDefault(startEndToSpan_7);
     const getCommonStreamArgWhitespacePrefix = (line) => {
         if (Array.isArray(line)) {
             return Math.min(...line.map(getCommonStreamArgWhitespacePrefix));
@@ -11387,7 +11590,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                     const trimmed = msg.trim();
                     if (plainHoverSpan) {
                         const node = document.createElement('span');
-                        const span = (0, startEndToSpan_6.default)(plainHoverSpan.start, plainHoverSpan.end);
+                        const span = (0, startEndToSpan_7.default)(plainHoverSpan.start, plainHoverSpan.end);
                         node.classList.add('highlightOnHover');
                         (0, registerOnHover_3.default)(node, hovering => {
                             env.updateSpanHighlight(hovering ? span : null);
@@ -11523,7 +11726,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                                 e.stopPropagation();
                                 e.stopImmediatePropagation();
                             };
-                            const span = (0, startEndToSpan_6.default)(tr.node.result.start, tr.node.result.end);
+                            const span = (0, startEndToSpan_7.default)(tr.node.result.start, tr.node.result.end);
                             (0, registerOnHover_3.default)(summaryPartNode, isHovering => {
                                 env.updateSpanHighlight(isHovering ? span : null);
                             });
@@ -11929,7 +12132,7 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "ui/create/cr
     };
     exports.default = displayTestAdditionModal;
 });
-define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, createTextSpanIndicator_6, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_4, displayProbeModal_4, formatAttr_3, startEndToSpan_7, trimTypeName_4) {
+define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, createTextSpanIndicator_6, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_4, displayProbeModal_4, formatAttr_3, startEndToSpan_8, trimTypeName_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createTextSpanIndicator_6 = __importDefault(createTextSpanIndicator_6);
@@ -11937,7 +12140,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
     displayArgModal_2 = __importDefault(displayArgModal_2);
     displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
     formatAttr_3 = __importStar(formatAttr_3);
-    startEndToSpan_7 = __importDefault(startEndToSpan_7);
+    startEndToSpan_8 = __importDefault(startEndToSpan_8);
     trimTypeName_4 = __importDefault(trimTypeName_4);
     const renderProbeModalTitleLeft = (env, container, close, getWindowPos, stickyController, locator, attr, nested, typeRenderingStyle) => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
@@ -12008,9 +12211,9 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
         }
         if (env) {
             const spanIndicator = (0, createTextSpanIndicator_6.default)({
-                span: (0, startEndToSpan_7.default)(locator.get().result.start, locator.get().result.end),
+                span: (0, startEndToSpan_8.default)(locator.get().result.start, locator.get().result.end),
                 marginLeft: true,
-                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_7.default)(locator.get().result.start, locator.get().result.end) : null),
+                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_8.default)(locator.get().result.start, locator.get().result.end) : null),
                 onClick: (_k = stickyController === null || stickyController === void 0 ? void 0 : stickyController.onClick) !== null && _k !== void 0 ? _k : undefined,
                 external: locator.get().result.external,
                 styleOverride: typeRenderingStyle === 'minimal-nested' ? 'lines-compact' : undefined,
@@ -12182,13 +12385,13 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
     };
     exports.default = createInlineWindowManager;
 });
-define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/startEndToSpan", "ui/create/registerOnHover"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_5, evaluateProperty_2, displayProbeModal_5, startEndToSpan_8, registerOnHover_4) {
+define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/startEndToSpan", "ui/create/registerOnHover"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_5, evaluateProperty_2, displayProbeModal_5, startEndToSpan_9, registerOnHover_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.createDiagnosticSource = void 0;
     evaluateProperty_2 = __importDefault(evaluateProperty_2);
     displayProbeModal_5 = __importStar(displayProbeModal_5);
-    startEndToSpan_8 = __importDefault(startEndToSpan_8);
+    startEndToSpan_9 = __importDefault(startEndToSpan_9);
     registerOnHover_4 = __importDefault(registerOnHover_4);
     const createMinimizedProbeModal = (env, locator, property, nestedWindows, optionalArgs = {}) => {
         var _a, _b, _c, _d, _e, _f, _g, _h;
@@ -12382,7 +12585,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
             });
         };
         env.triggerWindowSave();
-        (0, registerOnHover_4.default)(clickableUi, (on) => env.updateSpanHighlight((on && !locator.result.external) ? (0, startEndToSpan_8.default)(locator.result.start, locator.result.end) : null));
+        (0, registerOnHover_4.default)(clickableUi, (on) => env.updateSpanHighlight((on && !locator.result.external) ? (0, startEndToSpan_9.default)(locator.result.start, locator.result.end) : null));
         clickableUi.onclick = (e) => {
             if (!e.shiftKey && ui.parentElement) {
                 ui.parentElement.removeChild(ui);
@@ -12426,7 +12629,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
     exports.createDiagnosticSource = createDiagnosticSource;
     exports.default = createMinimizedProbeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_5, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_6, createMinimizedProbeModal_1, evaluateProperty_3, hacks_5, startEndToSpan_9) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_5, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_6, createMinimizedProbeModal_1, evaluateProperty_3, hacks_5, startEndToSpan_10) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.searchProbePropertyName = void 0;
@@ -12442,7 +12645,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     displayAstModal_2 = __importDefault(displayAstModal_2);
     createInlineWindowManager_1 = __importDefault(createInlineWindowManager_1);
     evaluateProperty_3 = __importDefault(evaluateProperty_3);
-    startEndToSpan_9 = __importDefault(startEndToSpan_9);
+    startEndToSpan_10 = __importDefault(startEndToSpan_10);
     const searchProbePropertyName = `m:NodesWithProperty`;
     exports.searchProbePropertyName = searchProbePropertyName;
     const displayProbeModal = (env, modalPos, locator, property, nestedWindows, optionalArgs = {}) => {
@@ -12627,7 +12830,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                         return ['', ...line.value.map(buildLine)].join('\n').replace(/\n/g, '\n  ');
                                     }
                                     case 'node': {
-                                        const span = (0, startEndToSpan_9.default)(line.value.result.start, line.value.result.end);
+                                        const span = (0, startEndToSpan_10.default)(line.value.result.start, line.value.result.end);
                                         return `[${span.lineStart}:${span.colStart}-${span.lineEnd}:${span.colEnd}] ${(_a = line.value.result.label) !== null && _a !== void 0 ? _a : line.value.result.type.split('.').slice(-1)[0]}`;
                                     }
                                     case 'tracing': {
@@ -16334,10 +16537,12 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             return { contents: ret };
                         }
                         case 'complete': {
+                            window.OnCompletionItemFocused = null;
+                            window.OnCompletionItemListClosed = null;
                             if (activeTextProbeManager) {
                                 const res = await activeTextProbeManager.complete(pos.line, pos.column);
                                 if (res) {
-                                    return { suggestions: res.map(line => ({ label: line, insertText: line, kind: 3 })) };
+                                    return { suggestions: res };
                                 }
                             }
                             if (!deferLspToBackend) {

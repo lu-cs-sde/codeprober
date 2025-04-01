@@ -172,6 +172,7 @@ public class EvaluatePropertyHandler {
 			final TracingBuilder traceBuilder = new TracingBuilder(parsed.info);
 			final AtomicBoolean ignoreStdio = new AtomicBoolean(false);
 			final Runnable evaluateAttr = () -> {
+				boolean shouldExpandListNodes = true;
 				if (req.captureTraces != null && req.captureTraces.booleanValue()) {
 					if (parsed.info.hasOverride1(parsed.info.ast.underlyingAstNode.getClass(), "cpr_setTraceReceiver",
 							Consumer.class)) {
@@ -257,6 +258,7 @@ public class EvaluatePropertyHandler {
 								predicate = req.property.args.get(1).asString();
 							}
 
+							shouldExpandListNodes = false;
 							value = NodesWithProperty.get(parsed.info, match.node, propName, predicate, limit);
 							break;
 						}
@@ -313,7 +315,13 @@ public class EvaluatePropertyHandler {
 								// Hacky html support
 								body.add(RpcBodyLine.fromHtml(((String) value).substring("@@HTML:".length())));
 							} else {
-								EncodeResponseValue.encodeTyped(parsed.info, body, diagnostics, value, new HashSet<>());
+
+								try {
+									EncodeResponseValue.shouldExpandListNodes = shouldExpandListNodes;
+									EncodeResponseValue.encodeTyped(parsed.info, body, diagnostics, value, new HashSet<>());
+								} finally {
+									EncodeResponseValue.shouldExpandListNodes = true;
+								}
 							}
 						} finally {
 							CreateLocator.setMergeMethod(LocatorMergeMethod.DEFAULT_METHOD);

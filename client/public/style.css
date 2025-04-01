@@ -509,6 +509,19 @@ textarea {
   font-style: oblique;
   background: #8888;
 }
+body[data-theme-light="true"] .monaco-rag-highlight {
+  background: #8884;
+}
+
+.elp-flash, .elp-flash-multiline {
+  font-style: oblique;
+  background: #8804;
+}
+body[data-theme-light="true"] .elp-flash,
+body[data-theme-light="true"] .elp-flash-multiline {
+  background: #8081;
+}
+
 
 /* Progressively higher alpha values so that overlapping sticky highlights are easier to distinguish */
 .monaco-rag-highlight-sticky-0 { background: rgba(  0, 255,   0, 0.200); /* lime */ }
@@ -522,15 +535,19 @@ textarea {
 .monaco-rag-highlight-sticky-8 { background: rgba(255, 160, 122, 0.400); /* lightsalmon */ }
 .monaco-rag-highlight-sticky-9 { background: rgba(135, 207, 235, 0.425); /* skyblue */ }
 
-                              .elp-result-success { background: #3933; outline: 1px solid green; }
-                              .elp-result-fail    { background: #9333; outline: 1px solid red;  }
-                              .elp-result-probe   { background: #3993; outline: 1px solid lightseagreen;   }
-                              .elp-result-noattr  { background: #9333; outline: 1px solid red; }
+                              .elp-result-success  { background: #3933; outline: 1px solid green; }
+                              .elp-result-fail     { background: #9333; outline: 1px solid red;  }
+                              .elp-result-probe    { background: #3993; outline: 1px solid lightseagreen;   }
+                              .elp-result-noattr   { background: #9333; outline: 1px solid red; }
+                                      .elp-flash   { outline: 2px dashed yellow; }
+                            .elp-flash-multiline   { box-shadow: 2px 0 0px yellow inset; }
 
-body[data-theme-light="true"] .elp-result-success { background: #efe7 }
-body[data-theme-light="true"] .elp-result-fail    { background: #fee7 }
-body[data-theme-light="true"] .elp-result-probe   { background: #eff7 }
-body[data-theme-light="true"] .elp-result-noattr  { background: #ffe7 }
+body[data-theme-light="true"] .elp-result-success  { background: #efe7 }
+body[data-theme-light="true"] .elp-result-fail     { background: #fee7 }
+body[data-theme-light="true"] .elp-result-probe    { background: #eff7 }
+body[data-theme-light="true"] .elp-result-noattr   { background: #ffe7 }
+body[data-theme-light="true"] .elp-flash           { outline: 2px dashed magenta; }
+body[data-theme-light="true"] .elp-flash-multiline { box-shadow: 2px 0 0px magenta inset; }
 
 .elp-actual-result-err,
 .elp-actual-result-probe {
@@ -541,10 +558,6 @@ body[data-theme-light="true"] .elp-result-noattr  { background: #ffe7 }
 }
                               .elp-actual-result-probe { color: lightseagreen !important; }
 body[data-theme-light="true"] .elp-actual-result-probe { color: hsl(177, 90%, 20%) !important; }
-
-body[data-theme-light="true"] .monaco-rag-highlight {
-  background: #8884;
-}
 
 .dimmed {
   color: #777;

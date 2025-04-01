@@ -186,6 +186,10 @@ public class NodesWithProperty {
 							// This mean 'span cover the specified line', handle separately
 							try {
 								show = astNode.getRecoveredSpan(info).containsLine(Integer.parseInt(expected));
+								if (!show) {
+									// No need to go deeper
+									return remainingNodeBudget;
+								}
 							} catch (NumberFormatException e) {
 								System.err.println("Expected value '" + expected +"' for line span is not an integer");
 								show = false;

@@ -250,6 +250,9 @@ public class CodeProber {
 			if (!jarFile.exists()) {
 				System.err.println("⚠ Invalid jar path '" + jarPath
 						+ "'. No such file exists. Please restart with a new path, or create the file before trying to create a probe.");
+			} else if (!jarFile.isFile()) {
+				System.err.println("⚠ Invalid jar path '" + jarPath
+						+ "'. It is not a file. Please restart with a new path.");
 			}
 			final FileMonitor fm = new FileMonitor(jarFile) {
 				public void onChange() {

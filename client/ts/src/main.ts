@@ -610,10 +610,12 @@ const doMain = (wsPort: number
           }
 
           case 'complete': {
+            window.OnCompletionItemFocused = null;
+            window.OnCompletionItemListClosed = null;
             if (activeTextProbeManager) {
               const res = await activeTextProbeManager.complete(pos.line, pos.column);
               if (res) {
-                return { suggestions: res.map(line => ({ label: line, insertText: line, kind: 3 })) };
+                return { suggestions: res };
               }
             }
             if (!deferLspToBackend) {

@@ -24,6 +24,15 @@ window.defineEditor(
         enabled: !window.location.search.includes('fullscreen=true'),
       },
     });
+    const suggestController = editor.getContribution("editor.contrib.suggestController");
+    const domNode = suggestController; // ?._list?.view?.domNode;
+    if (domNode) {
+      domNode.model.onDidCancel(() => {
+        if (window.OnCompletionItemListClosed) {
+          window.OnCompletionItemListClosed();
+        }
+      });
+    }
     window.CPR_CMD_OPEN_TEXTPROBE_ID = editor.addCommand(0, () => {
       window.CPR_CMD_OPEN_TEXTPROBE_CALLBACK?.();
     });
@@ -44,6 +53,14 @@ window.defineEditor(
           );
         },
         triggerCharacters: ['.', '[', '='],
+        resolveCompletionItem: (item) => {
+          if (window.OnCompletionItemFocused) {
+            window.OnCompletionItemFocused(item);
+          }
+          return new Promise(() => {
+            // Intentionally never resolve, this makes Monaco call resolveCompletionItem multiple times
+          });
+        }
       })
     });
 
