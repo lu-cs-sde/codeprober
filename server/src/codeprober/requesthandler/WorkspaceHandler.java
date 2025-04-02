@@ -43,6 +43,22 @@ public class WorkspaceHandler {
 		return Pattern.compile(custom);
 	}
 
+	private File workspaceRoot;
+
+	public WorkspaceHandler(File workspaceRoot) {
+		this.workspaceRoot = workspaceRoot;
+	}
+
+	public WorkspaceHandler() {
+		this(getWorkspaceRoot(false));
+	}
+
+	private static WorkspaceHandler sInstance = new WorkspaceHandler();
+
+	public static WorkspaceHandler getDefault() {
+		return sInstance;
+	}
+
 	private static File pathToValidFile(File workspaceRoot, String path) {
 		if (path == null || path.contains("..")) {
 			// Missing path, or trying to write outside the workspace dir, not legal.
@@ -79,33 +95,37 @@ public class WorkspaceHandler {
 		file.delete();
 	}
 
-	private static List<WorkspaceEntry> listWorkspaceFiles(final File srcDir) {
-		final Pattern pattern = getWorkspaceFilePattern();
+	public List<WorkspaceEntry> listWorkspaceFiles(final File srcDir) {
 		final List<WorkspaceEntry> ret = new ArrayList<>();
-		final File[] children = srcDir.listFiles();
-		if (children != null) {
-			Arrays.sort(children, (a, b) -> a.getName().compareTo(b.getName()));
-			for (File child : children) {
-				if (child.isDirectory() && child.getName().equals(".cpr")) {
-					// Metadata directory, hide it
-					continue;
-				}
-				if (child.isFile() && pattern != null) {
-					final String relpath = getWorkspaceRoot(false).toPath().relativize(child.toPath()).toString();
-					if (!pattern.matcher(relpath).matches()) {
+		if (workspaceRoot != null) {
+			final Pattern pattern = getWorkspaceFilePattern();
+			final File[] children = srcDir.listFiles();
+			if (children != null) {
+				Arrays.sort(children, (a, b) -> a.getName().compareTo(b.getName()));
+				for (File child : children) {
+					if (child.isDirectory() && child.getName().equals(".cpr")) {
+						// Metadata directory, hide it
 						continue;
 					}
+					if (child.isFile() && pattern != null) {
+						final String relpath = workspaceRoot.toPath().relativize(child.toPath()).toString();
+						if (!pattern.matcher(relpath).matches()) {
+							continue;
+						}
+					}
+					ret.add(child.isFile() //
+							? WorkspaceEntry.fromFile(child.getName())
+							: WorkspaceEntry.fromDirectory(child.getName()));
 				}
-				ret.add(child.isFile() //
-						? WorkspaceEntry.fromFile(child.getName())
-						: WorkspaceEntry.fromDirectory(child.getName()));
 			}
 		}
 		return ret;
 	}
 
+	public static final String WORKSPACE_SYSTEM_PROPERTY_KEY = "cpr.workspace";
+
 	public static File getWorkspaceRoot(boolean exitOnBadConfig) {
-		final String workspaceRootCfg = System.getProperty("cpr.workspace");
+		final String workspaceRootCfg = System.getProperty(WORKSPACE_SYSTEM_PROPERTY_KEY);
 		if (workspaceRootCfg == null) {
 			return null;
 		}
@@ -126,15 +146,14 @@ public class WorkspaceHandler {
 		return workspaceRootFile;
 	}
 
-	public static File getWorkspaceFile(String path) {
-		final File workspaceRootFile = getWorkspaceRoot(false);
-		if (workspaceRootFile == null) {
+	public File getWorkspaceFile(String path) {
+		if (workspaceRoot == null) {
 			if (debugApiFailureReasons) {
 				System.out.println("No workspace configured");
 			}
 			return null;
 		}
-		final File subFile = pathToValidFile(workspaceRootFile, path);
+		final File subFile = pathToValidFile(workspaceRoot, path);
 		if (subFile == null) {
 			if (debugApiFailureReasons) {
 				System.out.println("Invalid getFile path");
@@ -150,7 +169,7 @@ public class WorkspaceHandler {
 		return subFile;
 	}
 
-	public static GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {
+	public GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {
 		final File subFile = getWorkspaceFile(req.path);
 		if (subFile == null) {
 			return new GetWorkspaceFileRes();
@@ -172,15 +191,14 @@ public class WorkspaceHandler {
 		}
 	}
 
-	public static ListWorkspaceDirectoryRes handleListWorkspaceDirectory(ListWorkspaceDirectoryReq req) {
-		final File workspaceRootFile = getWorkspaceRoot(false);
-		if (workspaceRootFile == null) {
+	public ListWorkspaceDirectoryRes handleListWorkspaceDirectory(ListWorkspaceDirectoryReq req) {
+		if (workspaceRoot == null) {
 			return new ListWorkspaceDirectoryRes();
 		}
 		if (req.path == null) {
-			return new ListWorkspaceDirectoryRes(listWorkspaceFiles(workspaceRootFile));
+			return new ListWorkspaceDirectoryRes(listWorkspaceFiles(workspaceRoot));
 		}
-		final File subFile = pathToValidFile(workspaceRootFile, req.path);
+		final File subFile = pathToValidFile(workspaceRoot, req.path);
 		if (subFile == null) {
 			if (debugApiFailureReasons) {
 				System.out.println("Invalid list path");
@@ -196,15 +214,14 @@ public class WorkspaceHandler {
 		return new ListWorkspaceDirectoryRes(listWorkspaceFiles(subFile));
 	}
 
-	public static PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
-		final File workspaceRootFile = getWorkspaceRoot(false);
-		if (workspaceRootFile == null) {
+	public PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
+		if (workspaceRoot == null) {
 			if (debugApiFailureReasons) {
 				System.out.println("No workspace dir configured");
 			}
 			return new PutWorkspaceContentRes(false);
 		}
-		final File subFile = pathToValidFile(workspaceRootFile, req.path);
+		final File subFile = pathToValidFile(workspaceRoot, req.path);
 		if (subFile == null) {
 			if (debugApiFailureReasons) {
 				System.out.println("Invalid putContents path '" + req.path + "'");
@@ -235,15 +252,14 @@ public class WorkspaceHandler {
 		return new PutWorkspaceContentRes(true);
 	}
 
-	public static PutWorkspaceMetadataRes handlePutWorkspaceMetadata(PutWorkspaceMetadataReq req) {
-		final File workspaceRootFile = getWorkspaceRoot(false);
-		if (workspaceRootFile == null) {
+	public PutWorkspaceMetadataRes handlePutWorkspaceMetadata(PutWorkspaceMetadataReq req) {
+		if (workspaceRoot == null) {
 			if (debugApiFailureReasons) {
 				System.out.println("No workspace dir configured");
 			}
 			return new PutWorkspaceMetadataRes(false);
 		}
-		final File subFile = pathToValidFile(workspaceRootFile, req.path);
+		final File subFile = pathToValidFile(workspaceRoot, req.path);
 		if (subFile == null) {
 			if (debugApiFailureReasons) {
 				System.out.println("Invalid putMetadata path '" + req.path + "'");
@@ -264,28 +280,31 @@ public class WorkspaceHandler {
 			return new PutWorkspaceMetadataRes(false);
 		}
 		final File metadataFile = getMetadataFileForRealFile(subFile);
-		metadataFile.getParentFile().mkdirs();
+		if (req.metadata == null) {
+			metadataFile.delete();
+		} else {
+			metadataFile.getParentFile().mkdirs();
 
-		try (FileOutputStream fos = new FileOutputStream(metadataFile)) {
-			fos.write(req.metadata.toString().getBytes(StandardCharsets.UTF_8));
-		} catch (IOException e) {
-			System.err.println("Error when writing to workspace file " + subFile);
-			e.printStackTrace();
-			return new PutWorkspaceMetadataRes(false);
+			try (FileOutputStream fos = new FileOutputStream(metadataFile)) {
+				fos.write(req.metadata.toString().getBytes(StandardCharsets.UTF_8));
+			} catch (IOException e) {
+				System.err.println("Error when writing to workspace file " + subFile);
+				e.printStackTrace();
+				return new PutWorkspaceMetadataRes(false);
+			}
 		}
 		return new PutWorkspaceMetadataRes(true);
 	}
 
-	public static RenameWorkspacePathRes handleRenameWorkspacePath(RenameWorkspacePathReq req) {
-		final File workspaceRootFile = getWorkspaceRoot(false);
-		if (workspaceRootFile == null) {
+	public RenameWorkspacePathRes handleRenameWorkspacePath(RenameWorkspacePathReq req) {
+		if (workspaceRoot == null) {
 			if (debugApiFailureReasons) {
 				System.out.println("Workspace not configured");
 			}
 			return new RenameWorkspacePathRes(false);
 		}
-		final File srcFile = pathToValidFile(workspaceRootFile, req.srcPath);
-		final File dstFile = pathToValidFile(workspaceRootFile, req.dstPath);
+		final File srcFile = pathToValidFile(workspaceRoot, req.srcPath);
+		final File dstFile = pathToValidFile(workspaceRoot, req.dstPath);
 		if (srcFile == null || dstFile == null) {
 			if (debugApiFailureReasons) {
 				System.out.println("Invalid rename paths. src=" + req.srcPath + ", dst=" + req.dstPath);
@@ -330,12 +349,11 @@ public class WorkspaceHandler {
 		return new RenameWorkspacePathRes(true);
 	}
 
-	public static UnlinkWorkspacePathRes handleUnlinkWorkspacePath(UnlinkWorkspacePathReq req) {
-		final File workspaceRootFile = getWorkspaceRoot(false);
-		if (workspaceRootFile == null) {
+	public UnlinkWorkspacePathRes handleUnlinkWorkspacePath(UnlinkWorkspacePathReq req) {
+		if (workspaceRoot == null) {
 			return new UnlinkWorkspacePathRes(false);
 		}
-		final File file = pathToValidFile(workspaceRootFile, req.path);
+		final File file = pathToValidFile(workspaceRoot, req.path);
 		if (file == null) {
 			return new UnlinkWorkspacePathRes(false);
 		}
@@ -345,7 +363,7 @@ public class WorkspaceHandler {
 			}
 			return new UnlinkWorkspacePathRes(false);
 		}
-		recursiveRemove(file, workspaceRootFile.toPath());
+		recursiveRemove(file, workspaceRoot.toPath());
 		if (file.exists()) {
 			if (debugApiFailureReasons) {
 				System.out.println("Failed removing " + file + ", perhaps permission problems?");

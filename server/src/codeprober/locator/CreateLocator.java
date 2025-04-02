@@ -20,6 +20,7 @@ import org.json.JSONObject;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
+import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.create.CreateValue;
 import codeprober.protocol.data.FNStep;
@@ -29,8 +30,6 @@ import codeprober.protocol.data.Property;
 import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.TALStep;
 import codeprober.util.BenchmarkTimer;
-import codeprober.metaprogramming.Reflect;
-import codeprober.metaprogramming.InvokeProblem;
 
 public class CreateLocator {
 

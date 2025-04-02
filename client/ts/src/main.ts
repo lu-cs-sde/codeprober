@@ -39,11 +39,6 @@ window.clearUserSettings = () => {
   location.reload();
 }
 
-// setTimeout(() => {
-//   console.log('d3:', d3)
-
-// }, 1000)
-
 const doMain = (wsPort: number
   | 'ws-over-http'
   | { type: 'codespaces-compat', 'from': number, to: number }
@@ -56,6 +51,16 @@ const doMain = (wsPort: number
   if (!settings.shouldEnableTesting()) {
     uiElements.showTests.style.display = 'none';
   }
+
+  window.addEventListener("keydown", function (event) {
+    console.log('keydown:', event.ctrlKey, event.metaKey, ':', event.key)
+    const platform = this.navigator.platform || '';
+    const isMacIsh = platform.startsWith("Mac") || platform === "iPhone";
+    if ((isMacIsh ? event.metaKey : event.ctrlKey) && event.key === "p") {
+        event.preventDefault();
+        alert("Printing is disabled on this page.");
+    }
+  });
   let getLocalState = () => settings.getEditorContents() ?? '';
   let basicHighlight: Span | null = null;
   const stickyHighlights: { [probeId: string]: StickyHighlight } = {};
@@ -182,6 +187,10 @@ const doMain = (wsPort: number
     const initHandler = (info: InitInfo) => {
       const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile } = info;
       console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
+
+      if ((workerProcessCount ?? 1) <= 1) {
+        uiElements.displayWorkerStatusButton.style.display = 'none';
+      }
       rootElem.style.display = "grid";
 
       let shouldTryInitializingWorkspace = false;
@@ -555,8 +564,8 @@ const doMain = (wsPort: number
             showDiagnostics: data.showDiagnostics
           });
           uiElements.minimizedProbeArea.appendChild(miniProbe.ui);
-
-        }
+        },
+        workerProcessCount,
        };
        modalEnvHolder.setEnv(modalEnv);
 
@@ -762,3 +771,6 @@ window.initCodeProber = () => {
     doMain(8080);
   })
 }
+
+
+

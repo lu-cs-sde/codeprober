@@ -39,7 +39,6 @@ public class RunAllTests {
 			final TestSuite suite = client.getTestSuiteContents(suiteName);
 
 			final CountDownLatch cdl = runConcurrently ? new CountDownLatch(suite.cases.size()) : null;
-
 			final BiConsumer<String, TestResult> handleResult = (name, result) -> {
 				if (result.pass) {
 					System.out.println("  ✅ " + name);

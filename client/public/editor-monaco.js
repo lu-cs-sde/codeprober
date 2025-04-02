@@ -24,6 +24,7 @@ window.defineEditor(
         enabled: !window.location.search.includes('fullscreen=true'),
       },
     });
+
     const suggestController = editor.getContribution("editor.contrib.suggestController");
     const domNode = suggestController; // ?._list?.view?.domNode;
     if (domNode) {

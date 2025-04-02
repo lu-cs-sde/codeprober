@@ -7,6 +7,7 @@ import UIElements from '../ui/UIElements';
 import TextProbeManager, { TextProbeCheckResults } from './TextProbeManager';
 import ModalEnv from './ModalEnv';
 import WindowState from './WindowState';
+import ThreadPoolExecutor, { createThreadPoolExecutor } from './ThreadPoolExecutor';
 
 const uiElements = new UIElements();
 const unsavedFileKey = '%😄'; // Hopefully not colliding with anything
@@ -49,18 +50,22 @@ interface Workspace {
   onServerNotifyPathsChanged: (paths: string[]) => void;
 }
 
-
 interface WorkspaceFileMetadata {
   windowStates: WindowState[];
 }
-
 
 const displayTestModal = (args: WorkspaceInitArgs, workspace: Workspace, extras: { shouldIgnoreChangeCallbacks: boolean }) => {
   const testBtn = uiElements.workspaceTestRunner;
   let numPass = 0;
   let numFail = 0;
 
-  const testDir = async (statusLbl: HTMLElement, failureLog: HTMLElement, path: string | null = null, testRunMonitor: { shouldStop: boolean}) => {
+  const testDir = async (
+    statusLbl: HTMLElement,
+    failureLog: HTMLElement,
+    path: string | null = null,
+    testRunMonitor: { shouldStop: boolean },
+    executor: ThreadPoolExecutor,
+  ) => {
     const contents = await getDirContents(workspace, path ?? '');
     if (!contents) {
       return;
@@ -73,43 +78,46 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: Workspace, extras:
       }
       switch (entry.type) {
         case 'directory': {
-          await testDir(statusLbl, failureLog, fullPath, testRunMonitor);
+          // await testDir(statusLbl, failureLog, fullPath, testRunMonitor, executor);
+          executor.submit(() => testDir(statusLbl, failureLog, fullPath, testRunMonitor, executor));
           break;
         }
         case 'file': {
-          const entry = await getFileContents(workspace, fullPath);
-          if (entry == null) {
-            continue;
-          }
-          if (testRunMonitor.shouldStop) {
-            return;
-          }
-          const res = await args.textProbeManager.checkFile(
-            // { type: 'text', value: entry.contents },
-            { type: 'workspacePath', value: fullPath },
-            entry.contents
-          );
-          if (res === null) {
-            continue;
-          }
+          const checkFile = async () => {
+            const entry = await getFileContents(workspace, fullPath);
+            if (entry == null) {
+              return;
+            }
+            if (testRunMonitor.shouldStop) {
+              return;
+            }
+            const res = await args.textProbeManager.checkFile(
+              // { type: 'text', value: entry.contents },
+              { type: 'workspacePath', value: fullPath },
+              entry.contents
+            );
+            if (res === null) {
+              return;
+            }
+            numPass += res.numPass;
+            numFail += res.numFail;
+            if (res.numFail) {
+              const logEntry = document.createElement('div');
+              logEntry.classList.add('workspace-test-failure-log-entry')
+              logEntry.innerText = `${res.numFail} failure${res.numFail > 1 ? 's' : ''} in ${fullPath}`;
 
-          numPass += res.numPass;
-          numFail += res.numFail;
-          if (res.numFail) {
-            const logEntry = document.createElement('div');
-            logEntry.classList.add('workspace-test-failure-log-entry')
-            logEntry.innerText = `${res.numFail} failure${res.numFail > 1 ? 's' : ''} in ${fullPath}`;
+              failureLog.appendChild(logEntry);
+              failureLog.style.display = 'flex';
+            }
+            workspace.knownTestResults[fullPath] = res;
+            statusLbl.innerText = `Running.. ${numPass} pass, ${numFail} fail`;
 
-            failureLog.appendChild(logEntry);
-            failureLog.style.display = 'flex';
-          }
-          workspace.knownTestResults[fullPath] = res;
-          statusLbl.innerText = `Running.. ${numPass} pass, ${numFail} fail`;
-
-          const row = workspace.visibleRows[fullPath];
-          if (row) {
-            row.updateTestStatus(res);
-          }
+            const row = workspace.visibleRows[fullPath];
+            if (row) {
+              row.updateTestStatus(res);
+            }
+          };
+          executor.submit(checkFile);
           break;
         }
         default: {
@@ -175,7 +183,9 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: Workspace, extras:
       bodyWrapper.appendChild(failureLog);
 
       const start = Date.now();
-      testDir(statusLbl, failureLog, null, currentTestRunMonitor)
+      const executor = createThreadPoolExecutor(Math.max(1, args.env.workerProcessCount ?? 1));
+      testDir(statusLbl, failureLog, null, currentTestRunMonitor, executor)
+      .then(() => executor.wait())
       .catch((err) => {
         console.warn('Failed running tests', err)
       })
@@ -528,7 +538,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
         workspace.cachedFiles[activeFile].windows = states;
       }
       if (activeFile !== unsavedFileKey) {
-        const payload: WorkspaceFileMetadata = {
+        const payload: WorkspaceFileMetadata | undefined = states.length === 0 ? undefined : {
           windowStates: states,
         };
         const path = activeFile;

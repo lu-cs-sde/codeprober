@@ -64,6 +64,6 @@ public class Span {
 	}
 
 	public boolean containsLine(int line) {
-		return getStartLine() <= line && getEndLine() >= line;
+		return !isMeaningful() || (getStartLine() <= line && getEndLine() >= line);
 	}
 }

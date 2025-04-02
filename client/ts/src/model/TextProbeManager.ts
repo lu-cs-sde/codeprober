@@ -35,7 +35,7 @@ type HoverResult = {
 interface CompletionItem {
   label: string;
   insertText: string;
-  kind: number;
+  kind: number; // See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#completionItemKind
   sortText?: string;
 }
 interface TextProbeManager {
@@ -630,7 +630,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       return matchingNodes.map((node, nodeIndex) => {
         const type = node.result.label ?? node.result.type;
         const label = type.split('.').slice(-1)[0];
-        const ret = { kind: 3, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0') };
+        const ret = { kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0') };
         if (!duplicateTypes.has(type)) {
           return { label, insertText: label, ...ret};
         }
@@ -640,11 +640,6 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         const indexed = `${label}[${idx}]`;
         return { label: indexed, insertText: indexed, ...ret };
       });
-      // const types = new Set<string>(matchingNodes.map(loc => loc.result.label ?? loc.result.type));
-      // return [...types].sort().map(type => {
-      //   const label = type.split('.').slice(-1)[0];
-      //   return { label, insertText: label, kind: 3 };
-      // });
     }
     const completeProp = async (nodeType: string, nodeIndex: number | undefined, prerequisiteAttrs: string[], previousStepSpan: [number, number]) => {
       const parsingData = args.env.createParsingRequestData();
@@ -697,7 +692,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       }
       const zeroArgPropNames = new Set(props.properties.filter(prop => (prop.args?.length ?? 0) === 0).map(prop => prop.name));
       return [...zeroArgPropNames].sort().map(label => {
-        return { label, insertText: label, kind: 3 };
+        return { label, insertText: label, kind: 2 };
       });
     }
     const completeExpectedValue = async (nodeType: string, nodeIndex: number | undefined, attrNames: string[]) => {
@@ -730,7 +725,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         }
       }
       const cmp = evalPropertyBodyToString(attrEvalResult.body)
-      return [{ label: cmp, insertText: cmp, kind: 3 }];
+      return [{ label: cmp, insertText: cmp, kind: 15 }];
     };
 
     while ((match = reg.exec(lines[line])) !== null) {
@@ -810,57 +805,66 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       src: requestSrc,
     };
     const lines = knownSrc.split('\n');
+    const postLoopWaits: Promise<any>[] = [];
     for (let lineIdx = 0; lineIdx < lines.length; ++lineIdx) {
       const reg = createTypedProbeRegex();
-      let match: ReturnType<typeof reg['exec']>;
-      while ((match = reg.exec(lines[lineIdx])) != null) {
+      let outerMatch: ReturnType<typeof reg['exec']>;
+      while ((outerMatch = reg.exec(lines[lineIdx])) != null) {
+        const match = outerMatch;
         if (match.expectVal === undefined) {
           // Just a probe, no assertion, no need to check
           continue;
         }
-        const allNodes = await listNodes({
-          attrFilter: match.attrNames[0],
-          predicate: `this<:${match.nodeType}&@lineSpan~=${lineIdx+1}`,
-          zeroIndexedLine: lineIdx,
-          parsingData,
-        });
-        if (!allNodes?.length) {
-          ret.numFail++;
-          continue;
-        }
-        if (match.nodeIndex === undefined && allNodes.length !== 1) {
-          // Must have explicit index when >1 node
-          ++ret.numFail;
-          continue;
-        }
-        const locator = allNodes[match.nodeIndex ?? 0];
-        if (!locator) {
-          // Invalid index
-          ++ret.numFail;
-          continue;
-        }
+        const expectedValue = match.expectVal;
+        const handleMatch = async () => {
+          const allNodes = await listNodes({
+            attrFilter: match.attrNames[0],
+            predicate: `this<:${match.nodeType}&@lineSpan~=${lineIdx+1}`,
+            zeroIndexedLine: lineIdx,
+            parsingData,
+          });
+          if (!allNodes?.length) {
+            ret.numFail++;
+            return;
+          }
+          if (match.nodeIndex === undefined && allNodes.length !== 1) {
+            // Must have explicit index when >1 node
+            ++ret.numFail;
+            return;
+          }
+          const locator = allNodes[match.nodeIndex ?? 0];
+          if (!locator) {
+            // Invalid index
+            ++ret.numFail;
+            return;
+          }
 
-        // for (let i = 0; i < nodes.length; ++i) {
           const evalRes = await evaluatePropertyChain({ locator, propChain: match.attrNames, parsingData })
           if (evalRes === 'stopped') {
             // TODO is this a failure?
-            continue;
+            return;
           }
           if (isBrokenNodeChain(evalRes)) {
             ret.numFail++;
-            continue;
+            return;
           }
           const cmp = evalPropertyBodyToString(evalRes.body)
-          const rawComparisonSuccess = match.tilde ? cmp.includes(match.expectVal) : (cmp === match.expectVal);
+          const rawComparisonSuccess = match.tilde ? cmp.includes(expectedValue) : (cmp === expectedValue);
           const adjustedComparisonSuccsess = match.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
           if (adjustedComparisonSuccsess) {
             ret.numPass++;
           } else {
             ret.numFail++;
           }
-        // }
+        };
+        if (args.env.workerProcessCount !== undefined) {
+          postLoopWaits.push(handleMatch());
+        } else {
+          await handleMatch();
+        }
       }
     }
+    await Promise.all(postLoopWaits);
 
     return ret;
   };

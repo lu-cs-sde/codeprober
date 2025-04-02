@@ -32,6 +32,7 @@ interface ModalEnv {
   createJobId: (updateHandler: (data: AsyncRpcUpdate) => void) => JobId;
   getGlobalModalEnv: () => ModalEnv;
   minimize: (data: WindowStateDataProbe) => void;
+  workerProcessCount: number | undefined;
 }
 
 export { JobId }

@@ -49,6 +49,7 @@ public class RunWorkspaceTest {
 	int numFail = 0;
 	List<String> errMsgs = new ArrayList<>();
 	StdIoInterceptor interceptor;
+	final WorkspaceHandler workspaceHandler = new WorkspaceHandler();
 
 	private static boolean verbose = "true".equals(System.getProperty("cpr.verbose"));
 
@@ -76,8 +77,27 @@ public class RunWorkspaceTest {
 		return (rwt.numFail > 0) ? MergedResult.SOME_FAIL : MergedResult.ALL_PASS;
 	}
 
+	public static Pattern getTextProbePattern() {
+		return Pattern
+				.compile("\\[\\[(\\w+)(\\[\\d+\\])?((?:\\.\\w+)+)(!?)(~?)(?:=(((?!\\[\\[).)*))\\]\\](?!\\])");
+	}
+
+	public static int PATTERN_GROUP_NODETYPE = 1;
+	public static int PATTERN_GROUP_NODEINDEX = 2;
+	public static int PATTERN_GROUP_ATTRNAMES = 3;
+	public static int PATTERN_GROUP_EXCLAMATION = 4;
+	public static int PATTERN_GROUP_TILDE = 5;
+	public static int PATTERN_GROUP_EXPECTVAL= 6;
+
+//	final String nodeType = matcher.group(1);
+//	final String nodeIndex = matcher.group(2);
+//	final String rawAttrNames = matcher.group(3);
+//	final boolean exclamation = "!".equals(matcher.group(4));
+//	final boolean tilde = "~".equals(matcher.group(5));
+//	final String expectVal = matcher.group(6);
+
 	private void runDirectory(String workspacePath) {
-		final ListWorkspaceDirectoryRes res = WorkspaceHandler
+		final ListWorkspaceDirectoryRes res = workspaceHandler
 				.handleListWorkspaceDirectory(new ListWorkspaceDirectoryReq(workspacePath));
 		if (res.entries == null) {
 			System.err.println("Invalid path in workspace: " + workspacePath);
@@ -96,15 +116,14 @@ public class RunWorkspaceTest {
 				final int startNumFail = numFail;
 				errMsgs.clear();
 				final String fullPath = parentPath + e.asFile();
-				final String contents = WorkspaceHandler
+				final String contents = workspaceHandler
 						.handleGetWorkspaceFile(new GetWorkspaceFileReq(fullPath)).content;
 				if (contents == null) {
 					System.err.println("Invalid file in workspace: " + fullPath);
 					break;
 				}
 
-				final Pattern textProbePattern = Pattern
-						.compile("\\[\\[(\\w+)(\\[\\d+\\])?((?:\\.\\w+)+)(!?)(~?)(?:=(((?!\\[\\[).)*))\\]\\](?!\\])");
+				final Pattern textProbePattern = getTextProbePattern();
 
 				final ParsingRequestData prd = new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD,
 						AstCacheStrategy.PARTIAL, ParsingSource.fromText(contents + "\n"), null, "");
@@ -115,12 +134,12 @@ public class RunWorkspaceTest {
 					while (matcher.find()) {
 //					      const [full, nodeType, attrName, exclamation, tilde, expectVal] = match;
 //						final String full = matcher.group(0);
-						final String nodeType = matcher.group(1);
-						final String nodeIndex = matcher.group(2);
-						final String rawAttrNames = matcher.group(3);
-						final boolean exclamation = "!".equals(matcher.group(4));
-						final boolean tilde = "~".equals(matcher.group(5));
-						final String expectVal = matcher.group(6);
+						final String nodeType = matcher.group(PATTERN_GROUP_NODETYPE);
+						final String nodeIndex = matcher.group(PATTERN_GROUP_NODEINDEX);
+						final String rawAttrNames = matcher.group(PATTERN_GROUP_ATTRNAMES);
+						final boolean exclamation = "!".equals(matcher.group(PATTERN_GROUP_EXCLAMATION));
+						final boolean tilde = "~".equals(matcher.group(PATTERN_GROUP_TILDE));
+						final String expectVal = matcher.group(PATTERN_GROUP_EXPECTVAL);
 
 						final String[] attrNames = rawAttrNames.substring(1).split("\\.");
 //						System.out.println("Matched @ " + matcher.start() + ": " + full + " ;; " + nodeType + ";; "
@@ -130,7 +149,7 @@ public class RunWorkspaceTest {
 						final int fLineIdx = lineIdx;
 						interceptor.install();
 						try {
-							final List<NodeLocator> listing = listNodes(prd, fLineIdx, attrNames[0],
+							final List<NodeLocator> listing = listNodes(requestHandler, prd, fLineIdx, attrNames[0],
 									String.format("this<:%s&@lineSpan~=%d", nodeType, fLineIdx + 1));
 							if (listing == null || listing.isEmpty()) {
 								++numFail;
@@ -173,7 +192,7 @@ public class RunWorkspaceTest {
 							final String actual;
 							interceptor.install();
 							try {
-								actual = evaluateProperty(prd, subject, attrNames);
+								actual = evaluateProperty(requestHandler, prd, subject, attrNames);
 							} finally {
 								interceptor.restore();
 							}
@@ -190,9 +209,9 @@ public class RunWorkspaceTest {
 									errMsgs.add("    Actual: " + (exclamation ? "    " : "") + actual);
 								}
 							} else {
-								// An error was already logged down in evaluateProperty, no need to do anthing
+								++numFail;
+								errMsgs.add("Invalid attribute chain");
 							}
-
 						}
 					}
 				}
@@ -212,13 +231,12 @@ public class RunWorkspaceTest {
 		}
 	}
 
-	private ClientRequest constructMessage(JSONObject query) {
+	private static ClientRequest constructMessage(JSONObject query) {
 		return new ClientRequest(query, obj -> {
 		}, new AtomicBoolean(true));
 	}
 
-	public List<NodeLocator> listNodes(ParsingRequestData prd, int line, String attrPredicate, String tailPredicate) {
-		System.out.println("Listing on line " + line + " w/ attrPred: " + attrPredicate + ", tail:" + tailPredicate);
+	public static List<NodeLocator> listNodes(JsonRequestHandler requestHandler, ParsingRequestData prd, int line, String attrPredicate, String tailPredicate) {
 		final TALStep rootNode = new TALStep("<ROOT>", null, ((line + 1) << 12) + 1, ((line + 1) << 12) + 4095, 0);
 		final EvaluatePropertyRes result = EvaluatePropertyRes.fromJSON(requestHandler.handleRequest( //
 				constructMessage(new EvaluatePropertyReq( //
@@ -244,7 +262,7 @@ public class RunWorkspaceTest {
 				.collect(Collectors.toList());
 	}
 
-	private NodeLocator evaluateReferenceProperty(ParsingRequestData prd, NodeLocator locator, String attrName) {
+	private static NodeLocator evaluateReferenceProperty(JsonRequestHandler requestHandler, ParsingRequestData prd, NodeLocator locator, String attrName) {
 		final EvaluatePropertyRes result = EvaluatePropertyRes.fromJSON(requestHandler.handleRequest( //
 				constructMessage(new EvaluatePropertyReq( //
 						prd, locator, //
@@ -261,13 +279,11 @@ public class RunWorkspaceTest {
 		return body.get(0).asNode();
 	}
 
-	public String evaluateProperty(ParsingRequestData prd, NodeLocator locator, String[] attrChain) {
+	public static String evaluateProperty(JsonRequestHandler requestHandler, ParsingRequestData prd, NodeLocator locator, String[] attrChain) {
 		if (attrChain.length > 1) {
 			for (int intermediateIdx = 0; intermediateIdx < attrChain.length - 1; intermediateIdx++) {
-				locator = evaluateReferenceProperty(prd, locator, attrChain[intermediateIdx]);
+				locator = evaluateReferenceProperty(requestHandler, prd, locator, attrChain[intermediateIdx]);
 				if (locator == null) {
-					++numFail;
-					errMsgs.add("Invalid attribute chain");
 					return null;
 				}
 			}

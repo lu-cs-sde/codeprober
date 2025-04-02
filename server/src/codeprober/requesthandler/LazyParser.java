@@ -43,7 +43,7 @@ public interface LazyParser {
 			return src.asText();
 		}
 		case workspacePath: {
-			final GetWorkspaceFileRes res = WorkspaceHandler
+			final GetWorkspaceFileRes res = WorkspaceHandler.getDefault()
 					.handleGetWorkspaceFile(new GetWorkspaceFileReq(src.asWorkspacePath()));
 			if (res.content == null) {
 				System.err.println("Tried parsing non-existing workspace path '" + src.asWorkspacePath() + "'");

@@ -2429,7 +2429,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                     var _a, _b;
                     const type = (_a = node.result.label) !== null && _a !== void 0 ? _a : node.result.type;
                     const label = type.split('.').slice(-1)[0];
-                    const ret = { kind: 3, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0') };
+                    const ret = { kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0') };
                     if (!duplicateTypes.has(type)) {
                         return { label, insertText: label, ...ret };
                     }
@@ -2438,11 +2438,6 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                     const indexed = `${label}[${idx}]`;
                     return { label: indexed, insertText: indexed, ...ret };
                 });
-                // const types = new Set<string>(matchingNodes.map(loc => loc.result.label ?? loc.result.type));
-                // return [...types].sort().map(type => {
-                //   const label = type.split('.').slice(-1)[0];
-                //   return { label, insertText: label, kind: 3 };
-                // });
             };
             const completeProp = async (nodeType, nodeIndex, prerequisiteAttrs, previousStepSpan) => {
                 var _a;
@@ -2494,7 +2489,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                 }
                 const zeroArgPropNames = new Set(props.properties.filter(prop => { var _a, _b; return ((_b = (_a = prop.args) === null || _a === void 0 ? void 0 : _a.length) !== null && _b !== void 0 ? _b : 0) === 0; }).map(prop => prop.name));
                 return [...zeroArgPropNames].sort().map(label => {
-                    return { label, insertText: label, kind: 3 };
+                    return { label, insertText: label, kind: 2 };
                 });
             };
             const completeExpectedValue = async (nodeType, nodeIndex, attrNames) => {
@@ -2528,7 +2523,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                     }
                 }
                 const cmp = evalPropertyBodyToString(attrEvalResult.body);
-                return [{ label: cmp, insertText: cmp, kind: 3 }];
+                return [{ label: cmp, insertText: cmp, kind: 15 }];
             };
             while ((match = reg.exec(lines[line])) !== null) {
                 if (match.index >= column) {
@@ -2594,7 +2589,6 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
             return null;
         };
         const checkFile = async (requestSrc, knownSrc) => {
-            var _a;
             const ret = {
                 numPass: 0,
                 numFail: 0,
@@ -2607,57 +2601,68 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
                 src: requestSrc,
             };
             const lines = knownSrc.split('\n');
+            const postLoopWaits = [];
             for (let lineIdx = 0; lineIdx < lines.length; ++lineIdx) {
                 const reg = createTypedProbeRegex();
-                let match;
-                while ((match = reg.exec(lines[lineIdx])) != null) {
+                let outerMatch;
+                while ((outerMatch = reg.exec(lines[lineIdx])) != null) {
+                    const match = outerMatch;
                     if (match.expectVal === undefined) {
                         // Just a probe, no assertion, no need to check
                         continue;
                     }
-                    const allNodes = await listNodes({
-                        attrFilter: match.attrNames[0],
-                        predicate: `this<:${match.nodeType}&@lineSpan~=${lineIdx + 1}`,
-                        zeroIndexedLine: lineIdx,
-                        parsingData,
-                    });
-                    if (!(allNodes === null || allNodes === void 0 ? void 0 : allNodes.length)) {
-                        ret.numFail++;
-                        continue;
-                    }
-                    if (match.nodeIndex === undefined && allNodes.length !== 1) {
-                        // Must have explicit index when >1 node
-                        ++ret.numFail;
-                        continue;
-                    }
-                    const locator = allNodes[(_a = match.nodeIndex) !== null && _a !== void 0 ? _a : 0];
-                    if (!locator) {
-                        // Invalid index
-                        ++ret.numFail;
-                        continue;
-                    }
-                    // for (let i = 0; i < nodes.length; ++i) {
-                    const evalRes = await evaluatePropertyChain({ locator, propChain: match.attrNames, parsingData });
-                    if (evalRes === 'stopped') {
-                        // TODO is this a failure?
-                        continue;
-                    }
-                    if (isBrokenNodeChain(evalRes)) {
-                        ret.numFail++;
-                        continue;
-                    }
-                    const cmp = evalPropertyBodyToString(evalRes.body);
-                    const rawComparisonSuccess = match.tilde ? cmp.includes(match.expectVal) : (cmp === match.expectVal);
-                    const adjustedComparisonSuccsess = match.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
-                    if (adjustedComparisonSuccsess) {
-                        ret.numPass++;
+                    const expectedValue = match.expectVal;
+                    const handleMatch = async () => {
+                        var _a;
+                        const allNodes = await listNodes({
+                            attrFilter: match.attrNames[0],
+                            predicate: `this<:${match.nodeType}&@lineSpan~=${lineIdx + 1}`,
+                            zeroIndexedLine: lineIdx,
+                            parsingData,
+                        });
+                        if (!(allNodes === null || allNodes === void 0 ? void 0 : allNodes.length)) {
+                            ret.numFail++;
+                            return;
+                        }
+                        if (match.nodeIndex === undefined && allNodes.length !== 1) {
+                            // Must have explicit index when >1 node
+                            ++ret.numFail;
+                            return;
+                        }
+                        const locator = allNodes[(_a = match.nodeIndex) !== null && _a !== void 0 ? _a : 0];
+                        if (!locator) {
+                            // Invalid index
+                            ++ret.numFail;
+                            return;
+                        }
+                        const evalRes = await evaluatePropertyChain({ locator, propChain: match.attrNames, parsingData });
+                        if (evalRes === 'stopped') {
+                            // TODO is this a failure?
+                            return;
+                        }
+                        if (isBrokenNodeChain(evalRes)) {
+                            ret.numFail++;
+                            return;
+                        }
+                        const cmp = evalPropertyBodyToString(evalRes.body);
+                        const rawComparisonSuccess = match.tilde ? cmp.includes(expectedValue) : (cmp === expectedValue);
+                        const adjustedComparisonSuccsess = match.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
+                        if (adjustedComparisonSuccsess) {
+                            ret.numPass++;
+                        }
+                        else {
+                            ret.numFail++;
+                        }
+                    };
+                    if (args.env.workerProcessCount !== undefined) {
+                        postLoopWaits.push(handleMatch());
                     }
                     else {
-                        ret.numFail++;
+                        await handleMatch();
                     }
-                    // }
                 }
             }
+            await Promise.all(postLoopWaits);
             return ret;
         };
         return { hover, complete, checkFile };
@@ -15405,7 +15410,66 @@ define("ui/configureCheckboxWithHiddenCheckbox", ["require", "exports"], functio
     };
     exports.default = configureCheckboxWithHiddenCheckbox;
 });
-define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create/createModalTitle", "ui/create/showWindow", "ui/UIElements"], function (require, exports, hacks_6, settings_10, createModalTitle_14, showWindow_11, UIElements_4) {
+define("model/ThreadPoolExecutor", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createThreadPoolExecutor = void 0;
+    const createThreadPoolExecutor = (limitThreads) => {
+        let activeTasks = 0;
+        let cachedSlotWaiter = null;
+        let cachedSlotResolver = () => { };
+        const waitForSlot = async () => {
+            if (activeTasks < limitThreads) {
+                ++activeTasks;
+                return;
+            }
+            if (!cachedSlotWaiter) {
+                let preResolved = false;
+                cachedSlotResolver = () => {
+                    preResolved = true;
+                };
+                cachedSlotWaiter = new Promise((resolve => {
+                    if (preResolved) {
+                        resolve('');
+                    }
+                    else {
+                        cachedSlotResolver = () => resolve('');
+                    }
+                })).then(() => {
+                    cachedSlotWaiter = null;
+                });
+            }
+            return cachedSlotWaiter.then(waitForSlot);
+        };
+        const submittedTasks = {};
+        let taskIdGen = 0;
+        const submit = async (func) => {
+            const taskId = `t${taskIdGen++}`;
+            submittedTasks[taskId] = (async () => {
+                await waitForSlot();
+                try {
+                    await func();
+                }
+                catch (e) {
+                    console.warn('Failed task', taskId, ':', e);
+                }
+                --activeTasks;
+                delete submittedTasks[taskId];
+                cachedSlotResolver();
+            })();
+        };
+        const wait = async () => {
+            const remaining = Object.values(submittedTasks);
+            if (remaining.length === 0) {
+                return;
+            }
+            return Promise.all(remaining).then(wait);
+        };
+        return { submit, wait };
+    };
+    exports.createThreadPoolExecutor = createThreadPoolExecutor;
+});
+define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create/createModalTitle", "ui/create/showWindow", "ui/UIElements", "model/ThreadPoolExecutor"], function (require, exports, hacks_6, settings_10, createModalTitle_14, showWindow_11, UIElements_4, ThreadPoolExecutor_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.initWorkspace = void 0;
@@ -15419,7 +15483,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
         const testBtn = uiElements.workspaceTestRunner;
         let numPass = 0;
         let numFail = 0;
-        const testDir = async (statusLbl, failureLog, path = null, testRunMonitor) => {
+        const testDir = async (statusLbl, failureLog, path = null, testRunMonitor, executor) => {
             const contents = await getDirContents(workspace, path !== null && path !== void 0 ? path : '');
             if (!contents) {
                 return;
@@ -15432,38 +15496,42 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
                 }
                 switch (entry.type) {
                     case 'directory': {
-                        await testDir(statusLbl, failureLog, fullPath, testRunMonitor);
+                        // await testDir(statusLbl, failureLog, fullPath, testRunMonitor, executor);
+                        executor.submit(() => testDir(statusLbl, failureLog, fullPath, testRunMonitor, executor));
                         break;
                     }
                     case 'file': {
-                        const entry = await getFileContents(workspace, fullPath);
-                        if (entry == null) {
-                            continue;
-                        }
-                        if (testRunMonitor.shouldStop) {
-                            return;
-                        }
-                        const res = await args.textProbeManager.checkFile(
-                        // { type: 'text', value: entry.contents },
-                        { type: 'workspacePath', value: fullPath }, entry.contents);
-                        if (res === null) {
-                            continue;
-                        }
-                        numPass += res.numPass;
-                        numFail += res.numFail;
-                        if (res.numFail) {
-                            const logEntry = document.createElement('div');
-                            logEntry.classList.add('workspace-test-failure-log-entry');
-                            logEntry.innerText = `${res.numFail} failure${res.numFail > 1 ? 's' : ''} in ${fullPath}`;
-                            failureLog.appendChild(logEntry);
-                            failureLog.style.display = 'flex';
-                        }
-                        workspace.knownTestResults[fullPath] = res;
-                        statusLbl.innerText = `Running.. ${numPass} pass, ${numFail} fail`;
-                        const row = workspace.visibleRows[fullPath];
-                        if (row) {
-                            row.updateTestStatus(res);
-                        }
+                        const checkFile = async () => {
+                            const entry = await getFileContents(workspace, fullPath);
+                            if (entry == null) {
+                                return;
+                            }
+                            if (testRunMonitor.shouldStop) {
+                                return;
+                            }
+                            const res = await args.textProbeManager.checkFile(
+                            // { type: 'text', value: entry.contents },
+                            { type: 'workspacePath', value: fullPath }, entry.contents);
+                            if (res === null) {
+                                return;
+                            }
+                            numPass += res.numPass;
+                            numFail += res.numFail;
+                            if (res.numFail) {
+                                const logEntry = document.createElement('div');
+                                logEntry.classList.add('workspace-test-failure-log-entry');
+                                logEntry.innerText = `${res.numFail} failure${res.numFail > 1 ? 's' : ''} in ${fullPath}`;
+                                failureLog.appendChild(logEntry);
+                                failureLog.style.display = 'flex';
+                            }
+                            workspace.knownTestResults[fullPath] = res;
+                            statusLbl.innerText = `Running.. ${numPass} pass, ${numFail} fail`;
+                            const row = workspace.visibleRows[fullPath];
+                            if (row) {
+                                row.updateTestStatus(res);
+                            }
+                        };
+                        executor.submit(checkFile);
                         break;
                     }
                     default: {
@@ -15502,6 +15570,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
     `,
             onForceClose: cleanup,
             render: (root, info) => {
+                var _a;
                 while (root.firstChild) {
                     root.firstChild.remove();
                 }
@@ -15524,7 +15593,9 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
                 failureLog.classList.add('workspace-test-failure-log');
                 bodyWrapper.appendChild(failureLog);
                 const start = Date.now();
-                testDir(statusLbl, failureLog, null, currentTestRunMonitor)
+                const executor = (0, ThreadPoolExecutor_1.createThreadPoolExecutor)(Math.max(1, (_a = args.env.workerProcessCount) !== null && _a !== void 0 ? _a : 1));
+                testDir(statusLbl, failureLog, null, currentTestRunMonitor, executor)
+                    .then(() => executor.wait())
                     .catch((err) => {
                     console.warn('Failed running tests', err);
                 })
@@ -15844,7 +15915,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
                     workspace.cachedFiles[activeFile].windows = states;
                 }
                 if (activeFile !== unsavedFileKey) {
-                    const payload = {
+                    const payload = states.length === 0 ? undefined : {
                         windowStates: states,
                     };
                     const path = activeFile;
@@ -16037,9 +16108,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         settings_11.default.set({});
         location.reload();
     };
-    // setTimeout(() => {
-    //   console.log('d3:', d3)
-    // }, 1000)
     const doMain = (wsPort) => {
         (0, installASTEditor_1.default)();
         if (settings_11.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
@@ -16048,6 +16116,15 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         if (!settings_11.default.shouldEnableTesting()) {
             uiElements.showTests.style.display = 'none';
         }
+        window.addEventListener("keydown", function (event) {
+            console.log('keydown:', event.ctrlKey, event.metaKey, ':', event.key);
+            const platform = this.navigator.platform || '';
+            const isMacIsh = platform.startsWith("Mac") || platform === "iPhone";
+            if ((isMacIsh ? event.metaKey : event.ctrlKey) && event.key === "p") {
+                event.preventDefault();
+                alert("Printing is disabled on this page.");
+            }
+        });
         let getLocalState = () => { var _a; return (_a = settings_11.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
         let basicHighlight = null;
         const stickyHighlights = {};
@@ -16157,6 +16234,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             const initHandler = (info) => {
                 const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile } = info;
                 console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
+                if ((workerProcessCount !== null && workerProcessCount !== void 0 ? workerProcessCount : 1) <= 1) {
+                    uiElements.displayWorkerStatusButton.style.display = 'none';
+                }
                 rootElem.style.display = "grid";
                 let shouldTryInitializingWorkspace = false;
                 if (backingFile) {
@@ -16494,7 +16574,8 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             showDiagnostics: data.showDiagnostics
                         });
                         uiElements.minimizedProbeArea.appendChild(miniProbe.ui);
-                    }
+                    },
+                    workerProcessCount,
                 };
                 modalEnvHolder.setEnv(modalEnv);
                 modalEnv.onChangeListeners['reeval-tests-on-server-refresh'] = (_, reason) => {

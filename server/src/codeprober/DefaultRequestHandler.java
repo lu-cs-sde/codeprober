@@ -303,31 +303,32 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 				@Override
 				protected GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {
-					return WorkspaceHandler.handleGetWorkspaceFile(req);
+					return WorkspaceHandler.getDefault().handleGetWorkspaceFile(req);
 				};
 
 				@Override
 				protected ListWorkspaceDirectoryRes handleListWorkspaceDirectory(ListWorkspaceDirectoryReq req) {
-					return WorkspaceHandler.handleListWorkspaceDirectory(req);
+					return WorkspaceHandler.getDefault().handleListWorkspaceDirectory(req);
 				};
 
 				@Override
 				protected PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
-					return WorkspaceHandler.handlePutWorkspaceContent(req);
+					return WorkspaceHandler.getDefault().handlePutWorkspaceContent(req);
 				};
 
 				@Override
 				protected PutWorkspaceMetadataRes handlePutWorkspaceMetadata(PutWorkspaceMetadataReq req) {
-					return WorkspaceHandler.handlePutWorkspaceMetadata(req);
+					return WorkspaceHandler.getDefault().handlePutWorkspaceMetadata(req);
 				};
 
 				@Override
 				protected RenameWorkspacePathRes handleRenameWorkspacePath(RenameWorkspacePathReq req) {
-					return WorkspaceHandler.handleRenameWorkspacePath(req);
+					return WorkspaceHandler.getDefault().handleRenameWorkspacePath(req);
 				};
 
+				@Override
 				protected UnlinkWorkspacePathRes handleUnlinkWorkspacePath(UnlinkWorkspacePathReq req) {
-					return WorkspaceHandler.handleUnlinkWorkspacePath(req);
+					return WorkspaceHandler.getDefault().handleUnlinkWorkspacePath(req);
 
 				};
 			}.handle(request.data);
@@ -370,7 +371,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			if (!p1Path.equals(p2Path)) {
 				return false;
 			}
-			final File wsFile = WorkspaceHandler.getWorkspaceFile(p1Path);
+			final File wsFile = WorkspaceHandler.getDefault().getWorkspaceFile(p1Path);
 			if (wsFile == null) {
 				// Both point to the same (nonexisting) file -> equal
 				return true;
@@ -422,7 +423,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				return createTmpFile.apply(inputSource.asText(), tmpFileSuffix);
 			}
 			case workspacePath: {
-				final File ret = WorkspaceHandler.getWorkspaceFile(inputSource.asWorkspacePath());
+				final File ret = WorkspaceHandler.getDefault().getWorkspaceFile(inputSource.asWorkspacePath());
 				if (ret != null) {
 					lastParsedWorkspaceInput = statFile(ret);
 				}

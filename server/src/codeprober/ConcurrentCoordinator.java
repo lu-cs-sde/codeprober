@@ -39,6 +39,7 @@ import codeprober.protocol.data.TopRequestReq;
 import codeprober.protocol.data.TopRequestRes;
 import codeprober.protocol.data.UnsubscribeFromWorkerStatusReq;
 import codeprober.protocol.data.UnsubscribeFromWorkerStatusRes;
+import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.rpc.JsonRequestHandler;
 
 public class ConcurrentCoordinator implements JsonRequestHandler {
@@ -275,6 +276,10 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 		public Worker(String jarPath, String[] args) throws IOException {
 			final List<String> cmd = new ArrayList<>();
 			cmd.add("java");
+			final String wsSpec = System.getProperty(WorkspaceHandler.WORKSPACE_SYSTEM_PROPERTY_KEY);
+			if (wsSpec != null) {
+				cmd.add(String.format("-D%s=%s", WorkspaceHandler.WORKSPACE_SYSTEM_PROPERTY_KEY, wsSpec));
+			}
 			cmd.add("-jar");
 
 			try {
