@@ -137,7 +137,6 @@ public class WorkspaceHandler {
 				System.exit(1);
 			}
 		}
-
 		if (!workspaceRootFile.exists()) {
 			if (!workspaceRootFile.getParentFile().exists()) {
 				// If both the parent and child path are missing, there is a decent chance of

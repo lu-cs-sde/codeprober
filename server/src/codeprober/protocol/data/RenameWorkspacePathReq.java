@@ -11,6 +11,14 @@ public class RenameWorkspacePathReq implements codeprober.util.JsonUtil.ToJsonab
     this.srcPath = srcPath;
     this.dstPath = dstPath;
   }
+  public RenameWorkspacePathReq(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public RenameWorkspacePathReq(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = "RenameWorkspacePath";
+    this.srcPath = src.readUTF();
+    this.dstPath = src.readUTF();
+  }
 
   public static RenameWorkspacePathReq fromJSON(JSONObject obj) {
     codeprober.util.JsonUtil.requireString(obj.getString("type"), "RenameWorkspacePath");
@@ -25,5 +33,13 @@ public class RenameWorkspacePathReq implements codeprober.util.JsonUtil.ToJsonab
     _ret.put("srcPath", srcPath);
     _ret.put("dstPath", dstPath);
     return _ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    
+    dst.writeUTF(srcPath);
+    dst.writeUTF(dstPath);
   }
 }

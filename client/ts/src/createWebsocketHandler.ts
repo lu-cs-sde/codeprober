@@ -297,7 +297,6 @@ const createLocalRequestHandler = (
           clearTimeout(cleanupTimer);
           return rej(e);
         }
-        console.log('attemptFetch got', fetchResult)
         didReceiveAtLeastOneMessage = true;
         res(fetchResult);
       } catch (e) {
@@ -316,9 +315,7 @@ const createLocalRequestHandler = (
   const initReq: WsPutInitReq = ({ type: 'wsput:init', session });
   sendRpc(initReq)
     .then((init: WsPutInitRes) => {
-      console.log('got init response')
       if (messageHandlers['init']) {
-        console.log('call handler w/ info..', init.info)
         messageHandlers['init'](init.info);
       } else {
         console.warn('Got init message, but no handler for it')

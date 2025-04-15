@@ -8,12 +8,28 @@ public class WorkspaceEntry implements codeprober.util.JsonUtil.ToJsonable {
     file,
     directory,
   }
+  private static final Type[] typeValues = Type.values();
 
   public final Type type;
   public final Object value;
   private WorkspaceEntry(Type type, Object value) {
     this.type = type;
     this.value = value;
+  }
+  public WorkspaceEntry(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public WorkspaceEntry(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = typeValues[src.readInt()];
+    switch (this.type) {
+    case file:
+        this.value = src.readUTF();
+        break;
+    case directory:
+    default:
+        this.value = src.readUTF();
+        break;
+    }
   }
   public static WorkspaceEntry fromFile(String val) { return new WorkspaceEntry(Type.file, val); }
   public static WorkspaceEntry fromDirectory(String val) { return new WorkspaceEntry(Type.directory, val); }
@@ -58,5 +74,20 @@ public class WorkspaceEntry implements codeprober.util.JsonUtil.ToJsonable {
       break;
     }
     return ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(type.ordinal());
+    switch (type) {
+    case file:
+      dst.writeUTF(((String)value));
+      break;
+    case directory:
+    default:
+      dst.writeUTF(((String)value));
+      break;
+    }
   }
 }

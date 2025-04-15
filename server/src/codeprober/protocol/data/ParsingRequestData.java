@@ -21,7 +21,7 @@ public class ParsingRequestData implements codeprober.util.JsonUtil.ToJsonable {
   public ParsingRequestData(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
     this.posRecovery = codeprober.protocol.PositionRecoveryStrategy.values()[src.readInt()];
     this.cache = codeprober.protocol.AstCacheStrategy.values()[src.readInt()];
-    this.text = src.readUTF();
+    this.src = new ParsingSource(src);
     this.mainArgs = src.readBoolean() ? codeprober.util.JsonUtil.<String>readDataArr(src, () -> src.readUTF()) : null;
     this.tmpSuffix = src.readUTF();
   }
@@ -50,7 +50,7 @@ public class ParsingRequestData implements codeprober.util.JsonUtil.ToJsonable {
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
     dst.writeInt(posRecovery.ordinal());
     dst.writeInt(cache.ordinal());
-    dst.writeUTF(text);
+    src.writeTo(dst);
     if (mainArgs != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<String>writeDataArr(dst, mainArgs, ent -> dst.writeUTF(ent));; } else { dst.writeBoolean(false); }
     dst.writeUTF(tmpSuffix);
   }

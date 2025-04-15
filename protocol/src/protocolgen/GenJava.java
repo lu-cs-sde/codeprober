@@ -14,7 +14,6 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -68,18 +67,16 @@ public class GenJava {
 		public final WriteGenerator genWriteToJson;
 		public final BiFunction<String, String, String> genReadFromDataStream;
 		public final WriteGenerator genWriteToDataStream;
-		public final BiConsumer<String, String> genCompareTo;
 
 		public GeneratedType(String name, FieldKind kind, BiFunction<String, String, String> genReadFromJsonObj,
 				WriteGenerator genWriteToJson, BiFunction<String, String, String> genReadFromDataStream,
-				WriteGenerator genWriteToDataStream, BiConsumer<String, String> genCompareTo) {
+				WriteGenerator genWriteToDataStream) {
 			this.name = name;
 			this.kind = kind;
 			this.genReadFromJsonObj = genReadFromJsonObj;
 			this.genWriteToJson = genWriteToJson;
 			this.genReadFromDataStream = genReadFromDataStream;
 			this.genWriteToDataStream = genWriteToDataStream;
-			this.genCompareTo = genCompareTo;
 		}
 
 		public String getBoxedName() {
@@ -174,12 +171,10 @@ public class GenJava {
 	private static class UnionMember {
 		public final String name;
 		public final Object value;
-//		private final BiFunction<String, String, String> genCompareTo;
 
 		public UnionMember(String name, Object value) {
 			this.name = name;
 			this.value = value;
-//			this.genCompareTo = genCompareTo;
 		}
 	}
 
@@ -325,9 +320,6 @@ public class GenJava {
 
 			println.accept("    }");
 			println.accept("    return ret;");
-			println.accept("  }");
-			println.accept("  public int compareTo(" + getTypeName() + " other) {");
-			println.accept("    if (type != other.type) { return Integer.compare(type.ordinal, other.type.ordinal); }");
 			println.accept("  }");
 			println.accept("  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {");
 			println.accept("    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));");
@@ -757,29 +749,25 @@ public class GenJava {
 						(obj, field) -> obj + ".getString(" + field + ")",
 						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
 						(obj, field) -> obj + ".readUTF()",
-						(obj, field, val) -> String.format("%s.writeUTF(%s);", obj, val),
-						(a, b) -> String.format("%s.compareTo(%s)", a, b));
+						(obj, field, val) -> String.format("%s.writeUTF(%s);", obj, val));
 			} else if (clazz == Integer.class) {
 				return new GeneratedType("int", FieldKind.PRIMITIVE, //
 						(obj, field) -> obj + ".getInt(" + field + ")", //
 						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
 						(obj, field) -> obj + ".readInt()",
-						(obj, field, val) -> String.format("%s.writeInt(%s);", obj, val),
-						(a, b) -> String.format("Integer.compare(%s, %s)", a, b));
+						(obj, field, val) -> String.format("%s.writeInt(%s);", obj, val));
 			} else if (clazz == Long.class) {
 				return new GeneratedType("long", FieldKind.PRIMITIVE, //
 						(obj, field) -> obj + ".getLong(" + field + ")", //
 						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
 						(obj, field) -> obj + ".readLong()",
-						(obj, field, val) -> String.format("%s.writeLong(%s);", obj, val),
-						(a, b) -> String.format("Long.compare(%s, %s)", a, b));
+						(obj, field, val) -> String.format("%s.writeLong(%s);", obj, val));
 			} else if (clazz == Boolean.class) {
 				return new GeneratedType("boolean", FieldKind.PRIMITIVE,
 						(obj, field) -> obj + ".getBoolean(" + field + ")", //
 						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
 						(obj, field) -> obj + ".readBoolean()",
-						(obj, field, val) -> String.format("%s.writeBoolean(%s);", obj, val),
-						(a, b) -> String.format("Boolean.compare(%s, %s)", a, b));
+						(obj, field, val) -> String.format("%s.writeBoolean(%s);", obj, val));
 			} else if (clazz == Void.class) {
 				System.err.println("?? When is this used?");
 				Thread.dumpStack();
@@ -802,15 +790,13 @@ public class GenJava {
 						(obj, field) -> obj + ".getJSONObject(" + field + ")", //
 						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
 						(obj, field) -> "new org.json.JSONObject(" + obj+ ".readUTF())",
-						(obj, field, val) -> String.format("%s.writeUTF(%s.toString());", obj, val),
-						(a, b) -> String.format("%s.toString().compareTo(%s.toString())", a, b));
+						(obj, field, val) -> String.format("%s.writeUTF(%s.toString());", obj, val));
 			} else if (clazz.isEnum()) {
 				return new GeneratedType(clazz.getName(), FieldKind.ENUM,
 						(obj, field) -> clazz.getName() + ".parseFromJson(" + obj + ".getString(" + field + "))", //
 						(obj, field, val) -> String.format("%s.put(%s, %s.name());", obj, field, val),
 						(obj, field) -> clazz.getName() + ".values()[" + obj + ".readInt()]",
-						(obj, field, val) -> String.format("%s.writeInt(%s.ordinal());", obj, val),
-						(a, b) -> String.format("Integer.compare(%s.ordinal, %s.ordinal)", a, b));
+						(obj, field, val) -> String.format("%s.writeInt(%s.ordinal());", obj, val));
 			} else {
 				if (StreamableUnion.class.isAssignableFrom(clazz)) {
 					final RequestedType req = new UnionRequestedType((StreamableUnion) clazz.newInstance());
@@ -819,8 +805,7 @@ public class GenJava {
 							(obj, field) -> req.getTypeName() + ".fromJSON(" + obj + ".getJSONObject(" + field + "))", //
 							(obj, field, val) -> String.format("%s.put(%s, %s.toJSON());", obj, field, val),
 							(obj, field) -> String.format("new %s(%s)", req.getTypeName(), obj),
-							(obj, field, val) -> String.format("%s.writeTo(%s);", val, obj),
-							(a, b) -> String.format("%s.compareTo(%s)", a, b));
+							(obj, field, val) -> String.format("%s.writeTo(%s);", val, obj));
 
 				} else if (Streamable.class.isAssignableFrom(clazz)) {
 					requestedTypes.add(new NormalRequestedType((Streamable) clazz.newInstance()));
@@ -829,8 +814,7 @@ public class GenJava {
 									+ "))", //
 							(obj, field, val) -> String.format("%s.put(%s, %s.toJSON());", obj, field, val),
 							(obj, field) -> String.format("new %s(%s)", clazz.getSimpleName(), obj),
-							(obj, field, val) -> String.format("%s.writeTo(%s);", val, obj),
-							(a, b) -> String.format("%s.compareTo(%s)", a, b));
+							(obj, field, val) -> String.format("%s.writeTo(%s);", val, obj));
 				} else {
 					throw new Exception("Invalid class " + clazz);
 				}
@@ -841,8 +825,7 @@ public class GenJava {
 					(obj, field) -> "codeprober.util.JsonUtil.requireString(" + obj + ".getString(" + field + "), \""
 							+ rawRef + "\")", //
 					(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, rawRef.toString()),
-					(obj, field) -> "\"" + rawRef + "\"", (obj, field, val) -> "",
-					(a, b) -> String.format("%s.compareTo(%s)", a, b));
+					(obj, field) -> "\"" + rawRef + "\"", (obj, field, val) -> "");
 //			System.out.print("\"" + val + "\"");
 		} else if (rawRef instanceof StreamableUnion) {
 			final RequestedType req = new UnionRequestedType((StreamableUnion) rawRef);
@@ -851,8 +834,7 @@ public class GenJava {
 					(obj, field) -> req.getTypeName() + ".fromJSON(" + obj + ".getJSONObject(" + field + "))", //
 					(obj, field, val) -> String.format("%s.put(%s, %s.toJSON());", obj, field, val),
 					(obj, field) -> String.format("new %s(%s)", req.getTypeName(), obj),
-					(obj, field, val) -> String.format("%s.writeTo(%s);", val, obj),
-					(a, b) -> String.format("%s.compareTo(%s)", a, b));
+					(obj, field, val) -> String.format("%s.writeTo(%s);", val, obj));
 
 		} else if (rawRef instanceof Streamable) {
 			final RequestedType req = new AnonRequestedType((Streamable) rawRef);
@@ -861,8 +843,7 @@ public class GenJava {
 					(obj, field) -> req.getTypeName() + ".fromJSON(" + obj + ".getJSONObject(" + field + "))", //
 					(obj, field, val) -> String.format("%s.put(%s, %s.toJSON());", obj, field, val),
 					(obj, field) -> String.format("new %s(%s)", req.getTypeName(), obj),
-					(obj, field, val) -> String.format("%s.writeTo(%s);", val, obj),
-					(a, b) -> String.format("%s.compareTo(%s)", a, b));
+					(obj, field, val) -> String.format("%s.writeTo(%s);", val, obj));
 
 		} else if (rawRef instanceof Optional<?>) {
 			// TODO
@@ -937,8 +918,7 @@ public class GenJava {
 					(obj, field, val) -> {
 						return String.format("if (%s != null) { %s.writeBoolean(true); %s; } else { %s.writeBoolean(false); }", val,
 								obj, ent.genWriteToDataStream.genWrite(obj, field, val), obj);
-					},
-					(a, b) -> String.format("%s == null && %s == null ? 0 : (%s == null ? -1 : (%s == null ? 1 : " + comparator + "))", a, b, a, b, a, b));
+					});
 //					(obj, field, val) -> String.format("%s.put(%s, %s == null ? JSONObject.NULL : (%s))", obj, field, val, //
 //							String.format("%s", ) //
 //							));
@@ -981,8 +961,7 @@ public class GenJava {
 								+ options + ")",
 						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
 						(obj, field) -> "codeprober.util.JsonUtil.requireString(" + obj + ".readUTF())",
-						(obj, field, val) -> String.format("%s.writeUTF(%s);", obj, val),
-						(a, b) -> String.format("%s.compareTo(%s)", a, b));
+						(obj, field, val) -> String.format("%s.writeUTF(%s);", obj, val));
 			}
 			throw new Exception("Unknown object array type: " + Arrays.toString(opt));
 
@@ -1027,8 +1006,7 @@ public class GenJava {
 						final String writer = ref.genWriteToDataStream.genWrite(obj, "UNUSED", "ent");
 						return "codeprober.util.JsonUtil.<" + ref.getBoxedName() + ">writeDataArr(" + obj + ", " + val + ", ent -> "
 								+ (writer.endsWith(";") ? writer.substring(0, writer.length() - 1) : writer) + ");";
-					},
-					(a, b) -> String.format("%s.compareTo(%s)", a, b));
+					});
 		} else {
 			throw new Exception("TODO encode " + rawRef);
 		}

@@ -11,6 +11,14 @@ public class PutWorkspaceContentReq implements codeprober.util.JsonUtil.ToJsonab
     this.path = path;
     this.content = content;
   }
+  public PutWorkspaceContentReq(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public PutWorkspaceContentReq(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = "PutWorkspaceContent";
+    this.path = src.readUTF();
+    this.content = src.readUTF();
+  }
 
   public static PutWorkspaceContentReq fromJSON(JSONObject obj) {
     codeprober.util.JsonUtil.requireString(obj.getString("type"), "PutWorkspaceContent");
@@ -25,5 +33,13 @@ public class PutWorkspaceContentReq implements codeprober.util.JsonUtil.ToJsonab
     _ret.put("path", path);
     _ret.put("content", content);
     return _ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    
+    dst.writeUTF(path);
+    dst.writeUTF(content);
   }
 }
