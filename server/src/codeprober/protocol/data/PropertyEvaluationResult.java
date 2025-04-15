@@ -8,12 +8,28 @@ public class PropertyEvaluationResult implements codeprober.util.JsonUtil.ToJson
     job,
     sync,
   }
+  private static final Type[] typeValues = Type.values();
 
   public final Type type;
   public final Object value;
   private PropertyEvaluationResult(Type type, Object value) {
     this.type = type;
     this.value = value;
+  }
+  public PropertyEvaluationResult(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public PropertyEvaluationResult(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = typeValues[src.readInt()];
+    switch (this.type) {
+    case job:
+        this.value = src.readLong();
+        break;
+    case sync:
+    default:
+        this.value = new SynchronousEvaluationResult(src);
+        break;
+    }
   }
   public static PropertyEvaluationResult fromJob(long val) { return new PropertyEvaluationResult(Type.job, val); }
   public static PropertyEvaluationResult fromSync(SynchronousEvaluationResult val) { return new PropertyEvaluationResult(Type.sync, val); }
@@ -58,5 +74,20 @@ public class PropertyEvaluationResult implements codeprober.util.JsonUtil.ToJson
       break;
     }
     return ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(type.ordinal());
+    switch (type) {
+    case job:
+      dst.writeLong(((long)value));
+      break;
+    case sync:
+    default:
+      ((SynchronousEvaluationResult)value).writeTo(dst);
+      break;
+    }
   }
 }

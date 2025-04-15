@@ -9,12 +9,31 @@ public class NodeLocatorStep implements codeprober.util.JsonUtil.ToJsonable {
     nta,
     tal,
   }
+  private static final Type[] typeValues = Type.values();
 
   public final Type type;
   public final Object value;
   private NodeLocatorStep(Type type, Object value) {
     this.type = type;
     this.value = value;
+  }
+  public NodeLocatorStep(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public NodeLocatorStep(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = typeValues[src.readInt()];
+    switch (this.type) {
+    case child:
+        this.value = src.readInt();
+        break;
+    case nta:
+        this.value = new FNStep(src);
+        break;
+    case tal:
+    default:
+        this.value = new TALStep(src);
+        break;
+    }
   }
   public static NodeLocatorStep fromChild(int val) { return new NodeLocatorStep(Type.child, val); }
   public static NodeLocatorStep fromNta(FNStep val) { return new NodeLocatorStep(Type.nta, val); }
@@ -72,5 +91,23 @@ public class NodeLocatorStep implements codeprober.util.JsonUtil.ToJsonable {
       break;
     }
     return ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(type.ordinal());
+    switch (type) {
+    case child:
+      dst.writeInt(((int)value));
+      break;
+    case nta:
+      ((FNStep)value).writeTo(dst);
+      break;
+    case tal:
+    default:
+      ((TALStep)value).writeTo(dst);
+      break;
+    }
   }
 }

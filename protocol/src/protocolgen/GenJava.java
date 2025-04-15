@@ -14,13 +14,13 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.json.JSONObject;
 
-import protocolgen.spec.AsyncRpcUpdate;
 import protocolgen.spec.Rpc;
 import protocolgen.spec.Streamable;
 import protocolgen.spec.StreamableUnion;
@@ -57,7 +57,7 @@ public class GenJava {
 	}
 
 	@FunctionalInterface
-	interface WriteToJsonGenerator {
+	interface WriteGenerator {
 		String genWrite(String jsonObj, String field, String valPtr);
 	}
 
@@ -65,14 +65,21 @@ public class GenJava {
 		public final String name;
 		public final FieldKind kind;
 		public final BiFunction<String, String, String> genReadFromJsonObj;
-		public final WriteToJsonGenerator genWriteToJson;
+		public final WriteGenerator genWriteToJson;
+		public final BiFunction<String, String, String> genReadFromDataStream;
+		public final WriteGenerator genWriteToDataStream;
+		public final BiConsumer<String, String> genCompareTo;
 
 		public GeneratedType(String name, FieldKind kind, BiFunction<String, String, String> genReadFromJsonObj,
-				WriteToJsonGenerator genWriteToJson) {
+				WriteGenerator genWriteToJson, BiFunction<String, String, String> genReadFromDataStream,
+				WriteGenerator genWriteToDataStream, BiConsumer<String, String> genCompareTo) {
 			this.name = name;
 			this.kind = kind;
 			this.genReadFromJsonObj = genReadFromJsonObj;
 			this.genWriteToJson = genWriteToJson;
+			this.genReadFromDataStream = genReadFromDataStream;
+			this.genWriteToDataStream = genWriteToDataStream;
+			this.genCompareTo = genCompareTo;
 		}
 
 		public String getBoxedName() {
@@ -167,10 +174,12 @@ public class GenJava {
 	private static class UnionMember {
 		public final String name;
 		public final Object value;
+//		private final BiFunction<String, String, String> genCompareTo;
 
 		public UnionMember(String name, Object value) {
 			this.name = name;
 			this.value = value;
+//			this.genCompareTo = genCompareTo;
 		}
 	}
 
@@ -186,14 +195,6 @@ public class GenJava {
 			for (Field f : listFieldsInProperOrder(union.getClass())) {
 				f.setAccessible(true);
 				members.add(new UnionMember(f.getName(), f.get(union)));
-			}
-		}
-
-		public UnionRequestedType(List<Class<? extends AsyncRpcUpdate>> updates) {
-			this.typeName = "AsyncRpcUpdate";
-			this.members = new ArrayList<>();
-			for (Class<? extends AsyncRpcUpdate> aru : updates) {
-				members.add(new UnionMember(aru.getSimpleName(), aru));
 			}
 		}
 
@@ -237,12 +238,31 @@ public class GenJava {
 				println.accept("    " + f.name + ",");
 			}
 			println.accept("  }");
+			println.accept("  private static final Type[] typeValues = Type.values();");
 			println.accept("");
 			println.accept("  public final Type type;");
 			println.accept("  public final Object value;");
 			println.accept("  private " + getTypeName() + "(Type type, Object value) {");
 			println.accept("    this.type = type;");
 			println.accept("    this.value = value;");
+			println.accept("  }");
+			println.accept("  public " + getTypeName() + "(java.io.DataInputStream src) throws java.io.IOException {");
+			println.accept("    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));");
+			println.accept("  }");
+			println.accept("  public " + getTypeName() + "(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {");
+			println.accept("    this.type = typeValues[src.readInt()];");
+			println.accept("    switch (this.type) {");
+			for (int i = 0; i < members.size(); i++) {
+				final String fn = members.get(i).name;
+				println.accept("    case " + fn + ":");
+				if (i == members.size() - 1) {
+					println.accept("    default:");
+				}
+//				final String capped = fn.substring(0, 1).toUpperCase(Locale.ENGLISH) + fn.substring(1);
+				println.accept("        this.value = " + types.get(i).genReadFromDataStream.apply("src", "UNUSED") + ";");
+				println.accept("        break;");
+			}
+			println.accept("    }");
 			println.accept("  }");
 
 			for (int i = 0; i < members.size(); ++i) {
@@ -275,7 +295,6 @@ public class GenJava {
 					println.accept("    default:");
 				}
 				final String capped = fn.substring(0, 1).toUpperCase(Locale.ENGLISH) + fn.substring(1);
-//				final Class<?> c = fields[i];
 				println.accept("      try {");
 				println.accept("        final " + types.get(i).name + " val = "
 						+ types.get(i).genReadFromJsonObj.apply("obj", "\"value\"") + ";");
@@ -307,53 +326,28 @@ public class GenJava {
 			println.accept("    }");
 			println.accept("    return ret;");
 			println.accept("  }");
-			println.accept("}");
-			return out.toString();
-		}
-
-	}
-
-	private class EnumRequestedType extends RequestedType {
-		private final String[] fields;
-
-		public EnumRequestedType(String[] fields) {
-			this.fields = fields;
-		}
-
-		@Override
-		public String getTypeName() {
-			return fields[0];
-		}
-
-		@Override
-		protected Object[] getComparisonStuff() {
-			return fields;
-		}
-
-		@Override
-		protected String generate() throws Exception {
-			final StringBuilder out = new StringBuilder();
-			final Consumer<String> println = line -> out.append(line + "\n");
-//			final Consumer<String> print = line -> out.append(line);
-
-			println.accept("package " + getDstPkg() + ";");
-			println.accept("");
-//			println.accept("import org.json.JSONObject;");
-//			println.accept("");
-			println.accept("public enum " + getTypeName() + " {");
-			for (int i = 1; i < fields.length; ++i) {
-				println.accept("  " + fields[i] + ",");
+			println.accept("  public int compareTo(" + getTypeName() + " other) {");
+			println.accept("    if (type != other.type) { return Integer.compare(type.ordinal, other.type.ordinal); }");
+			println.accept("  }");
+			println.accept("  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {");
+			println.accept("    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));");
+			println.accept("  }");
+			println.accept("  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {");
+			println.accept("    dst.writeInt(type.ordinal());");
+			println.accept("    switch (type) {");
+			for (int i = 0; i < members.size(); i++) {
+				println.accept("    case " + members.get(i).name + ":");
+				if (i == members.size() - 1) {
+					println.accept("    default:");
+				}
+				println.accept("      " + types.get(i).genWriteToDataStream.genWrite("dst", "UNUSED",
+						"((" + types.get(i).name + ")value)"));
+				println.accept("      break;");
 			}
-			println.accept("  ;");
 
-			println.accept("  public static " + getTypeName() + " parse(String val) {");
-			println.accept("    try { return " + getTypeName() + ".valueOf(val); }");
-			println.accept(
-					"    catch (IllegalArgumentException e) { throw new org.json.JSONException(\"Bad val \" + val); }");
-
+			println.accept("    }");
 			println.accept("  }");
 			println.accept("}");
-
 			return out.toString();
 		}
 
@@ -596,6 +590,7 @@ public class GenJava {
 				if (numForwardedArgs > 0) {
 					print.accept(", ");
 				}
+				print.accept("(" + refs.get(i).name +")");
 				print.accept("null");
 				++numForwardedArgs;
 			}
@@ -625,6 +620,37 @@ public class GenJava {
 				println.accept("    this." + name + " = " + name + ";");
 			}
 		}
+		println.accept("  }");
+
+		println.accept("  public " + tname + "(java.io.DataInputStream src) throws java.io.IOException {");
+		println.accept("    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));");
+		println.accept("  }");
+		println.accept("  public " + tname + "(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {");
+		for (int i = 0; i < fields.size(); i++) {
+			final GeneratedType ref = refs.get(i);
+			final String name = fields.get(i).getName();
+			if (ref.kind.isConstant()) {
+				println.accept("    this." + name + " = \"" + (String) (fields.get(i).get(s)) + "\";");
+				continue;
+			} else {
+				println.accept("    this." + name +" = " + ref.genReadFromDataStream.apply("src", "UNUSED") +";");
+			}
+//			if (numAddedArgs > 0) {
+//				print.accept(", ");
+//			}
+//			print.accept(refs.get(i).name + " " + fields.get(i).getName());
+//			++numAddedArgs;
+		}
+//		println.accept(" {");
+
+//		for (int i = 0; i < fields.size(); i++) {
+//			final String name = fields.get(i).getName();
+//			if (refs.get(i).kind.isConstant()) {
+//				println.accept("    this." + name + " = \"" + (String) (fields.get(i).get(s)) + "\";");
+//			} else {
+//				println.accept("    this." + name + " = " + name + ";");
+//			}
+//		}
 		println.accept("  }");
 
 		println.accept("");
@@ -706,6 +732,17 @@ public class GenJava {
 		}
 		println.accept("    return _ret;");
 		println.accept("  }");
+
+		println.accept("  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {");
+		println.accept("    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));");
+		println.accept("  }");
+		println.accept("  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {");
+		for (int i = 0; i < fields.size(); i++) {
+			final String field = fields.get(i).getName();
+			println.accept("    " + refs.get(i).genWriteToDataStream.genWrite("dst", "UNUSED", field));
+		}
+		println.accept("  }");
+
 		println.accept("}");
 
 		return out.toString();
@@ -718,48 +755,82 @@ public class GenJava {
 			if (clazz == String.class) {
 				return new GeneratedType("String", FieldKind.PRIMITIVE,
 						(obj, field) -> obj + ".getString(" + field + ")",
-						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val));
+						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
+						(obj, field) -> obj + ".readUTF()",
+						(obj, field, val) -> String.format("%s.writeUTF(%s);", obj, val),
+						(a, b) -> String.format("%s.compareTo(%s)", a, b));
 			} else if (clazz == Integer.class) {
 				return new GeneratedType("int", FieldKind.PRIMITIVE, //
 						(obj, field) -> obj + ".getInt(" + field + ")", //
-						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val));
+						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
+						(obj, field) -> obj + ".readInt()",
+						(obj, field, val) -> String.format("%s.writeInt(%s);", obj, val),
+						(a, b) -> String.format("Integer.compare(%s, %s)", a, b));
 			} else if (clazz == Long.class) {
 				return new GeneratedType("long", FieldKind.PRIMITIVE, //
 						(obj, field) -> obj + ".getLong(" + field + ")", //
-						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val));
+						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
+						(obj, field) -> obj + ".readLong()",
+						(obj, field, val) -> String.format("%s.writeLong(%s);", obj, val),
+						(a, b) -> String.format("Long.compare(%s, %s)", a, b));
 			} else if (clazz == Boolean.class) {
 				return new GeneratedType("boolean", FieldKind.PRIMITIVE,
 						(obj, field) -> obj + ".getBoolean(" + field + ")", //
-						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val));
+						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
+						(obj, field) -> obj + ".readBoolean()",
+						(obj, field, val) -> String.format("%s.writeBoolean(%s);", obj, val),
+						(a, b) -> String.format("Boolean.compare(%s, %s)", a, b));
 			} else if (clazz == Void.class) {
-				return new GeneratedType("Object", FieldKind.NULLPOINTER,
-						(obj, field) -> "codeprober.util.JsonUtil.requireNull(" + obj + ".get(" + field + "))", //
-						(obj, field, val) -> String.format("%s.put(%s, JSONObject.NULL);", obj, field));
+				System.err.println("?? When is this used?");
+				Thread.dumpStack();
+				System.exit(1);
+				return null;
+//				return new GeneratedType("Object", FieldKind.NULLPOINTER,
+//						(obj, field) -> "codeprober.util.JsonUtil.requireNull(" + obj + ".get(" + field + "))", //
+//						(obj, field, val) -> String.format("%s.put(%s, JSONObject.NULL);", obj, field));
 			} else if (clazz == Object.class) {
-				return new GeneratedType("Object", FieldKind.PRIMITIVE, (obj, field) -> obj + ".get(" + field + ")", //
-						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val));
+				System.err.println("?? When is this used?");
+				Thread.dumpStack();
+				System.exit(1);
+				return null;
+//				return new GeneratedType("Object", FieldKind.PRIMITIVE, (obj, field) -> obj + ".get(" + field + ")", //
+//						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
+//						(obj, field) -> obj + ".readJSON()",
+//						(obj, field, val) -> String.format("%s.writeJSON(%s);", obj, val));
 			} else if (clazz == JSONObject.class) {
 				return new GeneratedType("org.json.JSONObject", FieldKind.PRIMITIVE,
 						(obj, field) -> obj + ".getJSONObject(" + field + ")", //
-						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val));
+						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
+						(obj, field) -> "new org.json.JSONObject(" + obj+ ".readUTF())",
+						(obj, field, val) -> String.format("%s.writeUTF(%s.toString());", obj, val),
+						(a, b) -> String.format("%s.toString().compareTo(%s.toString())", a, b));
 			} else if (clazz.isEnum()) {
 				return new GeneratedType(clazz.getName(), FieldKind.ENUM,
 						(obj, field) -> clazz.getName() + ".parseFromJson(" + obj + ".getString(" + field + "))", //
-						(obj, field, val) -> String.format("%s.put(%s, %s.name());", obj, field, val));
+						(obj, field, val) -> String.format("%s.put(%s, %s.name());", obj, field, val),
+						(obj, field) -> clazz.getName() + ".values()[" + obj + ".readInt()]",
+						(obj, field, val) -> String.format("%s.writeInt(%s.ordinal());", obj, val),
+						(a, b) -> String.format("Integer.compare(%s.ordinal, %s.ordinal)", a, b));
 			} else {
 				if (StreamableUnion.class.isAssignableFrom(clazz)) {
 					final RequestedType req = new UnionRequestedType((StreamableUnion) clazz.newInstance());
 					requestedTypes.add(req);
 					return new GeneratedType(req.getTypeName(), FieldKind.STREAMABLE,
 							(obj, field) -> req.getTypeName() + ".fromJSON(" + obj + ".getJSONObject(" + field + "))", //
-							(obj, field, val) -> String.format("%s.put(%s, %s.toJSON());", obj, field, val));
+							(obj, field, val) -> String.format("%s.put(%s, %s.toJSON());", obj, field, val),
+							(obj, field) -> String.format("new %s(%s)", req.getTypeName(), obj),
+							(obj, field, val) -> String.format("%s.writeTo(%s);", val, obj),
+							(a, b) -> String.format("%s.compareTo(%s)", a, b));
 
 				} else if (Streamable.class.isAssignableFrom(clazz)) {
 					requestedTypes.add(new NormalRequestedType((Streamable) clazz.newInstance()));
 					return new GeneratedType(clazz.getSimpleName(), FieldKind.STREAMABLE,
 							(obj, field) -> clazz.getSimpleName() + ".fromJSON(" + obj + ".getJSONObject(" + field
 									+ "))", //
-							(obj, field, val) -> String.format("%s.put(%s, %s.toJSON());", obj, field, val));
+							(obj, field, val) -> String.format("%s.put(%s, %s.toJSON());", obj, field, val),
+							(obj, field) -> String.format("new %s(%s)", clazz.getSimpleName(), obj),
+							(obj, field, val) -> String.format("%s.writeTo(%s);", val, obj),
+							(a, b) -> String.format("%s.compareTo(%s)", a, b));
 				} else {
 					throw new Exception("Invalid class " + clazz);
 				}
@@ -769,21 +840,29 @@ public class GenJava {
 			return new GeneratedType("String", FieldKind.STRING_CONSTANT,
 					(obj, field) -> "codeprober.util.JsonUtil.requireString(" + obj + ".getString(" + field + "), \""
 							+ rawRef + "\")", //
-					(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, rawRef.toString()));
+					(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, rawRef.toString()),
+					(obj, field) -> "\"" + rawRef + "\"", (obj, field, val) -> "",
+					(a, b) -> String.format("%s.compareTo(%s)", a, b));
 //			System.out.print("\"" + val + "\"");
 		} else if (rawRef instanceof StreamableUnion) {
 			final RequestedType req = new UnionRequestedType((StreamableUnion) rawRef);
 			requestedTypes.add(req);
 			return new GeneratedType(req.getTypeName(), FieldKind.STREAMABLE,
 					(obj, field) -> req.getTypeName() + ".fromJSON(" + obj + ".getJSONObject(" + field + "))", //
-					(obj, field, val) -> String.format("%s.put(%s, %s.toJSON());", obj, field, val));
+					(obj, field, val) -> String.format("%s.put(%s, %s.toJSON());", obj, field, val),
+					(obj, field) -> String.format("new %s(%s)", req.getTypeName(), obj),
+					(obj, field, val) -> String.format("%s.writeTo(%s);", val, obj),
+					(a, b) -> String.format("%s.compareTo(%s)", a, b));
 
 		} else if (rawRef instanceof Streamable) {
 			final RequestedType req = new AnonRequestedType((Streamable) rawRef);
 			requestedTypes.add(req);
 			return new GeneratedType(req.getTypeName(), FieldKind.STREAMABLE,
 					(obj, field) -> req.getTypeName() + ".fromJSON(" + obj + ".getJSONObject(" + field + "))", //
-					(obj, field, val) -> String.format("%s.put(%s, %s.toJSON());", obj, field, val));
+					(obj, field, val) -> String.format("%s.put(%s, %s.toJSON());", obj, field, val),
+					(obj, field) -> String.format("new %s(%s)", req.getTypeName(), obj),
+					(obj, field, val) -> String.format("%s.writeTo(%s);", val, obj),
+					(a, b) -> String.format("%s.compareTo(%s)", a, b));
 
 		} else if (rawRef instanceof Optional<?>) {
 			// TODO
@@ -791,22 +870,30 @@ public class GenJava {
 //			return new
 			FieldKind kind;
 			String boxedName;
+			String comparator;
 			switch (ent.kind) {
 			case PRIMITIVE:
 				kind = FieldKind.OPTIONAL_PRIMITIVE;
 				switch (ent.name) {
 				case "int":
 					boxedName = "Integer";
+					comparator = "Integer.compare(%s, %s)";
 					break;
 				case "long":
 					boxedName = "Long";
+					comparator = "Long.compare(%s, %s)";
 					break;
 				case "boolean":
 					boxedName = "Boolean";
+					comparator = "Boolean.compare(%s, %s)";
 					break;
 				case "String":
+					boxedName = ent.name;
+					comparator = "%s.compareTo(%s)";
+					break;
 				case "org.json.JSONObject":
 					boxedName = ent.name;
+					comparator = "%s.toString().compareTo(%s.toString())"; // TODO toString() is not a good comparison technique
 					break;
 				default: {
 					throw new Exception("Unknown primitive name " + ent.name);
@@ -816,18 +903,24 @@ public class GenJava {
 			case STREAMABLE:
 				kind = FieldKind.OPTIONAL_STREAMABLE;
 				boxedName = ent.name;
+				comparator = "%s.compareTo(%s)";
 				break;
 			case LIST_OF_STREAMABLES:
 				kind = FieldKind.OPTIONAL_LIST_OF_STREAMABLES;
 				boxedName = ent.name;
+				comparator = "%s.compareTo(%s)";
 				break;
 			case LIST_OF_PRIMTIIVES:
 				kind = FieldKind.OPTIONAL_LIST_OF_PRIMITIVES;
 				boxedName = ent.name;
+				comparator = "codeprober.util.JsonUtil.compareList(%s, %s, (x, y) -> x - y)";
+//				System.err.println("Is this needed??");
+//				System.exit(1);
 				break;
 			case ENUM:
 				kind = FieldKind.OPTIONAL_ENUM;
 				boxedName = ent.name;
+				comparator = "Integer.compare(%s.ordinal, %s.ordinal)";
 				break;
 			default:
 				throw new Exception("Illegal optional field kind " + ent.kind);
@@ -838,7 +931,14 @@ public class GenJava {
 							+ ") : null", //
 					(obj, field, val) -> {
 						return String.format("if (%s != null) %s;", val, ent.genWriteToJson.genWrite(obj, field, val));
-					});
+					},
+					(obj, field) -> obj + ".readBoolean() ? " + ent.genReadFromDataStream.apply(obj, field)
+							+ " : null", //
+					(obj, field, val) -> {
+						return String.format("if (%s != null) { %s.writeBoolean(true); %s; } else { %s.writeBoolean(false); }", val,
+								obj, ent.genWriteToDataStream.genWrite(obj, field, val), obj);
+					},
+					(a, b) -> String.format("%s == null && %s == null ? 0 : (%s == null ? -1 : (%s == null ? 1 : " + comparator + "))", a, b, a, b, a, b));
 //					(obj, field, val) -> String.format("%s.put(%s, %s == null ? JSONObject.NULL : (%s))", obj, field, val, //
 //							String.format("%s", ) //
 //							));
@@ -879,7 +979,10 @@ public class GenJava {
 				return new GeneratedType("String", FieldKind.PRIMITIVE,
 						(obj, field) -> "codeprober.util.JsonUtil.requireString(" + obj + ".getString(" + field + ")"
 								+ options + ")",
-						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val));
+						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
+						(obj, field) -> "codeprober.util.JsonUtil.requireString(" + obj + ".readUTF())",
+						(obj, field, val) -> String.format("%s.writeUTF(%s);", obj, val),
+						(a, b) -> String.format("%s.compareTo(%s)", a, b));
 			}
 			throw new Exception("Unknown object array type: " + Arrays.toString(opt));
 
@@ -914,7 +1017,18 @@ public class GenJava {
 									+ ".stream().<Object>map(x->x.toJSON()).collect(java.util.stream.Collectors.toList())";
 						}
 						return String.format("%s.put(%s, new org.json.JSONArray(%s));", obj, field, putter);
-					});
+					},
+					(obj, field) -> {
+						final String reader = ref.genReadFromDataStream.apply(obj, "UNUSED");
+						return "codeprober.util.JsonUtil.<" + ref.getBoxedName() + ">readDataArr(" + obj
+								+ ", () -> " + (reader.endsWith(";") ? reader.substring(0, reader.length() - 1) : reader) + ")";
+					}, //
+					(obj, field, val) -> {
+						final String writer = ref.genWriteToDataStream.genWrite(obj, "UNUSED", "ent");
+						return "codeprober.util.JsonUtil.<" + ref.getBoxedName() + ">writeDataArr(" + obj + ", " + val + ", ent -> "
+								+ (writer.endsWith(";") ? writer.substring(0, writer.length() - 1) : writer) + ");";
+					},
+					(a, b) -> String.format("%s.compareTo(%s)", a, b));
 		} else {
 			throw new Exception("TODO encode " + rawRef);
 		}

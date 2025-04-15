@@ -9,12 +9,28 @@ public class TestSuiteListOrError implements codeprober.util.JsonUtil.ToJsonable
     err,
     suites,
   }
+  private static final Type[] typeValues = Type.values();
 
   public final Type type;
   public final Object value;
   private TestSuiteListOrError(Type type, Object value) {
     this.type = type;
     this.value = value;
+  }
+  public TestSuiteListOrError(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public TestSuiteListOrError(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = typeValues[src.readInt()];
+    switch (this.type) {
+    case err:
+        this.value = codeprober.protocol.ListTestSuitesErrorCode.values()[src.readInt()];
+        break;
+    case suites:
+    default:
+        this.value = codeprober.util.JsonUtil.<String>readDataArr(src, () -> src.readUTF());
+        break;
+    }
   }
   public static TestSuiteListOrError fromErr(codeprober.protocol.ListTestSuitesErrorCode val) { return new TestSuiteListOrError(Type.err, val); }
   public static TestSuiteListOrError fromSuites(java.util.List<String> val) { return new TestSuiteListOrError(Type.suites, val); }
@@ -59,5 +75,20 @@ public class TestSuiteListOrError implements codeprober.util.JsonUtil.ToJsonable
       break;
     }
     return ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(type.ordinal());
+    switch (type) {
+    case err:
+      dst.writeInt(((codeprober.protocol.ListTestSuitesErrorCode)value).ordinal());
+      break;
+    case suites:
+    default:
+      codeprober.util.JsonUtil.<String>writeDataArr(dst, ((java.util.List<String>)value), ent -> dst.writeUTF(ent));
+      break;
+    }
   }
 }

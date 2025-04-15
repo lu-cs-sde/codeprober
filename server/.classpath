@@ -7,6 +7,6 @@
 	<classpathentry kind="lib" path="libs/junit-4.13.2.jar"/>
 	<classpathentry kind="lib" path="libs/hamcrest-2.2.jar"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/3"/>
-	<classpathentry kind="lib" path="/Users/anton/repo/IntraJExtended/intraj.jar"/>
+	<classpathentry kind="lib" path="/Users/anton/repo/IntraJExtended/intraj.jar" sourcepath="/Users/anton/repo/IntraJExtended/build/generated-src/ast"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

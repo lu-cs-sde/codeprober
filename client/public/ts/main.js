@@ -304,6 +304,7 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
                         clearTimeout(cleanupTimer);
                         return rej(e);
                     }
+                    console.log('attemptFetch got', fetchResult);
                     didReceiveAtLeastOneMessage = true;
                     res(fetchResult);
                 }
@@ -321,7 +322,9 @@ define("createWebsocketHandler", ["require", "exports"], function (require, expo
         const initReq = ({ type: 'wsput:init', session });
         sendRpc(initReq)
             .then((init) => {
+            console.log('got init response');
             if (messageHandlers['init']) {
+                console.log('call handler w/ info..', init.info);
                 messageHandlers['init'](init.info);
             }
             else {
@@ -13391,6 +13394,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
         });
         const refresher = env.createCullingTaskSubmitter();
         env.onChangeListeners[queryId] = (adjusters) => {
+            console.log('refreshing rag modal??');
             if (adjusters) {
                 adjusters.forEach((adj) => {
                     const [l, c] = adj(line, col);

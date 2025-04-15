@@ -24,7 +24,7 @@ import codeprober.toolglue.ParseResult;
  * Originally by gda10jth on 1/15/16, modified for CodeProber use.
  */
 public class ASTProvider {
-	private static class LoadedJar {
+	public static class LoadedJar {
 		public final String jarPath;
 		public final long jarLastModified;
 		public final CompilerClassLoader classLoader;
@@ -67,7 +67,7 @@ public class ASTProvider {
 
 	private static LoadedJar lastJar = null;
 
-	private static LoadedJar loadJar(String jarPath)
+	public static LoadedJar loadJar(String jarPath)
 			throws ClassNotFoundException, IOException, NoSuchMethodException, SecurityException, NoSuchFieldException {
 		if (hasUnchangedJar(jarPath)) {
 			return lastJar;

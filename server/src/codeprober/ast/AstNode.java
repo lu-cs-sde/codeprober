@@ -54,7 +54,7 @@ public class AstNode {
 			if (res instanceof Boolean) {
 				return ((Boolean) res).booleanValue();
 			}
-			System.out.println("Got non-boolean from cpr_isInsideExternalFile: " + res);
+			System.out.println("Got non-boolean from cpr_isTALRoot: " + res);
 			return false;
 		}
 

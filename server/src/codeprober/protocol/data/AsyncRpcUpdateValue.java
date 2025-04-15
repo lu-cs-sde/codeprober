@@ -11,12 +11,34 @@ public class AsyncRpcUpdateValue implements codeprober.util.JsonUtil.ToJsonable 
     workerStatuses,
     workerTaskDone,
   }
+  private static final Type[] typeValues = Type.values();
 
   public final Type type;
   public final Object value;
   private AsyncRpcUpdateValue(Type type, Object value) {
     this.type = type;
     this.value = value;
+  }
+  public AsyncRpcUpdateValue(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public AsyncRpcUpdateValue(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = typeValues[src.readInt()];
+    switch (this.type) {
+    case status:
+        this.value = src.readUTF();
+        break;
+    case workerStackTrace:
+        this.value = codeprober.util.JsonUtil.<String>readDataArr(src, () -> src.readUTF());
+        break;
+    case workerStatuses:
+        this.value = codeprober.util.JsonUtil.<String>readDataArr(src, () -> src.readUTF());
+        break;
+    case workerTaskDone:
+    default:
+        this.value = new WorkerTaskDone(src);
+        break;
+    }
   }
   public static AsyncRpcUpdateValue fromStatus(String val) { return new AsyncRpcUpdateValue(Type.status, val); }
   public static AsyncRpcUpdateValue fromWorkerStackTrace(java.util.List<String> val) { return new AsyncRpcUpdateValue(Type.workerStackTrace, val); }
@@ -87,5 +109,26 @@ public class AsyncRpcUpdateValue implements codeprober.util.JsonUtil.ToJsonable 
       break;
     }
     return ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(type.ordinal());
+    switch (type) {
+    case status:
+      dst.writeUTF(((String)value));
+      break;
+    case workerStackTrace:
+      codeprober.util.JsonUtil.<String>writeDataArr(dst, ((java.util.List<String>)value), ent -> dst.writeUTF(ent));
+      break;
+    case workerStatuses:
+      codeprober.util.JsonUtil.<String>writeDataArr(dst, ((java.util.List<String>)value), ent -> dst.writeUTF(ent));
+      break;
+    case workerTaskDone:
+    default:
+      ((WorkerTaskDone)value).writeTo(dst);
+      break;
+    }
   }
 }

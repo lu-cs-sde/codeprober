@@ -133,7 +133,12 @@ public abstract class StreamInterceptor extends PrintStream {
 	private StreamInterceptor(StreamInterceptorImpl dst) {
 		super(dst);
 		this.dst = dst;
-		dst.lineReader = s -> onLine(s);
+		dst.lineReader = new Consumer<String>() {
+			@Override
+			public void accept(String s) {
+				onLine(s);
+			}
+		};
 	}
 
 	public void consume() {

@@ -46,7 +46,6 @@ public class AttrsInNode {
 		}
     final boolean canDescribeChildNames = info.hasOverride1(node.underlyingAstNode.getClass(), "cpr_lGetChildName", String.class);
     final boolean canDescribeLabeledProperties = info.hasOverride1(node.underlyingAstNode.getClass(), "cpr_lGetAspectName", String.class);
-    System.out.println("cpr_lGetAspectName override: " + canDescribeLabeledProperties);
 		for (String filter : whitelistFilter) {
 			if (filter.startsWith("l:")) {
 				// Special "label-invoke" method, always add it

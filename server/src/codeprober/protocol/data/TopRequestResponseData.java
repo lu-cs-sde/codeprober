@@ -8,12 +8,28 @@ public class TopRequestResponseData implements codeprober.util.JsonUtil.ToJsonab
     success,
     failureMsg,
   }
+  private static final Type[] typeValues = Type.values();
 
   public final Type type;
   public final Object value;
   private TopRequestResponseData(Type type, Object value) {
     this.type = type;
     this.value = value;
+  }
+  public TopRequestResponseData(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public TopRequestResponseData(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = typeValues[src.readInt()];
+    switch (this.type) {
+    case success:
+        this.value = new org.json.JSONObject(src.readUTF());
+        break;
+    case failureMsg:
+    default:
+        this.value = src.readUTF();
+        break;
+    }
   }
   public static TopRequestResponseData fromSuccess(org.json.JSONObject val) { return new TopRequestResponseData(Type.success, val); }
   public static TopRequestResponseData fromFailureMsg(String val) { return new TopRequestResponseData(Type.failureMsg, val); }
@@ -58,5 +74,20 @@ public class TopRequestResponseData implements codeprober.util.JsonUtil.ToJsonab
       break;
     }
     return ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(type.ordinal());
+    switch (type) {
+    case success:
+      dst.writeUTF(((org.json.JSONObject)value).toString());
+      break;
+    case failureMsg:
+    default:
+      dst.writeUTF(((String)value));
+      break;
+    }
   }
 }

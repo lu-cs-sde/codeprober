@@ -129,6 +129,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
 
   const refresher = env.createCullingTaskSubmitter();
   env.onChangeListeners[queryId] = (adjusters) => {
+    console.log('refreshing rag modal??')
     if (adjusters) {
       adjusters.forEach((adj) => {
         const [l,c] = adj(line, col);
