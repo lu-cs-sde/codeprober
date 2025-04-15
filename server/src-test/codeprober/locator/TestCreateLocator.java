@@ -317,6 +317,12 @@ public class TestCreateLocator {
 		};
 
 		testIdentifications.accept(TypeIdentificationStyle.REFLECTION, NodeLocatorStep.Type.child);
+		if (CreateLocator.identityLocatorCache != null) {
+			// Swapping identification style without restarting the JVM is not usually
+			// supported.
+			// Must manually clear the locator cache.
+			CreateLocator.identityLocatorCache.clear();
+		}
 		testIdentifications.accept(TypeIdentificationStyle.NODE_LABEL, NodeLocatorStep.Type.tal);
 	}
 

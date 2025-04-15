@@ -851,30 +851,24 @@ public class GenJava {
 //			return new
 			FieldKind kind;
 			String boxedName;
-			String comparator;
 			switch (ent.kind) {
 			case PRIMITIVE:
 				kind = FieldKind.OPTIONAL_PRIMITIVE;
 				switch (ent.name) {
 				case "int":
 					boxedName = "Integer";
-					comparator = "Integer.compare(%s, %s)";
 					break;
 				case "long":
 					boxedName = "Long";
-					comparator = "Long.compare(%s, %s)";
 					break;
 				case "boolean":
 					boxedName = "Boolean";
-					comparator = "Boolean.compare(%s, %s)";
 					break;
 				case "String":
 					boxedName = ent.name;
-					comparator = "%s.compareTo(%s)";
 					break;
 				case "org.json.JSONObject":
 					boxedName = ent.name;
-					comparator = "%s.toString().compareTo(%s.toString())"; // TODO toString() is not a good comparison technique
 					break;
 				default: {
 					throw new Exception("Unknown primitive name " + ent.name);
@@ -884,24 +878,20 @@ public class GenJava {
 			case STREAMABLE:
 				kind = FieldKind.OPTIONAL_STREAMABLE;
 				boxedName = ent.name;
-				comparator = "%s.compareTo(%s)";
 				break;
 			case LIST_OF_STREAMABLES:
 				kind = FieldKind.OPTIONAL_LIST_OF_STREAMABLES;
 				boxedName = ent.name;
-				comparator = "%s.compareTo(%s)";
 				break;
 			case LIST_OF_PRIMTIIVES:
 				kind = FieldKind.OPTIONAL_LIST_OF_PRIMITIVES;
 				boxedName = ent.name;
-				comparator = "codeprober.util.JsonUtil.compareList(%s, %s, (x, y) -> x - y)";
 //				System.err.println("Is this needed??");
 //				System.exit(1);
 				break;
 			case ENUM:
 				kind = FieldKind.OPTIONAL_ENUM;
 				boxedName = ent.name;
-				comparator = "Integer.compare(%s.ordinal, %s.ordinal)";
 				break;
 			default:
 				throw new Exception("Illegal optional field kind " + ent.kind);
