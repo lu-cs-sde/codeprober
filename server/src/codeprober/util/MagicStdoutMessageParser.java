@@ -9,7 +9,7 @@ import codeprober.protocol.data.Diagnostic;
 public class MagicStdoutMessageParser {
 
 	public static Diagnostic parse(String line) {
-		final Matcher matcher = Pattern.compile("(ERR|WARN|INFO|HINT|LINE-PP|LINE-AA|LINE-AP|LINE-PA)@(\\d+);(\\d+);(.*)")
+		final Matcher matcher = Pattern.compile("(ERR|WARN|INFO|HINT|LINE-PP|LINE-AA|LINE-AP|LINE-PA)@(\\d+);(\\d+);(.*)", Pattern.DOTALL)
 				.matcher(line);
 		if (!matcher.matches()) {
 			return null;

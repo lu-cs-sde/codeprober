@@ -3,6 +3,7 @@ package codeprober.util;
 public class BenchmarkTimer {
 
 	public static final BenchmarkTimer CREATE_LOCATOR = new BenchmarkTimer();
+	public static final BenchmarkTimer CREATE_LOCATOR_NTA_STEP = new BenchmarkTimer();
 	public static final BenchmarkTimer APPLY_LOCATOR = new BenchmarkTimer();
 	public static final BenchmarkTimer EVALUATE_ATTR = new BenchmarkTimer();
 	public static final BenchmarkTimer LIST_NODES = new BenchmarkTimer();
@@ -10,6 +11,7 @@ public class BenchmarkTimer {
 
 	public static void resetAll() {
 		CREATE_LOCATOR.reset();
+		CREATE_LOCATOR_NTA_STEP.reset();
 		APPLY_LOCATOR.reset();
 		EVALUATE_ATTR.reset();
 		LIST_NODES.reset();
@@ -19,6 +21,7 @@ public class BenchmarkTimer {
 	private int depth = 0;
 	private long accumulated = 0;
 	private long start = 0;
+	private int numHits;
 
 	private Thread ownerThread;
 
@@ -33,6 +36,7 @@ public class BenchmarkTimer {
 			start = System.nanoTime();
 		}
 		++depth;
+		++numHits;
 	}
 	public void exit() {
 		if (ownerThread != null && Thread.currentThread() != ownerThread) {
@@ -56,6 +60,7 @@ public class BenchmarkTimer {
 		depth = 0;
 		accumulated = 0;
 		ownerThread = null;
+		numHits = 0;
 	}
 
 	public long getAccumulatedNano() {
@@ -63,5 +68,9 @@ public class BenchmarkTimer {
 			throw new IllegalStateException("Measurement currently active, make sure to call .enter() & .exit() equal number of times");
 		}
 		return accumulated;
+	}
+
+	public int getNumHits() {
+		return numHits;
 	}
 }

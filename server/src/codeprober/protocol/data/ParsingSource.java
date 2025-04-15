@@ -8,12 +8,28 @@ public class ParsingSource implements codeprober.util.JsonUtil.ToJsonable {
     text,
     workspacePath,
   }
+  private static final Type[] typeValues = Type.values();
 
   public final Type type;
   public final Object value;
   private ParsingSource(Type type, Object value) {
     this.type = type;
     this.value = value;
+  }
+  public ParsingSource(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public ParsingSource(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = typeValues[src.readInt()];
+    switch (this.type) {
+    case text:
+        this.value = src.readUTF();
+        break;
+    case workspacePath:
+    default:
+        this.value = src.readUTF();
+        break;
+    }
   }
   public static ParsingSource fromText(String val) { return new ParsingSource(Type.text, val); }
   public static ParsingSource fromWorkspacePath(String val) { return new ParsingSource(Type.workspacePath, val); }
@@ -58,5 +74,20 @@ public class ParsingSource implements codeprober.util.JsonUtil.ToJsonable {
       break;
     }
     return ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(type.ordinal());
+    switch (type) {
+    case text:
+      dst.writeUTF(((String)value));
+      break;
+    case workspacePath:
+    default:
+      dst.writeUTF(((String)value));
+      break;
+    }
   }
 }

@@ -85,5 +85,19 @@ const displayRagModal = (env, line, col) => {
             });
         }
     });
+    env.onChangeListeners[queryId] = (adjusters) => {
+        if (adjusters) {
+            locator.adjust(adjusters);
+            property.args?.forEach((arg) => {
+            adjusters.forEach(adj => adjustValue(adj, arg));
+            })
+        }
+        if (loading) {
+            refreshOnDone = true;
+        } else {
+            refresher.submit(() => queryWindow.refresh());
+        }
+    }
+    
 };
 exports.default = displayRagModal;

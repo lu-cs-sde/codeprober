@@ -11,6 +11,14 @@ public class HighlightableMessage implements codeprober.util.JsonUtil.ToJsonable
     this.end = end;
     this.msg = msg;
   }
+  public HighlightableMessage(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public HighlightableMessage(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.start = src.readInt();
+    this.end = src.readInt();
+    this.msg = src.readUTF();
+  }
 
   public static HighlightableMessage fromJSON(JSONObject obj) {
     return new HighlightableMessage(
@@ -25,5 +33,13 @@ public class HighlightableMessage implements codeprober.util.JsonUtil.ToJsonable
     _ret.put("end", end);
     _ret.put("msg", msg);
     return _ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(start);
+    dst.writeInt(end);
+    dst.writeUTF(msg);
   }
 }

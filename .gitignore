@@ -4,3 +4,7 @@ codeprober.jar
 server/bin
 .DS_Store
 server/src-test/codeprober/RunDemoTests.java
+logs
+test_log
+oneshot_res
+.vscode

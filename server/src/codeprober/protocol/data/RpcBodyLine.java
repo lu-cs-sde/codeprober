@@ -17,12 +17,52 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
     tracing,
     html,
   }
+  private static final Type[] typeValues = Type.values();
 
   public final Type type;
   public final Object value;
   private RpcBodyLine(Type type, Object value) {
     this.type = type;
     this.value = value;
+  }
+  public RpcBodyLine(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public RpcBodyLine(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = typeValues[src.readInt()];
+    switch (this.type) {
+    case plain:
+        this.value = src.readUTF();
+        break;
+    case stdout:
+        this.value = src.readUTF();
+        break;
+    case stderr:
+        this.value = src.readUTF();
+        break;
+    case streamArg:
+        this.value = src.readUTF();
+        break;
+    case arr:
+        this.value = codeprober.util.JsonUtil.<RpcBodyLine>readDataArr(src, () -> new RpcBodyLine(src));
+        break;
+    case node:
+        this.value = new NodeLocator(src);
+        break;
+    case dotGraph:
+        this.value = src.readUTF();
+        break;
+    case highlightMsg:
+        this.value = new HighlightableMessage(src);
+        break;
+    case tracing:
+        this.value = new Tracing(src);
+        break;
+    case html:
+    default:
+        this.value = src.readUTF();
+        break;
+    }
   }
   public static RpcBodyLine fromPlain(String val) { return new RpcBodyLine(Type.plain, val); }
   public static RpcBodyLine fromStdout(String val) { return new RpcBodyLine(Type.stdout, val); }
@@ -171,5 +211,44 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
       break;
     }
     return ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    dst.writeInt(type.ordinal());
+    switch (type) {
+    case plain:
+      dst.writeUTF(((String)value));
+      break;
+    case stdout:
+      dst.writeUTF(((String)value));
+      break;
+    case stderr:
+      dst.writeUTF(((String)value));
+      break;
+    case streamArg:
+      dst.writeUTF(((String)value));
+      break;
+    case arr:
+      codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, ((java.util.List<RpcBodyLine>)value), ent -> ent.writeTo(dst));
+      break;
+    case node:
+      ((NodeLocator)value).writeTo(dst);
+      break;
+    case dotGraph:
+      dst.writeUTF(((String)value));
+      break;
+    case highlightMsg:
+      ((HighlightableMessage)value).writeTo(dst);
+      break;
+    case tracing:
+      ((Tracing)value).writeTo(dst);
+      break;
+    case html:
+    default:
+      dst.writeUTF(((String)value));
+      break;
+    }
   }
 }

@@ -14,5 +14,6 @@ aws() {
 # See e.g https://docs.aws.amazon.com/cli/v1/userguide/cli-configure-files.html for reference on what they are
 
 export S3_BUCKET_NAME="bucket-name-here"
+export SRC_WEBSITE_DIR="/website" # Or 'public' if not using docker
 export CLOUDFRONT_DISTRIBUTION="DISTRIBUTION-ID-HERE"
 

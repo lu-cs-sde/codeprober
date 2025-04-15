@@ -11,6 +11,14 @@ public class ListNodesReq implements codeprober.util.JsonUtil.ToJsonable {
     this.pos = pos;
     this.src = src;
   }
+  public ListNodesReq(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public ListNodesReq(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = "ListNodes";
+    this.pos = src.readInt();
+    this.src = new ParsingRequestData(src);
+  }
 
   public static ListNodesReq fromJSON(JSONObject obj) {
     codeprober.util.JsonUtil.requireString(obj.getString("type"), "ListNodes");
@@ -25,5 +33,13 @@ public class ListNodesReq implements codeprober.util.JsonUtil.ToJsonable {
     _ret.put("pos", pos);
     _ret.put("src", src.toJSON());
     return _ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    
+    dst.writeInt(pos);
+    src.writeTo(dst);
   }
 }

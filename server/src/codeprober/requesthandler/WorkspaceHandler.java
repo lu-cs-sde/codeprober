@@ -131,13 +131,12 @@ public class WorkspaceHandler {
 		}
 
 		final File workspaceRootFile = new File(workspaceRootCfg);
-		if (!workspaceRootFile.isFile()) {
+		if (workspaceRootFile.isFile()) {
 			System.err.println("ERROR: specified 'cpr.workspace' path '" + workspaceRootCfg + "' is a file");
 			if (exitOnBadConfig) {
 				System.exit(1);
 			}
 		}
-
 		if (!workspaceRootFile.exists()) {
 			if (!workspaceRootFile.getParentFile().exists()) {
 				// If both the parent and child path are missing, there is a decent chance of

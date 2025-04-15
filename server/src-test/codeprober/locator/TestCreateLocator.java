@@ -4,11 +4,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
+import org.junit.Before;
 import org.junit.Test;
 
 import codeprober.AstInfo;
@@ -34,6 +36,14 @@ public class TestCreateLocator {
 
 	private NodeLocator createLocator(AstInfo info, AstNode node) {
 		return CreateLocator.fromNode(info, node);
+	}
+
+	@Before
+	public void setup() {
+		// The cache is an optimisation that enables a different code path in
+		// CreateLocator. Can be uncommented, should work identically but tests less
+		// code.
+		CreateLocator.identityLocatorCache = new IdentityHashMap<>();
 	}
 
 	@Test
@@ -307,6 +317,12 @@ public class TestCreateLocator {
 		};
 
 		testIdentifications.accept(TypeIdentificationStyle.REFLECTION, NodeLocatorStep.Type.child);
+		if (CreateLocator.identityLocatorCache != null) {
+			// Swapping identification style without restarting the JVM is not usually
+			// supported.
+			// Must manually clear the locator cache.
+			CreateLocator.identityLocatorCache.clear();
+		}
 		testIdentifications.accept(TypeIdentificationStyle.NODE_LABEL, NodeLocatorStep.Type.tal);
 	}
 

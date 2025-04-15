@@ -180,7 +180,7 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 								}
 								w.destroy();
 								dispatchStatusToSubscribers();
-								return new StopJobRes(null);
+								return new StopJobRes();
 							}
 						}
 					}

@@ -32,6 +32,25 @@ public abstract class CreateValue {
 		}
 		switch (arg.type) {
 		case collection: {
+			if (Collection.class.isAssignableFrom(valueClazz)) {
+				// We do not get any help on the child types, just guess
+				final ArrayList<PropertyArg> remapped = new ArrayList<>();
+				for (Object child : ((Collection<?>) value)) {
+					if (child == null) {
+						// Bail
+						System.err.println("Cannot determine type of list containing null entries");
+						return null;
+					}
+					final Class<?> childClazz = child.getClass();
+					final PropertyArg childVal = CreateValue.fromInstance(info, childClazz, childClazz, child);
+					if (childVal == null) {
+						return null;
+					}
+					remapped.add(childVal);
+				}
+				return PropertyArg.fromCollection(new PropertyArgCollection(arg.asCollection().type, remapped));
+			}
+
 			if (!(valueType instanceof ParameterizedType)) {
 				System.err.println("Expected Collection argument to be parameterized, got " + valueType);
 				return null;
@@ -63,7 +82,8 @@ public abstract class CreateValue {
 			return PropertyArg.fromCollection(new PropertyArgCollection(arg.asCollection().type, remapped));
 		}
 		case nodeLocator:
-			return PropertyArg.fromNodeLocator(new NullableNodeLocator(valueClazz.getName(), CreateLocator.fromNode(info, new AstNode(value))));
+			return PropertyArg.fromNodeLocator(new NullableNodeLocator(valueClazz.getName(),
+					value == null ? null : CreateLocator.fromNode(info, new AstNode(value))));
 		case bool:
 			return PropertyArg.fromBool((boolean) value);
 		case integer:

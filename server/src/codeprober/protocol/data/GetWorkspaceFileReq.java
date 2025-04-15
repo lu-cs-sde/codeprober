@@ -9,6 +9,13 @@ public class GetWorkspaceFileReq implements codeprober.util.JsonUtil.ToJsonable 
     this.type = "GetWorkspaceFile";
     this.path = path;
   }
+  public GetWorkspaceFileReq(java.io.DataInputStream src) throws java.io.IOException {
+    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
+  }
+  public GetWorkspaceFileReq(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {
+    this.type = "GetWorkspaceFile";
+    this.path = src.readUTF();
+  }
 
   public static GetWorkspaceFileReq fromJSON(JSONObject obj) {
     codeprober.util.JsonUtil.requireString(obj.getString("type"), "GetWorkspaceFile");
@@ -21,5 +28,12 @@ public class GetWorkspaceFileReq implements codeprober.util.JsonUtil.ToJsonable 
     _ret.put("type", type);
     _ret.put("path", path);
     return _ret;
+  }
+  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
+    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
+  }
+  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
+    
+    dst.writeUTF(path);
   }
 }
