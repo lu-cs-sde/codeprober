@@ -13,6 +13,8 @@ import java.util.regex.Pattern;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import codeprober.requesthandler.WorkspaceHandler;
+
 public class WorkspaceApi {
 
 	public interface Responder {
@@ -97,7 +99,7 @@ public class WorkspaceApi {
 	}
 
 	public void rename(String srcPath, String dstPath) throws IOException {
-		final File workspaceRootFile = getWorkspaceRoot(false);
+		final File workspaceRootFile = WorkspaceHandler.getWorkspaceRoot(false);
 		if (workspaceRootFile == null) {
 			resp.respondBadRequest();
 			return;
@@ -148,7 +150,7 @@ public class WorkspaceApi {
 	}
 
 	public void putContents(String path, int contentLen, SocketLike body) throws IOException {
-		final File workspaceRootFile = getWorkspaceRoot(false);
+		final File workspaceRootFile = WorkspaceHandler.getWorkspaceRoot(false);
 
 		if (workspaceRootFile == null) {
 			if (debugApiFailureReasons) {
@@ -180,7 +182,7 @@ public class WorkspaceApi {
 	}
 
 	public void putMetadata(String path, int contentLen, SocketLike body) throws IOException {
-		final File workspaceRootFile = getWorkspaceRoot(false);
+		final File workspaceRootFile = WorkspaceHandler.getWorkspaceRoot(false);
 		if (workspaceRootFile == null) {
 			resp.respondBadRequest();
 			return;
@@ -210,7 +212,7 @@ public class WorkspaceApi {
 
 
 	public void unlink(String path) throws  IOException {
-		final File workspaceRootFile = getWorkspaceRoot(false);
+		final File workspaceRootFile = WorkspaceHandler.getWorkspaceRoot(false);
 		if (workspaceRootFile == null) {
 			resp.respondBadRequest();
 			return;
@@ -269,7 +271,7 @@ public class WorkspaceApi {
 	}
 
 	public void getWorkspace() throws IOException {
-		final File workspaceRootFile = getWorkspaceRoot(false);
+		final File workspaceRootFile = WorkspaceHandler.getWorkspaceRoot(false);
 		if (workspaceRootFile == null) {
 			resp.respondNoContent();
 			return;
@@ -279,7 +281,7 @@ public class WorkspaceApi {
 
 
 	public void getContents(String path) throws IOException {
-		final File workspaceRootFile = getWorkspaceRoot(false);
+		final File workspaceRootFile = WorkspaceHandler.getWorkspaceRoot(false);
 		if (workspaceRootFile == null) {
 			resp.respondBadRequest();
 			return;
@@ -336,25 +338,4 @@ public class WorkspaceApi {
 		;
 	}
 
-	public static File getWorkspaceRoot(boolean exitOnError) {
-		final String workspaceRootCfg = System.getProperty("cpr.workspace");
-		if (workspaceRootCfg == null) {
-			return null;
-		}
-
-		final File workspaceRootFile = new File(workspaceRootCfg);
-		if (!workspaceRootFile.exists()) {
-			System.err.println("ERROR: specified 'cpr.workspace' path " + workspaceRootCfg + " does not exist");
-			if (exitOnError) {
-				System.exit(1);
-			}
-		}
-		if (!workspaceRootFile.isDirectory()) {
-			System.err.println("ERROR: specified 'cpr.workspace' path " + workspaceRootCfg + " is not a directory");
-			if (exitOnError) {
-				System.exit(1);
-			}
-		}
-		return workspaceRootFile;
-	}
 }

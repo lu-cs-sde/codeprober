@@ -34,6 +34,7 @@ import org.gradle.api.tasks.Exec;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.InputFile;
+import org.gradle.api.tasks.InputDirectory;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.JavaExec;
 import org.gradle.api.tasks.Optional;
@@ -192,6 +193,17 @@ public abstract class LaunchCodeProber extends JavaExec {
     return "https://api.github.com/repos/lu-cs-sde/codeprober";
   }
 
+  @Optional @InputDirectory
+  public File workspace;
+  public File getWorkspace() { return workspace; }
+  private File getOverriddenWorkspace() {
+    Object val = getProject().getProperties().get("workspace");
+    if (val != null) {
+      return overriddenPathToFile("" + val);
+    }
+    return workspace;
+  }
+
   // Parse space separated args, while allowing spaces to be escaped
   // E.g "a b\\ c" becomes ["a", "b c"]
   private List<String> parseArgsList(String val) {
@@ -223,14 +235,19 @@ public abstract class LaunchCodeProber extends JavaExec {
 
   @Override
   public void exec() {
+    List<String> jvmArgs = new ArrayList<>();
     final Object val = getProject().getProperties().get("jvmArgs");
     if (val != null) {
-      setJvmArgs(parseArgsList("" + val));
+      jvmArgs.addAll(parseArgsList("" + val));
     }
-    // List<String> sysProps = getOverriddenSysProps();
-    // if (sysProps != null) {
-    //   setJvmArgs(sysProps);
-    // }
+    File workspace = getOverriddenWorkspace();
+    if (workspace != null) {
+      jvmArgs.add(String.format("-Dcpr.workspace=%s", workspace.getPath()));
+    }
+    if (!jvmArgs.isEmpty()) {
+      setJvmArgs(jvmArgs);
+    }
+
     List<String> args = new ArrayList<>();
     List<String> cArgs = getOverriddenCprArgs();
     if (cArgs != null) {

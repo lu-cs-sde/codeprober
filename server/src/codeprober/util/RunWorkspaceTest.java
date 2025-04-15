@@ -79,7 +79,7 @@ public class RunWorkspaceTest {
 
 	public static Pattern getTextProbePattern() {
 		return Pattern
-				.compile("\\[\\[(\\w+)(\\[\\d+\\])?((?:\\.\\w+)+)(!?)(~?)(?:=(((?!\\[\\[).)*))\\]\\](?!\\])");
+				.compile("\\[\\[(\\w+)(\\[\\d+\\])?((?:\\.(?:l:)?\\w+)+)(!?)(~?)(?:=(((?!\\[\\[).)*))\\]\\](?!\\])");
 	}
 
 	public static int PATTERN_GROUP_NODETYPE = 1;

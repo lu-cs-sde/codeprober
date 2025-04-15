@@ -131,17 +131,27 @@ public class WorkspaceHandler {
 		}
 
 		final File workspaceRootFile = new File(workspaceRootCfg);
-		if (!workspaceRootFile.exists()) {
-			System.err.println("ERROR: specified 'cpr.workspace' path " + workspaceRootCfg + " does not exist");
+		if (!workspaceRootFile.isFile()) {
+			System.err.println("ERROR: specified 'cpr.workspace' path '" + workspaceRootCfg + "' is a file");
 			if (exitOnBadConfig) {
 				System.exit(1);
 			}
 		}
-		if (!workspaceRootFile.isDirectory()) {
-			System.err.println("ERROR: specified 'cpr.workspace' path " + workspaceRootCfg + " is not a directory");
-			if (exitOnBadConfig) {
-				System.exit(1);
+
+		if (!workspaceRootFile.exists()) {
+			if (!workspaceRootFile.getParentFile().exists()) {
+				// If both the parent and child path are missing, there is a decent chance of
+				// misconfiguration. Print an error and exit/return.
+				System.err.println("ERROR: neither the 'cpr.workspace' path '" + workspaceRootCfg
+						+ "' nor its parent path exists. Please create the directories before starting CodeProber.");
+				if (exitOnBadConfig) {
+					System.exit(1);
+				}
+				return null;
 			}
+			// Else, only the child path does not exist. Create it
+			System.out.println("'cpr.workspace' path " + workspaceRootCfg + " is missing. Creating an empty direcyory");
+			workspaceRootFile.mkdir();
 		}
 		return workspaceRootFile;
 	}

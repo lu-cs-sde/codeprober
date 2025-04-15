@@ -47,7 +47,7 @@ interface TextProbeManager {
 type TextProbeStyle = 'angle-brackets' | 'disabled';
 
 const createTypedProbeRegex = () => {
-  const reg = /\[\[(\w+)(\[\d+\])?((?:\.\w*)+)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
+  const reg = /\[\[(\w+)(\[\d+\])?((?:\.(?:l:)?\w*)+)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
 
   return {
     exec: (line: string) => {
@@ -72,7 +72,7 @@ const createTypedProbeRegex = () => {
 
 const createForgivingProbeRegex = () => {
   // Neede for autocompletion
-  const reg = /\[\[(\w*)(\[\d+\])?((?:\.\w*)*)?(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
+  const reg = /\[\[(\w*)(\[\d+\])?((?:\.(?:l:)?\w*)*)?(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
 
   return {
     exec: (line: string) => {

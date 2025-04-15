@@ -7,6 +7,7 @@ import codeprober.AstInfo;
 import codeprober.ast.AstNode;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
+import codeprober.metaprogramming.TypeIdentificationStyle;
 
 public class NodesWithProperty {
 
@@ -112,13 +113,16 @@ public class NodesWithProperty {
 						final String expression = predPart.substring(0, subtypePos).trim();
 						final String expectedValue = predPart.substring(subtypePos + "<:".length()).trim();
 
+						AstNode actualNode;
 						final Object actualValue;
 						switch (expression) {
 						case "this": {
+							actualNode = astNode;
 							actualValue = astNode.underlyingAstNode;
 							break;
 						}
 						default: {
+							actualNode = null;
 							actualValue = invokePotentiallyLabelled(info, astNode, expression);
 							break;
 						}
@@ -128,32 +132,46 @@ public class NodesWithProperty {
 							break;
 						}
 						try {
-							Class<?> expectedCls = null;
-							final ClassLoader classLoader = info.ast.underlyingAstNode.getClass().getClassLoader();
-							try {
-								expectedCls = classLoader.loadClass(expectedValue);
-							} catch (ClassNotFoundException e) {
-								if (!expectedValue.contains(".")) {
-									final Class<?> rootClass = info.ast.underlyingAstNode.getClass();
-									// Might be shorthand syntax, retry with the ast package prefixed
-									final String desugaredClsName = String.format("%s%s", //
-											rootClass.getEnclosingClass() != null //
-													? (rootClass.getEnclosingClass().getName() + "$")
-													: (rootClass.getPackage().getName() + "."), //
-											expectedValue //
-									);
-									expectedCls = classLoader.loadClass(desugaredClsName);
+							if (info.typeIdentificationStyle == TypeIdentificationStyle.NODE_LABEL) {
+								if (actualNode == null) {
+									actualNode = new AstNode(actualValue);
 
-								} else {
-									throw e;
 								}
-							}
+								final String label = actualNode.getNodeLabel();
+								if (label != null && label.equals(expectedValue)) {
+									continue;
+								}
+								show = false;
+								break;
+
+							} else {
+								Class<?> expectedCls = null;
+								final ClassLoader classLoader = info.ast.underlyingAstNode.getClass().getClassLoader();
+								try {
+									expectedCls = classLoader.loadClass(expectedValue);
+								} catch (ClassNotFoundException e) {
+									if (!expectedValue.contains(".")) {
+										final Class<?> rootClass = info.ast.underlyingAstNode.getClass();
+										// Might be shorthand syntax, retry with the ast package prefixed
+										final String desugaredClsName = String.format("%s%s", //
+												rootClass.getEnclosingClass() != null //
+												? (rootClass.getEnclosingClass().getName() + "$")
+														: (rootClass.getPackage().getName() + "."), //
+														expectedValue //
+												);
+										expectedCls = classLoader.loadClass(desugaredClsName);
+
+									} else {
+										throw e;
+									}
+								}
 //							actualValue.getClass().asSubclass(expectedCls); // Will throw CCE if not correct subtype
-							if (expectedCls.isInstance(actualValue)) {
-								continue;
+								if (expectedCls.isInstance(actualValue)) {
+									continue;
+								}
+								show = false;
+								break;
 							}
-							show = false;
-							break;
 						} catch (ClassNotFoundException e) {
 							System.out.println("Invalid expected class in subtype predicate: " + expectedValue);
 							e.printStackTrace();

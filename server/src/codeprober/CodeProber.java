@@ -231,7 +231,7 @@ public class CodeProber {
 		// terminal. Do it early to inform user.
 		CodespacesCompat.shouldApplyCompatHacks();
 		CodespacesCompat.getChangeBufferTime();
-		final File workspaceRoot = WorkspaceApi.getWorkspaceRoot(true);
+		final File workspaceRoot = WorkspaceHandler.getWorkspaceRoot(true);
 		if (workspaceRoot != null) {
 			new WorkspaceDirectoryMonitor(workspaceRoot, msgPusher).start();
 		}

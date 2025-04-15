@@ -48,6 +48,7 @@ The plugin contains a number of parameters, all of which are optional.
 | cprUpdateCheck | boolean  | true                                              | Whether or not to periodically check for new versions of CodeProber. This is done once a week by default, i.e when the lastModified of the downloaded `codeprober.jar` is over a week old, the plugin will try to retrieve the latest jar from github. This parameter has no effect if `cprVersion` is set. |
 | openBrowser    | boolean  | true                                              | Whether to automatically open a web browser with the the CodeProber URL immediately after starting. |
 | port           | int      | 0                                                 | The port to serve requests on. If set to 0, then a random free port is automatically picked. |
+| workspace      | File     | null                                              | Set a directory to be used as a "file system" in the CodeProber UI. This can also be set with the system property 'cpr.workspace'. |
 | repoApiUrl     | String   | https://api.github.com/repos/lu-cs-sde/codeprober | Base url for the API requests used for fetching and downloading CodeProber. This can be used to run CodeProber forks. |
 
 All parameters can be set with project properties on the command-line, like `-Pfoo=bar`, or in the `build.gradle` file.

@@ -1881,7 +1881,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
     cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
     ;
     const createTypedProbeRegex = () => {
-        const reg = /\[\[(\w+)(\[\d+\])?((?:\.\w*)+)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
+        const reg = /\[\[(\w+)(\[\d+\])?((?:\.(?:l:)?\w*)+)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
         return {
             exec: (line) => {
                 const match = reg.exec(line);
@@ -1904,7 +1904,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "network/evalua
     };
     const createForgivingProbeRegex = () => {
         // Neede for autocompletion
-        const reg = /\[\[(\w*)(\[\d+\])?((?:\.\w*)*)?(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
+        const reg = /\[\[(\w*)(\[\d+\])?((?:\.(?:l:)?\w*)*)?(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
         return {
             exec: (line) => {
                 const match = reg.exec(line);
