@@ -1694,152 +1694,6 @@ define("model/ModalEnv", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
 });
-define("network/evaluateProperty", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    const evaluateProperty = (env, req, onSlowResponseDetected, onStatusUpdate, cleanupSlownessInformation) => {
-        let cancelled = false;
-        let activelyLoadingJob = null;
-        const doStopJob = (jobId) => env.performTypedRpc({
-            type: 'Concurrent:StopJob',
-            job: jobId,
-        }).then(res => {
-            if (res.err) {
-                console.warn('Error when stopping job:', res.err);
-                return false;
-            }
-            return true;
-        });
-        let stopper = () => { };
-        return {
-            cancel: () => {
-                cancelled = true;
-                if (activelyLoadingJob !== null) {
-                    doStopJob(activelyLoadingJob);
-                    activelyLoadingJob = null;
-                }
-                stopper();
-            },
-            fetch: () => new Promise((resolve, reject) => {
-                var _a;
-                stopper = () => resolve('stopped');
-                let isDone = false;
-                let isConnectedToConcurrentCapableServer = false;
-                let knownStatus = 'Unknown';
-                let knownStackTrace = null;
-                let localConcurrentCleanup = () => { };
-                const initialPollDelayTimer = setTimeout(() => {
-                    if (isDone || cancelled || !isConnectedToConcurrentCapableServer) {
-                        return;
-                    }
-                    onSlowResponseDetected === null || onSlowResponseDetected === void 0 ? void 0 : onSlowResponseDetected();
-                    localConcurrentCleanup = () => { cleanupSlownessInformation === null || cleanupSlownessInformation === void 0 ? void 0 : cleanupSlownessInformation(); };
-                    const poll = () => {
-                        if (isDone || cancelled) {
-                            return;
-                        }
-                        env.performTypedRpc({
-                            type: 'Concurrent:PollWorkerStatus',
-                            job: jobId,
-                        })
-                            .then(res => {
-                            if (res.ok) {
-                                // Polled OK, async update will be delivered to job monitor below
-                                // Queue future poll.
-                                setTimeout(poll, 1000);
-                            }
-                            else {
-                                console.warn('Error when polling for job status');
-                                // Don't queue more polling, very unlikely to work anyway.
-                            }
-                        });
-                    };
-                    poll();
-                }, 5000);
-                const jobId = env.createJobId(update => {
-                    switch (update.value.type) {
-                        case 'status': {
-                            knownStatus = update.value.value;
-                            onStatusUpdate === null || onStatusUpdate === void 0 ? void 0 : onStatusUpdate(knownStatus, knownStackTrace);
-                            break;
-                        }
-                        case 'workerStackTrace': {
-                            knownStackTrace = update.value.value;
-                            onStatusUpdate === null || onStatusUpdate === void 0 ? void 0 : onStatusUpdate(knownStatus, knownStackTrace);
-                            break;
-                        }
-                        case 'workerTaskDone': {
-                            const wtd = update.value.value;
-                            switch (wtd.type) {
-                                case 'normal': {
-                                    isDone = true;
-                                    activelyLoadingJob = null;
-                                    localConcurrentCleanup();
-                                    const cast = wtd.value;
-                                    if (cast.response.type == 'job') {
-                                        throw new Error(`Unexpected 'job' result in async update`);
-                                    }
-                                    resolve(cast.response.value);
-                                    break;
-                                }
-                            }
-                            break;
-                        }
-                    }
-                });
-                env.performTypedRpc({
-                    ...req,
-                    job: jobId,
-                    jobLabel: `Probe: '${`${(_a = req.locator.result.label) !== null && _a !== void 0 ? _a : req.locator.result.type}`.split('.').slice(-1)[0]}.${req.property.name}'`,
-                })
-                    .then((data) => {
-                    if (data.response.type === 'job') {
-                        // Async work queued, not done.
-                        if (cancelled) {
-                            // We were removed while this request was sent
-                            // Stop it asap
-                            doStopJob(jobId);
-                            clearTimeout(initialPollDelayTimer);
-                        }
-                        else {
-                            activelyLoadingJob = jobId;
-                        }
-                        isConnectedToConcurrentCapableServer = true;
-                    }
-                    else {
-                        // Sync work executed, done.
-                        clearTimeout(initialPollDelayTimer);
-                        isDone = true;
-                        resolve(data.response.value);
-                    }
-                });
-            }),
-        };
-    };
-    exports.default = evaluateProperty;
-});
-define("model/cullingTaskSubmitterFactory", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    const createCullingTaskSubmitterFactory = (cullTime) => {
-        if (typeof cullTime !== 'number') {
-            return () => ({ submit: (cb) => cb(), cancel: () => { }, });
-        }
-        return () => {
-            let localChangeDebounceTimer = -1;
-            return {
-                submit: (cb) => {
-                    clearTimeout(localChangeDebounceTimer);
-                    localChangeDebounceTimer = setTimeout(() => cb(), cullTime);
-                },
-                cancel: () => {
-                    clearTimeout(localChangeDebounceTimer);
-                },
-            };
-        };
-    };
-    exports.default = createCullingTaskSubmitterFactory;
-});
 define("model/UpdatableNodeLocator", ["require", "exports", "model/adjustLocator"], function (require, exports, adjustLocator_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -1870,1847 +1724,6 @@ define("model/UpdatableNodeLocator", ["require", "exports", "model/adjustLocator
     };
     exports.createMutableLocator = createMutableLocator;
 });
-define("model/TextProbeManager", ["require", "exports", "hacks", "network/evaluateProperty", "settings", "ui/create/attachDragToX", "ui/popup/displayProbeModal", "ui/startEndToSpan", "model/cullingTaskSubmitterFactory", "model/UpdatableNodeLocator"], function (require, exports, hacks_2, evaluateProperty_1, settings_2, attachDragToX_3, displayProbeModal_1, startEndToSpan_2, cullingTaskSubmitterFactory_1, UpdatableNodeLocator_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.setupTextProbeManager = void 0;
-    evaluateProperty_1 = __importDefault(evaluateProperty_1);
-    settings_2 = __importDefault(settings_2);
-    displayProbeModal_1 = __importDefault(displayProbeModal_1);
-    startEndToSpan_2 = __importDefault(startEndToSpan_2);
-    cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
-    ;
-    const createTypedProbeRegex = () => {
-        const reg = /\[\[(\w+)(\[\d+\])?((?:\.(?:l:)?\w*)+)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
-        return {
-            exec: (line) => {
-                const match = reg.exec(line);
-                if (!match) {
-                    return null;
-                }
-                const [full, nodeType, nodeIndex, attrNames, exclamation, tilde, expectVal] = match;
-                return {
-                    index: match.index,
-                    full,
-                    nodeType,
-                    nodeIndex: nodeIndex ? +nodeIndex.slice(1, -1) : undefined,
-                    attrNames: attrNames.slice(1).split('.'),
-                    exclamation: !!exclamation,
-                    tilde: !!tilde,
-                    expectVal: typeof expectVal === 'string' ? expectVal : undefined,
-                };
-            }
-        };
-    };
-    const createForgivingProbeRegex = () => {
-        // Neede for autocompletion
-        const reg = /\[\[(\w*)(\[\d+\])?((?:\.(?:l:)?\w*)*)?(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
-        return {
-            exec: (line) => {
-                const match = reg.exec(line);
-                if (!match) {
-                    return null;
-                }
-                const [full, nodeType, nodeIndex, attrNames] = match;
-                return {
-                    index: match.index,
-                    full,
-                    nodeType,
-                    nodeIndex: nodeIndex ? +nodeIndex.slice(1, -1) : undefined,
-                    attrNames: attrNames ? attrNames.slice(1).split('.') : undefined,
-                };
-            }
-        };
-    };
-    const createSpanFlasher = (env) => {
-        let activeFlashCleanup = () => { };
-        let activeFlashSpan = null;
-        const activeSpanReferenceHoverPos = { ...attachDragToX_3.lastKnownMousePos };
-        const flash = (spans, removeHighlightsOnMove) => {
-            // Remove invalid spans
-            spans = spans.filter(x => x.lineStart && x.lineEnd);
-            const act = activeFlashSpan;
-            if (act && JSON.stringify(act) === JSON.stringify(spans) /* bit hacky comparison, but it works */) {
-                // Already flashing this, update the hover pos reference and exit
-                Object.assign(activeSpanReferenceHoverPos, attachDragToX_3.lastKnownMousePos);
-                return;
-            }
-            activeFlashSpan = spans;
-            const flashes = spans.map(span => ({
-                id: `flash-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`,
-                sticky: { span, classNames: [span.lineStart === span.lineEnd ? 'elp-flash' : 'elp-flash-multiline'] }
-            }));
-            flashes.forEach(flash => env.setStickyHighlight(flash.id, flash.sticky));
-            const cleanup = () => {
-                flashes.forEach(flash => env.clearStickyHighlight(flash.id));
-                activeFlashSpan = null;
-                window.removeEventListener('mousemove', cleanup);
-            };
-            Object.assign(activeSpanReferenceHoverPos, attachDragToX_3.lastKnownMousePos);
-            if (removeHighlightsOnMove) {
-                window.addEventListener('mousemove', (e) => {
-                    const dx = e.x - activeSpanReferenceHoverPos.x;
-                    const dy = e.y - activeSpanReferenceHoverPos.y;
-                    if (Math.hypot(dx, dy) > 24 /* arbitrary distance */) {
-                        cleanup();
-                    }
-                });
-            }
-            activeFlashCleanup();
-            activeFlashCleanup = cleanup;
-        };
-        const quickFlash = (spans) => {
-            flash(spans);
-            const cleaner = activeFlashCleanup;
-            setTimeout(() => {
-                if (activeFlashCleanup === cleaner) {
-                    activeFlashCleanup();
-                }
-                {
-                    // Else, we have been replaced by another highlight
-                }
-            }, 500);
-        };
-        const clear = () => {
-            activeFlashCleanup();
-        };
-        return { flash, clear, quickFlash };
-    };
-    const setupTextProbeManager = (args) => {
-        const refreshDispatcher = (0, cullingTaskSubmitterFactory_1.default)(1)();
-        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-        const evaluateProperty = async (evalArgs) => {
-            var _a;
-            const rpcQueryStart = performance.now();
-            const res = await (0, evaluateProperty_1.default)(args.env, {
-                captureStdout: false,
-                locator: evalArgs.locator,
-                property: { name: evalArgs.prop, args: evalArgs.args },
-                src: (_a = evalArgs.parsingData) !== null && _a !== void 0 ? _a : args.env.createParsingRequestData(),
-                type: 'EvaluateProperty',
-                skipResultLocator: true,
-            }).fetch();
-            if (res !== 'stopped') {
-                if (typeof res.totalTime === 'number'
-                    && typeof res.parseTime === 'number'
-                    && typeof res.createLocatorTime === 'number'
-                    && typeof res.applyLocatorTime === 'number'
-                    && typeof res.attrEvalTime === 'number') {
-                    args.env.statisticsCollector.addProbeEvaluationTime({
-                        attrEvalMs: res.attrEvalTime / 1000000,
-                        fullRpcMs: Math.max(performance.now() - rpcQueryStart),
-                        serverApplyLocatorMs: res.applyLocatorTime / 1000000,
-                        serverCreateLocatorMs: res.createLocatorTime / 1000000,
-                        serverParseOnlyMs: res.parseTime / 1000000,
-                        serverSideMs: res.totalTime / 1000000,
-                    });
-                }
-            }
-            return res;
-        };
-        const isBrokenNodeChain = (val) => val && (typeof val === 'object') && val.type === 'broken-node-chain';
-        const evaluatePropertyChain = async (evalArgs) => {
-            var _a;
-            const first = await evaluateProperty({ locator: evalArgs.locator, prop: evalArgs.propChain[0], parsingData: evalArgs.parsingData, });
-            if (first === 'stopped') {
-                return 'stopped';
-            }
-            let prevResult = first;
-            for (let subsequentIdx = 1; subsequentIdx < evalArgs.propChain.length; ++subsequentIdx) {
-                // Previous result must be a node locator
-                if (((_a = prevResult.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
-                    console.log('prevResult does not look like a reference attribute:', prevResult.body);
-                    return { type: 'broken-node-chain', brokenIndex: subsequentIdx - 1 };
-                }
-                const chainedLocator = prevResult.body[0].value;
-                const nextRes = await evaluateProperty({ locator: chainedLocator, prop: evalArgs.propChain[subsequentIdx], parsingData: evalArgs.parsingData });
-                if (nextRes === 'stopped') {
-                    return 'stopped';
-                }
-                prevResult = nextRes;
-            }
-            return prevResult;
-        };
-        const listNodes = async (listArgs) => {
-            const rootNode = { type: '<ROOT>', start: ((listArgs.zeroIndexedLine + 1) << 12) + 1, end: ((listArgs.zeroIndexedLine + 1) << 12) + 4095, depth: 0 };
-            const propResult = await evaluateProperty({
-                locator: { result: rootNode, steps: [] },
-                prop: 'm:NodesWithProperty',
-                args: [
-                    { type: 'string', value: listArgs.attrFilter },
-                    { type: 'string', value: listArgs.predicate }
-                ],
-                parsingData: listArgs.parsingData,
-            });
-            if (propResult === 'stopped') {
-                return null;
-            }
-            if (!propResult.body.length || propResult.body[0].type !== 'arr') {
-                console.error('Unexpected respose from search query:', propResult);
-                return null;
-            }
-            const queryResultList = propResult.body[0].value;
-            const ret = [];
-            queryResultList.forEach(line => {
-                if (line.type === 'node') {
-                    ret.push(line.value);
-                }
-            });
-            return ret;
-        };
-        const diagnostics = [];
-        args.env.probeMarkers[queryId] = () => diagnostics;
-        let activeRefresh = false;
-        let repeatOnDone = false;
-        const activeStickies = [];
-        const doRefresh = async () => {
-            const hadDiagnosticsBefore = diagnostics.length;
-            if (settings_2.default.getTextProbeStyle() === 'disabled') {
-                for (let i = 0; i < activeStickies.length; ++i) {
-                    args.env.clearStickyHighlight(activeStickies[i]);
-                }
-                activeStickies.length = 0;
-                args.onFinishedCheckingActiveFile({ numFail: 0, numPass: 0 });
-                if (hadDiagnosticsBefore) {
-                    diagnostics.length = 0;
-                    args.env.updateMarkers();
-                }
-                return;
-            }
-            if (activeRefresh) {
-                repeatOnDone = true;
-                return;
-            }
-            diagnostics.length = 0;
-            activeRefresh = true;
-            repeatOnDone = false;
-            let nextStickyIndex = 0;
-            const allocateStickyId = () => {
-                let stickyId;
-                if (nextStickyIndex >= activeStickies.length) {
-                    stickyId = `${queryId}-${nextStickyIndex}`;
-                    activeStickies.push(stickyId);
-                }
-                else {
-                    stickyId = activeStickies[nextStickyIndex];
-                }
-                ++nextStickyIndex;
-                return stickyId;
-            };
-            const combinedResults = { numPass: 0, numFail: 0 };
-            try {
-                const preqData = args.env.createParsingRequestData();
-                const lines = args.env.getLocalState().split('\n');
-                for (let lineIdx = 0; lineIdx < lines.length; ++lineIdx) {
-                    const line = lines[lineIdx];
-                    const reg = createTypedProbeRegex();
-                    let match;
-                    function addErr(colStart, colEnd, msg) {
-                        diagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
-                    }
-                    while ((match = reg.exec(line)) !== null) {
-                        const matchingNodes = await listNodes({
-                            attrFilter: match.attrNames[0],
-                            predicate: `this<:${match.nodeType}&@lineSpan~=${lineIdx + 1}`,
-                            zeroIndexedLine: lineIdx,
-                            parsingData: preqData,
-                        });
-                        let numPass = 0, numFail = 0;
-                        let errMsg = null;
-                        if (!(matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes.length)) {
-                            ++numFail;
-                            errMsg = `No matching nodes`;
-                            const typeStart = line.indexOf(match.nodeType, match.index);
-                            const firstAttrEnd = line.indexOf(match.attrNames[0], line.indexOf('.', typeStart)) + match.attrNames[0].length;
-                            addErr(typeStart + 1, firstAttrEnd, errMsg);
-                        }
-                        else {
-                            let matchedNode = null;
-                            if (match.nodeIndex !== undefined) {
-                                if (match.nodeIndex < 0 || match.nodeIndex >= matchingNodes.length) {
-                                    ++numFail;
-                                    errMsg = `Invalid index`;
-                                    const typeEnd = line.indexOf(match.nodeType, match.index) + match.nodeType.length;
-                                    const idxStart = line.indexOf(`${match.nodeIndex}`, typeEnd);
-                                    addErr(idxStart + 1, idxStart + `${match.nodeIndex}`.length, `Bad Index`);
-                                }
-                                else {
-                                    matchedNode = matchingNodes[match.nodeIndex];
-                                }
-                            }
-                            else {
-                                if (matchingNodes.length === 1) {
-                                    // Only one node, no need for an index
-                                    matchedNode = matchingNodes[0];
-                                }
-                                else {
-                                    ++numFail;
-                                    errMsg = `${matchingNodes.length} nodes of type "${match.nodeType}". Add [idx] to disambiguate, e.g. "${match.nodeType}[0]"`;
-                                    const typeStart = line.indexOf(match.nodeType, match.index);
-                                    addErr(typeStart + 1, line.indexOf('.', typeStart), `Ambiguous, add "[idx]" to select which "${match.nodeType}" to match. 0 ≤ idx < ${matchingNodes.length}`);
-                                }
-                            }
-                            if (matchedNode) {
-                                const attrEvalResult = await evaluatePropertyChain({
-                                    locator: matchedNode,
-                                    propChain: match.attrNames,
-                                    parsingData: preqData,
-                                });
-                                if (attrEvalResult == 'stopped') {
-                                    break;
-                                }
-                                if (isBrokenNodeChain(attrEvalResult)) {
-                                    ++numFail;
-                                    errMsg = 'Invalid attribute chain';
-                                    let attrStart = line.indexOf('.', match.index) + 1;
-                                    for (let i = 0; i < attrEvalResult.brokenIndex; ++i) {
-                                        attrStart = line.indexOf('.', attrStart) + 1;
-                                    }
-                                    addErr(attrStart + 1, attrStart + match.attrNames[attrEvalResult.brokenIndex].length, `No AST node returned by "${match.attrNames[attrEvalResult.brokenIndex]}"`);
-                                }
-                                else {
-                                    const cmp = evalPropertyBodyToString(attrEvalResult.body);
-                                    if (attrEvalResult.body.length === 1 && attrEvalResult.body[0].type === 'plain' && attrEvalResult.body[0].value.startsWith(`No such attribute '${match.attrNames[match.attrNames.length - 1]}' on `)) {
-                                        let lastAttrStart = match.index;
-                                        for (let i = 0; i < match.attrNames.length; ++i) {
-                                            lastAttrStart = line.indexOf('.', lastAttrStart) + 1;
-                                        }
-                                        addErr(lastAttrStart + 1, lastAttrStart + match.attrNames[match.attrNames.length - 1].length, 'No such attribute');
-                                    }
-                                    if (match.expectVal === undefined) {
-                                        if (!errMsg) {
-                                            // Just a probe, save the result as a message
-                                            errMsg = `Result: ${cmp}`;
-                                        }
-                                    }
-                                    else {
-                                        const rawComparisonSuccess = match.tilde ? cmp.includes(match.expectVal) : (cmp === match.expectVal);
-                                        const adjustedComparisonSuccsess = match.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
-                                        if (adjustedComparisonSuccsess) {
-                                            ++numPass;
-                                        }
-                                        else {
-                                            errMsg = `Actual: ${cmp}`;
-                                            ++numFail;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        combinedResults.numPass += numPass;
-                        combinedResults.numFail += numFail;
-                        const span = { lineStart: (lineIdx + 1), colStart: match.index + 1, lineEnd: (lineIdx + 1), colEnd: (match.index + match.full.length) };
-                        const inlineTextSpan = { ...span, colStart: span.colEnd - 2, colEnd: span.colEnd - 1 };
-                        args.env.setStickyHighlight(allocateStickyId(), {
-                            classNames: [numFail ? 'elp-result-fail' : (numPass ? 'elp-result-success' : 'elp-result-probe')],
-                            span,
-                        });
-                        if (errMsg) {
-                            args.env.setStickyHighlight(allocateStickyId(), {
-                                classNames: [],
-                                span: inlineTextSpan,
-                                content: errMsg,
-                                contentClassNames: [`elp-actual-result-${numFail ? 'err' : 'probe'}`],
-                            });
-                        }
-                    }
-                }
-            }
-            catch (e) {
-                console.warn('Error during refresh', e);
-            }
-            if (diagnostics.length || hadDiagnosticsBefore) {
-                args.env.updateMarkers();
-            }
-            for (let i = nextStickyIndex; i < activeStickies.length; ++i) {
-                args.env.clearStickyHighlight(activeStickies[i]);
-            }
-            activeStickies.length = nextStickyIndex;
-            activeRefresh = false;
-            args.onFinishedCheckingActiveFile(combinedResults);
-            if (repeatOnDone) {
-                refresh();
-            }
-        };
-        const refresh = () => refreshDispatcher.submit(doRefresh);
-        args.env.onChangeListeners[queryId] = refresh;
-        refresh();
-        const flasher = createSpanFlasher(args.env);
-        const hover = async (line, column) => {
-            const res = await doHover(line, column);
-            if (res === null) {
-                flasher.clear();
-            }
-            return res;
-        };
-        const doHover = async (line, column) => {
-            var _a;
-            if (settings_2.default.getTextProbeStyle() === 'disabled') {
-                return null;
-            }
-            const lines = args.env.getLocalState().split('\n');
-            // Make line/col 0-indexed
-            --line;
-            --column;
-            if (line < 0 || line >= lines.length) {
-                return null;
-            }
-            const reg = createTypedProbeRegex();
-            let match;
-            while ((match = reg.exec(lines[line])) !== null) {
-                const begin = match.index;
-                if (column < begin) {
-                    continue;
-                }
-                const end = begin + match.full.length;
-                if (column >= end) {
-                    continue;
-                }
-                const fmatch = match;
-                const parsingData = args.env.createParsingRequestData();
-                const listedNodes = await listNodes({ attrFilter: fmatch.attrNames[0], predicate: `this<:${fmatch.nodeType}&@lineSpan~=${line + 1}`, zeroIndexedLine: line, parsingData });
-                const locator = listedNodes === null || listedNodes === void 0 ? void 0 : listedNodes[(_a = match.nodeIndex) !== null && _a !== void 0 ? _a : 0];
-                if (!locator) {
-                    return null;
-                }
-                const typeStart = match.index + 2;
-                const typeEnd = lines[line].indexOf('.', typeStart);
-                if (column >= typeStart && column < typeEnd) {
-                    const retFlash = [];
-                    if (!locator.result.external) {
-                        retFlash.push((0, startEndToSpan_2.default)(locator.result.start, locator.result.end));
-                    }
-                    retFlash.push({
-                        // Type in text probe
-                        lineStart: line + 1, colStart: typeStart + 1,
-                        lineEnd: line + 1, colEnd: typeEnd,
-                    });
-                    flasher.flash(retFlash, true);
-                }
-                else {
-                    let searchStart = typeEnd;
-                    let hoveringProp = false;
-                    for (let propIdx = 0; propIdx < match.attrNames.length - 1 /* -1, only want intermediate props */; ++propIdx) {
-                        const propStart = lines[line].indexOf('.', searchStart) + 1;
-                        const propEnd = propStart + match.attrNames[propIdx].length;
-                        searchStart = propEnd;
-                        if (column >= propStart && column < propEnd) {
-                            console.log('hovering intermediate prop', propIdx);
-                            hoveringProp = true;
-                            evaluatePropertyChain({ locator, parsingData, propChain: match.attrNames.slice(0, propIdx + 1) })
-                                // 'then', not 'await'. Do not want to block the hover info from appearing
-                                .then(res => {
-                                if (res === 'stopped' || isBrokenNodeChain(res) || res.body[0].type !== 'node') {
-                                    return;
-                                }
-                                const node = res.body[0].value.result;
-                                flasher.flash([
-                                    {
-                                        lineStart: line + 1, colStart: propStart + 1,
-                                        lineEnd: line + 1, colEnd: propEnd,
-                                    },
-                                    (0, startEndToSpan_2.default)(node.start, node.end)
-                                ], true);
-                            });
-                            break;
-                        }
-                    }
-                    if (!hoveringProp && match.expectVal) {
-                        const resultStart = lines[line].indexOf('=', searchStart) + 1;
-                        const resultEnd = resultStart + match.expectVal.length;
-                        if (column >= resultStart && column < resultEnd) {
-                            evaluatePropertyChain({ locator, parsingData, propChain: match.attrNames })
-                                .then(res => {
-                                if (res === 'stopped' || isBrokenNodeChain(res)) {
-                                    return;
-                                }
-                                if (res.body[0].type === 'node') {
-                                    const node = res.body[0].value.result;
-                                    const spans = [{
-                                            lineStart: line + 1, colStart: resultStart + 1,
-                                            lineEnd: line + 1, colEnd: resultEnd,
-                                        }];
-                                    if (!node.external) {
-                                        spans.push((0, startEndToSpan_2.default)(node.start, node.end));
-                                    }
-                                    flasher.flash(spans, true);
-                                }
-                            });
-                        }
-                    }
-                }
-                window.CPR_CMD_OPEN_TEXTPROBE_CALLBACK = async () => {
-                    var _a;
-                    const nestedWindows = {};
-                    let nestTarget = nestedWindows;
-                    let nestLocator = locator;
-                    for (let chainAttrIdx = 0; chainAttrIdx < fmatch.attrNames.length; ++chainAttrIdx) {
-                        const chainAttr = fmatch.attrNames[chainAttrIdx];
-                        const res = await evaluateProperty({ locator: nestLocator, prop: chainAttr, parsingData });
-                        if (res === 'stopped' || isBrokenNodeChain(res)) {
-                            break;
-                        }
-                        if (chainAttrIdx > 0) {
-                            let newNest = {};
-                            nestTarget['[0]'] = [
-                                { data: { type: 'probe', locator, property: { name: chainAttr }, nested: newNest } },
-                            ];
-                            nestTarget = newNest;
-                        }
-                        if (((_a = res.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
-                            break;
-                        }
-                        nestLocator = res.body[0].value;
-                    }
-                    (0, displayProbeModal_1.default)(args.env, null, (0, UpdatableNodeLocator_1.createMutableLocator)(locator), { name: fmatch.attrNames[0] }, nestedWindows);
-                };
-                return {
-                    range: { startLineNumber: line + 1, startColumn: column + 1, endLineNumber: line + 1, endColumn: column + 3 },
-                    contents: [{
-                            value: `[Open Normal Probe](command:${window.CPR_CMD_OPEN_TEXTPROBE_ID})`, isTrusted: true
-                        }],
-                };
-            }
-            return null;
-        };
-        const complete = async (line, column) => {
-            if (settings_2.default.getTextProbeStyle() === 'disabled') {
-                return null;
-            }
-            const lines = args.env.getLocalState().split('\n');
-            // Make line/col 0-indexed
-            --line;
-            --column;
-            if (line < 0 || line >= lines.length) {
-                return null;
-            }
-            const reg = createTypedProbeRegex();
-            let match;
-            const completeType = async () => {
-                const matchingNodes = await listNodes({
-                    attrFilter: '',
-                    predicate: `@lineSpan~=${line + 1}`,
-                    zeroIndexedLine: line,
-                });
-                if (matchingNodes === null) {
-                    return null;
-                }
-                const duplicateTypes = new Set();
-                const includedTypes = new Set();
-                matchingNodes.forEach(node => {
-                    var _a;
-                    const type = (_a = node.result.label) !== null && _a !== void 0 ? _a : node.result.type;
-                    if (includedTypes.has(type)) {
-                        duplicateTypes.add(type);
-                    }
-                    includedTypes.add(type);
-                });
-                let nodeListCounter = {};
-                let lastFlash = -1;
-                window.OnCompletionItemListClosed = () => {
-                    flasher.clear();
-                };
-                window.OnCompletionItemFocused = item => {
-                    if (item.nodeIndex === 'undefined') {
-                        return;
-                    }
-                    const nodeIndex = item.nodeIndex;
-                    if (lastFlash === nodeIndex) {
-                        return;
-                    }
-                    lastFlash = nodeIndex;
-                    const node = matchingNodes[nodeIndex];
-                    if (!node) {
-                        return;
-                    }
-                    flasher.flash([(0, startEndToSpan_2.default)(node.result.start, node.result.end)]);
-                };
-                return matchingNodes.map((node, nodeIndex) => {
-                    var _a, _b;
-                    const type = (_a = node.result.label) !== null && _a !== void 0 ? _a : node.result.type;
-                    const label = type.split('.').slice(-1)[0];
-                    const ret = { kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0') };
-                    if (!duplicateTypes.has(type)) {
-                        return { label, insertText: label, ...ret };
-                    }
-                    let idx = ((_b = nodeListCounter[type]) !== null && _b !== void 0 ? _b : -1) + 1;
-                    nodeListCounter[type] = idx;
-                    const indexed = `${label}[${idx}]`;
-                    return { label: indexed, insertText: indexed, ...ret };
-                });
-            };
-            const completeProp = async (nodeType, nodeIndex, prerequisiteAttrs, previousStepSpan) => {
-                var _a;
-                const parsingData = args.env.createParsingRequestData();
-                const matchingNodes = await listNodes({
-                    attrFilter: '',
-                    predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
-                    zeroIndexedLine: line,
-                    parsingData,
-                });
-                let locator = matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes[nodeIndex !== null && nodeIndex !== void 0 ? nodeIndex : 0];
-                if (!locator) {
-                    return null;
-                }
-                if (prerequisiteAttrs.length != 0) {
-                    const chainResult = await evaluatePropertyChain({ locator, propChain: prerequisiteAttrs, parsingData });
-                    if (chainResult === 'stopped' || isBrokenNodeChain(chainResult)) {
-                        return null;
-                    }
-                    if (((_a = chainResult.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
-                        return null;
-                    }
-                    locator = chainResult.body[0].value;
-                }
-                // const typeStart = match.index + 2;
-                // const typeEnd = typeStart + match.nodeType.length;
-                // const firstPropStart =
-                flasher.flash([
-                    {
-                        lineStart: line + 1, colStart: previousStepSpan[0],
-                        lineEnd: line + 1, colEnd: previousStepSpan[1],
-                    },
-                    {
-                        lineStart: locator.result.start >>> 12, colStart: locator.result.start & 0xFFF,
-                        lineEnd: locator.result.end >>> 12, colEnd: locator.result.end & 0xFFF,
-                    }
-                ]);
-                window.OnCompletionItemListClosed = () => {
-                    flasher.clear();
-                };
-                const props = await args.env.performTypedRpc({
-                    locator,
-                    src: parsingData,
-                    type: 'ListProperties',
-                    all: settings_2.default.shouldShowAllProperties(),
-                });
-                if (!props.properties) {
-                    return null;
-                }
-                const zeroArgPropNames = new Set(props.properties.filter(prop => { var _a, _b; return ((_b = (_a = prop.args) === null || _a === void 0 ? void 0 : _a.length) !== null && _b !== void 0 ? _b : 0) === 0; }).map(prop => prop.name));
-                return [...zeroArgPropNames].sort().map(label => {
-                    return { label, insertText: label, kind: 2 };
-                });
-            };
-            const completeExpectedValue = async (nodeType, nodeIndex, attrNames) => {
-                var _a;
-                const parsingData = args.env.createParsingRequestData();
-                const matchingNodes = await listNodes({
-                    attrFilter: '',
-                    predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
-                    zeroIndexedLine: line,
-                    parsingData,
-                });
-                let locator = matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes[nodeIndex !== null && nodeIndex !== void 0 ? nodeIndex : 0];
-                if (!locator) {
-                    return null;
-                }
-                const attrEvalResult = await evaluatePropertyChain({
-                    locator,
-                    propChain: attrNames,
-                    parsingData,
-                });
-                if (attrEvalResult == 'stopped' || isBrokenNodeChain(attrEvalResult)) {
-                    return null;
-                }
-                if (((_a = attrEvalResult.body[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node') {
-                    const node = attrEvalResult.body[0].value.result;
-                    if (!node.external) {
-                        flasher.flash([(0, startEndToSpan_2.default)(node.start, node.end)]);
-                        window.OnCompletionItemListClosed = () => {
-                            flasher.clear();
-                        };
-                    }
-                }
-                const cmp = evalPropertyBodyToString(attrEvalResult.body);
-                return [{ label: cmp, insertText: cmp, kind: 15 }];
-            };
-            while ((match = reg.exec(lines[line])) !== null) {
-                if (match.index >= column) {
-                    // Cursor is before the match
-                    continue;
-                }
-                if (match.index + match.full.length <= column) {
-                    // Cursor is before the match
-                    continue;
-                }
-                const typeStart = match.index + 2;
-                const typeEnd = lines[line].indexOf('.', typeStart);
-                if (column >= typeStart && column <= typeEnd) {
-                    return completeType();
-                }
-                let attrSearchStart = typeEnd;
-                for (let attrIdx = 0; attrIdx < match.attrNames.length; ++attrIdx) {
-                    const attrStart = lines[line].indexOf('.', attrSearchStart) + 1;
-                    ;
-                    const attrEnd = attrStart + match.attrNames[attrIdx].length;
-                    attrSearchStart = attrEnd;
-                    if (column >= attrStart && column <= attrEnd) {
-                        return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx), [typeStart, attrStart]);
-                    }
-                }
-                if (match.expectVal !== undefined) {
-                    const expectStart = lines[line].indexOf('=', attrSearchStart) + 1;
-                    ;
-                    const expectEnd = expectStart + match.expectVal.length;
-                    if (column >= expectStart && column <= expectEnd) {
-                        return completeExpectedValue(match.nodeType, match.nodeIndex, match.attrNames);
-                    }
-                }
-            }
-            const forgivingReg = createForgivingProbeRegex();
-            while ((match = forgivingReg.exec(lines[line])) !== null) {
-                if (match.index >= column) {
-                    // Cursor is before the match
-                    continue;
-                }
-                if (match.index + match.full.length <= column) {
-                    // Cursor is before the match
-                    continue;
-                }
-                const typeStart = match.index + 2;
-                const typeEnd = Math.max(typeStart + match.nodeType.length, lines[line].indexOf('.', typeStart));
-                if (column >= typeStart && column <= typeEnd) {
-                    return completeType();
-                }
-                if (match.attrNames) {
-                    let attrSearchStart = typeEnd;
-                    for (let attrIdx = 0; attrIdx < match.attrNames.length; ++attrIdx) {
-                        const attrStart = lines[line].indexOf('.', attrSearchStart) + 1;
-                        ;
-                        const attrEnd = attrStart + match.attrNames[attrIdx].length;
-                        attrSearchStart = attrEnd;
-                        if (column >= attrStart && column <= attrEnd) {
-                            return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx), [typeStart, attrStart]);
-                        }
-                    }
-                }
-            }
-            return null;
-        };
-        const checkFile = async (requestSrc, knownSrc) => {
-            const ret = {
-                numPass: 0,
-                numFail: 0,
-            };
-            if (settings_2.default.getTextProbeStyle() === 'disabled') {
-                return ret;
-            }
-            const parsingData = {
-                ...args.env.createParsingRequestData(),
-                src: requestSrc,
-            };
-            const lines = knownSrc.split('\n');
-            const postLoopWaits = [];
-            for (let lineIdx = 0; lineIdx < lines.length; ++lineIdx) {
-                const reg = createTypedProbeRegex();
-                let outerMatch;
-                while ((outerMatch = reg.exec(lines[lineIdx])) != null) {
-                    const match = outerMatch;
-                    if (match.expectVal === undefined) {
-                        // Just a probe, no assertion, no need to check
-                        continue;
-                    }
-                    const expectedValue = match.expectVal;
-                    const handleMatch = async () => {
-                        var _a;
-                        const allNodes = await listNodes({
-                            attrFilter: match.attrNames[0],
-                            predicate: `this<:${match.nodeType}&@lineSpan~=${lineIdx + 1}`,
-                            zeroIndexedLine: lineIdx,
-                            parsingData,
-                        });
-                        if (!(allNodes === null || allNodes === void 0 ? void 0 : allNodes.length)) {
-                            ret.numFail++;
-                            return;
-                        }
-                        if (match.nodeIndex === undefined && allNodes.length !== 1) {
-                            // Must have explicit index when >1 node
-                            ++ret.numFail;
-                            return;
-                        }
-                        const locator = allNodes[(_a = match.nodeIndex) !== null && _a !== void 0 ? _a : 0];
-                        if (!locator) {
-                            // Invalid index
-                            ++ret.numFail;
-                            return;
-                        }
-                        const evalRes = await evaluatePropertyChain({ locator, propChain: match.attrNames, parsingData });
-                        if (evalRes === 'stopped') {
-                            // TODO is this a failure?
-                            return;
-                        }
-                        if (isBrokenNodeChain(evalRes)) {
-                            ret.numFail++;
-                            return;
-                        }
-                        const cmp = evalPropertyBodyToString(evalRes.body);
-                        const rawComparisonSuccess = match.tilde ? cmp.includes(expectedValue) : (cmp === expectedValue);
-                        const adjustedComparisonSuccsess = match.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
-                        if (adjustedComparisonSuccsess) {
-                            ret.numPass++;
-                        }
-                        else {
-                            ret.numFail++;
-                        }
-                    };
-                    if (args.env.workerProcessCount !== undefined) {
-                        postLoopWaits.push(handleMatch());
-                    }
-                    else {
-                        await handleMatch();
-                    }
-                }
-            }
-            await Promise.all(postLoopWaits);
-            return ret;
-        };
-        return { hover, complete, checkFile };
-    };
-    exports.setupTextProbeManager = setupTextProbeManager;
-    const evalPropertyBodyToString = (body) => {
-        const lineToComparisonString = (line) => {
-            var _a, _b;
-            switch (line.type) {
-                case 'plain':
-                case 'stdout':
-                case 'stderr':
-                case 'streamArg':
-                case 'dotGraph':
-                case 'html':
-                    return line.value;
-                case 'arr':
-                    let mapped = [];
-                    for (let idx = 0; idx < line.value.length; ++idx) {
-                        if (line.value[idx].type === 'node' && ((_a = line.value[idx + 1]) === null || _a === void 0 ? void 0 : _a.type) === 'plain' && line.value[idx + 1].value === '\n') {
-                            const justNode = lineToComparisonString(line.value[idx]);
-                            if (line.value.length === 2) {
-                                return justNode;
-                            }
-                            mapped.push(justNode);
-                            ++idx;
-                        }
-                        else {
-                            mapped.push(lineToComparisonString(line.value[idx]));
-                        }
-                    }
-                    return `[${mapped.join(', ')}]`;
-                case 'node':
-                    const ret = (_b = line.value.result.label) !== null && _b !== void 0 ? _b : line.value.result.type;
-                    return ret.slice(ret.lastIndexOf('.') + 1);
-                case 'highlightMsg':
-                    return line.value.msg;
-                case 'tracing':
-                    return lineToComparisonString(line.value.result);
-                default:
-                    (0, hacks_2.assertUnreachable)(line);
-                    return '';
-            }
-        };
-        return lineToComparisonString(body.length === 1 ? body[0] : { type: 'arr', value: body });
-    };
-});
-define("ui/UIElements", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    class UIElements {
-        // Use lazy getters since the dom elements haven't been loaded
-        // by the time this script initially runs.
-        get positionRecoverySelector() { return document.getElementById('control-position-recovery-strategy'); }
-        get positionRecoveryHelpButton() { return document.getElementById('control-position-recovery-strategy-help'); }
-        get astCacheStrategySelector() { return document.getElementById('ast-cache-strategy'); }
-        get astCacheStrategyHelpButton() { return document.getElementById('control-ast-cache-strategy-help'); }
-        get syntaxHighlightingSelector() { return document.getElementById('syntax-highlighting'); }
-        get syntaxHighlightingHelpButton() { return document.getElementById('control-syntax-highlighting-help'); }
-        get shouldOverrideMainArgsCheckbox() { return document.getElementById('control-should-override-main-args'); }
-        get configureMainArgsOverrideButton() { return document.getElementById('configure-main-args'); }
-        get mainArgsOverrideHelpButton() { return document.getElementById('main-args-override-help'); }
-        get shouldCustomizeFileSuffixCheckbox() { return document.getElementById('control-customize-file-suffix'); }
-        get configureCustomFileSuffixButton() { return document.getElementById('customize-file-suffix'); }
-        get customFileSuffixHelpButton() { return document.getElementById('customize-file-suffix-help'); }
-        get showAllPropertiesCheckbox() { return document.getElementById('control-show-all-properties'); }
-        get showAllPropertiesHelpButton() { return document.getElementById('show-all-properties-help'); }
-        get groupPropertiesByAspectCheckbox() { return document.getElementById('control-group-properties-by-aspect'); }
-        get groupPropertiesByAspectButton() { return document.getElementById('group-properties-by-aspect-help'); }
-        get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr'); }
-        get duplicateProbeHelpButton() { return document.getElementById('duplicate-probe-on-attr-help'); }
-        get captureStdoutCheckbox() { return document.getElementById('control-capture-stdout'); }
-        get captureStdoutHelpButton() { return document.getElementById('capture-stdout-help'); }
-        get captureTracesCheckbox() { return document.getElementById('control-capture-traces'); }
-        get captureTracesHelpButton() { return document.getElementById('capture-traces-help'); }
-        get autoflushTracesCheckbox() { return document.getElementById('control-autoflush-traces'); }
-        get autoflushTracesContainer() { return document.getElementById('container-autoflush-traces'); }
-        get locationStyleSelector() { return document.getElementById('location-style'); }
-        get locationStyleHelpButton() { return document.getElementById('control-location-style-help'); }
-        get textprobeStyleSelector() { return document.getElementById('textprobe-style'); }
-        get textprobeStyleHelpButton() { return document.getElementById('control-textprobe-style-help'); }
-        get workspaceHeaderLabel() { return document.getElementById('workspace-header'); }
-        get workspaceListWrapper() { return document.getElementById('workspace-wrapper'); }
-        get workspaceTestRunner() { return document.getElementById('workspace-test-runner'); }
-        get generalHelpButton() { return document.getElementById('display-help'); }
-        get saveAsUrlButton() { return document.getElementById('saveAsUrl'); }
-        get darkModeCheckbox() { return document.getElementById('control-dark-mode'); }
-        get displayStatisticsButton() { return document.getElementById('display-statistics'); }
-        get displayWorkerStatusButton() { return document.getElementById('display-worker-status'); }
-        get versionInfo() { return document.getElementById('version'); }
-        get settingsHider() { return document.getElementById('settings-hider'); }
-        get settingsRevealer() { return document.getElementById('settings-revealer'); }
-        get showTests() { return document.getElementById('show-tests'); }
-        get minimizedProbeArea() { return document.getElementById('minimized-probe-area'); }
-    }
-    exports.default = UIElements;
-});
-define("settings", ["require", "exports", "model/syntaxHighlighting", "ui/UIElements"], function (require, exports, syntaxHighlighting_1, UIElements_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    UIElements_1 = __importDefault(UIElements_1);
-    let settingsObj = null;
-    const clearHashFromLocation = () => history.replaceState('', document.title, `${window.location.pathname}${window.location.search}`);
-    window.saveStateAsUrl = () => {
-        const encoded = encodeURIComponent(JSON.stringify(settings.get()));
-        // delete location.hash;'
-        // console.log('loc:', location.toString());
-        navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}${window.location.search}${window.location.search.length === 0 ? '?' : '&'}settings=${encoded}`);
-        const btn = new UIElements_1.default().saveAsUrlButton;
-        const saveText = btn.textContent;
-        setTimeout(() => {
-            btn.textContent = saveText;
-            btn.style.border = 'unset';
-            delete btn.style.border;
-        }, 1000);
-        btn.textContent = `Copied to clipboard`;
-        btn.style.border = '1px solid green';
-    };
-    const settings = {
-        get: () => {
-            if (!settingsObj) {
-                let settingsMatch;
-                if ((settingsMatch = /[?&]settings=[^?&]+/.exec(location.search)) != null) {
-                    const trimmedSearch = settingsMatch.index === 0
-                        ? (settingsMatch[0].length < location.search.length
-                            ? `?${location.search.slice(settingsMatch[0].length + 1)}`
-                            : `${location.search.slice(0, settingsMatch.index)}${location.search.slice(settingsMatch.index + settingsMatch[0].length)}`)
-                        : `${location.search.slice(0, settingsMatch.index)}${location.search.slice(settingsMatch.index + settingsMatch[0].length)}`;
-                    history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
-                    try {
-                        settingsObj = JSON.parse(decodeURIComponent(settingsMatch[0].slice(`?settings=`.length)));
-                        clearHashFromLocation();
-                        if (settingsObj) {
-                            settings.set(settingsObj);
-                        }
-                    }
-                    catch (e) {
-                        console.warn('Invalid windowState in hash', e);
-                    }
-                }
-                if (!settingsObj) {
-                    try {
-                        // TODO remove 'pasta-settings' fallback after an appropriate amount of time
-                        settingsObj = JSON.parse(localStorage.getItem('codeprober-settings') || localStorage.getItem('pasta-settings') || '{}');
-                    }
-                    catch (e) {
-                        console.warn('Bad data in localStorage, resetting settings', e);
-                        settingsObj = {};
-                    }
-                }
-            }
-            return settingsObj || {};
-        },
-        set: (newSettings) => {
-            settingsObj = newSettings;
-            localStorage.setItem('codeprober-settings', JSON.stringify(settingsObj));
-        },
-        getEditorContents: () => settings.get().editorContents,
-        setEditorContents: (editorContents) => settings.set({ ...settings.get(), editorContents }),
-        isLightTheme: () => { var _a; return (_a = settings.get().lightTheme) !== null && _a !== void 0 ? _a : false; },
-        setLightTheme: (lightTheme) => settings.set({ ...settings.get(), lightTheme }),
-        shouldDuplicateProbeOnAttrClick: () => { var _a; return (_a = settings.get().duplicateProbeOnAttrClick) !== null && _a !== void 0 ? _a : true; },
-        setShouldDuplicateProbeOnAttrClick: (duplicateProbeOnAttrClick) => settings.set({ ...settings.get(), duplicateProbeOnAttrClick }),
-        shouldCaptureStdio: () => { var _a; return (_a = settings.get().captureStdio) !== null && _a !== void 0 ? _a : true; },
-        setShouldCaptureStdio: (captureStdio) => settings.set({ ...settings.get(), captureStdio }),
-        shouldCaptureTraces: () => { var _a; return (_a = settings.get().captureTraces) !== null && _a !== void 0 ? _a : false; },
-        setShouldCaptureTraces: (captureTraces) => settings.set({ ...settings.get(), captureTraces }),
-        shouldAutoflushTraces: () => { var _a; return (_a = settings.get().autoflushTraces) !== null && _a !== void 0 ? _a : true; },
-        setShouldAutoflushTraces: (autoflushTraces) => settings.set({ ...settings.get(), autoflushTraces }),
-        getPositionRecoveryStrategy: () => { var _a; return (_a = settings.get().positionRecoveryStrategy) !== null && _a !== void 0 ? _a : 'ALTERNATE_PARENT_CHILD'; },
-        setPositionRecoveryStrategy: (positionRecoveryStrategy) => settings.set({ ...settings.get(), positionRecoveryStrategy }),
-        getAstCacheStrategy: () => { var _a; return (_a = settings.get().astCacheStrategy) !== null && _a !== void 0 ? _a : 'PARTIAL'; },
-        setAstCacheStrategy: (astCacheStrategy) => settings.set({ ...settings.get(), astCacheStrategy }),
-        getProbeWindowStates: () => {
-            var _a;
-            const ret = (_a = settings.get().probeWindowStates) !== null && _a !== void 0 ? _a : [];
-            return ret.map((item) => {
-                if (typeof item.data === 'undefined') {
-                    // Older variant of this data, upgrade it
-                    return {
-                        modalPos: item.modalPos,
-                        data: {
-                            type: 'probe',
-                            locator: item.locator,
-                            property: item.property,
-                            nested: {},
-                        }
-                    };
-                }
-                return item;
-            });
-        },
-        setProbeWindowStates: (probeWindowStates) => settings.set({ ...settings.get(), probeWindowStates }),
-        getSyntaxHighlighting: () => { var _a; return (_a = settings.get().syntaxHighlighting) !== null && _a !== void 0 ? _a : 'java'; },
-        setSyntaxHighlighting: (syntaxHighlighting) => settings.set({ ...settings.get(), syntaxHighlighting }),
-        getMainArgsOverride: () => { var _a; return (_a = settings.get().mainArgsOverride) !== null && _a !== void 0 ? _a : null; },
-        setMainArgsOverride: (mainArgsOverride) => settings.set({ ...settings.get(), mainArgsOverride }),
-        getCustomFileSuffix: () => { var _a; return (_a = settings.get().customFileSuffix) !== null && _a !== void 0 ? _a : null; },
-        setCustomFileSuffix: (customFileSuffix) => settings.set({ ...settings.get(), customFileSuffix }),
-        getCurrentFileSuffix: () => { var _a; return (_a = settings.getCustomFileSuffix()) !== null && _a !== void 0 ? _a : `.${(0, syntaxHighlighting_1.getAppropriateFileSuffix)(settings.getSyntaxHighlighting())}`; },
-        shouldShowAllProperties: () => { var _a; return (_a = settings.get().showAllProperties) !== null && _a !== void 0 ? _a : false; },
-        setShouldShowAllProperties: (showAllProperties) => settings.set({ ...settings.get(), showAllProperties }),
-        getLocationStyle: () => { var _a; return (_a = settings.get().locationStyle) !== null && _a !== void 0 ? _a : 'full'; },
-        setLocationStyle: (locationStyle) => settings.set({ ...settings.get(), locationStyle }),
-        getTextProbeStyle: () => { var _a; return (_a = settings.get().textProbeStyle) !== null && _a !== void 0 ? _a : 'angle-brackets'; },
-        setTextProbeStyle: (textProbeStyle) => settings.set({ ...settings.get(), textProbeStyle }),
-        shouldHideSettingsPanel: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.hideSettingsPanel) !== null && _b !== void 0 ? _b : false; },
-        setShouldHideSettingsPanel: (shouldHide) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),
-        shouldGroupPropertiesByAspect: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.groupPropertiesByAspect) !== null && _b !== void 0 ? _b : false; },
-        setShouldGroupPropertiesByAspect: (shouldHide) => settings.set({ ...settings.get(), groupPropertiesByAspect: shouldHide }),
-        getActiveWorkspacePath: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.activeWorkspacePath) !== null && _b !== void 0 ? _b : null; },
-        setActiveWorkspacePath: (activeWorkspacePath) => settings.set({ ...settings.get(), activeWorkspacePath }),
-        shouldRerunWorkspaceTestsOnChange: () => { var _a; return (_a = settings.get().shouldRerunWorkspaceTestsOnChange) !== null && _a !== void 0 ? _a : false; },
-        setShouldRerunWorkspaceTestsOnChange: (shouldRerunWorkspaceTestsOnChange) => settings.set({ ...settings.get(), shouldRerunWorkspaceTestsOnChange }),
-        shouldEnableTesting: () => window.location.search.includes('enableTesting=true'),
-    };
-    exports.default = settings;
-});
-define("ui/create/registerOnHover", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    const registerOnHover = (element, onHover) => {
-        element.onmouseenter = () => onHover(true);
-        element.onmouseleave = () => onHover(false);
-    };
-    exports.default = registerOnHover;
-});
-define("ui/create/createTextSpanIndicator", ["require", "exports", "settings", "ui/create/registerOnHover"], function (require, exports, settings_3, registerOnHover_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    settings_3 = __importDefault(settings_3);
-    registerOnHover_1 = __importDefault(registerOnHover_1);
-    const createTextSpanIndicator = (args) => {
-        var _a;
-        const { span, marginLeft, marginRight, onHover, onClick } = args;
-        const indicator = document.createElement('span');
-        indicator.style.fontSize = '0.75rem';
-        indicator.style.color = 'gray';
-        if (marginLeft) {
-            indicator.style.marginLeft = '0.25rem';
-        }
-        if (args.autoVerticalMargin) {
-            indicator.style.marginTop = 'auto';
-            indicator.style.marginBottom = 'auto';
-        }
-        if (marginRight) {
-            indicator.style.marginRight = '0.25rem';
-        }
-        const ext = args.external ? '↰' : '';
-        const warn = span.lineStart === 0 && span.colStart === 0 && span.lineEnd === 0 && span.colEnd === 0 ? '⚠️' : '';
-        switch ((_a = args.styleOverride) !== null && _a !== void 0 ? _a : settings_3.default.getLocationStyle()) {
-            case 'full-compact':
-                if (span.lineStart === span.lineEnd) {
-                    indicator.innerText = `${ext}[${span.lineStart}:${span.colStart}-${span.colEnd}]${warn}`;
-                    break;
-                }
-            // Else, fall through
-            case 'full':
-                indicator.innerText = `${ext}[${span.lineStart}:${span.colStart}→${span.lineEnd}:${span.colEnd}]${warn}`;
-                break;
-            case 'lines-compact':
-                if (span.lineStart === span.lineEnd) {
-                    indicator.innerText = `${ext}[${span.lineStart}]${warn}`;
-                    break;
-                }
-            // Else, fall through
-            case 'lines':
-                indicator.innerText = `${ext}[${span.lineStart}→${span.lineEnd}]${warn}`;
-                break;
-            case 'start':
-                indicator.innerText = `${ext}[${span.lineStart}:${span.colStart}]${warn}`;
-                break;
-            case 'start-line':
-                indicator.innerText = `${ext}[${span.lineStart}]${warn}`;
-                break;
-        }
-        if (!args.external) {
-            if (onHover) {
-                indicator.classList.add('highlightOnHover');
-                (0, registerOnHover_1.default)(indicator, onHover);
-            }
-            if (onClick) {
-                indicator.onclick = () => onClick();
-            }
-        }
-        return indicator;
-    };
-    exports.default = createTextSpanIndicator;
-});
-define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/showWindow"], function (require, exports, repositoryUrl_1, createModalTitle_1, createTextSpanIndicator_1, showWindow_2) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    createModalTitle_1 = __importDefault(createModalTitle_1);
-    createTextSpanIndicator_1 = __importDefault(createTextSpanIndicator_1);
-    showWindow_2 = __importDefault(showWindow_2);
-    const createSyntaxNode = (type, text, margins) => {
-        const retNode = document.createElement('span');
-        if (type) {
-            retNode.classList.add(type);
-        }
-        if (margins === null || margins === void 0 ? void 0 : margins.includes('left'))
-            retNode.style.marginLeft = '0.5rem';
-        if (margins === null || margins === void 0 ? void 0 : margins.includes('right'))
-            retNode.style.marginRight = '0.5rem';
-        retNode.innerText = text;
-        return retNode;
-    };
-    const getHelpTitle = (type) => ({
-        'general': 'How to use CodeProber 🔎',
-        'recovery-strategy': 'Position recovery',
-        'probe-window': 'Probe help',
-        'magic-stdout-messages': 'Magic stdout messages',
-        'ast-cache-strategy': 'AST caching',
-        'syntax-highlighting': 'Syntax Highlighting',
-        'main-args-override': 'Main args override',
-        'customize-file-suffix': 'Temp file suffix',
-        'property-list-usage': 'Property list help',
-        'show-all-properties': 'Show all properties',
-        'group-properties-by-aspect': 'Group properties',
-        'duplicate-probe-on-attr': 'Duplicate probe',
-        'capture-stdout': 'Capture stdout',
-        'capture-traces': 'Capture traces',
-        'location-style': 'Location styles',
-        'textprobe-style': 'TextProbe styles',
-        'ast': 'AST',
-        'test-code-vs-codeprober-code': 'Test code vs CodeProber code',
-    })[type];
-    const getHelpContents = (type) => {
-        const createHeader = (text) => {
-            const header = document.createElement('span');
-            header.classList.add('syntax-attr');
-            header.innerText = text;
-            return header;
-        };
-        const joinElements = (...parts) => {
-            const wrapper = document.createElement('div');
-            parts.forEach(p => {
-                if (typeof p === 'string') {
-                    wrapper.appendChild(document.createTextNode(p));
-                }
-                else {
-                    wrapper.appendChild(p);
-                }
-                return p;
-            });
-            return wrapper;
-        };
-        switch (type) {
-            case 'general': {
-                const exampleVisible = document.createElement('div');
-                {
-                    const add = (...args) => exampleVisible.appendChild(createSyntaxNode(args[0], args[1], args[2]));
-                    exampleVisible.appendChild(document.createTextNode('Example (JastAdd syntax): '));
-                    add('syntax-modifier', 'syn', 'right');
-                    add('syntax-type', 'boolean List');
-                    add('syntax-attr', '.cpr_nodeListVisible', '');
-                    add('', '() =', 'right');
-                    add('syntax-modifier', 'false', 'false');
-                    add('', ';', '');
-                }
-                const exampleAttrs = document.createElement('div');
-                {
-                    const add = (...args) => exampleAttrs.appendChild(createSyntaxNode(args[0], args[1], args[2]));
-                    exampleAttrs.appendChild(document.createTextNode('Example (JastAdd syntax): '));
-                    add('syntax-modifier', 'syn', 'right');
-                    add('syntax-type', 'java.util.List<String> Function');
-                    add('syntax-attr', '.cpr_propertyListShow', '');
-                    add('', '() =', 'right');
-                    add('syntax-type', 'Arrays.asList(', '');
-                    add('syntax-string', '"eval"', '');
-                    add('', ', ', '');
-                    add('syntax-string', '"reference"', '');
-                    add('', ');', '');
-                }
-                const exampleView = document.createElement('div');
-                {
-                    const add = (...args) => exampleView.appendChild(createSyntaxNode(args[0], args[1], args[2]));
-                    exampleView.appendChild(document.createTextNode('Example (JastAdd syntax): '));
-                    add('syntax-modifier', 'syn', 'right');
-                    add('syntax-type', 'Object IntType');
-                    add('syntax-attr', '.cpr_getOutput', '');
-                    add('', '() =', 'right');
-                    add('syntax-string', '"int"');
-                    add('', ';', '');
-                }
-                const viewDefault = document.createElement('pre');
-                viewDefault.style.marginTop = '2px';
-                viewDefault.style.marginLeft = '2px';
-                viewDefault.style.fontSize = '0.875rem';
-                viewDefault.innerText = `
-encode(value):
-  if (value is ASTNode):
-    if (value has 'cpr_getOutput'): encode(value.cpr_getOutput())
-    else: output(value.location, value.type)
-
-  if (value is Iterator or Iterable):
-    for (entry in value): encode(entry)
-
-  if no case above matched: output(value.toString())
-`.trim();
-                return [
-                    `Right click on some text in the editor and click 'Create Probe' to get started.`,
-                    `If you get the message 'Node listing failed', then it likely means that something went wrong during parsing.`,
-                    `Look at the terminal where you started codeprober.jar for more information.`,
-                    ``,
-                    `There are a number of 'magic' attributes you can add to your AST nodes to modify their behavior in this tool.`,
-                    `All magic attributes are prefixed with 'cpr_' (CodePRober_) to avoid colliding with your own functionality.`,
-                    `There three main magic attributes you may want to add are:`,
-                    ``,
-                    joinElements(`1) '`, createHeader('cpr_nodeListVisible'), `'. This controls whether or not a node will appear in the 'Create Probe' node list.`),
-                    `Default: `,
-                    `-    false: for 'List' and 'Opt'. Note: this is only default, you can override it.`,
-                    `-     true: for all other types.`,
-                    exampleVisible,
-                    ``,
-                    joinElements(`2) '`, createHeader('cpr_propertyListShow'), `'. A collection (List<String> or String[]) that is used to include extra properties in the property list seen when creating probes.`),
-                    `Functions are shown in the property list if all of the following is true:`,
-                    `- The function is public.`,
-                    `- The argument types are 'String', 'int', 'boolean', 'java.io.OutputStream', 'java.io.PrintStream' or a subtype of the top AST Node type.`,
-                    `- One of the following is true:`,
-                    `-- The function is an attribute (originates from a jrag file, e.g 'z' in 'syn X Y.z() = ...')`,
-                    `-- The function is an AST child accessor (used to get members declared in an .ast file).`,
-                    `-- The function name is either 'toString', 'getChild', 'getNumChild', 'getParent' or 'dumpTree'`,
-                    `-- The function name is found in the return value from cpr_propertyListShow()`,
-                    `Default: empty array.`,
-                    exampleAttrs,
-                    ``,
-                    joinElements(`3) '`, createHeader('cpr_getOutput'), `'. This controls how a value is shown in the output (lower part) of a probe.`),
-                    `Default: encodes one or more options in order. In pseudocode:`,
-                    viewDefault,
-                    exampleView,
-                    ``,
-                    `The way this tool is built, it cannot help you find & fix infinite loops.`,
-                    joinElements(`For infinite loops we instead recommend you use other tools like `, (() => {
-                        const a = document.createElement('a');
-                        a.href = 'https://docs.oracle.com/javase/1.5.0/docs/tooldocs/share/jstack.html';
-                        a.innerText = 'jstack';
-                        a.target = '_blank';
-                        return a;
-                    })(), ' and/or traditional breakpoint/step-debuggers.'),
-                    ``,
-                    joinElements(`Contributions welcome at `, (() => {
-                        const a = document.createElement('a');
-                        a.href = repositoryUrl_1.repositoryUrl;
-                        a.innerText = repositoryUrl_1.repositoryUrl;
-                        a.target = '_blank';
-                        return a;
-                    })()),
-                ];
-            }
-            case 'recovery-strategy': {
-                const settingsExplanation = document.createElement('div');
-                settingsExplanation.style.display = 'grid';
-                settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
-                settingsExplanation.style.gridColumnGap = '0.5rem';
-                [
-                    [`Fail`, `don\'t try to recover information`],
-                    [`Parent`, `search recursively upwards through parent nodes, using the equivalent of 'node.getParent()'`],
-                    [`Child`, `search recursively downwards through child nodes, using the equivalent of 'node.getChild(0)'`],
-                    [`Parent->Child`, `Try 'Parent'. If no position is found, try 'Child'.`],
-                    [`Child->Parent`, `Try 'Child'. If no position is found, try 'Parent'.`],
-                    [`Zigzag`, `Similar to 'Parent->Child', but only search one step in one direction, then try the other direction, then another step in the first direction, etc. Initially searches one step upwards.`],
-                ].forEach(([head, tail]) => {
-                    const headNode = document.createElement('span');
-                    headNode.style.textAlign = 'right';
-                    headNode.classList.add('syntax-attr');
-                    headNode.innerText = head;
-                    settingsExplanation.appendChild(headNode);
-                    settingsExplanation.appendChild(document.createTextNode('-'));
-                    const tailNode = document.createElement('span');
-                    tailNode.innerText = tail;
-                    settingsExplanation.appendChild(tailNode);
-                });
-                const sampleAttr = document.createElement('pre');
-                sampleAttr.style.marginTop = '6px';
-                sampleAttr.style.marginLeft = '2px';
-                sampleAttr.style.fontSize = '0.875rem';
-                sampleAttr.innerText = `
-aspect DumpSubtree {
-
-  // Bypass/inline Opt/List
-  void ASTNode.bypassDumpSubtree(java.util.List<Object> dst, int budget) {
-    if (budget <= 0) return;
-    for (ASTNode child : astChildren()) child.dumpSubtree(dst, budget);
-  }
-  void Opt.dumpSubtree(java.util.List<Object> dst, int budget) { bypassDumpSubtree(dst, budget); }
-  void List.dumpSubtree(java.util.List<Object> dst, int budget) { bypassDumpSubtree(dst, budget); }
-
-  void ASTNode.dumpSubtree(java.util.List<Object> dst, int budget) {
-    dst.add(this);
-    if (getNumChild() == 0 || budget <= 0) { return; }
-
-    final java.util.List<Object> ret = new java.util.ArrayList<>();
-    for (ASTNode child : astChildren()) child.dumpSubtree(ret, budget - 1);
-    dst.add(ret);
-  }
-
-  syn Object ASTNode.dumpSubtree(int budget) {
-    java.util.List<Object> dst = new java.util.ArrayList<>();
-    for (ASTNode child : astChildren()) child.dumpSubtree(dst, budget);
-    if (dst.size() == 1 && dst.get(0) instanceof java.util.List<?>) {
-      return dst.get(0);
-    }
-    return dst;
-  }
-  syn Object ASTNode.dumpSubtree() { return dumpSubtree(999); }
-
-}
-`.trim();
-                const copyButton = document.createElement('button');
-                copyButton.innerText = 'Copy to clipboard';
-                copyButton.onclick = () => {
-                    navigator.clipboard.writeText(sampleAttr.innerText);
-                };
-                return [
-                    'Some nodes in your AST might be missing location information.',
-                    'CodeProber is heavily built around the idea that all AST nodes have positions, and the experience is worsened for nodes where this isn\'t true.',
-                    '',
-                    'There are two solutions:',
-                    '',
-                    '1) Fix your parser',
-                    'Usually position information is missing because of how you structured your parser.',
-                    'Maybe you do some sort of desugaring in the parser, and create multiple AST nodes in a single production rule.',
-                    'Beaver, for example, will only give a single node position information per production rule, so try to ony create a single node per rule.',
-                    `Note that this isn't a solution for nodes generated by NTA's. They will need to use solution 2.`,
-                    '',
-                    '2) Use a recovery strategy',
-                    'If a node is missing location information, then we can sometimes get it from nearby nodes.',
-                    'This setting controls just how we search for information. Which option fits best for you depends on how you built your AST.',
-                    'Settings:',
-                    settingsExplanation,
-                    '',
-                    `No strategy guarantees success. If position is missing, it will be marked with '⚠️', and you\'ll likely run into problems when using it`,
-                    `If you are unsure of what to use, 'Zigzag' is usually a pretty good option.`,
-                    `An efficient way to root out parser problems is to pick 'Fail', then dump the entire tree using the following 'dumpSubtree' attribute (JastAdd syntax):`,
-                    sampleAttr,
-                    copyButton,
-                ];
-            }
-            case 'probe-window': {
-                return [
-                    `This window represents an active 'probe'`,
-                    `The titlebar shows the input to the probe; namely node type and attribute name.`,
-                    `Sometimes you'll also see attribute arguments here, and a pen that lets you edit them.`,
-                    `Finally, the title bar show where the probed node exists. You can hover this to highlight the node in the document.`,
-                    '',
-                    'Below the titlebar is the output of the probe.',
-                    `This is the resolved value of the probe, formatted according to the 'cpr_getOutput' logic (see general help window for more on this).`,
-                    '',
-                    `If you check 'Capture stdout' on the top right, you'll also see any messages printed to System.out and System.err in the window.`,
-                    `If the cache strategy is set to 'None' or 'Purge', then each probe will get evaluated in a fresh compiler instance in isolation, so any values and messages you see in the probe window belongs only to that window.`,
-                    '',
-                    'The probes are automatically reevaluated whenever the document changes.',
-                    `The probes also automatically update when the underlying jar file (usually 'compiler.jar') changes.`,
-                    `Therefore you can use probes as a sort of automatic test case runner. Write some code, open some probes, then move it to a secondary monitor and continue working on your compiler.`,
-                    `Whenever you rebuild your compiler, glance at your probes. They should now display fresh values.`,
-                ];
-            }
-            case 'magic-stdout-messages': {
-                const createParent = () => {
-                    const parent = document.createElement('div');
-                    parent.style.display = 'grid';
-                    parent.style.gridTemplateColumns = 'auto 1fr';
-                    parent.style.rowGap = '0.125rem';
-                    parent.style.columnGap = '0.5rem';
-                    return parent;
-                };
-                let entryParent;
-                const createEntry = (pattern, explanation) => {
-                    const patternHolder = document.createElement('span');
-                    patternHolder.classList.add('syntax-string');
-                    patternHolder.style.textAlign = 'right';
-                    patternHolder.innerText = pattern;
-                    const explanationHolder = document.createElement('span');
-                    explanationHolder.innerText = explanation;
-                    entryParent.appendChild(patternHolder);
-                    entryParent.appendChild(explanationHolder);
-                };
-                // TODO rename the patterns a bit? Prefix everything by PASTA- perhaps?
-                const patternsParent = entryParent = createParent();
-                createEntry('ERR@S;E;MSG', 'Show a red squiggly line.');
-                createEntry('WARN@S;E;MSG', 'Show a yellow squiggly line.');
-                createEntry('INFO@S;E;MSG', 'Show a blue squiggly line.');
-                createEntry('LINE-PP@S;E;COL', 'Draw a plain line.');
-                createEntry('LINE-PA@S;E;COL', 'Draw line that starts plain and ends with an arrow.');
-                createEntry('LINE-AP@S;E;COL', 'Draw line that starts with an arrow and ends plain.');
-                createEntry('LINE-AA@S;E;COL', 'Draw line with arrows on both ends.');
-                const patternsExamples = entryParent = createParent();
-                createEntry('ERR@40964;40966;Hello', `Red squiggly line on line 10, column 4 to 6. Shows 'Hello' when you hover over it`);
-                createEntry('INFO@16384;32767;Hi', `Blue squiggly line on the entirety of lines 4, 5, 6 and 7. Shows 'Hi' when you hover over it`);
-                createEntry('LINE-PA@4096;20490;#0FFF', `Solid cyan line from start of line 1 to line 5, column 10. Has arrow on the end.`);
-                createEntry('LINE-AA@16388;16396;#0F07', `Semi-transparent green double-sided arrow on line of line 4 from column 4 to 12`);
-                const sampleAttr = document.createElement('pre');
-                sampleAttr.style.marginTop = '6px';
-                sampleAttr.style.marginLeft = '2px';
-                sampleAttr.style.fontSize = '0.875rem';
-                sampleAttr.innerText = `
-aspect MagicOutputDemo {
-  void ASTNode.outputMagic(String type, String arg) {
-    System.out.println(type + "@" + getStart() + ";" + getEnd() + ";" + arg);
-  }
-  coll HashSet<ASTNode> Program.thingsToHighlightBlue() root Program;
-  MyNodeType contributes this
-    to Program.thingsToHighlightBlue()
-    for program();
-
-  syn Object Program.drawBlueSquigglys() {
-    for (ASTNode node : thingsToHighlightBlue()) {
-      node.outputMagic("INFO", "This thing is highlighted because [..]");
-    }
-    return null;
-  }
-}
-`.trim();
-                const copyButton = document.createElement('button');
-                copyButton.innerText = 'Copy to clipboard';
-                copyButton.onclick = () => {
-                    navigator.clipboard.writeText(sampleAttr.innerText);
-                };
-                return [
-                    `There are a number of 'magic' messages you can print to System.out.`,
-                    `Whenever probes are evaluated, these messages are intercepted (even if 'Capture stdout' isn't checked!).`,
-                    `The patterns and effects of the magic messages are shown below:`,
-                    '',
-                    patternsParent,
-                    '',
-                    `'S' and 'E' stand for 'start' and 'end', and are ints containing line and column. 20 bits for line, 12 for column, e.g: 0xLLLLLCCC.`,
-                    'Example: 20493 represents line 5 and column 13 (20493 = (5 << 12) + 13).',
-                    '',
-                    `'MSG' is any string. This string is displayed when you hover over the squiggly lines`,
-                    '',
-                    `'COL' is a hex-encoded color in the form #RGBA.`,
-                    'Example: #F007 (semi-transparent red)',
-                    '',
-                    'Some example messages and their effects are listed below:',
-                    patternsExamples,
-                    '',
-                    `The arrows don't work (or only partially work) for lines that are connected to offscreen or invalid positions.`,
-                    'For example, if you try to draw a line with one end at line 2, column 5, but that line only has 3 characters, then the line will instead point at column 3.',
-                    '',
-                    `These special messages can be used as a some custom styling/renderer to help understand how your compiler works.`,
-                    `The following code can be used as a starting point`,
-                    sampleAttr,
-                    copyButton,
-                    `Once you have the code in an aspect and have recompiled, open a probe for the attribute 'drawBlueSquigglys' to see all instances of 'MyNodeType' have blue lines under them.`,
-                    'Note that the squiggly lines (and all other arrows/lines) only remain as long as their related probe window remains open.'
-                ];
-            }
-            case "ast-cache-strategy": {
-                const settingsExplanation = document.createElement('div');
-                settingsExplanation.style.display = 'grid';
-                settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
-                settingsExplanation.style.gridColumnGap = '0.5rem';
-                [
-                    [`Full`, `Cache everything`],
-                    [`Partial`, `Cache the AST, but call 'flushTreeCache' on the root before evaluating any probe. This ensures that cached attributes are invoked for every probe.`],
-                    [`None`, `Don't cache the AST.`],
-                    [`Purge`, `Don't cache the AST or even the underlying jar file, fully reload from the file system each time. This resets all global state, but kills the JVMs ability to optimize your code. This is terrible for performance.`],
-                ].forEach(([head, tail]) => {
-                    const headNode = document.createElement('span');
-                    headNode.style.textAlign = 'right';
-                    headNode.classList.add('syntax-attr');
-                    headNode.innerText = head;
-                    settingsExplanation.appendChild(headNode);
-                    settingsExplanation.appendChild(document.createTextNode('-'));
-                    const tailNode = document.createElement('span');
-                    tailNode.innerText = tail;
-                    settingsExplanation.appendChild(tailNode);
-                });
-                return [
-                    `When multiple probes are active, the same editor state will be evaluated multiple times (once for each probe).`,
-                    `When this happens, we can re-use the AST multiple times to avoid unnecessary re-parses. There are however reasons that you might not want to re-use the AST, or at least not fully.`,
-                    '',
-                    `While it is technically bad practice, you can use "printf-style" debugging in your attributes (System.out.println(..)).`,
-                    `Cached attributes will only output such printf-messages once. With multiple active probes, this makes it uncertain which probe will capture the message.`,
-                    `Even worse, if you have any form of mutable state in your AST (please don't!), then reusing an AST can cause unpredictable behavior when parsing.`,
-                    `There are a few strategies you can use:`,
-                    '',
-                    settingsExplanation,
-                    '',
-                    `Performance is best with 'Full', and worst with 'Purge'.`,
-                    `"Debuggability" is best with 'Purge', and worst with 'Full'.`,
-                    `If you are unsure of what to use, 'Partial' is usually a pretty good option.`,
-                ];
-            }
-            case 'syntax-highlighting': return [
-                `This setting controls which style of highlighting is used in the editor.`,
-                `This also affects the suffix used for temporary files, unless 'Custom file suffix' is checked.`,
-            ];
-            case 'main-args-override': return [
-                `When your underlying tool is invoked, the path to a temporary file is sent as an arg to the main method.`,
-                `Optionally, some extra args are also included.`,
-                `By default, the extra args are defined when you start the CodeProber server.`,
-                `For example, running 'java -jar codeprober.jar path/to/your/tool.jar foo bar baz', will set the extra args array to [foo, bar, baz].`,
-                `By checking 'Override main args' and clicking "Edit", you can override those extra args.`,
-                ``,
-                `Args are separated by spaces and/or newlines.`,
-                `To include a space in an arg, wrap the arg in quotes (e.g "foo bar").`,
-                `To include a newline, quote or backslash in an arg, prefix the char with \\ (e.g \\n, \\" and \\\\).`,
-            ];
-            case 'customize-file-suffix': return [
-                `By default, the editor state is written to a temporary file with a file suffix that matches the chosen syntax highlighting.`,
-                `For example, if the highlighting is set to 'Python', then the temp file will end with '.py'.`,
-                ``,
-                `If you work on a language not represented in the syntax highlighting list, then this might result in your compiler/analyzer rejecting the temporary file due to it having an unknown suffix.`,
-                `By checking 'Custom file suffix' you can change the default suffix to something else.`,
-                `Note that custom suffixes are used as-is. If you want temp files to end with '.txt', then you must set the custom suffix to exactly '.txt' (including the dot).`,
-            ];
-            case 'property-list-usage': return [
-                `This is the list of available properties on the node you selected.`,
-                `The list is filtered according to the 'cpr_propertyListShow' logic (see general help window for more on this).`,
-                `When no filter is added, the properties are sorted by two criteria in order:`,
-                `1) Properties representing AST child accessors. This corresponds to field declarations in ast files. If you write 'MyNode ::= MyChild:TheType;', then the property 'getMyChild()' will appear high up in this list.`,
-                `2) Alphabetical ordering.`,
-                ``,
-                `When a filter is added, this list is instead is sorted by:`,
-                `1) Properties that match the filter. The filter is case insensitive and allows arbitrary characters to appear in between the filter characters. For example, 'gl' matches 'getLorem' but not 'getIpsum'.`,
-                `2) Alphabetical ordering`,
-            ];
-            case 'show-all-properties': return [
-                `By default, the property list shown while creating a probe is filtered according to the 'cpr_propertyListShow' logic (see general help window for more on this).`,
-                `The last criteria of that filter is that the function must follow one of a few predicates to be shown.`,
-                `This checkbox basically adds a '|| true' to the end of that predicate list. I.e any function that is public and has serializable argument types will be shown.`,
-                `There is potentially a very large amount of functions shown is you check this box, which can be annoying.`,
-                `In addition, some of the non-standard functions might cause mutations (like 'setChild(int, ..)'), which can cause undefined behavior when used in this tool.`,
-                `In general, we recommend you keep this box unchecked, and only occasionally re-check it.`,
-            ];
-            case 'group-properties-by-aspect': return [
-                `Check this to group and filter property names by their containing aspect file.`,
-                `This affects the dialog where you select a property, i.e after you've selected an AST node.`,
-                ``,
-                `This is only applicable for JastAdd tools.`
-            ];
-            case 'duplicate-probe-on-attr': return [
-                `When you have created a probe, you can click the property name to create a new probe on the same node, but with a different property.`,
-                `This click can either create a new probe window, or replace the old one.`,
-                `If this box is checked, then a new window will be created.`,
-                `If this box is unchecked, then it will replace the old window.`,
-                `By holding 'Shift' while clicking the property name, you can access the 'reverse' functionality.`,
-                `I.e if the box is checked and you hold shift, then the window will be replaced, and vice versa.`,
-            ];
-            case 'capture-stdout': {
-                const styled = (text, cls) => {
-                    const span = document.createElement('span');
-                    span.classList.add(cls);
-                    span.innerText = text;
-                    return span;
-                };
-                return [
-                    `Check this if you want messages to stdout and stderr to be shown in probe outputs.`,
-                    `'printf-debugging' should generally be avoided if possible, but if you feel it is strictly needed then you can use this checkbox to access it.`,
-                    joinElements(`Captured messages are displayed with a `, styled('blue', 'captured-stdout'), ` color if they were printed to stdout, and a `, styled('red', 'captured-stderr'), ` color if they were printed to stderr.`),
-                    ``,
-                    `Note that only messages printed during property evaluation are captured.`,
-                    `Messages printed during parsing are not shown here, but can still be seen in the terminal where you started codeprober.jar.`,
-                    `An exception to this is when parsing fails, in which case messages during parsing are displayed (even if this checkbox is unchecked).`,
-                ];
-            }
-            case 'capture-traces': {
-                const code = document.createElement('pre');
-                code.innerText = '  ' + [
-                    `public void Program.cpr_setTraceReceiver(final java.util.function.Consumer<Object[]> recv) {`,
-                    `  trace().setReceiver(new ASTState.Trace.Receiver() {`,
-                    `    @Override`,
-                    `    public void accept(ASTState.Trace.Event event, ASTNode node, String attribute, Object params, Object value) {`,
-                    `      recv.accept(new Object[] { event, node, attribute, params, value });`,
-                    `    }`,
-                    `  });`,
-                    `}`,
-                ].join('\n  ');
-                const copyButton = document.createElement('button');
-                copyButton.innerText = 'Copy to clipboard';
-                copyButton.onclick = () => {
-                    navigator.clipboard.writeText(code.innerText);
-                };
-                return [
-                    `Check this if you want to capture traces of indirect dependencies while evaluating properties.`,
-                    `Once checked, you can optionally also decide if you want to call flushTreeCache() before each time traces are collected.`,
-                    `If you perform computations during main() that results in cached values in your AST, then you wouldn't see the traces of those computations when the probe is evaluated.`,
-                    `By always performing an extra flushTreeCache() prior to collecting traces, we get a bigger and more accurate trace, at the cost of some speed.`,
-                    ``,
-                    `Tracing is an advanced feature which requires some customization in your tool to be able to use.`,
-                    `If you are using JastAdd, add a --tracing flag in your build script, and then the following aspect code (replace 'Program' with your root node type):`,
-                    code,
-                    copyButton
-                ];
-            }
-            case 'location-style': {
-                const sp = { lineStart: 1, colStart: 2, lineEnd: 3, colEnd: 4 };
-                const createExplanationPanel = (entries) => {
-                    const settingsExplanation = document.createElement('div');
-                    settingsExplanation.style.paddingLeft = '1rem';
-                    settingsExplanation.style.display = 'grid';
-                    settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
-                    settingsExplanation.style.gridColumnGap = '0.5rem';
-                    entries.forEach(([head, tail, span]) => {
-                        const headNode = document.createElement('span');
-                        headNode.style.textAlign = 'right';
-                        headNode.classList.add('syntax-attr');
-                        headNode.innerText = head;
-                        settingsExplanation.appendChild(headNode);
-                        settingsExplanation.appendChild(document.createTextNode('-'));
-                        settingsExplanation.appendChild((0, createTextSpanIndicator_1.default)({
-                            span,
-                            styleOverride: tail,
-                        }));
-                        // const tailNode = document.createElement('span');
-                        // tailNode.innerText = tail;
-                        // settingsExplanation.appendChild(tailNode);
-                    });
-                    return settingsExplanation;
-                };
-                return [
-                    `In several locations in CodeProber you can see location indicators.`,
-                    `This setting control how the location indicators are presented. Example values can be seen below for a location that starts at line 1, column 2 and ends at line 3, column 4.`,
-                    ``,
-                    createExplanationPanel([
-                        [`Full`, 'full', sp],
-                        [`Lines`, 'lines', sp],
-                        [`Start`, 'start', sp],
-                        [`Start line`, `start-line`, sp],
-                    ]),
-                    ``,
-                    `The 'compact' options look like the non-compact options if the start and end lines are different. If start and end lines are equal, then it looks like this:`,
-                    createExplanationPanel([
-                        [`Full compact`, 'full-compact', { ...sp, lineEnd: 1 }],
-                        [`Lines compact`, 'lines-compact', { ...sp, lineEnd: 1 }],
-                    ]),
-                    ``,
-                    `Note that this setting doesn't affect the hover highlighting. The exact line/column is highlighted, even if the indicator only shows the start line for example.`,
-                ];
-            }
-            case 'textprobe-style': {
-                const parted = (parts) => {
-                    const ret = document.createElement('div');
-                    const addPart = (text, clazz = '') => {
-                        const part = document.createElement('span');
-                        part.innerText = text;
-                        if (clazz) {
-                            if (clazz.trim()) {
-                                part.classList.add(clazz);
-                            }
-                            if (clazz === ' ' || clazz.startsWith('syntax-')) {
-                                part.style.fontFamily = 'monospace';
-                            }
-                        }
-                        ret.appendChild(part);
-                    };
-                    parts.forEach(p => typeof p === 'string' ? addPart(p) : addPart(p[0], p[1]));
-                    return ret;
-                };
-                const ol = (items) => {
-                    const ret = document.createElement('ol');
-                    items.forEach(itm => {
-                        const li = document.createElement('li');
-                        if (typeof itm === 'string') {
-                            li.innerText = itm;
-                        }
-                        else {
-                            li.appendChild(itm);
-                        }
-                        ret.appendChild(li);
-                    });
-                    return ret;
-                };
-                const patternExpl = parted([
-                    '[[',
-                    ['A', 'syntax-type'],
-                    '[',
-                    ['i', 'syntax-int'],
-                    '].',
-                    ['b', 'syntax-attr'],
-                    '=',
-                    ['c', 'syntax-string'],
-                    ']]',
-                ]);
-                patternExpl.style.padding = '0.25rem';
-                patternExpl.style.margin = '0.25rem 0 0.25rem 2rem';
-                patternExpl.style.outline = '1px dashed gray';
-                patternExpl.style.fontFamily = 'monospace';
-                patternExpl.style.display = 'inline-block';
-                const example = (pattern, explanation) => {
-                    const ret = document.createElement('div');
-                    ret.style.marginLeft = '2rem';
-                    ret.style.marginBottom = '0.25rem';
-                    const patternNode = parted([pattern, ' ']);
-                    // patternNode.style.display = 'inline';
-                    ret.appendChild(patternNode);
-                    const explNode = parted([[explanation, 'stream-arg-msg']]);
-                    // explNode.style.display = 'inline';
-                    explNode.style.fontStyle = 'italic';
-                    ret.appendChild(explNode);
-                    return ret;
-                };
-                return [
-                    `CodeProber supports probes that exist purely in textual form inside the text editor. These 'text probes' are specified with the follwing pattern by default:`,
-                    patternExpl,
-                    `The above pattern tells CodeProber to do the following:`,
-                    ol([
-                        parted([
-                            `Find all nodes on the line where the text probe is specified that are of (sub-)type `,
-                            ['A', 'syntax-type'],
-                            `, using a left-to-right depth-first search.`,
-                        ]),
-                        parted([
-                            `Select the `,
-                            ['i', 'syntax-int'],
-                            `:th node in the resulting list.`,
-                        ]),
-                        parted([
-                            `Evaluate `,
-                            ['b', 'syntax-attr'],
-                            ` on the node.`,
-                        ]),
-                        parted([
-                            `Compare the result of `,
-                            ['b', 'syntax-attr'],
-                            ` with `,
-                            ['c', 'syntax-string'],
-                            `.`,
-                        ])
-                    ]),
-                    parted([
-                        '"',
-                        ['[', ' '],
-                        ['i', 'syntax-int'],
-                        [']', ' '],
-                        '"  is optional if there is only one node on the given line that matches (sub-)type ',
-                        ['A', 'syntax-type'],
-                        '.',
-                    ]),
-                    parted([
-                        '"',
-                        ['.', ' '],
-                        ['b', 'syntax-attr'],
-                        `" can be a list of multiple properties, like "`,
-                        ['.', ' '], ['b', 'syntax-attr'],
-                        ['.', ' '], ['x', 'syntax-attr'],
-                        ['.', ' '], ['y', 'syntax-attr'],
-                        ['.', ' '], ['z', 'syntax-attr'],
-                        `". All non-last properties must resolve to an AST node reference, similar to nested probes.`,
-                    ]),
-                    parted([
-                        '"',
-                        ['=', ' '],
-                        ['c', 'syntax-string'],
-                        '" is optional.',
-                    ]),
-                    ``,
-                    parted([
-                        `If a comparison is included ("`,
-                        ['=', ' '],
-                        ['c', 'syntax-string'],
-                        `"), then the text probe is highlighted `,
-                        ['green', 'elp-result-success'],
-                        ` or `,
-                        ['red', 'elp-result-fail'],
-                        ` depending on if the comparison succeeded or not.`
-                    ]),
-                    `Comparisons can include '!' and/or '~' before the equals sign. Adding '!' means 'not', i.e. invert the comparison. '~' means 'contains', i.e. do a substring comparison.`,
-                    ``,
-                    `Some example text probes and their possible meanings are listed below`,
-                    ``,
-                    example('[[CallExpr.type=int]]', 'The function call on this line has type int.'),
-                    example('[[Program.errors=[]]]', 'There are no errors in this program.'),
-                    example('[[Program.errors~=duplicate definition]]', 'There is at least one error containing the message "duplicate definition"'),
-                    example('[[IfStmt.getCond.expectedType=bool]]', 'The expected type of the if-condition is boolean'),
-                    example('[[Expr[2].prettyPrint=abc]]', 'Pretty-printing the third Expr on this line results in "abc"'),
-                    ``,
-                    `The exact meaning of text probes depend on the underlying tool (compiler/analyzer) being explored in CodeProber, just as with normal probes.`,
-                    ``,
-                    `CodeProber has no knowledge of the syntax of the underlying tool, therefore it will search for text probes everywhere, including possibly in normal program code. In some languages, text like "[[A.b]]" is a valid expression that you may want to write.`,
-                    `When something is intended to be interpreted as a text probe, consider putting them  in a comment (e.g. prefix with "//", "#" or similar).`,
-                    `When something is intended to be an expression in the language, you have two main options:`,
-                    ol([
-                        `Add whitespace somewhere. For example, "[[ A.b ]]" is not interpreted as a text probe`,
-                        `Disable text probe support entirely by changing "TextProbe style" to "Disabled" in the settings panel`,
-                    ]),
-                ];
-            }
-            case 'ast': {
-                return [
-                    `This window displays the abstract syntax tree (AST) around a node in the tree.`,
-                    `Nodes can be hovered and interacted with, just like when the output of a normal probe is an AST node.`,
-                    `When you see '᠁', the AST has been truncated due to performance reasons.`,
-                    `You can click the '᠁' to continue exploring the AST from that point`,
-                ];
-            }
-            case 'test-code-vs-codeprober-code': {
-                return [
-                    `When a test is created it saves the current state of CodeProber. This includes the code in the main CodeProber text editor, as well as some of the settings (cache settings, main args, file suffix, etc.).`,
-                    ``,
-                    `When tests are executed, they do so with their saved state, *not* the current CodeProber state. This lets you have multiple tests at the same time, each with their on unique configuration.`,
-                    ``,
-                    `When a test fails, you may want to open probes to inspect why. The first step is to change the current CodeProber code to the test code. Open the test in question and click the 'Source Code' tab. There will be a button labeled 'Load Source' or 'Open Probe'.`,
-                    `• Clicking 'Load Source' will replace the code inside the main CodeProber editor with the saved code from the test.`,
-                    `• Clicking 'Open Probe' will open the probe corresponding to the test.`,
-                    `'Open Probe' is only available if the CodeProber code matches the test code.`,
-                ];
-            }
-        }
-    };
-    const displayHelp = (type, setHelpButtonDisabled) => {
-        setHelpButtonDisabled === null || setHelpButtonDisabled === void 0 ? void 0 : setHelpButtonDisabled(true);
-        const cleanup = () => {
-            helpWindow.remove();
-            setHelpButtonDisabled === null || setHelpButtonDisabled === void 0 ? void 0 : setHelpButtonDisabled(false);
-        };
-        const helpWindow = (0, showWindow_2.default)({
-            rootStyle: `
-      width: 32rem;
-      min-height: 8rem;
-    `,
-            onForceClose: cleanup,
-            resizable: true,
-            render: (root) => {
-                root.appendChild((0, createModalTitle_1.default)({
-                    renderLeft: (container) => {
-                        const header = document.createElement('span');
-                        header.innerText = getHelpTitle(type);
-                        container.appendChild(header);
-                    },
-                    onClose: cleanup,
-                }).element);
-                const textHolder = document.createElement('div');
-                textHolder.style.padding = '0.5rem';
-                const paragraphs = getHelpContents(type);
-                paragraphs.forEach(p => {
-                    if (!p) {
-                        textHolder.appendChild(document.createElement('br'));
-                        return;
-                    }
-                    if (typeof p !== 'string') {
-                        textHolder.appendChild(p);
-                        return;
-                    }
-                    const node = document.createElement('p');
-                    node.appendChild(document.createTextNode(p));
-                    node.style.marginTop = '0';
-                    node.style.marginBottom = '0';
-                    textHolder.appendChild(node);
-                });
-                root.appendChild(textHolder);
-            }
-        });
-    };
-    exports.default = displayHelp;
-});
 define("ui/create/registerNodeSelector", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -3727,6 +1740,15 @@ define("ui/create/registerNodeSelector", ["require", "exports"], function (requi
         });
     };
     exports.default = registerNodeSelector;
+});
+define("ui/create/registerOnHover", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const registerOnHover = (element, onHover) => {
+        element.onmouseenter = () => onHover(true);
+        element.onmouseleave = () => onHover(false);
+    };
+    exports.default = registerOnHover;
 });
 define("ui/trimTypeName", ["require", "exports"], function (require, exports) {
     "use strict";
@@ -3812,17 +1834,17 @@ define("ui/popup/formatAttr", ["require", "exports"], function (require, exports
     exports.formatAttrArgList = formatAttrArgList;
     exports.default = formatAttr;
 });
-define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/UpdatableNodeLocator", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/startEndToSpan", "ui/trimTypeName", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, hacks_3, UpdatableNodeLocator_2, createModalTitle_2, createTextSpanIndicator_2, registerNodeSelector_1, registerOnHover_2, startEndToSpan_3, trimTypeName_1, displayAttributeModal_1, displayProbeModal_2, formatAttr_1) {
+define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/UpdatableNodeLocator", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/startEndToSpan", "ui/trimTypeName", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, hacks_2, UpdatableNodeLocator_1, createModalTitle_1, createTextSpanIndicator_1, registerNodeSelector_1, registerOnHover_1, startEndToSpan_2, trimTypeName_1, displayAttributeModal_1, displayProbeModal_1, formatAttr_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    createModalTitle_2 = __importDefault(createModalTitle_2);
-    createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
+    createModalTitle_1 = __importDefault(createModalTitle_1);
+    createTextSpanIndicator_1 = __importDefault(createTextSpanIndicator_1);
     registerNodeSelector_1 = __importDefault(registerNodeSelector_1);
-    registerOnHover_2 = __importDefault(registerOnHover_2);
-    startEndToSpan_3 = __importDefault(startEndToSpan_3);
+    registerOnHover_1 = __importDefault(registerOnHover_1);
+    startEndToSpan_2 = __importDefault(startEndToSpan_2);
     trimTypeName_1 = __importDefault(trimTypeName_1);
     displayAttributeModal_1 = __importDefault(displayAttributeModal_1);
-    displayProbeModal_2 = __importDefault(displayProbeModal_2);
+    displayProbeModal_1 = __importDefault(displayProbeModal_1);
     formatAttr_1 = __importStar(formatAttr_1);
     const cancelLocatorRequest = () => {
         if (!window.ActiveLocatorRequest) {
@@ -3862,7 +1884,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
             }
         };
         const createTitle = () => {
-            return (0, createModalTitle_2.default)({
+            return (0, createModalTitle_1.default)({
                 shouldAutoCloseOnWorkspaceSwitch: true,
                 extraActions: [
                     {
@@ -3905,7 +1927,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
                 const proceed = () => {
                     var _a;
                     cleanup();
-                    (0, displayProbeModal_2.default)(env, popup.getPos(), locator, {
+                    (0, displayProbeModal_1.default)(env, popup.getPos(), locator, {
                         name: attr.name,
                         args: (_a = attr.args) === null || _a === void 0 ? void 0 : _a.map((arg, argIdx) => argValues[argIdx]),
                     }, nested);
@@ -4024,7 +2046,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
                             const origLocator = arg.value;
                             let pickedNodePanel = document.createElement('div');
                             let pickedNodeHighlighter = () => { };
-                            (0, registerOnHover_2.default)(pickedNodePanel, (on) => pickedNodeHighlighter(on));
+                            (0, registerOnHover_1.default)(pickedNodePanel, (on) => pickedNodeHighlighter(on));
                             let state = arg.value ? 'node' : 'null';
                             const refreshPickedNode = () => {
                                 var _a;
@@ -4051,10 +2073,10 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
                                 const nodeWrapper = document.createElement('div');
                                 (0, registerNodeSelector_1.default)(nodeWrapper, () => pickedNode);
                                 nodeWrapper.addEventListener('click', () => {
-                                    (0, displayAttributeModal_1.default)(env, null, (0, UpdatableNodeLocator_2.createMutableLocator)(pickedNode));
+                                    (0, displayAttributeModal_1.default)(env, null, (0, UpdatableNodeLocator_1.createMutableLocator)(pickedNode));
                                 });
-                                const span = (0, startEndToSpan_3.default)(pickedNode.result.start, pickedNode.result.end);
-                                nodeWrapper.appendChild((0, createTextSpanIndicator_2.default)({
+                                const span = (0, startEndToSpan_2.default)(pickedNode.result.start, pickedNode.result.end);
+                                nodeWrapper.appendChild((0, createTextSpanIndicator_1.default)({
                                     span,
                                 }));
                                 const typeNode = document.createElement('span');
@@ -4112,7 +2134,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
                             break;
                         }
                         default: {
-                            (0, hacks_3.assertUnreachable)(arg);
+                            (0, hacks_2.assertUnreachable)(arg);
                             console.warn('Unknown arg type', arg, ', defaulting to string input');
                             // Fall through
                         }
@@ -4150,992 +2172,6 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
         });
     };
     exports.default = displayArgModal;
-});
-define("ui/create/createStickyHighlightController", ["require", "exports", "ui/startEndToSpan"], function (require, exports, startEndToSpan_4) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    startEndToSpan_4 = __importDefault(startEndToSpan_4);
-    const createStickyHighlightController = (env, initialColorClass = '') => {
-        const stickyId = `sticky-highlight-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-        let activeStickyColorClass = initialColorClass;
-        if (activeStickyColorClass && !/monaco-rag-highlight-sticky-\d/.test(activeStickyColorClass)) {
-            console.warn('Invalid initial sticky color:', activeStickyColorClass);
-            activeStickyColorClass = '';
-        }
-        let currentTarget = null;
-        let currentLocator = null;
-        const applySticky = () => {
-            if (!currentTarget || !currentLocator)
-                return;
-            env.setStickyHighlight(stickyId, {
-                classNames: [
-                    `monaco-rag-highlight-sticky`,
-                    activeStickyColorClass,
-                ],
-                span: (0, startEndToSpan_4.default)(currentLocator.get().result.start, currentLocator.get().result.end),
-            });
-            currentTarget.classList.add(`monaco-rag-highlight-sticky`);
-            currentTarget.classList.add(activeStickyColorClass);
-        };
-        const pickNewColor = () => {
-            for (let i = 0; i < 10; ++i) {
-                document.querySelector;
-                activeStickyColorClass = `monaco-rag-highlight-sticky-${i}`;
-                if (!!document.querySelector(`.${activeStickyColorClass}`)) {
-                    activeStickyColorClass = '';
-                }
-                else {
-                    break;
-                }
-            }
-            if (!activeStickyColorClass) {
-                // More than 10 colors active, pick one pseudorandomly instead
-                activeStickyColorClass = `monaco-rag-highlight-sticky-${(Math.random() * 10) | 0}`;
-            }
-        };
-        return {
-            onClick: () => {
-                var _a, _b;
-                if (!activeStickyColorClass) {
-                    pickNewColor();
-                    applySticky();
-                }
-                else {
-                    env.clearStickyHighlight(stickyId);
-                    if (activeStickyColorClass) {
-                        (_a = currentTarget === null || currentTarget === void 0 ? void 0 : currentTarget.classList) === null || _a === void 0 ? void 0 : _a.remove(`monaco-rag-highlight-sticky`);
-                        (_b = currentTarget === null || currentTarget === void 0 ? void 0 : currentTarget.classList) === null || _b === void 0 ? void 0 : _b.remove(activeStickyColorClass);
-                        activeStickyColorClass = '';
-                    }
-                }
-            },
-            cleanup: () => {
-                if (activeStickyColorClass) {
-                    env.clearStickyHighlight(stickyId);
-                }
-            },
-            configure: (target, locator) => {
-                currentTarget = target;
-                currentLocator = locator;
-                if (activeStickyColorClass) {
-                    applySticky();
-                }
-                else {
-                    env.clearStickyHighlight(stickyId);
-                }
-            },
-            getActiveColor: () => activeStickyColorClass || undefined,
-        };
-    };
-    exports.default = createStickyHighlightController;
-});
-define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_1, createModalTitle_3, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_4, displayAttributeModal_2, createTextSpanIndicator_3, cullingTaskSubmitterFactory_2, createStickyHighlightController_1, startEndToSpan_5, UpdatableNodeLocator_3) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
-    createModalTitle_3 = __importDefault(createModalTitle_3);
-    displayHelp_1 = __importDefault(displayHelp_1);
-    encodeRpcBodyLines_1 = __importDefault(encodeRpcBodyLines_1);
-    attachDragToX_4 = __importDefault(attachDragToX_4);
-    displayAttributeModal_2 = __importDefault(displayAttributeModal_2);
-    createTextSpanIndicator_3 = __importDefault(createTextSpanIndicator_3);
-    cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
-    createStickyHighlightController_1 = __importDefault(createStickyHighlightController_1);
-    startEndToSpan_5 = __importDefault(startEndToSpan_5);
-    const displayAstModal = (env, modalPos, locator, listDirection, extraArgs = {}) => {
-        var _a, _b, _c, _d, _e;
-        const queryId = `ast-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-        let state = null;
-        let lightTheme = env.themeIsLight();
-        const stickyController = (0, createStickyHighlightController_1.default)(env);
-        let fetchState = 'idle';
-        const cleanup = () => {
-            delete env.onChangeListeners[queryId];
-            delete env.probeWindowStateSavers[queryId];
-            delete env.themeChangeListeners[queryId];
-            popup.remove();
-            env.triggerWindowSave();
-            stickyController.cleanup();
-        };
-        const onResizePtr = {
-            callback: () => { },
-        };
-        const bufferingSaver = (0, cullingTaskSubmitterFactory_2.default)(100)();
-        const saveAfterTransformChange = () => {
-            bufferingSaver.submit(() => { env.triggerWindowSave(); });
-        };
-        const initialTransform = extraArgs.initialTransform;
-        const trn = {
-            x: (_a = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.x) !== null && _a !== void 0 ? _a : 1920 / 2,
-            y: (_b = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.y) !== null && _b !== void 0 ? _b : 0,
-            scale: (_c = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.scale) !== null && _c !== void 0 ? _c : 1,
-            width: (_d = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.width) !== null && _d !== void 0 ? _d : 0,
-            height: (_e = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.height) !== null && _e !== void 0 ? _e : 0,
-        };
-        let resetTranslationOnRender = !initialTransform;
-        const popup = env.showWindow({
-            pos: modalPos,
-            size: (initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.width) && (initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.height) ? {
-                width: initialTransform.width,
-                height: initialTransform.height,
-            } : undefined,
-            debugLabel: `ast:${locator.get().result.type}`,
-            rootStyle: `
-      min-width: 24rem;
-      min-height: 12rem;
-      80vh;
-    `,
-            onForceClose: cleanup,
-            onFinishedMove: () => {
-                bufferingSaver.cancel();
-                env.triggerWindowSave();
-            },
-            onOngoingResize: () => onResizePtr.callback(),
-            onFinishedResize: () => {
-                onResizePtr.callback();
-                const size = popup.getSize();
-                trn.width = size.width;
-                trn.height = size.height;
-            },
-            resizable: true,
-            render: (root, { bringToFront }) => {
-                while (root.firstChild)
-                    root.firstChild.remove();
-                // root.innerText = 'Loading..';
-                if (!extraArgs.hideTitleBar) {
-                    root.appendChild((0, createModalTitle_3.default)({
-                        shouldAutoCloseOnWorkspaceSwitch: true,
-                        renderLeft: (container) => {
-                            const headType = document.createElement('span');
-                            headType.innerText = `AST`;
-                            container.appendChild(headType);
-                            const spanIndicator = (0, createTextSpanIndicator_3.default)({
-                                span: (0, startEndToSpan_5.default)(locator.get().result.start, locator.get().result.end),
-                                marginLeft: true,
-                                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_5.default)(locator.get().result.start, locator.get().result.end) : null),
-                                onClick: stickyController.onClick,
-                            });
-                            stickyController.configure(spanIndicator, locator);
-                            container.appendChild(spanIndicator);
-                        },
-                        onClose: () => {
-                            cleanup();
-                        },
-                        extraActions: [
-                            ...(env.getGlobalModalEnv() === env ? [] : [{
-                                    title: 'Detatch window',
-                                    invoke: () => {
-                                        cleanup();
-                                        displayAstModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), listDirection, {
-                                            initialTransform,
-                                            hideTitleBar: extraArgs.hideTitleBar,
-                                        });
-                                    }
-                                }]),
-                            {
-                                title: 'Help',
-                                invoke: () => {
-                                    (0, displayHelp_1.default)('ast', () => { });
-                                }
-                            },
-                        ],
-                    }).element);
-                }
-                const addSpinner = () => {
-                    const spinner = (0, createLoadingSpinner_1.default)();
-                    spinner.classList.add('absoluteCenter');
-                    const spinnerWrapper = document.createElement('div');
-                    spinnerWrapper.style.height = '7rem';
-                    spinnerWrapper.style.display = 'block';
-                    spinnerWrapper.style.position = 'relative';
-                    spinnerWrapper.appendChild(spinner);
-                    root.appendChild(spinnerWrapper);
-                };
-                if (state === null) {
-                    addSpinner();
-                    return;
-                }
-                if (state.type === 'err') {
-                    if (state.body.length === 0) {
-                        const text = document.createElement('span');
-                        text.classList.add('captured-stderr');
-                        text.innerText = `Failed listing tree`;
-                        root.appendChild(text);
-                        return;
-                    }
-                    root.appendChild((0, encodeRpcBodyLines_1.default)(env, state.body));
-                }
-                else {
-                    // Build UI
-                    root.style.display = 'flex';
-                    root.style.flexDirection = 'column';
-                    root.style.flexGrow = '1';
-                    root.style.overflow = 'hidden';
-                    const cv = document.createElement('canvas');
-                    cv.width = 1920;
-                    cv.height = 1080;
-                    const wrapper = document.createElement('div');
-                    wrapper.appendChild(cv);
-                    wrapper.style.flexGrow = '1';
-                    wrapper.style.minWidth = '4rem';
-                    wrapper.style.minHeight = '4rem';
-                    // wrapper.style.width = '100vw';
-                    // wrapper.style.height = '100vh';
-                    root.appendChild(wrapper);
-                    const ctx = cv.getContext('2d');
-                    if (!ctx) {
-                        root.appendChild(document.createTextNode(`You browser doesn't seem to support HTML canvas 2D rendering mode.`));
-                        return;
-                    }
-                    cv.style.width = '100%';
-                    cv.style.height = '100%';
-                    // cv.width  = cv.offsetWidth;
-                    // cv.height = cv.offsetHeight;
-                    cv.onmousedown = (e) => {
-                        e.stopPropagation();
-                    };
-                    cv.style.cursor = 'default';
-                    // const trn = Array(9).fill(0);
-                    const lastClick = { x: 0, y: 0 };
-                    const getScaleY = () => trn.scale * (cv.clientWidth / 1920) / (cv.clientHeight / 1080);
-                    const clientToWorld = (pt, trnx = trn.x, trny = trn.y, scaleX = trn.scale, scaleY = getScaleY()) => {
-                        const csx = 1920 / cv.clientWidth;
-                        const x = (pt.x * csx - trnx) / scaleX;
-                        const csy = 1080 / cv.clientHeight;
-                        const y = (pt.y * csy - trny) / scaleY;
-                        // ((pt.x * 1920 / (cv.clientWidth)) - (trnx)) / scaleX == REF
-                        //
-                        return { x, y };
-                    };
-                    const dragInfo = { x: trn.x, y: trn.y }; // , sx: 1, sy: 1 };
-                    let hoverClick = 'no';
-                    (0, attachDragToX_4.default)(cv, (e) => {
-                        bringToFront();
-                        dragInfo.x = trn.x;
-                        dragInfo.y = trn.y;
-                        const w = clientToWorld({ x: e.offsetX, y: e.offsetY });
-                        lastClick.x = w.x;
-                        lastClick.y = w.y;
-                        hoverClick = 'maybe';
-                        // dragInfo.sx = 1920 / cv.clientWidth;
-                        // dragInfo.sy = 1080 / cv.clientHeight;
-                    }, (dx, dy) => {
-                        hoverClick = 'no';
-                        const w = clientToWorld({
-                            x: dx,
-                            y: dy,
-                        }, 0, 0, 1, 1);
-                        trn.x = dragInfo.x + w.x;
-                        trn.y = dragInfo.y + w.y;
-                        // trn.x = dragInfo.x + dx * dragInfo.sx;
-                        // trn.y = dragInfo.y + dy * dragInfo.sy;
-                        renderFrame();
-                        saveAfterTransformChange();
-                    }, () => {
-                        if (hoverClick == 'maybe') {
-                            hoverClick = 'yes';
-                            renderFrame();
-                        }
-                    });
-                    cv.addEventListener('wheel', (e) => {
-                        const ptx = e.offsetX;
-                        const csx = 1920 / cv.clientWidth;
-                        const trx1 = trn.x;
-                        const z1 = trn.scale;
-                        const z2 = Math.max(0.1, Math.min(10, trn.scale * (e.deltaY > 0 ? 1.02 : 0.98)));
-                        /*
-                          -- We want to modify trn.x so that transforming {e.offsetX, e.offsetY} gets the same result before and after zooming.
-                          -- For trn.x we want this relation to hold:
-                          (ptx*csx - trx1) / z1 = (ptx*csx - trx2) / z2
-                          -- All variables are known but trx2. rewrite a bit and we get:
-                          trx2 = ptx*csx - (z2/z1)*(ptx*csx - trx1)
-                        */
-                        trn.x = (ptx * csx - (z2 / z1) * (ptx * csx - trx1));
-                        // Same idea for trn.y
-                        const csy = 1080 / cv.clientHeight;
-                        trn.y = (e.offsetY * csy - (z2 / z1) * (e.offsetY * csy - trn.y));
-                        // const w = clientToWorld({ x: e.offsetX, y: e.offsetY });
-                        // trn.x += (w.x / trn.scale) * e.deltaX / 1000;
-                        trn.scale = z2;
-                        renderFrame();
-                        saveAfterTransformChange();
-                    });
-                    let hover = null;
-                    let hasActiveSpanHighlight = false;
-                    cv.addEventListener('mousemove', e => {
-                        hover = clientToWorld({ x: e.offsetX, y: e.offsetY });
-                        hoverClick = 'no';
-                        renderFrame();
-                    });
-                    cv.addEventListener('mouseleave', () => {
-                        hover = null;
-                        if (hasActiveSpanHighlight) {
-                            hasActiveSpanHighlight = false;
-                            env.updateSpanHighlight(null);
-                        }
-                        renderFrame();
-                    });
-                    const rootNode = state.data;
-                    const nodew = 256 + 128;
-                    const nodeh = 64;
-                    const nodepadx = nodew * 0.05;
-                    const nodepady = nodeh * 0.75;
-                    const measureBoundingBox = (node) => {
-                        if (node.boundingBox) {
-                            return node.boundingBox;
-                        }
-                        let bb = { x: nodew, y: nodeh };
-                        if (Array.isArray(node.children)) {
-                            let childW = 0;
-                            node.children.forEach((child, childIdx) => {
-                                const childBox = measureBoundingBox(child);
-                                if (childIdx >= 1) {
-                                    childW += nodepadx;
-                                }
-                                childW += childBox.x;
-                                bb.y = Math.max(bb.y, nodeh + nodepady + childBox.y);
-                            });
-                            bb.x = Math.max(bb.x, childW);
-                        }
-                        node.boundingBox = bb;
-                        return bb;
-                    };
-                    const rootBox = measureBoundingBox(rootNode);
-                    if (resetTranslationOnRender) {
-                        resetTranslationOnRender = false;
-                        trn.scale = 1;
-                        trn.x = (1920 - rootBox.x) / 2;
-                        trn.y = 0;
-                    }
-                    const renderFrame = () => {
-                        const w = cv.width;
-                        const h = cv.height;
-                        ctx.resetTransform();
-                        ctx.fillStyle = getThemedColor(lightTheme, 'probe-result-area');
-                        ctx.fillRect(0, 0, w, h);
-                        ctx.translate(trn.x, trn.y);
-                        ctx.scale(trn.scale, getScaleY());
-                        cv.style.cursor = 'default';
-                        let didHighlightSomething = false;
-                        const renderNode = (node, ox, oy) => {
-                            var _a, _b;
-                            const nodeBox = measureBoundingBox(node);
-                            const renderx = ox + (nodeBox.x - nodew) / 2;
-                            const rendery = oy;
-                            if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
-                                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
-                                cv.style.cursor = 'pointer';
-                                const { start, end, external } = node.locator.result;
-                                if (start && end && !external) {
-                                    didHighlightSomething = true;
-                                    hasActiveSpanHighlight = true;
-                                    env.updateSpanHighlight({
-                                        lineStart: (start >>> 12), colStart: (start & 0xFFF),
-                                        lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
-                                    });
-                                }
-                                if (hoverClick === 'yes') {
-                                    hoverClick = 'no';
-                                    (0, displayAttributeModal_2.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(node.locator));
-                                }
-                            }
-                            else {
-                                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
-                            }
-                            ctx.fillRect(renderx, rendery, nodew, nodeh);
-                            ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
-                            if (node.locator.steps.length > 0 && node.locator.steps[node.locator.steps.length - 1].type === 'nta') {
-                                ctx.setLineDash([5, 5]);
-                                ctx.strokeRect(renderx, rendery, nodew, nodeh);
-                                ctx.setLineDash([]);
-                            }
-                            else {
-                                ctx.strokeRect(renderx, rendery, nodew, nodeh);
-                            }
-                            // ctx.fillStyle = `black`;
-                            let fonth = (nodeh * 0.5) | 0;
-                            renderText: while (true) {
-                                ctx.font = `${fonth}px sans`;
-                                const typeTail = ((_a = node.locator.result.label) !== null && _a !== void 0 ? _a : node.locator.result.type).split('\.').slice(-1)[0];
-                                const txty = rendery + (nodeh - (nodeh - fonth) * 0.5);
-                                if (node.name) {
-                                    const typeTailMeasure = ctx.measureText(`: ${typeTail}`);
-                                    const nameMeasure = ctx.measureText(node.name);
-                                    const totalW = nameMeasure.width + typeTailMeasure.width;
-                                    if (totalW > nodew && fonth > 16) {
-                                        fonth = Math.max(16, fonth * 0.9 | 0);
-                                        continue renderText;
-                                    }
-                                    const txtx = renderx + (nodew - totalW) / 2;
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable');
-                                    ctx.fillText(node.name, txtx, txty);
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
-                                    // dark: 4EC9B0
-                                    ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
-                                }
-                                else {
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
-                                    const typeTailMeasure = ctx.measureText(typeTail);
-                                    if (typeTailMeasure.width > nodew && fonth > 16) {
-                                        fonth = Math.max(16, fonth * 0.9 | 0);
-                                        continue renderText;
-                                    }
-                                    ctx.fillText(typeTail, renderx + (nodew - typeTailMeasure.width) / 2, txty);
-                                }
-                                break;
-                            }
-                            if (!Array.isArray(node.children)) {
-                                if (((_b = node.children) === null || _b === void 0 ? void 0 : _b.type) == 'placeholder') {
-                                    // More children available
-                                    // console.log('placeholder:', node.children);
-                                    const msg = `᠁`;
-                                    const fonth = (nodeh * 0.5) | 0;
-                                    ctx.font = `${fonth}px sans`;
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'separator');
-                                    const cx = renderx + nodew / 2;
-                                    const cy = rendery + nodeh + nodepady + fonth;
-                                    ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
-                                    ctx.beginPath();
-                                    ctx.moveTo(cx, rendery + nodeh);
-                                    ctx.lineTo(cx, cy - fonth);
-                                    ctx.stroke();
-                                    if (hover && Math.hypot(cx - hover.x, cy - hover.y) < fonth) {
-                                        ctx.strokeStyle = 'cyan';
-                                        cv.style.cursor = 'pointer';
-                                        if (hoverClick == 'yes') {
-                                            hoverClick = 'no';
-                                            displayAstModal(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(node.locator), 'downwards');
-                                        }
-                                    }
-                                    const msgMeasure = ctx.measureText(msg);
-                                    ctx.fillText(msg, renderx + (nodew - msgMeasure.width) / 2, cy + fonth * 0.33);
-                                    ctx.beginPath();
-                                    ctx.arc(cx, cy, fonth, 0, Math.PI * 2);
-                                    ctx.stroke();
-                                }
-                                return;
-                            }
-                            let childOffX = 0;
-                            const childOffY = nodeh + nodepady;
-                            node.children.forEach((child, childIdx) => {
-                                const chbb = measureBoundingBox(child);
-                                if (childIdx >= 1) {
-                                    childOffX += nodepadx;
-                                }
-                                renderNode(child, ox + childOffX, oy + childOffY);
-                                ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
-                                ctx.lineWidth = 2;
-                                ctx.beginPath(); // Start a new path
-                                ctx.moveTo(renderx + nodew / 2, rendery + nodeh);
-                                const paddedBottomY = rendery + nodeh + nodepady * 0.5;
-                                ctx.lineTo(renderx + nodew / 2, paddedBottomY);
-                                // ctx.lineTo(ox + childOffX + chbb.x / 2, oy + childOffY); // Draw a line to (150, 100)
-                                const chx = ox + childOffX + chbb.x / 2;
-                                // ctx.bezierCurveTo()
-                                ctx.arcTo(chx, paddedBottomY, chx, oy + childOffY, nodepady / 2);
-                                ctx.lineTo(chx, oy + childOffY);
-                                ctx.stroke(); // Render the path
-                                ctx.lineWidth = 1;
-                                childOffX += chbb.x;
-                            });
-                        };
-                        renderNode(rootNode, 0, 32);
-                        if (!didHighlightSomething) {
-                            if (hasActiveSpanHighlight) {
-                                hasActiveSpanHighlight = false;
-                                env.updateSpanHighlight(null);
-                            }
-                        }
-                    };
-                    renderFrame();
-                    onResizePtr.callback = () => {
-                        renderFrame();
-                    };
-                }
-                if (fetchState !== 'idle') {
-                    const spinner = (0, createLoadingSpinner_1.default)();
-                    spinner.classList.add('absoluteCenter');
-                    root.appendChild(spinner);
-                }
-            },
-        });
-        const refresher = env.createCullingTaskSubmitter();
-        env.onChangeListeners[queryId] = (adjusters) => {
-            if (adjusters) {
-                locator.adjust(adjusters);
-            }
-            refresher.submit(() => {
-                fetchAttrs();
-                popup.refresh();
-            });
-        };
-        const fetchAttrs = () => {
-            switch (fetchState) {
-                case 'idle': {
-                    fetchState = 'fetching';
-                    break;
-                }
-                case 'fetching': {
-                    fetchState = 'queued';
-                    return;
-                }
-                case 'queued': return;
-            }
-            env.performTypedRpc({
-                locator: locator.get(),
-                src: env.createParsingRequestData(),
-                type: listDirection === 'upwards' ? 'ListTreeUpwards' : 'ListTreeDownwards'
-            })
-                .then((result) => {
-                var _a;
-                const refetch = fetchState == 'queued';
-                fetchState = 'idle';
-                if (refetch)
-                    fetchAttrs();
-                const parsed = result.node;
-                if (!parsed) {
-                    // root.appendChild(createTitle('err'));
-                    if ((_a = result.body) === null || _a === void 0 ? void 0 : _a.length) {
-                        state = { type: 'err', body: result.body };
-                        popup.refresh();
-                        // root.appendChild(encodeRpcBodyLines(env, parsed.body));
-                        return;
-                    }
-                    throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
-                }
-                // Handle resp
-                if (result.locator) {
-                    locator.set(result.locator);
-                }
-                const mapNode = (src) => ({
-                    type: src.type,
-                    locator: src.locator,
-                    name: src.name,
-                    children: src.children.type === 'children'
-                        ? src.children.value.map(mapNode)
-                        : { type: 'placeholder', num: src.children.value },
-                });
-                state = { type: 'ok', data: mapNode(parsed) };
-                popup.refresh();
-            })
-                .catch(err => {
-                console.warn('Error when loading attributes', err);
-                state = { type: 'err', body: [] };
-                popup.refresh();
-            });
-        };
-        fetchAttrs();
-        env.probeWindowStateSavers[queryId] = (target) => {
-            target.push({
-                modalPos: popup.getPos(),
-                data: {
-                    type: 'ast',
-                    locator: locator.get(),
-                    direction: listDirection,
-                    transform: { ...trn, },
-                },
-            });
-        };
-        env.themeChangeListeners[queryId] = (light) => {
-            lightTheme = light;
-            onResizePtr.callback();
-        };
-        env.triggerWindowSave();
-    };
-    exports.default = displayAstModal;
-});
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_2, createModalTitle_4, displayProbeModal_3, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, settings_4, encodeRpcBodyLines_2, trimTypeName_2, displayAstModal_1, startEndToSpan_6) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
-    createModalTitle_4 = __importDefault(createModalTitle_4);
-    displayProbeModal_3 = __importStar(displayProbeModal_3);
-    displayArgModal_1 = __importDefault(displayArgModal_1);
-    formatAttr_2 = __importDefault(formatAttr_2);
-    createTextSpanIndicator_4 = __importDefault(createTextSpanIndicator_4);
-    displayHelp_2 = __importDefault(displayHelp_2);
-    settings_4 = __importDefault(settings_4);
-    encodeRpcBodyLines_2 = __importDefault(encodeRpcBodyLines_2);
-    trimTypeName_2 = __importDefault(trimTypeName_2);
-    displayAstModal_1 = __importDefault(displayAstModal_1);
-    startEndToSpan_6 = __importDefault(startEndToSpan_6);
-    const displayAttributeModal = (env, modalPos, locator, optionalArgs = {}) => {
-        var _a;
-        const queryId = `attr-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-        let filter = (_a = optionalArgs.initialFilter) !== null && _a !== void 0 ? _a : '';
-        let state = null;
-        let fetchState = 'idle';
-        const cleanup = () => {
-            delete env.onChangeListeners[queryId];
-            popup.remove();
-        };
-        let isFirstRender = true;
-        const popup = env.showWindow({
-            pos: modalPos,
-            debugLabel: `attr:${locator.get().result.type}`,
-            rootStyle: `
-      min-width: 16rem;
-      min-height: 8rem;
-      80vh;
-    `,
-            onForceClose: cleanup,
-            render: (root) => {
-                while (root.firstChild)
-                    root.firstChild.remove();
-                root.appendChild((0, createModalTitle_4.default)({
-                    shouldAutoCloseOnWorkspaceSwitch: true,
-                    renderLeft: (container) => {
-                        var _a;
-                        if (env === env.getGlobalModalEnv()) {
-                            const headType = document.createElement('span');
-                            headType.classList.add('syntax-type');
-                            headType.innerText = `${(_a = locator.get().result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_2.default)(locator.get().result.type)}`;
-                            container.appendChild(headType);
-                        }
-                        const headAttr = document.createElement('span');
-                        headAttr.classList.add('syntax-attr');
-                        headAttr.innerText = `.?`;
-                        container.appendChild(headAttr);
-                        container.appendChild((0, createTextSpanIndicator_4.default)({
-                            span: (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end),
-                            marginLeft: true,
-                            onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end) : null),
-                        }));
-                    },
-                    onClose: () => {
-                        cleanup();
-                    },
-                    extraActions: [
-                        {
-                            title: 'Help',
-                            invoke: () => {
-                                (0, displayHelp_2.default)('property-list-usage', () => { });
-                            }
-                        },
-                        {
-                            title: 'Render AST downwards',
-                            invoke: () => {
-                                cleanup();
-                                (0, displayAstModal_1.default)(env, popup.getPos(), locator, 'downwards');
-                            }
-                        },
-                        {
-                            title: 'Render AST upwards',
-                            invoke: () => {
-                                cleanup();
-                                (0, displayAstModal_1.default)(env, popup.getPos(), locator, 'upwards');
-                            }
-                        },
-                    ],
-                }).element);
-                const addSpinner = () => {
-                    const spinner = (0, createLoadingSpinner_2.default)();
-                    spinner.classList.add('absoluteCenter');
-                    const spinnerWrapper = document.createElement('div');
-                    spinnerWrapper.style.height = '7rem';
-                    spinnerWrapper.style.display = 'block';
-                    spinnerWrapper.style.position = 'relative';
-                    spinnerWrapper.appendChild(spinner);
-                    root.appendChild(spinnerWrapper);
-                };
-                if (state === null) {
-                    addSpinner();
-                    return;
-                }
-                if (state.type === 'err') {
-                    if (state.body.length === 0) {
-                        const text = document.createElement('span');
-                        text.classList.add('captured-stderr');
-                        // text.style.color = '#F88';
-                        text.innerText = `Failed listing properties`;
-                        root.appendChild(text);
-                        return;
-                    }
-                    root.appendChild((0, encodeRpcBodyLines_2.default)(env, state.body));
-                }
-                else {
-                    let attrs = state.attrs;
-                    const groupByAspect = settings_4.default.shouldGroupPropertiesByAspect();
-                    if (groupByAspect && attrs) {
-                        attrs = [...attrs].sort((a, b) => {
-                            if (!!a.astChildName != !!b.astChildName) {
-                                return a.astChildName ? -1 : 1;
-                            }
-                            if (!!a.aspect != !!b.aspect) {
-                                return a.aspect ? -1 : 1;
-                            }
-                            if (a.aspect) {
-                                const cmp = a.aspect.localeCompare(b.aspect || '', 'en-GB');
-                                return cmp || (0, formatAttr_2.default)(a).localeCompare((0, formatAttr_2.default)(b), 'en-GB');
-                            }
-                            return 0;
-                        });
-                    }
-                    let resortList = () => { };
-                    let submit = () => { };
-                    const nodesList = [];
-                    const filterInput = document.createElement('input');
-                    filterInput.placeholder = 'Filter';
-                    filterInput.classList.add('attr-modal-filter');
-                    if (!filter) {
-                        filterInput.classList.add('empty');
-                    }
-                    filterInput.type = 'text';
-                    filterInput.value = filter;
-                    filterInput.oninput = (e) => {
-                        filter = filterInput.value.trim();
-                        resortList();
-                    };
-                    filterInput.onkeydown = (e) => {
-                        var _a;
-                        if (e.key === 'Enter') {
-                            submit();
-                        }
-                        else if (e.key === 'ArrowDown') {
-                            if (nodesList.length > 0) {
-                                (_a = nodesList[0]) === null || _a === void 0 ? void 0 : _a.focus();
-                                e.preventDefault();
-                            }
-                        }
-                    };
-                    if (isFirstRender) {
-                        isFirstRender = false;
-                        setTimeout(() => {
-                            if (optionalArgs.initialFilter) {
-                                filterInput.select();
-                            }
-                            else {
-                                filterInput.focus();
-                            }
-                        }, 50);
-                    }
-                    root.appendChild(filterInput);
-                    root.style.minHeight = '4rem';
-                    const sortedAttrs = document.createElement('div');
-                    resortList = () => {
-                        nodesList.length = 0;
-                        submit = () => { };
-                        while (sortedAttrs.firstChild)
-                            sortedAttrs.firstChild.remove();
-                        if (!attrs) {
-                            console.log('attrs disappeared after a successful load??');
-                            return;
-                        }
-                        function escapeRegex(string) {
-                            return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                        }
-                        const reg = filter ? new RegExp(`.*${[...filter].map(part => part.trim()).filter(Boolean).map(part => escapeRegex(part)).join('.*')}.*`, 'i') : null;
-                        const match = (attr) => {
-                            if (!reg) {
-                                return !!attr.astChildName;
-                            }
-                            const combinedName = `${(groupByAspect ? (attr.aspect || 'No Aspect') : '')} ${attr.astChildName || ''} ${(0, formatAttr_2.default)(attr)}`;
-                            return reg.test(combinedName);
-                        };
-                        const matches = [];
-                        const misses = [];
-                        attrs.forEach(prop => {
-                            if (match(prop)) {
-                                matches.push(prop);
-                            }
-                            else {
-                                misses.push(prop);
-                            }
-                        });
-                        const showProbe = (attr) => {
-                            cleanup();
-                            if (!attr.args || attr.args.length === 0) {
-                                (0, displayProbeModal_3.default)(env, popup.getPos(), locator, { name: attr.name }, {});
-                            }
-                            else {
-                                if (attr.args.every(arg => arg.type === 'outputstream')) {
-                                    // Shortcut directly to probe since there is nothing for user to add in arg modal
-                                    (0, displayProbeModal_3.default)(env, popup.getPos(), locator, attr, {});
-                                }
-                                else {
-                                    (0, displayArgModal_1.default)(env, popup.getPos(), locator, attr, {});
-                                }
-                            }
-                        };
-                        const addAspectLabels = groupByAspect && attrs.some(attr => !!attr.aspect);
-                        let lastAspect = '';
-                        const buildNode = (attr, borderTop, highlight) => {
-                            if (addAspectLabels) {
-                                const newAspect = attr.aspect || '';
-                                if (newAspect !== lastAspect) {
-                                    // console
-                                    const head = document.createElement('p');
-                                    head.style.marginBottom = '0';
-                                    head.style.marginTop = '0.5rem';
-                                    head.style.fontSize = '0.75rem';
-                                    head.classList.add('syntax-type');
-                                    head.innerText = newAspect || 'No Aspect';
-                                    sortedAttrs.appendChild(head);
-                                    lastAspect = newAspect;
-                                }
-                            }
-                            const node = document.createElement('div');
-                            const ourNodeIndex = nodesList.length;
-                            nodesList.push(node);
-                            node.tabIndex = 0;
-                            node.onmousedown = (e) => { e.stopPropagation(); };
-                            node.style.whiteSpace = 'break-spaces';
-                            node.style.maxWidth = '100%';
-                            node.style.wordBreak = 'break-all';
-                            node.classList.add('syntax-attr-dim-focus');
-                            node.classList.add('clickHighlightOnHover');
-                            node.style.padding = '0 0.25rem';
-                            if (borderTop) {
-                                node.style.borderTop = `1px solid gray`;
-                            }
-                            if (highlight) {
-                                node.classList.add('bg-syntax-attr-dim');
-                            }
-                            node.appendChild(document.createTextNode((0, formatAttr_2.default)(attr)));
-                            node.onclick = () => showProbe(attr);
-                            node.onkeydown = (e) => {
-                                var _a, _b;
-                                if (e.key === 'Enter') {
-                                    showProbe(attr);
-                                }
-                                else if (e.key === 'ArrowDown' && ourNodeIndex !== (nodesList.length - 1)) {
-                                    e.preventDefault();
-                                    (_a = nodesList[ourNodeIndex + 1]) === null || _a === void 0 ? void 0 : _a.focus();
-                                }
-                                else if (e.key === 'ArrowUp') {
-                                    e.preventDefault();
-                                    if (ourNodeIndex > 0) {
-                                        (_b = nodesList[ourNodeIndex - 1]) === null || _b === void 0 ? void 0 : _b.focus();
-                                    }
-                                    else {
-                                        filterInput.focus();
-                                    }
-                                }
-                            };
-                            sortedAttrs.appendChild(node);
-                        };
-                        const addSubmitExplanation = (msg) => {
-                            const submitExpl = document.createElement('p');
-                            submitExpl.classList.add('syntax-attr');
-                            submitExpl.style.textAlign = 'center';
-                            submitExpl.innerText = msg;
-                            sortedAttrs.appendChild(submitExpl);
-                        };
-                        matches.forEach((attr, idx) => buildNode(attr, idx > 0, matches.length === 1));
-                        if (matches.length && misses.length) {
-                            if (matches.length === 1) {
-                                addSubmitExplanation('Press enter to select');
-                                submit = () => showProbe(matches[0]);
-                            }
-                            const sep = document.createElement('div');
-                            sep.classList.add('search-list-separator');
-                            sortedAttrs.appendChild(sep);
-                        }
-                        else if (!matches.length && (filter.startsWith('*.') || filter.startsWith('?')) && filter.length >= 3) {
-                            addSubmitExplanation('Press enter to create search probe');
-                            submit = () => {
-                                const args = [];
-                                if (filter.startsWith('?')) {
-                                    args.push({ type: 'string', value: '' });
-                                    args.push({ type: 'string', value: filter.slice(1) });
-                                }
-                                else {
-                                    let propAndPredicate = filter.slice('*.'.length);
-                                    const predicateStart = propAndPredicate.indexOf('?');
-                                    if (predicateStart === -1) {
-                                        args.push({ type: 'string', value: propAndPredicate });
-                                    }
-                                    else {
-                                        args.push({ type: 'string', value: propAndPredicate.slice(0, predicateStart) });
-                                        args.push({ type: 'string', value: propAndPredicate.slice(predicateStart + 1) });
-                                    }
-                                }
-                                const prop = { name: displayProbeModal_3.searchProbePropertyName, args };
-                                cleanup();
-                                (0, displayProbeModal_3.default)(env, popup.getPos(), locator, prop, {});
-                            };
-                            const sep = document.createElement('div');
-                            sep.classList.add('search-list-separator');
-                            sortedAttrs.appendChild(sep);
-                        }
-                        lastAspect = '';
-                        misses.forEach((attr, idx) => buildNode(attr, idx > 0, !matches.length && misses.length === 1));
-                    };
-                    resortList();
-                    root.appendChild(sortedAttrs);
-                }
-                if (fetchState !== 'idle') {
-                    const spinner = (0, createLoadingSpinner_2.default)();
-                    spinner.classList.add('absoluteCenter');
-                    root.appendChild(spinner);
-                }
-            },
-        });
-        const refresher = env.createCullingTaskSubmitter();
-        env.onChangeListeners[queryId] = (adjusters) => {
-            if (adjusters) {
-                locator.adjust(adjusters);
-            }
-            refresher.submit(() => {
-                fetchAttrs();
-                popup.refresh();
-            });
-        };
-        const fetchAttrs = () => {
-            switch (fetchState) {
-                case 'idle': {
-                    fetchState = 'fetching';
-                    break;
-                }
-                case 'fetching': {
-                    fetchState = 'queued';
-                    return;
-                }
-                case 'queued': return;
-            }
-            env.performTypedRpc({
-                locator: locator.get(),
-                src: env.createParsingRequestData(),
-                type: 'ListProperties',
-                all: settings_4.default.shouldShowAllProperties(),
-            })
-                .then((result) => {
-                var _a;
-                const refetch = fetchState == 'queued';
-                fetchState = 'idle';
-                if (refetch)
-                    fetchAttrs();
-                const parsed = result.properties;
-                if (!parsed) {
-                    if ((_a = result.body) === null || _a === void 0 ? void 0 : _a.length) {
-                        state = { type: 'err', body: result.body };
-                        popup.refresh();
-                        return;
-                    }
-                    throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
-                }
-                const uniq = [];
-                const deudplicator = new Set();
-                parsed.forEach(attr => {
-                    const uniqId = JSON.stringify(attr);
-                    if (deudplicator.has(uniqId)) {
-                        return;
-                    }
-                    deudplicator.add(uniqId);
-                    uniq.push(attr);
-                });
-                state = { type: 'attrs', attrs: uniq };
-                popup.refresh();
-            })
-                .catch(err => {
-                console.warn('Error when loading attributes', err);
-                state = { type: 'err', body: [] };
-                popup.refresh();
-            });
-        };
-        fetchAttrs();
-    };
-    exports.default = displayAttributeModal;
 });
 // @ts-nocheck
 define("dependencies/graphviz/graphviz", ["require", "exports"], function (require, exports) {
@@ -11391,15 +8427,15 @@ define("dependencies/graphviz/graphviz", ["require", "exports"], function (requi
     selection.prototype.graphviz = selection_graphviz;
     selection.prototype.selectWithoutDataPropagation = selection_selectWithoutDataPropagation;
 });
-define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNodeLocator", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal", "dependencies/graphviz/graphviz", "hacks", "ui/startEndToSpan"], function (require, exports, UpdatableNodeLocator_4, createTextSpanIndicator_5, registerNodeSelector_2, registerOnHover_3, trimTypeName_3, displayAttributeModal_3, graphviz_1, hacks_4, startEndToSpan_7) {
+define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNodeLocator", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal", "dependencies/graphviz/graphviz", "hacks", "ui/startEndToSpan"], function (require, exports, UpdatableNodeLocator_2, createTextSpanIndicator_2, registerNodeSelector_2, registerOnHover_2, trimTypeName_2, displayAttributeModal_2, graphviz_1, hacks_3, startEndToSpan_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    createTextSpanIndicator_5 = __importDefault(createTextSpanIndicator_5);
+    createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
     registerNodeSelector_2 = __importDefault(registerNodeSelector_2);
-    registerOnHover_3 = __importDefault(registerOnHover_3);
-    trimTypeName_3 = __importDefault(trimTypeName_3);
-    displayAttributeModal_3 = __importDefault(displayAttributeModal_3);
-    startEndToSpan_7 = __importDefault(startEndToSpan_7);
+    registerOnHover_2 = __importDefault(registerOnHover_2);
+    trimTypeName_2 = __importDefault(trimTypeName_2);
+    displayAttributeModal_2 = __importDefault(displayAttributeModal_2);
+    startEndToSpan_3 = __importDefault(startEndToSpan_3);
     const getCommonStreamArgWhitespacePrefix = (line) => {
         if (Array.isArray(line)) {
             return Math.min(...line.map(getCommonStreamArgWhitespacePrefix));
@@ -11431,11 +8467,11 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
             };
             const typeNode = document.createElement('span');
             typeNode.classList.add('syntax-type');
-            typeNode.innerText = label !== null && label !== void 0 ? label : (0, trimTypeName_3.default)(type);
+            typeNode.innerText = label !== null && label !== void 0 ? label : (0, trimTypeName_2.default)(type);
             typeNode.style.margin = 'auto 0';
             container.appendChild(typeNode);
             if (includePositionIndicator) {
-                container.appendChild((0, createTextSpanIndicator_5.default)({
+                container.appendChild((0, createTextSpanIndicator_2.default)({
                     span,
                     marginLeft: true,
                     autoVerticalMargin: true,
@@ -11444,7 +8480,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
             container.classList.add('clickHighlightOnHover');
             container.style.width = 'fit-content';
             container.style.display = 'inline';
-            (0, registerOnHover_3.default)(container, on => {
+            (0, registerOnHover_2.default)(container, on => {
                 var _a, _b;
                 if (!on || ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true)) {
                     env.updateSpanHighlight(on ? span : null);
@@ -11466,7 +8502,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                 var _a, _b;
                 if ((_b = (_a = extras.lateInteractivityEnabledChecker) === null || _a === void 0 ? void 0 : _a.call(extras)) !== null && _b !== void 0 ? _b : true) {
                     e.preventDefault();
-                    (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_4.createMutableLocator)(locator));
+                    (0, displayAttributeModal_2.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_2.createMutableLocator)(locator));
                 }
             });
             if (!localDisableNodeExpander && extras.nodeLocatorExpanderHandler) {
@@ -11595,9 +8631,9 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                     const trimmed = msg.trim();
                     if (plainHoverSpan) {
                         const node = document.createElement('span');
-                        const span = (0, startEndToSpan_7.default)(plainHoverSpan.start, plainHoverSpan.end);
+                        const span = (0, startEndToSpan_3.default)(plainHoverSpan.start, plainHoverSpan.end);
                         node.classList.add('highlightOnHover');
-                        (0, registerOnHover_3.default)(node, hovering => {
+                        (0, registerOnHover_2.default)(node, hovering => {
                             env.updateSpanHighlight(hovering ? span : null);
                         });
                         node.innerText = trimmed;
@@ -11731,13 +8767,13 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                                 e.stopPropagation();
                                 e.stopImmediatePropagation();
                             };
-                            const span = (0, startEndToSpan_7.default)(tr.node.result.start, tr.node.result.end);
-                            (0, registerOnHover_3.default)(summaryPartNode, isHovering => {
+                            const span = (0, startEndToSpan_3.default)(tr.node.result.start, tr.node.result.end);
+                            (0, registerOnHover_2.default)(summaryPartNode, isHovering => {
                                 env.updateSpanHighlight(isHovering ? span : null);
                             });
                             summaryPartNode.onclick = (e) => {
                                 e.preventDefault();
-                                (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_4.createMutableLocator)(tr.node));
+                                (0, displayAttributeModal_2.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_2.createMutableLocator)(tr.node));
                             };
                             const summaryPartAttr = document.createElement('span');
                             summaryPartAttr.classList.add('syntax-attr');
@@ -11858,7 +8894,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                 }
                 default: {
                     console.warn('Unknown body line type', line);
-                    (0, hacks_4.assertUnreachable)(line);
+                    (0, hacks_3.assertUnreachable)(line);
                     break;
                 }
             }
@@ -11931,6 +8967,3418 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
         return pre;
     };
     exports.default = encodeRpcBodyLines;
+});
+define("model/cullingTaskSubmitterFactory", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const createCullingTaskSubmitterFactory = (cullTime) => {
+        if (typeof cullTime !== 'number') {
+            return () => ({ submit: (cb) => cb(), cancel: () => { }, });
+        }
+        return () => {
+            let localChangeDebounceTimer = -1;
+            return {
+                submit: (cb) => {
+                    clearTimeout(localChangeDebounceTimer);
+                    localChangeDebounceTimer = setTimeout(() => cb(), cullTime);
+                },
+                cancel: () => {
+                    clearTimeout(localChangeDebounceTimer);
+                },
+            };
+        };
+    };
+    exports.default = createCullingTaskSubmitterFactory;
+});
+define("ui/create/createStickyHighlightController", ["require", "exports", "ui/startEndToSpan"], function (require, exports, startEndToSpan_4) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    startEndToSpan_4 = __importDefault(startEndToSpan_4);
+    const createStickyHighlightController = (env, initialColorClass = '') => {
+        const stickyId = `sticky-highlight-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        let activeStickyColorClass = initialColorClass;
+        if (activeStickyColorClass && !/monaco-rag-highlight-sticky-\d/.test(activeStickyColorClass)) {
+            console.warn('Invalid initial sticky color:', activeStickyColorClass);
+            activeStickyColorClass = '';
+        }
+        let currentTarget = null;
+        let currentLocator = null;
+        const applySticky = () => {
+            if (!currentTarget || !currentLocator)
+                return;
+            env.setStickyHighlight(stickyId, {
+                classNames: [
+                    `monaco-rag-highlight-sticky`,
+                    activeStickyColorClass,
+                ],
+                span: (0, startEndToSpan_4.default)(currentLocator.get().result.start, currentLocator.get().result.end),
+            });
+            currentTarget.classList.add(`monaco-rag-highlight-sticky`);
+            currentTarget.classList.add(activeStickyColorClass);
+        };
+        const pickNewColor = () => {
+            for (let i = 0; i < 10; ++i) {
+                document.querySelector;
+                activeStickyColorClass = `monaco-rag-highlight-sticky-${i}`;
+                if (!!document.querySelector(`.${activeStickyColorClass}`)) {
+                    activeStickyColorClass = '';
+                }
+                else {
+                    break;
+                }
+            }
+            if (!activeStickyColorClass) {
+                // More than 10 colors active, pick one pseudorandomly instead
+                activeStickyColorClass = `monaco-rag-highlight-sticky-${(Math.random() * 10) | 0}`;
+            }
+        };
+        return {
+            onClick: () => {
+                var _a, _b;
+                if (!activeStickyColorClass) {
+                    pickNewColor();
+                    applySticky();
+                }
+                else {
+                    env.clearStickyHighlight(stickyId);
+                    if (activeStickyColorClass) {
+                        (_a = currentTarget === null || currentTarget === void 0 ? void 0 : currentTarget.classList) === null || _a === void 0 ? void 0 : _a.remove(`monaco-rag-highlight-sticky`);
+                        (_b = currentTarget === null || currentTarget === void 0 ? void 0 : currentTarget.classList) === null || _b === void 0 ? void 0 : _b.remove(activeStickyColorClass);
+                        activeStickyColorClass = '';
+                    }
+                }
+            },
+            cleanup: () => {
+                if (activeStickyColorClass) {
+                    env.clearStickyHighlight(stickyId);
+                }
+            },
+            configure: (target, locator) => {
+                currentTarget = target;
+                currentLocator = locator;
+                if (activeStickyColorClass) {
+                    applySticky();
+                }
+                else {
+                    env.clearStickyHighlight(stickyId);
+                }
+            },
+            getActiveColor: () => activeStickyColorClass || undefined,
+        };
+    };
+    exports.default = createStickyHighlightController;
+});
+define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_3, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, startEndToSpan_5, UpdatableNodeLocator_3) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
+    createModalTitle_2 = __importDefault(createModalTitle_2);
+    displayHelp_1 = __importDefault(displayHelp_1);
+    encodeRpcBodyLines_1 = __importDefault(encodeRpcBodyLines_1);
+    attachDragToX_3 = __importDefault(attachDragToX_3);
+    displayAttributeModal_3 = __importDefault(displayAttributeModal_3);
+    createTextSpanIndicator_3 = __importDefault(createTextSpanIndicator_3);
+    cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
+    createStickyHighlightController_1 = __importDefault(createStickyHighlightController_1);
+    startEndToSpan_5 = __importDefault(startEndToSpan_5);
+    const displayAstModal = (env, modalPos, locator, listDirection, extraArgs = {}) => {
+        var _a, _b, _c, _d, _e;
+        const queryId = `ast-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        let state = null;
+        let lightTheme = env.themeIsLight();
+        const stickyController = (0, createStickyHighlightController_1.default)(env);
+        let fetchState = 'idle';
+        const cleanup = () => {
+            delete env.onChangeListeners[queryId];
+            delete env.probeWindowStateSavers[queryId];
+            delete env.themeChangeListeners[queryId];
+            popup.remove();
+            env.triggerWindowSave();
+            stickyController.cleanup();
+        };
+        const onResizePtr = {
+            callback: () => { },
+        };
+        const bufferingSaver = (0, cullingTaskSubmitterFactory_1.default)(100)();
+        const saveAfterTransformChange = () => {
+            bufferingSaver.submit(() => { env.triggerWindowSave(); });
+        };
+        const initialTransform = extraArgs.initialTransform;
+        const trn = {
+            x: (_a = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.x) !== null && _a !== void 0 ? _a : 1920 / 2,
+            y: (_b = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.y) !== null && _b !== void 0 ? _b : 0,
+            scale: (_c = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.scale) !== null && _c !== void 0 ? _c : 1,
+            width: (_d = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.width) !== null && _d !== void 0 ? _d : 0,
+            height: (_e = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.height) !== null && _e !== void 0 ? _e : 0,
+        };
+        let resetTranslationOnRender = !initialTransform;
+        const popup = env.showWindow({
+            pos: modalPos,
+            size: (initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.width) && (initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.height) ? {
+                width: initialTransform.width,
+                height: initialTransform.height,
+            } : undefined,
+            debugLabel: `ast:${locator.get().result.type}`,
+            rootStyle: `
+      min-width: 24rem;
+      min-height: 12rem;
+      80vh;
+    `,
+            onForceClose: cleanup,
+            onFinishedMove: () => {
+                bufferingSaver.cancel();
+                env.triggerWindowSave();
+            },
+            onOngoingResize: () => onResizePtr.callback(),
+            onFinishedResize: () => {
+                onResizePtr.callback();
+                const size = popup.getSize();
+                trn.width = size.width;
+                trn.height = size.height;
+            },
+            resizable: true,
+            render: (root, { bringToFront }) => {
+                while (root.firstChild)
+                    root.firstChild.remove();
+                // root.innerText = 'Loading..';
+                if (!extraArgs.hideTitleBar) {
+                    root.appendChild((0, createModalTitle_2.default)({
+                        shouldAutoCloseOnWorkspaceSwitch: true,
+                        renderLeft: (container) => {
+                            const headType = document.createElement('span');
+                            headType.innerText = `AST`;
+                            container.appendChild(headType);
+                            const spanIndicator = (0, createTextSpanIndicator_3.default)({
+                                span: (0, startEndToSpan_5.default)(locator.get().result.start, locator.get().result.end),
+                                marginLeft: true,
+                                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_5.default)(locator.get().result.start, locator.get().result.end) : null),
+                                onClick: stickyController.onClick,
+                            });
+                            stickyController.configure(spanIndicator, locator);
+                            container.appendChild(spanIndicator);
+                        },
+                        onClose: () => {
+                            cleanup();
+                        },
+                        extraActions: [
+                            ...(env.getGlobalModalEnv() === env ? [] : [{
+                                    title: 'Detatch window',
+                                    invoke: () => {
+                                        cleanup();
+                                        displayAstModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), listDirection, {
+                                            initialTransform,
+                                            hideTitleBar: extraArgs.hideTitleBar,
+                                        });
+                                    }
+                                }]),
+                            {
+                                title: 'Help',
+                                invoke: () => {
+                                    (0, displayHelp_1.default)('ast', () => { });
+                                }
+                            },
+                        ],
+                    }).element);
+                }
+                const addSpinner = () => {
+                    const spinner = (0, createLoadingSpinner_1.default)();
+                    spinner.classList.add('absoluteCenter');
+                    const spinnerWrapper = document.createElement('div');
+                    spinnerWrapper.style.height = '7rem';
+                    spinnerWrapper.style.display = 'block';
+                    spinnerWrapper.style.position = 'relative';
+                    spinnerWrapper.appendChild(spinner);
+                    root.appendChild(spinnerWrapper);
+                };
+                if (state === null) {
+                    addSpinner();
+                    return;
+                }
+                if (state.type === 'err') {
+                    if (state.body.length === 0) {
+                        const text = document.createElement('span');
+                        text.classList.add('captured-stderr');
+                        text.innerText = `Failed listing tree`;
+                        root.appendChild(text);
+                        return;
+                    }
+                    root.appendChild((0, encodeRpcBodyLines_1.default)(env, state.body));
+                }
+                else {
+                    // Build UI
+                    root.style.display = 'flex';
+                    root.style.flexDirection = 'column';
+                    root.style.flexGrow = '1';
+                    root.style.overflow = 'hidden';
+                    const cv = document.createElement('canvas');
+                    cv.width = 1920;
+                    cv.height = 1080;
+                    const wrapper = document.createElement('div');
+                    wrapper.appendChild(cv);
+                    wrapper.style.flexGrow = '1';
+                    wrapper.style.minWidth = '4rem';
+                    wrapper.style.minHeight = '4rem';
+                    // wrapper.style.width = '100vw';
+                    // wrapper.style.height = '100vh';
+                    root.appendChild(wrapper);
+                    const ctx = cv.getContext('2d');
+                    if (!ctx) {
+                        root.appendChild(document.createTextNode(`You browser doesn't seem to support HTML canvas 2D rendering mode.`));
+                        return;
+                    }
+                    cv.style.width = '100%';
+                    cv.style.height = '100%';
+                    // cv.width  = cv.offsetWidth;
+                    // cv.height = cv.offsetHeight;
+                    cv.onmousedown = (e) => {
+                        e.stopPropagation();
+                    };
+                    cv.style.cursor = 'default';
+                    // const trn = Array(9).fill(0);
+                    const lastClick = { x: 0, y: 0 };
+                    const getScaleY = () => trn.scale * (cv.clientWidth / 1920) / (cv.clientHeight / 1080);
+                    const clientToWorld = (pt, trnx = trn.x, trny = trn.y, scaleX = trn.scale, scaleY = getScaleY()) => {
+                        const csx = 1920 / cv.clientWidth;
+                        const x = (pt.x * csx - trnx) / scaleX;
+                        const csy = 1080 / cv.clientHeight;
+                        const y = (pt.y * csy - trny) / scaleY;
+                        // ((pt.x * 1920 / (cv.clientWidth)) - (trnx)) / scaleX == REF
+                        //
+                        return { x, y };
+                    };
+                    const dragInfo = { x: trn.x, y: trn.y }; // , sx: 1, sy: 1 };
+                    let hoverClick = 'no';
+                    (0, attachDragToX_3.default)(cv, (e) => {
+                        bringToFront();
+                        dragInfo.x = trn.x;
+                        dragInfo.y = trn.y;
+                        const w = clientToWorld({ x: e.offsetX, y: e.offsetY });
+                        lastClick.x = w.x;
+                        lastClick.y = w.y;
+                        hoverClick = 'maybe';
+                        // dragInfo.sx = 1920 / cv.clientWidth;
+                        // dragInfo.sy = 1080 / cv.clientHeight;
+                    }, (dx, dy) => {
+                        hoverClick = 'no';
+                        const w = clientToWorld({
+                            x: dx,
+                            y: dy,
+                        }, 0, 0, 1, 1);
+                        trn.x = dragInfo.x + w.x;
+                        trn.y = dragInfo.y + w.y;
+                        // trn.x = dragInfo.x + dx * dragInfo.sx;
+                        // trn.y = dragInfo.y + dy * dragInfo.sy;
+                        renderFrame();
+                        saveAfterTransformChange();
+                    }, () => {
+                        if (hoverClick == 'maybe') {
+                            hoverClick = 'yes';
+                            renderFrame();
+                        }
+                    });
+                    cv.addEventListener('wheel', (e) => {
+                        const ptx = e.offsetX;
+                        const csx = 1920 / cv.clientWidth;
+                        const trx1 = trn.x;
+                        const z1 = trn.scale;
+                        const z2 = Math.max(0.1, Math.min(10, trn.scale * (e.deltaY > 0 ? 1.02 : 0.98)));
+                        /*
+                          -- We want to modify trn.x so that transforming {e.offsetX, e.offsetY} gets the same result before and after zooming.
+                          -- For trn.x we want this relation to hold:
+                          (ptx*csx - trx1) / z1 = (ptx*csx - trx2) / z2
+                          -- All variables are known but trx2. rewrite a bit and we get:
+                          trx2 = ptx*csx - (z2/z1)*(ptx*csx - trx1)
+                        */
+                        trn.x = (ptx * csx - (z2 / z1) * (ptx * csx - trx1));
+                        // Same idea for trn.y
+                        const csy = 1080 / cv.clientHeight;
+                        trn.y = (e.offsetY * csy - (z2 / z1) * (e.offsetY * csy - trn.y));
+                        // const w = clientToWorld({ x: e.offsetX, y: e.offsetY });
+                        // trn.x += (w.x / trn.scale) * e.deltaX / 1000;
+                        trn.scale = z2;
+                        renderFrame();
+                        saveAfterTransformChange();
+                    });
+                    let hover = null;
+                    let hasActiveSpanHighlight = false;
+                    cv.addEventListener('mousemove', e => {
+                        hover = clientToWorld({ x: e.offsetX, y: e.offsetY });
+                        hoverClick = 'no';
+                        renderFrame();
+                    });
+                    cv.addEventListener('mouseleave', () => {
+                        hover = null;
+                        if (hasActiveSpanHighlight) {
+                            hasActiveSpanHighlight = false;
+                            env.updateSpanHighlight(null);
+                        }
+                        renderFrame();
+                    });
+                    const rootNode = state.data;
+                    const nodew = 256 + 128;
+                    const nodeh = 64;
+                    const nodepadx = nodew * 0.05;
+                    const nodepady = nodeh * 0.75;
+                    const measureBoundingBox = (node) => {
+                        if (node.boundingBox) {
+                            return node.boundingBox;
+                        }
+                        let bb = { x: nodew, y: nodeh };
+                        if (Array.isArray(node.children)) {
+                            let childW = 0;
+                            node.children.forEach((child, childIdx) => {
+                                const childBox = measureBoundingBox(child);
+                                if (childIdx >= 1) {
+                                    childW += nodepadx;
+                                }
+                                childW += childBox.x;
+                                bb.y = Math.max(bb.y, nodeh + nodepady + childBox.y);
+                            });
+                            bb.x = Math.max(bb.x, childW);
+                        }
+                        node.boundingBox = bb;
+                        return bb;
+                    };
+                    const rootBox = measureBoundingBox(rootNode);
+                    if (resetTranslationOnRender) {
+                        resetTranslationOnRender = false;
+                        trn.scale = 1;
+                        trn.x = (1920 - rootBox.x) / 2;
+                        trn.y = 0;
+                    }
+                    const renderFrame = () => {
+                        const w = cv.width;
+                        const h = cv.height;
+                        ctx.resetTransform();
+                        ctx.fillStyle = getThemedColor(lightTheme, 'probe-result-area');
+                        ctx.fillRect(0, 0, w, h);
+                        ctx.translate(trn.x, trn.y);
+                        ctx.scale(trn.scale, getScaleY());
+                        cv.style.cursor = 'default';
+                        let didHighlightSomething = false;
+                        const renderNode = (node, ox, oy) => {
+                            var _a, _b;
+                            const nodeBox = measureBoundingBox(node);
+                            const renderx = ox + (nodeBox.x - nodew) / 2;
+                            const rendery = oy;
+                            if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
+                                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
+                                cv.style.cursor = 'pointer';
+                                const { start, end, external } = node.locator.result;
+                                if (start && end && !external) {
+                                    didHighlightSomething = true;
+                                    hasActiveSpanHighlight = true;
+                                    env.updateSpanHighlight({
+                                        lineStart: (start >>> 12), colStart: (start & 0xFFF),
+                                        lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
+                                    });
+                                }
+                                if (hoverClick === 'yes') {
+                                    hoverClick = 'no';
+                                    (0, displayAttributeModal_3.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(node.locator));
+                                }
+                            }
+                            else {
+                                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
+                            }
+                            ctx.fillRect(renderx, rendery, nodew, nodeh);
+                            ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                            if (node.locator.steps.length > 0 && node.locator.steps[node.locator.steps.length - 1].type === 'nta') {
+                                ctx.setLineDash([5, 5]);
+                                ctx.strokeRect(renderx, rendery, nodew, nodeh);
+                                ctx.setLineDash([]);
+                            }
+                            else {
+                                ctx.strokeRect(renderx, rendery, nodew, nodeh);
+                            }
+                            // ctx.fillStyle = `black`;
+                            let fonth = (nodeh * 0.5) | 0;
+                            renderText: while (true) {
+                                ctx.font = `${fonth}px sans`;
+                                const typeTail = ((_a = node.locator.result.label) !== null && _a !== void 0 ? _a : node.locator.result.type).split('\.').slice(-1)[0];
+                                const txty = rendery + (nodeh - (nodeh - fonth) * 0.5);
+                                if (node.name) {
+                                    const typeTailMeasure = ctx.measureText(`: ${typeTail}`);
+                                    const nameMeasure = ctx.measureText(node.name);
+                                    const totalW = nameMeasure.width + typeTailMeasure.width;
+                                    if (totalW > nodew && fonth > 16) {
+                                        fonth = Math.max(16, fonth * 0.9 | 0);
+                                        continue renderText;
+                                    }
+                                    const txtx = renderx + (nodew - totalW) / 2;
+                                    ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable');
+                                    ctx.fillText(node.name, txtx, txty);
+                                    ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
+                                    // dark: 4EC9B0
+                                    ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
+                                }
+                                else {
+                                    ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
+                                    const typeTailMeasure = ctx.measureText(typeTail);
+                                    if (typeTailMeasure.width > nodew && fonth > 16) {
+                                        fonth = Math.max(16, fonth * 0.9 | 0);
+                                        continue renderText;
+                                    }
+                                    ctx.fillText(typeTail, renderx + (nodew - typeTailMeasure.width) / 2, txty);
+                                }
+                                break;
+                            }
+                            if (!Array.isArray(node.children)) {
+                                if (((_b = node.children) === null || _b === void 0 ? void 0 : _b.type) == 'placeholder') {
+                                    // More children available
+                                    // console.log('placeholder:', node.children);
+                                    const msg = `᠁`;
+                                    const fonth = (nodeh * 0.5) | 0;
+                                    ctx.font = `${fonth}px sans`;
+                                    ctx.fillStyle = getThemedColor(lightTheme, 'separator');
+                                    const cx = renderx + nodew / 2;
+                                    const cy = rendery + nodeh + nodepady + fonth;
+                                    ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                                    ctx.beginPath();
+                                    ctx.moveTo(cx, rendery + nodeh);
+                                    ctx.lineTo(cx, cy - fonth);
+                                    ctx.stroke();
+                                    if (hover && Math.hypot(cx - hover.x, cy - hover.y) < fonth) {
+                                        ctx.strokeStyle = 'cyan';
+                                        cv.style.cursor = 'pointer';
+                                        if (hoverClick == 'yes') {
+                                            hoverClick = 'no';
+                                            displayAstModal(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_3.createMutableLocator)(node.locator), 'downwards');
+                                        }
+                                    }
+                                    const msgMeasure = ctx.measureText(msg);
+                                    ctx.fillText(msg, renderx + (nodew - msgMeasure.width) / 2, cy + fonth * 0.33);
+                                    ctx.beginPath();
+                                    ctx.arc(cx, cy, fonth, 0, Math.PI * 2);
+                                    ctx.stroke();
+                                }
+                                return;
+                            }
+                            let childOffX = 0;
+                            const childOffY = nodeh + nodepady;
+                            node.children.forEach((child, childIdx) => {
+                                const chbb = measureBoundingBox(child);
+                                if (childIdx >= 1) {
+                                    childOffX += nodepadx;
+                                }
+                                renderNode(child, ox + childOffX, oy + childOffY);
+                                ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                                ctx.lineWidth = 2;
+                                ctx.beginPath(); // Start a new path
+                                ctx.moveTo(renderx + nodew / 2, rendery + nodeh);
+                                const paddedBottomY = rendery + nodeh + nodepady * 0.5;
+                                ctx.lineTo(renderx + nodew / 2, paddedBottomY);
+                                // ctx.lineTo(ox + childOffX + chbb.x / 2, oy + childOffY); // Draw a line to (150, 100)
+                                const chx = ox + childOffX + chbb.x / 2;
+                                // ctx.bezierCurveTo()
+                                ctx.arcTo(chx, paddedBottomY, chx, oy + childOffY, nodepady / 2);
+                                ctx.lineTo(chx, oy + childOffY);
+                                ctx.stroke(); // Render the path
+                                ctx.lineWidth = 1;
+                                childOffX += chbb.x;
+                            });
+                        };
+                        renderNode(rootNode, 0, 32);
+                        if (!didHighlightSomething) {
+                            if (hasActiveSpanHighlight) {
+                                hasActiveSpanHighlight = false;
+                                env.updateSpanHighlight(null);
+                            }
+                        }
+                    };
+                    renderFrame();
+                    onResizePtr.callback = () => {
+                        renderFrame();
+                    };
+                }
+                if (fetchState !== 'idle') {
+                    const spinner = (0, createLoadingSpinner_1.default)();
+                    spinner.classList.add('absoluteCenter');
+                    root.appendChild(spinner);
+                }
+            },
+        });
+        const refresher = env.createCullingTaskSubmitter();
+        env.onChangeListeners[queryId] = (adjusters) => {
+            if (adjusters) {
+                locator.adjust(adjusters);
+            }
+            refresher.submit(() => {
+                fetchAttrs();
+                popup.refresh();
+            });
+        };
+        const fetchAttrs = () => {
+            switch (fetchState) {
+                case 'idle': {
+                    fetchState = 'fetching';
+                    break;
+                }
+                case 'fetching': {
+                    fetchState = 'queued';
+                    return;
+                }
+                case 'queued': return;
+            }
+            env.performTypedRpc({
+                locator: locator.get(),
+                src: env.createParsingRequestData(),
+                type: listDirection === 'upwards' ? 'ListTreeUpwards' : 'ListTreeDownwards'
+            })
+                .then((result) => {
+                var _a;
+                const refetch = fetchState == 'queued';
+                fetchState = 'idle';
+                if (refetch)
+                    fetchAttrs();
+                const parsed = result.node;
+                if (!parsed) {
+                    // root.appendChild(createTitle('err'));
+                    if ((_a = result.body) === null || _a === void 0 ? void 0 : _a.length) {
+                        state = { type: 'err', body: result.body };
+                        popup.refresh();
+                        // root.appendChild(encodeRpcBodyLines(env, parsed.body));
+                        return;
+                    }
+                    throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
+                }
+                // Handle resp
+                if (result.locator) {
+                    locator.set(result.locator);
+                }
+                const mapNode = (src) => ({
+                    type: src.type,
+                    locator: src.locator,
+                    name: src.name,
+                    children: src.children.type === 'children'
+                        ? src.children.value.map(mapNode)
+                        : { type: 'placeholder', num: src.children.value },
+                });
+                state = { type: 'ok', data: mapNode(parsed) };
+                popup.refresh();
+            })
+                .catch(err => {
+                console.warn('Error when loading attributes', err);
+                state = { type: 'err', body: [] };
+                popup.refresh();
+            });
+        };
+        fetchAttrs();
+        env.probeWindowStateSavers[queryId] = (target) => {
+            target.push({
+                modalPos: popup.getPos(),
+                data: {
+                    type: 'ast',
+                    locator: locator.get(),
+                    direction: listDirection,
+                    transform: { ...trn, },
+                },
+            });
+        };
+        env.themeChangeListeners[queryId] = (light) => {
+            lightTheme = light;
+            onResizePtr.callback();
+        };
+        env.triggerWindowSave();
+    };
+    exports.default = displayAstModal;
+});
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_2, createModalTitle_3, displayProbeModal_2, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, settings_2, encodeRpcBodyLines_2, trimTypeName_3, displayAstModal_1, startEndToSpan_6) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
+    createModalTitle_3 = __importDefault(createModalTitle_3);
+    displayProbeModal_2 = __importStar(displayProbeModal_2);
+    displayArgModal_1 = __importDefault(displayArgModal_1);
+    formatAttr_2 = __importDefault(formatAttr_2);
+    createTextSpanIndicator_4 = __importDefault(createTextSpanIndicator_4);
+    displayHelp_2 = __importDefault(displayHelp_2);
+    settings_2 = __importDefault(settings_2);
+    encodeRpcBodyLines_2 = __importDefault(encodeRpcBodyLines_2);
+    trimTypeName_3 = __importDefault(trimTypeName_3);
+    displayAstModal_1 = __importDefault(displayAstModal_1);
+    startEndToSpan_6 = __importDefault(startEndToSpan_6);
+    const displayAttributeModal = (env, modalPos, locator, optionalArgs = {}) => {
+        var _a;
+        const queryId = `attr-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        let filter = (_a = optionalArgs.initialFilter) !== null && _a !== void 0 ? _a : '';
+        let state = null;
+        let fetchState = 'idle';
+        const cleanup = () => {
+            delete env.onChangeListeners[queryId];
+            popup.remove();
+        };
+        let isFirstRender = true;
+        const popup = env.showWindow({
+            pos: modalPos,
+            debugLabel: `attr:${locator.get().result.type}`,
+            rootStyle: `
+      min-width: 16rem;
+      min-height: 8rem;
+      80vh;
+    `,
+            onForceClose: cleanup,
+            render: (root) => {
+                while (root.firstChild)
+                    root.firstChild.remove();
+                root.appendChild((0, createModalTitle_3.default)({
+                    shouldAutoCloseOnWorkspaceSwitch: true,
+                    renderLeft: (container) => {
+                        var _a;
+                        if (env === env.getGlobalModalEnv()) {
+                            const headType = document.createElement('span');
+                            headType.classList.add('syntax-type');
+                            headType.innerText = `${(_a = locator.get().result.label) !== null && _a !== void 0 ? _a : (0, trimTypeName_3.default)(locator.get().result.type)}`;
+                            container.appendChild(headType);
+                        }
+                        const headAttr = document.createElement('span');
+                        headAttr.classList.add('syntax-attr');
+                        headAttr.innerText = `.?`;
+                        container.appendChild(headAttr);
+                        container.appendChild((0, createTextSpanIndicator_4.default)({
+                            span: (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end),
+                            marginLeft: true,
+                            onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end) : null),
+                        }));
+                    },
+                    onClose: () => {
+                        cleanup();
+                    },
+                    extraActions: [
+                        {
+                            title: 'Help',
+                            invoke: () => {
+                                (0, displayHelp_2.default)('property-list-usage', () => { });
+                            }
+                        },
+                        {
+                            title: 'Render AST downwards',
+                            invoke: () => {
+                                cleanup();
+                                (0, displayAstModal_1.default)(env, popup.getPos(), locator, 'downwards');
+                            }
+                        },
+                        {
+                            title: 'Render AST upwards',
+                            invoke: () => {
+                                cleanup();
+                                (0, displayAstModal_1.default)(env, popup.getPos(), locator, 'upwards');
+                            }
+                        },
+                    ],
+                }).element);
+                const addSpinner = () => {
+                    const spinner = (0, createLoadingSpinner_2.default)();
+                    spinner.classList.add('absoluteCenter');
+                    const spinnerWrapper = document.createElement('div');
+                    spinnerWrapper.style.height = '7rem';
+                    spinnerWrapper.style.display = 'block';
+                    spinnerWrapper.style.position = 'relative';
+                    spinnerWrapper.appendChild(spinner);
+                    root.appendChild(spinnerWrapper);
+                };
+                if (state === null) {
+                    addSpinner();
+                    return;
+                }
+                if (state.type === 'err') {
+                    if (state.body.length === 0) {
+                        const text = document.createElement('span');
+                        text.classList.add('captured-stderr');
+                        // text.style.color = '#F88';
+                        text.innerText = `Failed listing properties`;
+                        root.appendChild(text);
+                        return;
+                    }
+                    root.appendChild((0, encodeRpcBodyLines_2.default)(env, state.body));
+                }
+                else {
+                    let attrs = state.attrs;
+                    const groupByAspect = settings_2.default.shouldGroupPropertiesByAspect();
+                    if (groupByAspect && attrs) {
+                        attrs = [...attrs].sort((a, b) => {
+                            if (!!a.astChildName != !!b.astChildName) {
+                                return a.astChildName ? -1 : 1;
+                            }
+                            if (!!a.aspect != !!b.aspect) {
+                                return a.aspect ? -1 : 1;
+                            }
+                            if (a.aspect) {
+                                const cmp = a.aspect.localeCompare(b.aspect || '', 'en-GB');
+                                return cmp || (0, formatAttr_2.default)(a).localeCompare((0, formatAttr_2.default)(b), 'en-GB');
+                            }
+                            return 0;
+                        });
+                    }
+                    let resortList = () => { };
+                    let submit = () => { };
+                    const nodesList = [];
+                    const filterInput = document.createElement('input');
+                    filterInput.placeholder = 'Filter';
+                    filterInput.classList.add('attr-modal-filter');
+                    if (!filter) {
+                        filterInput.classList.add('empty');
+                    }
+                    filterInput.type = 'text';
+                    filterInput.value = filter;
+                    filterInput.oninput = (e) => {
+                        filter = filterInput.value.trim();
+                        resortList();
+                    };
+                    filterInput.onkeydown = (e) => {
+                        var _a;
+                        if (e.key === 'Enter') {
+                            submit();
+                        }
+                        else if (e.key === 'ArrowDown') {
+                            if (nodesList.length > 0) {
+                                (_a = nodesList[0]) === null || _a === void 0 ? void 0 : _a.focus();
+                                e.preventDefault();
+                            }
+                        }
+                    };
+                    if (isFirstRender) {
+                        isFirstRender = false;
+                        setTimeout(() => {
+                            if (optionalArgs.initialFilter) {
+                                filterInput.select();
+                            }
+                            else {
+                                filterInput.focus();
+                            }
+                        }, 50);
+                    }
+                    root.appendChild(filterInput);
+                    root.style.minHeight = '4rem';
+                    const sortedAttrs = document.createElement('div');
+                    resortList = () => {
+                        nodesList.length = 0;
+                        submit = () => { };
+                        while (sortedAttrs.firstChild)
+                            sortedAttrs.firstChild.remove();
+                        if (!attrs) {
+                            console.log('attrs disappeared after a successful load??');
+                            return;
+                        }
+                        function escapeRegex(string) {
+                            return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                        }
+                        const reg = filter ? new RegExp(`.*${[...filter].map(part => part.trim()).filter(Boolean).map(part => escapeRegex(part)).join('.*')}.*`, 'i') : null;
+                        const match = (attr) => {
+                            if (!reg) {
+                                return !!attr.astChildName;
+                            }
+                            const combinedName = `${(groupByAspect ? (attr.aspect || 'No Aspect') : '')} ${attr.astChildName || ''} ${(0, formatAttr_2.default)(attr)}`;
+                            return reg.test(combinedName);
+                        };
+                        const matches = [];
+                        const misses = [];
+                        attrs.forEach(prop => {
+                            if (match(prop)) {
+                                matches.push(prop);
+                            }
+                            else {
+                                misses.push(prop);
+                            }
+                        });
+                        const showProbe = (attr) => {
+                            cleanup();
+                            if (!attr.args || attr.args.length === 0) {
+                                (0, displayProbeModal_2.default)(env, popup.getPos(), locator, { name: attr.name }, {});
+                            }
+                            else {
+                                if (attr.args.every(arg => arg.type === 'outputstream')) {
+                                    // Shortcut directly to probe since there is nothing for user to add in arg modal
+                                    (0, displayProbeModal_2.default)(env, popup.getPos(), locator, attr, {});
+                                }
+                                else {
+                                    (0, displayArgModal_1.default)(env, popup.getPos(), locator, attr, {});
+                                }
+                            }
+                        };
+                        const addAspectLabels = groupByAspect && attrs.some(attr => !!attr.aspect);
+                        let lastAspect = '';
+                        const buildNode = (attr, borderTop, highlight) => {
+                            if (addAspectLabels) {
+                                const newAspect = attr.aspect || '';
+                                if (newAspect !== lastAspect) {
+                                    // console
+                                    const head = document.createElement('p');
+                                    head.style.marginBottom = '0';
+                                    head.style.marginTop = '0.5rem';
+                                    head.style.fontSize = '0.75rem';
+                                    head.classList.add('syntax-type');
+                                    head.innerText = newAspect || 'No Aspect';
+                                    sortedAttrs.appendChild(head);
+                                    lastAspect = newAspect;
+                                }
+                            }
+                            const node = document.createElement('div');
+                            const ourNodeIndex = nodesList.length;
+                            nodesList.push(node);
+                            node.tabIndex = 0;
+                            node.onmousedown = (e) => { e.stopPropagation(); };
+                            node.style.whiteSpace = 'break-spaces';
+                            node.style.maxWidth = '100%';
+                            node.style.wordBreak = 'break-all';
+                            node.classList.add('syntax-attr-dim-focus');
+                            node.classList.add('clickHighlightOnHover');
+                            node.style.padding = '0 0.25rem';
+                            if (borderTop) {
+                                node.style.borderTop = `1px solid gray`;
+                            }
+                            if (highlight) {
+                                node.classList.add('bg-syntax-attr-dim');
+                            }
+                            node.appendChild(document.createTextNode((0, formatAttr_2.default)(attr)));
+                            node.onclick = () => showProbe(attr);
+                            node.onkeydown = (e) => {
+                                var _a, _b;
+                                if (e.key === 'Enter') {
+                                    showProbe(attr);
+                                }
+                                else if (e.key === 'ArrowDown' && ourNodeIndex !== (nodesList.length - 1)) {
+                                    e.preventDefault();
+                                    (_a = nodesList[ourNodeIndex + 1]) === null || _a === void 0 ? void 0 : _a.focus();
+                                }
+                                else if (e.key === 'ArrowUp') {
+                                    e.preventDefault();
+                                    if (ourNodeIndex > 0) {
+                                        (_b = nodesList[ourNodeIndex - 1]) === null || _b === void 0 ? void 0 : _b.focus();
+                                    }
+                                    else {
+                                        filterInput.focus();
+                                    }
+                                }
+                            };
+                            sortedAttrs.appendChild(node);
+                        };
+                        const addSubmitExplanation = (msg) => {
+                            const submitExpl = document.createElement('p');
+                            submitExpl.classList.add('syntax-attr');
+                            submitExpl.style.textAlign = 'center';
+                            submitExpl.innerText = msg;
+                            sortedAttrs.appendChild(submitExpl);
+                        };
+                        matches.forEach((attr, idx) => buildNode(attr, idx > 0, matches.length === 1));
+                        if (matches.length && misses.length) {
+                            if (matches.length === 1) {
+                                addSubmitExplanation('Press enter to select');
+                                submit = () => showProbe(matches[0]);
+                            }
+                            const sep = document.createElement('div');
+                            sep.classList.add('search-list-separator');
+                            sortedAttrs.appendChild(sep);
+                        }
+                        else if (!matches.length && (filter.startsWith('*.') || filter.startsWith('?')) && filter.length >= 3) {
+                            addSubmitExplanation('Press enter to create search probe');
+                            submit = () => {
+                                const args = [];
+                                if (filter.startsWith('?')) {
+                                    args.push({ type: 'string', value: '' });
+                                    args.push({ type: 'string', value: filter.slice(1) });
+                                }
+                                else {
+                                    let propAndPredicate = filter.slice('*.'.length);
+                                    const predicateStart = propAndPredicate.indexOf('?');
+                                    if (predicateStart === -1) {
+                                        args.push({ type: 'string', value: propAndPredicate });
+                                    }
+                                    else {
+                                        args.push({ type: 'string', value: propAndPredicate.slice(0, predicateStart) });
+                                        args.push({ type: 'string', value: propAndPredicate.slice(predicateStart + 1) });
+                                    }
+                                }
+                                const prop = { name: displayProbeModal_2.searchProbePropertyName, args };
+                                cleanup();
+                                (0, displayProbeModal_2.default)(env, popup.getPos(), locator, prop, {});
+                            };
+                            const sep = document.createElement('div');
+                            sep.classList.add('search-list-separator');
+                            sortedAttrs.appendChild(sep);
+                        }
+                        lastAspect = '';
+                        misses.forEach((attr, idx) => buildNode(attr, idx > 0, !matches.length && misses.length === 1));
+                    };
+                    resortList();
+                    root.appendChild(sortedAttrs);
+                }
+                if (fetchState !== 'idle') {
+                    const spinner = (0, createLoadingSpinner_2.default)();
+                    spinner.classList.add('absoluteCenter');
+                    root.appendChild(spinner);
+                }
+            },
+        });
+        const refresher = env.createCullingTaskSubmitter();
+        env.onChangeListeners[queryId] = (adjusters) => {
+            if (adjusters) {
+                locator.adjust(adjusters);
+            }
+            refresher.submit(() => {
+                fetchAttrs();
+                popup.refresh();
+            });
+        };
+        const fetchAttrs = () => {
+            switch (fetchState) {
+                case 'idle': {
+                    fetchState = 'fetching';
+                    break;
+                }
+                case 'fetching': {
+                    fetchState = 'queued';
+                    return;
+                }
+                case 'queued': return;
+            }
+            env.performTypedRpc({
+                locator: locator.get(),
+                src: env.createParsingRequestData(),
+                type: 'ListProperties',
+                all: settings_2.default.shouldShowAllProperties(),
+            })
+                .then((result) => {
+                var _a;
+                const refetch = fetchState == 'queued';
+                fetchState = 'idle';
+                if (refetch)
+                    fetchAttrs();
+                const parsed = result.properties;
+                if (!parsed) {
+                    if ((_a = result.body) === null || _a === void 0 ? void 0 : _a.length) {
+                        state = { type: 'err', body: result.body };
+                        popup.refresh();
+                        return;
+                    }
+                    throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
+                }
+                const uniq = [];
+                const deudplicator = new Set();
+                parsed.forEach(attr => {
+                    const uniqId = JSON.stringify(attr);
+                    if (deudplicator.has(uniqId)) {
+                        return;
+                    }
+                    deudplicator.add(uniqId);
+                    uniq.push(attr);
+                });
+                state = { type: 'attrs', attrs: uniq };
+                popup.refresh();
+            })
+                .catch(err => {
+                console.warn('Error when loading attributes', err);
+                state = { type: 'err', body: [] };
+                popup.refresh();
+            });
+        };
+        fetchAttrs();
+    };
+    exports.default = displayAttributeModal;
+});
+define("network/evaluateProperty", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const evaluateProperty = (env, req, onSlowResponseDetected, onStatusUpdate, cleanupSlownessInformation) => {
+        let cancelled = false;
+        let activelyLoadingJob = null;
+        const doStopJob = (jobId) => env.performTypedRpc({
+            type: 'Concurrent:StopJob',
+            job: jobId,
+        }).then(res => {
+            if (res.err) {
+                console.warn('Error when stopping job:', res.err);
+                return false;
+            }
+            return true;
+        });
+        let stopper = () => { };
+        return {
+            cancel: () => {
+                cancelled = true;
+                if (activelyLoadingJob !== null) {
+                    doStopJob(activelyLoadingJob);
+                    activelyLoadingJob = null;
+                }
+                stopper();
+            },
+            fetch: () => new Promise((resolve, reject) => {
+                var _a;
+                stopper = () => resolve('stopped');
+                let isDone = false;
+                let isConnectedToConcurrentCapableServer = false;
+                let knownStatus = 'Unknown';
+                let knownStackTrace = null;
+                let localConcurrentCleanup = () => { };
+                const initialPollDelayTimer = setTimeout(() => {
+                    if (isDone || cancelled || !isConnectedToConcurrentCapableServer) {
+                        return;
+                    }
+                    onSlowResponseDetected === null || onSlowResponseDetected === void 0 ? void 0 : onSlowResponseDetected();
+                    localConcurrentCleanup = () => { cleanupSlownessInformation === null || cleanupSlownessInformation === void 0 ? void 0 : cleanupSlownessInformation(); };
+                    const poll = () => {
+                        if (isDone || cancelled) {
+                            return;
+                        }
+                        env.performTypedRpc({
+                            type: 'Concurrent:PollWorkerStatus',
+                            job: jobId,
+                        })
+                            .then(res => {
+                            if (res.ok) {
+                                // Polled OK, async update will be delivered to job monitor below
+                                // Queue future poll.
+                                setTimeout(poll, 1000);
+                            }
+                            else {
+                                console.warn('Error when polling for job status');
+                                // Don't queue more polling, very unlikely to work anyway.
+                            }
+                        });
+                    };
+                    poll();
+                }, 5000);
+                const jobId = env.createJobId(update => {
+                    switch (update.value.type) {
+                        case 'status': {
+                            knownStatus = update.value.value;
+                            onStatusUpdate === null || onStatusUpdate === void 0 ? void 0 : onStatusUpdate(knownStatus, knownStackTrace);
+                            break;
+                        }
+                        case 'workerStackTrace': {
+                            knownStackTrace = update.value.value;
+                            onStatusUpdate === null || onStatusUpdate === void 0 ? void 0 : onStatusUpdate(knownStatus, knownStackTrace);
+                            break;
+                        }
+                        case 'workerTaskDone': {
+                            const wtd = update.value.value;
+                            switch (wtd.type) {
+                                case 'normal': {
+                                    isDone = true;
+                                    activelyLoadingJob = null;
+                                    localConcurrentCleanup();
+                                    const cast = wtd.value;
+                                    if (cast.response.type == 'job') {
+                                        throw new Error(`Unexpected 'job' result in async update`);
+                                    }
+                                    resolve(cast.response.value);
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                });
+                env.performTypedRpc({
+                    ...req,
+                    job: jobId,
+                    jobLabel: `Probe: '${`${(_a = req.locator.result.label) !== null && _a !== void 0 ? _a : req.locator.result.type}`.split('.').slice(-1)[0]}.${req.property.name}'`,
+                })
+                    .then((data) => {
+                    if (data.response.type === 'job') {
+                        // Async work queued, not done.
+                        if (cancelled) {
+                            // We were removed while this request was sent
+                            // Stop it asap
+                            doStopJob(jobId);
+                            clearTimeout(initialPollDelayTimer);
+                        }
+                        else {
+                            activelyLoadingJob = jobId;
+                        }
+                        isConnectedToConcurrentCapableServer = true;
+                    }
+                    else {
+                        // Sync work executed, done.
+                        clearTimeout(initialPollDelayTimer);
+                        isDone = true;
+                        resolve(data.response.value);
+                    }
+                });
+            }),
+        };
+    };
+    exports.default = evaluateProperty;
+});
+define("model/TextProbeEvaluator", ["require", "exports", "network/evaluateProperty"], function (require, exports, evaluateProperty_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isBrokenNodeChain = exports.isAssignmentMatch = exports.createTextProbeEvaluator = void 0;
+    evaluateProperty_1 = __importDefault(evaluateProperty_1);
+    const createGeneralTextMatcher = () => {
+        const reg = /\[\[(?:(((?!\[\[).)*))\]\](?!\])/g;
+        const exec = (line) => {
+            const match = reg.exec(line);
+            if (!match) {
+                return null;
+            }
+            const [full, contents] = match;
+            if (!contents.match(/^(\$|\w)/)) {
+                // Starting with space or somethign similar, ignore it
+                return exec(line);
+            }
+            return {
+                index: match.index,
+                full,
+                contents,
+            };
+        };
+        return { exec };
+    };
+    const isAssignmentMatch = (match) => typeof match.srcVal !== 'undefined';
+    exports.isAssignmentMatch = isAssignmentMatch;
+    const matchFullFile = (fullFile) => {
+        const lines = fullFile.split('\n').map((value, lineIdx) => ({ lineIdx, value }));
+        let ret = {
+            lines,
+            assignments: [],
+            probes: [],
+            matchesOnLine: (lineIdx) => [
+                ...ret.assignments.filter(x => x.lineIdx === lineIdx),
+                ...ret.probes.filter(x => x.lineIdx === lineIdx),
+            ]
+        };
+        for (let lineIdx = 0; lineIdx < lines.length; ++lineIdx) {
+            const line = lines[lineIdx];
+            const matcher = createGeneralTextMatcher();
+            let match;
+            while ((match = matcher.exec(line.value)) != null) {
+                const contents = match.contents;
+                const assign = matchAssignment(contents);
+                if (assign) {
+                    console.log('matched assign:', assign);
+                    ret.assignments.push({ ...assign, lineIdx, index: assign.index + match.index + 2 /* 2 for "[[" */ });
+                }
+                else {
+                    const probe = matchTypedProbeRegex({ lineIdx, value: contents });
+                    if (probe) {
+                        ret.probes.push({ ...probe, lineIdx, index: probe.index + match.index + 2 /* 2 for "[[" */ });
+                    }
+                }
+            }
+        }
+        return ret;
+    };
+    const matchNodeAndAttrChain = (line, strict = false) => {
+        const reg = strict
+            ? /^(\$?\w+)(\[\d+\])?((?:\.(?:l:)?\w*)*$)/g
+            : /(\$?\w+)(\[\d+\])?((?:\.(?:l:)?\w*)*)/g;
+        const match = reg.exec(line.value);
+        if (!match) {
+            return null;
+        }
+        // if (strict && match.index > 0) {
+        //   return null;
+        // }
+        const [full, nodeType, nodeIndex, attrNames] = match;
+        return {
+            full,
+            lineIdx: line.lineIdx,
+            index: match.index,
+            nodeType,
+            nodeIndex: nodeIndex ? +nodeIndex.slice(1, -1) : undefined,
+            attrNames: attrNames ? attrNames.slice(1).split('.') : [],
+        };
+    };
+    const matchTypedProbeRegex = (line) => {
+        const nodeMatch = matchNodeAndAttrChain(line);
+        if (!nodeMatch) {
+            return null;
+        }
+        const expectMatch = nodeMatch.full.length === line.value.length
+            ? null
+            : /(!?)(~?)(?:=((.)*))?/g.exec(line.value.slice(nodeMatch.full.length));
+        if (!expectMatch) {
+            return {
+                index: nodeMatch.index,
+                full: nodeMatch.full,
+                lhs: nodeMatch,
+            };
+        }
+        const [expectFull, exclamation, tilde, expectVal] = expectMatch;
+        return {
+            index: nodeMatch.index,
+            full: line.value.slice(nodeMatch.index, nodeMatch.index + nodeMatch.full.length + expectFull.length),
+            lhs: nodeMatch,
+            rhs: {
+                exclamation: !!exclamation,
+                tilde: !!tilde,
+                expectVal: typeof expectVal === 'string' ? expectVal : undefined,
+            }
+        };
+    };
+    const matchAssignment = (line) => {
+        const reg = /(\$\w+):=(.*)/g;
+        const match = reg.exec(line);
+        if (!match) {
+            return null;
+        }
+        const [full, nodeType, srcVal] = match;
+        return {
+            index: match.index,
+            full,
+            nodeType,
+            srcVal,
+        };
+    };
+    const doEvaluateProperty = async (env, evalArgs) => {
+        var _a;
+        const rpcQueryStart = performance.now();
+        const res = await (0, evaluateProperty_1.default)(env, {
+            captureStdout: false,
+            locator: evalArgs.locator,
+            property: { name: evalArgs.prop, args: evalArgs.args },
+            src: (_a = evalArgs.parsingData) !== null && _a !== void 0 ? _a : env.createParsingRequestData(),
+            type: 'EvaluateProperty',
+            skipResultLocator: true,
+        }).fetch();
+        if (res !== 'stopped') {
+            if (typeof res.totalTime === 'number'
+                && typeof res.parseTime === 'number'
+                && typeof res.createLocatorTime === 'number'
+                && typeof res.applyLocatorTime === 'number'
+                && typeof res.attrEvalTime === 'number') {
+                env.statisticsCollector.addProbeEvaluationTime({
+                    attrEvalMs: res.attrEvalTime / 1000000,
+                    fullRpcMs: Math.max(performance.now() - rpcQueryStart),
+                    serverApplyLocatorMs: res.applyLocatorTime / 1000000,
+                    serverCreateLocatorMs: res.createLocatorTime / 1000000,
+                    serverParseOnlyMs: res.parseTime / 1000000,
+                    serverSideMs: res.totalTime / 1000000,
+                });
+            }
+        }
+        return res;
+    };
+    const isBrokenNodeChain = (val) => val && (typeof val === 'object') && val.type === 'broken-node-chain';
+    exports.isBrokenNodeChain = isBrokenNodeChain;
+    const doEvaluatePropertyChain = async (env, evalArgs) => {
+        var _a;
+        const first = await doEvaluateProperty(env, { locator: evalArgs.locator, prop: evalArgs.propChain[0], parsingData: evalArgs.parsingData, });
+        if (first === 'stopped') {
+            return 'stopped';
+        }
+        let prevResult = first;
+        for (let subsequentIdx = 1; subsequentIdx < evalArgs.propChain.length; ++subsequentIdx) {
+            // Previous result must be a node locator
+            if (((_a = prevResult.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
+                return { type: 'broken-node-chain', brokenIndex: subsequentIdx - 1 };
+            }
+            const chainedLocator = prevResult.body[0].value;
+            const nextRes = await doEvaluateProperty(env, { locator: chainedLocator, prop: evalArgs.propChain[subsequentIdx], parsingData: evalArgs.parsingData });
+            if (nextRes === 'stopped') {
+                return 'stopped';
+            }
+            prevResult = nextRes;
+        }
+        return prevResult;
+    };
+    const doListNodes = async (env, listArgs) => {
+        const rootNode = { type: '<ROOT>', start: ((listArgs.lineIdx + 1) << 12) + 1, end: ((listArgs.lineIdx + 1) << 12) + 4095, depth: 0 };
+        const propResult = await doEvaluateProperty(env, {
+            locator: { result: rootNode, steps: [] },
+            prop: 'm:NodesWithProperty',
+            args: [
+                { type: 'string', value: listArgs.attrFilter },
+                { type: 'string', value: listArgs.predicate }
+            ],
+            parsingData: listArgs.parsingData,
+        });
+        if (propResult === 'stopped') {
+            return null;
+        }
+        if (!propResult.body.length || propResult.body[0].type !== 'arr') {
+            console.error('Unexpected respose from search query:', propResult);
+            return null;
+        }
+        const queryResultList = propResult.body[0].value;
+        const ret = [];
+        queryResultList.forEach(line => {
+            if (line.type === 'node') {
+                ret.push(line.value);
+            }
+        });
+        return ret;
+    };
+    const doEvaluateNodeAndAttr = async (env, variables, lines, args, preqData) => {
+        var _a;
+        let matchingNodes = null;
+        if (args.nodeType.startsWith('$')) {
+            const lines = variables[args.nodeType];
+            if (lines) {
+                matchingNodes = [];
+                if (!args.attrNames.length) {
+                    return { type: 'success', output: lines };
+                }
+                lines.forEach(row => {
+                    if (row.type === 'node') {
+                        matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes.push(row.value);
+                    }
+                });
+            }
+        }
+        else {
+            matchingNodes = await doListNodes(env, {
+                attrFilter: (_a = args.attrNames[0]) !== null && _a !== void 0 ? _a : '',
+                predicate: `this<:${args.nodeType}&@lineSpan~=${args.lineIdx + 1}`,
+                lineIdx: args.lineIdx,
+                parsingData: preqData,
+            });
+        }
+        // let errMsg: string | null = null;
+        const line = lines[args.lineIdx];
+        if (!(matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes.length)) {
+            const typeStart = line.value.indexOf(args.nodeType, args.index);
+            // const firstAttrEnd = line.indexOf(match.attrNames[0], line.indexOf('.', typeStart)) + match.attrNames[0].length;
+            let firstAttrEnd;
+            if (args.attrNames.length) {
+                firstAttrEnd = line.value.indexOf(args.attrNames[0], line.value.indexOf('.', typeStart)) + args.attrNames[0].length;
+            }
+            else {
+                firstAttrEnd = typeStart + args.nodeType.length;
+            }
+            return {
+                type: 'error',
+                msg: (args.nodeType.startsWith('$') && !variables[args.nodeType]) ? `No such variable` : `No matching nodes`,
+                errRange: { colStart: typeStart + 1, colEnd: firstAttrEnd },
+            };
+        }
+        let matchedNode = null;
+        if (args.nodeIndex !== undefined) {
+            if (args.nodeIndex < 0 || args.nodeIndex >= matchingNodes.length) {
+                const typeEnd = line.value.indexOf(args.nodeType, args.index) + args.nodeType.length;
+                const idxStart = line.value.indexOf(`${args.nodeIndex}`, typeEnd);
+                return {
+                    type: 'error',
+                    msg: `Invalid index`,
+                    errRange: { colStart: idxStart + 1, colEnd: idxStart + `${args.nodeIndex}`.length },
+                };
+            }
+            matchedNode = matchingNodes[args.nodeIndex];
+        }
+        else {
+            if (matchingNodes.length === 1) {
+                // Only one node, no need for an index
+                matchedNode = matchingNodes[0];
+            }
+            else {
+                const typeStart = line.value.indexOf(args.nodeType, args.index);
+                // addErr(lineIdx, typeStart + 1, line.value.indexOf('.', typeStart), `Ambiguous, add "[idx]" to select which "${args.nodeType}" to match. 0 ≤ idx < ${matchingNodes.length}`);
+                // return { anyFailure: true, errMsg };
+                return {
+                    type: 'error',
+                    msg: `${matchingNodes.length} nodes of type "${args.nodeType}". Add [idx] to disambiguate, e.g. "${args.nodeType}[0]"`,
+                    errRange: { colStart: typeStart + 1, colEnd: line.value.indexOf('.', typeStart) },
+                };
+            }
+        }
+        if (!args.attrNames.length) {
+            return {
+                type: 'success',
+                output: [{ type: 'node', value: matchedNode }]
+            };
+        }
+        const attrEvalResult = await doEvaluatePropertyChain(env, {
+            locator: matchedNode,
+            propChain: args.attrNames,
+            parsingData: preqData,
+        });
+        if (attrEvalResult == 'stopped') {
+            // return { anyFailure: false, errMsg };
+            return {
+                type: 'error',
+                msg: `Evaluation stopped`,
+                errRange: { colStart: args.index, colEnd: args.index + args.full.length },
+            };
+        }
+        if (isBrokenNodeChain(attrEvalResult)) {
+            let attrStart = line.value.indexOf('.', args.index) + 1;
+            for (let i = 0; i < attrEvalResult.brokenIndex; ++i) {
+                attrStart = line.value.indexOf('.', attrStart) + 1;
+            }
+            return {
+                type: 'error',
+                msg: `No AST node returned by "${args.attrNames[attrEvalResult.brokenIndex]}"`,
+                errRange: { colStart: attrStart + 1, colEnd: attrStart + args.attrNames[attrEvalResult.brokenIndex].length },
+            };
+        }
+        if (attrEvalResult.body.length === 1 && attrEvalResult.body[0].type === 'plain' && attrEvalResult.body[0].value.startsWith(`No such attribute '${args.attrNames[args.attrNames.length - 1]}' on `)) {
+            let lastAttrStart = args.index;
+            for (let i = 0; i < args.attrNames.length; ++i) {
+                lastAttrStart = line.value.indexOf('.', lastAttrStart) + 1;
+            }
+            return {
+                type: 'error',
+                msg: `No such attribute`,
+                errRange: { colStart: lastAttrStart + 1, colEnd: lastAttrStart + args.attrNames[args.attrNames.length - 1].length },
+            };
+        }
+        return {
+            type: 'success',
+            output: attrEvalResult.body,
+        };
+    };
+    const doLoadVariables = async (evaluator) => {
+        const ret = [];
+        for (let i = 0; i < evaluator.fileMatches.assignments.length; ++i) {
+            const assign = evaluator.fileMatches.assignments[i];
+            const lineIdx = assign.lineIdx;
+            if (assign.srcVal.startsWith('$')) {
+                const col = assign.index + assign.full.length - assign.srcVal.length;
+                ret.push({
+                    type: 'error',
+                    assign,
+                    lineIdx,
+                    msg: `Cannot use variables on right-hand side of assignment`,
+                    errRange: { colStart: col, colEnd: col + assign.srcVal.length },
+                });
+                continue;
+            }
+            const srcMatch = evaluator.matchNodeAndAttrChain({ lineIdx, value: assign.srcVal }, true);
+            if (!srcMatch) {
+                const col = assign.index + assign.full.length - assign.srcVal.length;
+                ret.push({
+                    type: 'error',
+                    assign,
+                    lineIdx,
+                    msg: !!assign.srcVal ? `Invalid syntax` : `Missing src val`,
+                    errRange: { colStart: col, colEnd: col + assign.srcVal.length },
+                });
+                continue;
+            }
+            srcMatch.index = assign.index + assign.full.indexOf('=') + 1;
+            const actual = await evaluator.evaluateNodeAndAttr(srcMatch);
+            if (actual.type === 'success') {
+                if (evaluator.variables[assign.nodeType]) {
+                    ret.push({
+                        type: 'error',
+                        assign,
+                        lineIdx,
+                        msg: `Duplicate definition of ${assign.nodeType}`,
+                        errRange: { colStart: assign.index + 1, colEnd: assign.index + assign.full.length },
+                    });
+                    continue;
+                }
+                evaluator.variables[assign.nodeType] = actual.output;
+            }
+            ret.push({ ...actual, assign, lineIdx, });
+        }
+        return ret;
+    };
+    const createTextProbeEvaluator = (env, parsingSource) => {
+        let parsingData;
+        let fullFile;
+        if (!parsingSource) {
+            parsingData = env.createParsingRequestData();
+            fullFile = env.getLocalState();
+        }
+        else if (typeof parsingSource === 'string') {
+            parsingData = { ...env.createParsingRequestData(), src: { type: 'text', value: parsingSource } };
+            fullFile = parsingSource;
+        }
+        else {
+            parsingData = { ...env.createParsingRequestData(), src: parsingSource.src };
+            fullFile = parsingSource.contents;
+        }
+        const variables = {};
+        const fileMatches = matchFullFile(fullFile);
+        let variableLoadPromise = null;
+        const loadVariables = async () => {
+            if (!variableLoadPromise) {
+                variableLoadPromise = doLoadVariables(ret);
+            }
+            return variableLoadPromise;
+            // return doLoadVariables(ret);
+        };
+        const evaluateNodeAndAttr = async (match) => {
+            return doEvaluateNodeAndAttr(env, variables, fileMatches.lines, match, parsingData);
+        };
+        const listNodes = async (args) => {
+            return doListNodes(env, { ...args, parsingData });
+        };
+        const evaluatePropertyChain = async (args) => {
+            return doEvaluatePropertyChain(env, { ...args, parsingData });
+        };
+        const evaluateProperty = async (args) => {
+            return doEvaluateProperty(env, { ...args, parsingData });
+        };
+        const ret = {
+            variables,
+            loadVariables,
+            parsingData,
+            fileMatches,
+            matchNodeAndAttrChain,
+            evaluateNodeAndAttr,
+            listNodes,
+            evaluatePropertyChain,
+            evaluateProperty,
+        };
+        return ret;
+    };
+    exports.createTextProbeEvaluator = createTextProbeEvaluator;
+});
+define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/startEndToSpan", "model/cullingTaskSubmitterFactory", "model/TextProbeEvaluator", "model/UpdatableNodeLocator"], function (require, exports, hacks_4, settings_3, attachDragToX_4, displayAttributeModal_4, displayProbeModal_3, startEndToSpan_7, cullingTaskSubmitterFactory_2, TextProbeEvaluator_1, UpdatableNodeLocator_4) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.setupTextProbeManager = void 0;
+    settings_3 = __importDefault(settings_3);
+    displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
+    displayProbeModal_3 = __importDefault(displayProbeModal_3);
+    startEndToSpan_7 = __importDefault(startEndToSpan_7);
+    cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
+    ;
+    const createSpanFlasher = (env) => {
+        let activeFlashCleanup = () => { };
+        let activeFlashSpan = null;
+        const activeSpanReferenceHoverPos = { ...attachDragToX_4.lastKnownMousePos };
+        const flash = (spans, removeHighlightsOnMove) => {
+            // Remove invalid spans
+            spans = spans.filter(x => x.lineStart && x.lineEnd);
+            const act = activeFlashSpan;
+            if (act && JSON.stringify(act) === JSON.stringify(spans) /* bit hacky comparison, but it works */) {
+                // Already flashing this, update the hover pos reference and exit
+                Object.assign(activeSpanReferenceHoverPos, attachDragToX_4.lastKnownMousePos);
+                return;
+            }
+            activeFlashSpan = spans;
+            const flashes = spans.map(span => ({
+                id: `flash-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`,
+                sticky: { span, classNames: [span.lineStart === span.lineEnd ? 'elp-flash' : 'elp-flash-multiline'] }
+            }));
+            flashes.forEach(flash => env.setStickyHighlight(flash.id, flash.sticky));
+            const cleanup = () => {
+                flashes.forEach(flash => env.clearStickyHighlight(flash.id));
+                activeFlashSpan = null;
+                window.removeEventListener('mousemove', cleanup);
+            };
+            Object.assign(activeSpanReferenceHoverPos, attachDragToX_4.lastKnownMousePos);
+            if (removeHighlightsOnMove) {
+                window.addEventListener('mousemove', (e) => {
+                    const dx = e.x - activeSpanReferenceHoverPos.x;
+                    const dy = e.y - activeSpanReferenceHoverPos.y;
+                    if (Math.hypot(dx, dy) > 24 /* arbitrary distance */) {
+                        cleanup();
+                    }
+                });
+            }
+            activeFlashCleanup();
+            activeFlashCleanup = cleanup;
+        };
+        const quickFlash = (spans) => {
+            flash(spans);
+            const cleaner = activeFlashCleanup;
+            setTimeout(() => {
+                if (activeFlashCleanup === cleaner) {
+                    activeFlashCleanup();
+                }
+                {
+                    // Else, we have been replaced by another highlight
+                }
+            }, 500);
+        };
+        const clear = () => {
+            activeFlashCleanup();
+        };
+        return { flash, clear, quickFlash };
+    };
+    const setupTextProbeManager = (args) => {
+        const refreshDispatcher = (0, cullingTaskSubmitterFactory_2.default)(1)();
+        const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
+        const diagnostics = [];
+        args.env.probeMarkers[queryId] = () => diagnostics;
+        let activeRefresh = false;
+        let repeatOnDone = false;
+        const activeStickies = [];
+        const doRefresh = async () => {
+            var _a;
+            const hadDiagnosticsBefore = diagnostics.length;
+            if (settings_3.default.getTextProbeStyle() === 'disabled') {
+                for (let i = 0; i < activeStickies.length; ++i) {
+                    args.env.clearStickyHighlight(activeStickies[i]);
+                }
+                activeStickies.length = 0;
+                args.onFinishedCheckingActiveFile({ numFail: 0, numPass: 0 });
+                if (hadDiagnosticsBefore) {
+                    diagnostics.length = 0;
+                    args.env.updateMarkers();
+                }
+                return;
+            }
+            if (activeRefresh) {
+                repeatOnDone = true;
+                return;
+            }
+            diagnostics.length = 0;
+            activeRefresh = true;
+            repeatOnDone = false;
+            let nextStickyIndex = 0;
+            const allocateStickyId = () => {
+                let stickyId;
+                if (nextStickyIndex >= activeStickies.length) {
+                    stickyId = `${queryId}-${nextStickyIndex}`;
+                    activeStickies.push(stickyId);
+                }
+                else {
+                    stickyId = activeStickies[nextStickyIndex];
+                }
+                ++nextStickyIndex;
+                return stickyId;
+            };
+            const combinedResults = { numPass: 0, numFail: 0 };
+            try {
+                const evaluator = (0, TextProbeEvaluator_1.createTextProbeEvaluator)(args.env);
+                // TODO rename to addsquiggly
+                function addSquiggly(lineIdx, colStart, colEnd, msg) {
+                    diagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
+                }
+                function addStickyBox(boxClass, boxSpan, stickyClass, stickyContent, stickySpan) {
+                    args.env.setStickyHighlight(allocateStickyId(), {
+                        classNames: boxClass,
+                        span: boxSpan,
+                    });
+                    args.env.setStickyHighlight(allocateStickyId(), {
+                        classNames: [],
+                        span: stickySpan !== null && stickySpan !== void 0 ? stickySpan : { ...boxSpan, colStart: boxSpan.colEnd - 2, colEnd: boxSpan.colEnd - 1 },
+                        content: stickyContent !== null && stickyContent !== void 0 ? stickyContent : undefined,
+                        contentClassNames: stickyClass,
+                    });
+                }
+                (await evaluator.loadVariables()).forEach(vres => {
+                    const span = { lineStart: vres.lineIdx + 1, colStart: vres.assign.index - 1, lineEnd: vres.lineIdx + 1, colEnd: vres.assign.index + vres.assign.full.length + 2 };
+                    switch (vres.type) {
+                        case 'success': {
+                            args.env.setStickyHighlight(allocateStickyId(), {
+                                classNames: ['elp-result-stored'],
+                                span,
+                            });
+                            break;
+                        }
+                        case 'error': {
+                            addSquiggly(vres.lineIdx, vres.errRange.colStart, vres.errRange.colEnd, vres.msg);
+                            addStickyBox(['elp-result-fail'], span, ['elp-actual-result-err'], vres.msg);
+                            combinedResults.numFail++;
+                            break;
+                        }
+                    }
+                });
+                // Second, go through all non-assignments
+                for (let i = 0; i < evaluator.fileMatches.probes.length; ++i) {
+                    const match = evaluator.fileMatches.probes[i];
+                    const lineIdx = match.lineIdx;
+                    const lhsEval = await evaluator.evaluateNodeAndAttr(match.lhs);
+                    const span = { lineStart: lineIdx + 1, colStart: match.index - 1, lineEnd: lineIdx + 1, colEnd: match.index + match.full.length + 2 };
+                    if (lhsEval.type === 'error') {
+                        addSquiggly(lineIdx, lhsEval.errRange.colStart, lhsEval.errRange.colEnd, lhsEval.msg);
+                        addStickyBox(['elp-result-fail'], span, ['elp-actual-result-err'], lhsEval.msg);
+                        combinedResults.numFail++;
+                        continue;
+                    }
+                    // Else, success!
+                    if (typeof ((_a = match.rhs) === null || _a === void 0 ? void 0 : _a.expectVal) === 'undefined') {
+                        addStickyBox(['elp-result-probe'], span, [`elp-actual-result-probe`], `Result: ${evalPropertyBodyToString(lhsEval.output)}`);
+                        continue;
+                    }
+                    // Else, an assertion!
+                    if (match.rhs.expectVal.startsWith('$')) {
+                        // Do not flatten to string, make full-precision comparison
+                        const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx, value: match.rhs.expectVal }, true);
+                        if (!rhsMatch) {
+                            const errMsg = `Invalid syntax`;
+                            combinedResults.numFail++;
+                            addSquiggly(lineIdx, match.index + match.full.indexOf(match.rhs.expectVal), span.colEnd - 1, errMsg);
+                            addStickyBox(['elp-result-fail'], span, ['elp-actual-result-err'], errMsg);
+                            continue;
+                        }
+                        rhsMatch.index = match.index + match.full.indexOf('$', 2);
+                        const rhsEval = await evaluator.evaluateNodeAndAttr(rhsMatch);
+                        if (rhsEval.type === 'error') {
+                            addSquiggly(lineIdx, rhsEval.errRange.colStart, rhsEval.errRange.colEnd, rhsEval.msg);
+                            addStickyBox(['elp-result-fail'], span, ['elp-actual-result-err'], rhsEval.msg);
+                            continue;
+                        }
+                        // Else, success!
+                        // Ugly stringify comparison, should work but is not the most efficient
+                        const lhsFiltered = filterPropertyBodyForHighIshPrecisionComparison(lhsEval.output);
+                        const rhsFiltered = filterPropertyBodyForHighIshPrecisionComparison(rhsEval.output);
+                        const rawComparisonSuccess = JSON.stringify(lhsFiltered) === JSON.stringify(rhsFiltered);
+                        const adjustedComparisonSuccsess = match.rhs.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
+                        if (adjustedComparisonSuccsess) {
+                            combinedResults.numPass++;
+                            args.env.setStickyHighlight(allocateStickyId(), {
+                                classNames: ['elp-result-success'], span,
+                            });
+                            continue;
+                        }
+                        const errMsg = `Assertion failed.`;
+                        addSquiggly(lineIdx, span.colStart + 2, span.colEnd - 2, errMsg);
+                        addStickyBox(['elp-result-fail'], span, ['elp-actual-result-err'], errMsg);
+                        combinedResults.numFail++;
+                    }
+                    else {
+                        // Flatten to string and make string comparison
+                        const cmp = evalPropertyBodyToString(lhsEval.output);
+                        const rawComparisonSuccess = match.rhs.tilde ? cmp.includes(match.rhs.expectVal) : cmp === match.rhs.expectVal;
+                        const adjustedComparisonSuccsess = match.rhs.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
+                        if (adjustedComparisonSuccsess) {
+                            combinedResults.numPass++;
+                            args.env.setStickyHighlight(allocateStickyId(), {
+                                classNames: ['elp-result-success'], span,
+                            });
+                        }
+                        else {
+                            const errMsg = `Actual: ${cmp}`;
+                            addSquiggly(lineIdx, match.index + match.full.indexOf(match.rhs.expectVal), span.colEnd - 1, errMsg);
+                            addStickyBox(['elp-result-fail'], span, ['elp-actual-result-err'], errMsg);
+                            combinedResults.numFail++;
+                        }
+                    }
+                }
+            }
+            catch (e) {
+                console.warn('Error during refresh', e);
+            }
+            if (diagnostics.length || hadDiagnosticsBefore) {
+                args.env.updateMarkers();
+            }
+            for (let i = nextStickyIndex; i < activeStickies.length; ++i) {
+                args.env.clearStickyHighlight(activeStickies[i]);
+            }
+            activeStickies.length = nextStickyIndex;
+            activeRefresh = false;
+            args.onFinishedCheckingActiveFile(combinedResults);
+            if (repeatOnDone) {
+                refresh();
+            }
+        };
+        const refresh = () => refreshDispatcher.submit(doRefresh);
+        args.env.onChangeListeners[queryId] = refresh;
+        refresh();
+        const flasher = createSpanFlasher(args.env);
+        const resolveNode = async (evaluator, match) => {
+            var _a, _b, _c, _d;
+            if (match.nodeType.startsWith('$')) {
+                await evaluator.loadVariables();
+                const varVal = evaluator.variables[match.nodeType];
+                return ((_a = varVal === null || varVal === void 0 ? void 0 : varVal[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node' ? varVal[0].value : null;
+            }
+            const listedNodes = await evaluator.listNodes({ attrFilter: (_b = match.attrNames[0]) !== null && _b !== void 0 ? _b : '', predicate: `this<:${match.nodeType}&@lineSpan~=${match.lineIdx + 1}`, lineIdx: match.lineIdx });
+            return (_d = listedNodes === null || listedNodes === void 0 ? void 0 : listedNodes[(_c = match.nodeIndex) !== null && _c !== void 0 ? _c : 0]) !== null && _d !== void 0 ? _d : null;
+        };
+        const hover = async (line, column) => {
+            const res = await doHover(line, column);
+            if (res === null) {
+                flasher.clear();
+            }
+            return res;
+        };
+        const doHover = async (line, column) => {
+            var _a;
+            if (settings_3.default.getTextProbeStyle() === 'disabled') {
+                return null;
+            }
+            const evaluator = (0, TextProbeEvaluator_1.createTextProbeEvaluator)(args.env);
+            // const evaluator.fileMatches = matchFullFile(args.env.getLocalState());
+            const lines = evaluator.fileMatches.lines;
+            // const lines = args.env.getLocalState().split('\n');
+            // Make line/col 0-indexed
+            --line;
+            --column;
+            if (line < 0 || line >= lines.length) {
+                return null;
+            }
+            const filtered = evaluator.fileMatches.matchesOnLine(line);
+            for (let i = 0; i < filtered.length; ++i) {
+                const match = filtered[i];
+                const begin = match.index;
+                if (column < begin) {
+                    continue;
+                }
+                const end = begin + match.full.length;
+                if (column >= end) {
+                    continue;
+                }
+                if ((0, TextProbeEvaluator_1.isAssignmentMatch)(match)) {
+                    // TODO
+                }
+                else {
+                    // Probe
+                    const locator = await resolveNode(evaluator, match.lhs);
+                    if (!locator) {
+                        return null;
+                    }
+                    const typeStart = match.index;
+                    let typeEnd;
+                    if (match.lhs.attrNames.length) {
+                        typeEnd = lines[line].value.indexOf('.', typeStart);
+                    }
+                    else {
+                        typeEnd = typeStart + match.full.length;
+                    }
+                    if (column >= typeStart && column < typeEnd) {
+                        const retFlash = [];
+                        if (!locator.result.external) {
+                            retFlash.push((0, startEndToSpan_7.default)(locator.result.start, locator.result.end));
+                        }
+                        retFlash.push({
+                            // Type in text probe
+                            lineStart: line + 1, colStart: typeStart + 1,
+                            lineEnd: line + 1, colEnd: typeEnd,
+                        });
+                        flasher.flash(retFlash, true);
+                    }
+                    else {
+                        let searchStart = typeEnd;
+                        let hoveringProp = false;
+                        for (let propIdx = 0; propIdx < match.lhs.attrNames.length; ++propIdx) {
+                            const propStart = lines[line].value.indexOf('.', searchStart) + 1;
+                            const propEnd = propStart + match.lhs.attrNames[propIdx].length;
+                            searchStart = propEnd;
+                            if (column >= propStart && column < propEnd) {
+                                hoveringProp = true;
+                                evaluator.evaluatePropertyChain({ locator, propChain: match.lhs.attrNames.slice(0, propIdx + 1) })
+                                    // 'then', not 'await'. Do not want to block the hover info from appearing
+                                    .then(res => {
+                                    if (res === 'stopped' || (0, TextProbeEvaluator_1.isBrokenNodeChain)(res) || res.body[0].type !== 'node') {
+                                        return;
+                                    }
+                                    const node = res.body[0].value.result;
+                                    flasher.flash([
+                                        {
+                                            lineStart: line + 1, colStart: propStart + 1,
+                                            lineEnd: line + 1, colEnd: propEnd,
+                                        },
+                                        (0, startEndToSpan_7.default)(node.start, node.end)
+                                    ], true);
+                                });
+                                break;
+                            }
+                        }
+                        if (!hoveringProp && ((_a = match.rhs) === null || _a === void 0 ? void 0 : _a.expectVal)) {
+                            const resultStart = lines[line].value.indexOf('=', searchStart) + 1;
+                            const resultEnd = resultStart + match.rhs.expectVal.length;
+                            if (column >= resultStart && column < resultEnd) {
+                                evaluator.evaluatePropertyChain({ locator, propChain: match.lhs.attrNames })
+                                    .then(res => {
+                                    if (res === 'stopped' || (0, TextProbeEvaluator_1.isBrokenNodeChain)(res)) {
+                                        return;
+                                    }
+                                    if (res.body[0].type === 'node') {
+                                        const node = res.body[0].value.result;
+                                        const spans = [{
+                                                lineStart: line + 1, colStart: resultStart + 1,
+                                                lineEnd: line + 1, colEnd: resultEnd,
+                                            }];
+                                        if (!node.external) {
+                                            spans.push((0, startEndToSpan_7.default)(node.start, node.end));
+                                        }
+                                        flasher.flash(spans, true);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    window.CPR_CMD_OPEN_TEXTPROBE_CALLBACK = async () => {
+                        var _a, _b;
+                        if (!match.lhs.attrNames.length) {
+                            (0, displayAttributeModal_4.default)(args.env, null, (0, UpdatableNodeLocator_4.createMutableLocator)(locator));
+                            return;
+                        }
+                        const displayForNode = async (locator, m, offset) => {
+                            var _a;
+                            const nestedWindows = {};
+                            let nestTarget = nestedWindows;
+                            let nestLocator = locator;
+                            for (let chainAttrIdx = 0; chainAttrIdx < m.attrNames.length; ++chainAttrIdx) {
+                                const chainAttr = m.attrNames[chainAttrIdx];
+                                const res = await evaluator.evaluateProperty({ locator: nestLocator, prop: chainAttr });
+                                if (res === 'stopped' || (0, TextProbeEvaluator_1.isBrokenNodeChain)(res)) {
+                                    break;
+                                }
+                                if (chainAttrIdx > 0) {
+                                    let newNest = {};
+                                    nestTarget['[0]'] = [
+                                        { data: { type: 'probe', locator, property: { name: chainAttr }, nested: newNest } },
+                                    ];
+                                    nestTarget = newNest;
+                                }
+                                if (((_a = res.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
+                                    break;
+                                }
+                                nestLocator = res.body[0].value;
+                            }
+                            (0, displayProbeModal_3.default)(args.env, { x: attachDragToX_4.lastKnownMousePos.x + offset.x, y: attachDragToX_4.lastKnownMousePos.y + offset.y }, (0, UpdatableNodeLocator_4.createMutableLocator)(locator), { name: m.attrNames[0] }, nestedWindows);
+                        };
+                        await displayForNode(locator, match.lhs, { x: 0, y: 0 });
+                        if ((_a = match.rhs) === null || _a === void 0 ? void 0 : _a.expectVal) {
+                            // Maybe open for right side as well
+                            const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: match.lineIdx, value: match.rhs.expectVal });
+                            if ((_b = rhsMatch === null || rhsMatch === void 0 ? void 0 : rhsMatch.attrNames) === null || _b === void 0 ? void 0 : _b.length) {
+                                const rhsLocator = await resolveNode(evaluator, rhsMatch);
+                                if (rhsLocator) {
+                                    await displayForNode(rhsLocator, rhsMatch, { x: 64, y: 4 });
+                                }
+                            }
+                        }
+                    };
+                    return {
+                        range: { startLineNumber: line + 1, startColumn: column + 1, endLineNumber: line + 1, endColumn: column + 3 },
+                        contents: [{
+                                value: `[${match.lhs.attrNames.length ? `Open Normal Probe` : `Create Normal Probe`}](command:${window.CPR_CMD_OPEN_TEXTPROBE_ID})`, isTrusted: true
+                            }],
+                    };
+                }
+            }
+            return null;
+        };
+        const complete = async (line, column) => {
+            var _a;
+            if (settings_3.default.getTextProbeStyle() === 'disabled') {
+                return null;
+            }
+            const evaluator = (0, TextProbeEvaluator_1.createTextProbeEvaluator)(args.env);
+            const lines = evaluator.fileMatches.lines;
+            // Make line/col 0-indexed
+            --line;
+            --column;
+            if (line < 0 || line >= lines.length) {
+                return null;
+            }
+            const completeType = async (filter = 'allow-all', existingText = '') => {
+                const matchingNodes = [];
+                const setupPromises = [];
+                if (filter !== 'forbid-types') {
+                    setupPromises.push(evaluator.listNodes({
+                        attrFilter: '',
+                        predicate: `@lineSpan~=${line + 1}`,
+                        lineIdx: line,
+                    }).then(list => list === null || list === void 0 ? void 0 : list.forEach(node => matchingNodes.push(node.result))));
+                }
+                ;
+                if (filter !== 'forbid-variables') {
+                    setupPromises.push(evaluator.loadVariables().then(() => {
+                        Object.entries(evaluator.variables).forEach(([label, val]) => {
+                            var _a;
+                            if (((_a = val[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node') {
+                                matchingNodes.push({ ...val[0].value.result, label });
+                            }
+                        });
+                    }));
+                }
+                await Promise.all(setupPromises);
+                if (!matchingNodes.length) {
+                    return null;
+                }
+                const duplicateTypes = new Set();
+                const includedTypes = new Set();
+                matchingNodes.forEach(node => {
+                    var _a;
+                    const type = (_a = node.label) !== null && _a !== void 0 ? _a : node.type;
+                    if (includedTypes.has(type)) {
+                        duplicateTypes.add(type);
+                    }
+                    includedTypes.add(type);
+                });
+                let nodeListCounter = {};
+                let lastFlash = -1;
+                window.OnCompletionItemListClosed = () => {
+                    flasher.clear();
+                };
+                window.OnCompletionItemFocused = item => {
+                    if (item.nodeIndex === 'undefined') {
+                        return;
+                    }
+                    const nodeIndex = item.nodeIndex;
+                    if (lastFlash === nodeIndex) {
+                        return;
+                    }
+                    lastFlash = nodeIndex;
+                    const node = matchingNodes[nodeIndex];
+                    if (!node) {
+                        return;
+                    }
+                    flasher.flash([(0, startEndToSpan_7.default)(node.start, node.end)]);
+                };
+                return matchingNodes.map((node, nodeIndex) => {
+                    var _a, _b;
+                    const type = (_a = node.label) !== null && _a !== void 0 ? _a : node.type;
+                    const label = type.split('.').slice(-1)[0];
+                    let detail = undefined;
+                    if (type.startsWith('$')) {
+                        // It is a variable, add the type as detail
+                        detail = node.type.split('.').slice(-1)[0];
+                    }
+                    const ret = { label, kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0'), detail };
+                    if (!duplicateTypes.has(type)) {
+                        if (label.length > existingText.length && label.startsWith(existingText)) {
+                            ret.insertText = label.slice(existingText.length);
+                        }
+                        else {
+                            ret.insertText = label;
+                        }
+                        return ret;
+                    }
+                    let idx = ((_b = nodeListCounter[type]) !== null && _b !== void 0 ? _b : -1) + 1;
+                    nodeListCounter[type] = idx;
+                    const indexed = `${label}[${idx}]`;
+                    ret.label = indexed;
+                    ret.insertText = indexed;
+                    return ret;
+                });
+            };
+            const completeProp = async (nodeType, nodeIndex, prerequisiteAttrs, previousStepSpan) => {
+                var _a, _b;
+                let locator = undefined;
+                if (nodeType.startsWith('$')) {
+                    await evaluator.loadVariables();
+                    const varData = evaluator.variables[nodeType];
+                    if (((_a = varData === null || varData === void 0 ? void 0 : varData[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node') {
+                        locator = varData[0].value;
+                    }
+                }
+                else {
+                    const matchingNodes = await evaluator.listNodes({
+                        attrFilter: '',
+                        predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
+                        lineIdx: line,
+                    });
+                    locator = matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes[nodeIndex !== null && nodeIndex !== void 0 ? nodeIndex : 0];
+                }
+                if (!locator) {
+                    return null;
+                }
+                if (prerequisiteAttrs.length != 0) {
+                    const chainResult = await evaluator.evaluatePropertyChain({ locator, propChain: prerequisiteAttrs });
+                    if (chainResult === 'stopped' || (0, TextProbeEvaluator_1.isBrokenNodeChain)(chainResult)) {
+                        return null;
+                    }
+                    if (((_b = chainResult.body[0]) === null || _b === void 0 ? void 0 : _b.type) !== 'node') {
+                        return null;
+                    }
+                    locator = chainResult.body[0].value;
+                }
+                // const typeStart = match.index + 2;
+                // const typeEnd = typeStart + match.nodeType.length;
+                // const firstPropStart =
+                flasher.flash([
+                    {
+                        lineStart: line + 1, colStart: previousStepSpan[0],
+                        lineEnd: line + 1, colEnd: previousStepSpan[1],
+                    },
+                    {
+                        lineStart: locator.result.start >>> 12, colStart: locator.result.start & 0xFFF,
+                        lineEnd: locator.result.end >>> 12, colEnd: locator.result.end & 0xFFF,
+                    }
+                ]);
+                window.OnCompletionItemListClosed = () => {
+                    flasher.clear();
+                };
+                const props = await args.env.performTypedRpc({
+                    locator,
+                    src: evaluator.parsingData,
+                    type: 'ListProperties',
+                    all: settings_3.default.shouldShowAllProperties(),
+                });
+                if (!props.properties) {
+                    return null;
+                }
+                const zeroArgPropNames = new Set(props.properties.filter(prop => { var _a, _b; return ((_b = (_a = prop.args) === null || _a === void 0 ? void 0 : _a.length) !== null && _b !== void 0 ? _b : 0) === 0; }).map(prop => prop.name));
+                return [...zeroArgPropNames].sort().map(label => {
+                    return { label, insertText: label, kind: 2 };
+                });
+            };
+            const completeExpectedValue = async (nodeType, nodeIndex, attrNames) => {
+                var _a, _b;
+                let locator = undefined;
+                if (nodeType.startsWith('$')) {
+                    await evaluator.loadVariables();
+                    const varData = evaluator.variables[nodeType];
+                    if (varData && !attrNames.length) {
+                        const cmp = evalPropertyBodyToString(varData);
+                        return [{ label: cmp, insertText: cmp, kind: 15 }];
+                    }
+                    if (((_a = varData === null || varData === void 0 ? void 0 : varData[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node') {
+                        locator = varData[0].value;
+                    }
+                }
+                else {
+                    const matchingNodes = await evaluator.listNodes({
+                        attrFilter: '',
+                        predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
+                        lineIdx: line,
+                    });
+                    locator = matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes[nodeIndex !== null && nodeIndex !== void 0 ? nodeIndex : 0];
+                }
+                if (!locator) {
+                    return null;
+                }
+                if (!attrNames.length) {
+                    const cmp = evalPropertyBodyToString([{ type: 'node', value: locator }]);
+                    return [{ label: cmp, insertText: cmp, kind: 15 }];
+                }
+                const attrEvalResult = await evaluator.evaluatePropertyChain({
+                    locator,
+                    propChain: attrNames,
+                });
+                if (attrEvalResult == 'stopped' || (0, TextProbeEvaluator_1.isBrokenNodeChain)(attrEvalResult)) {
+                    return null;
+                }
+                if (((_b = attrEvalResult.body[0]) === null || _b === void 0 ? void 0 : _b.type) === 'node') {
+                    const node = attrEvalResult.body[0].value.result;
+                    if (!node.external) {
+                        flasher.flash([(0, startEndToSpan_7.default)(node.start, node.end)]);
+                        window.OnCompletionItemListClosed = () => {
+                            flasher.clear();
+                        };
+                    }
+                }
+                const cmp = evalPropertyBodyToString(attrEvalResult.body);
+                return [{ label: cmp, insertText: cmp, kind: 15 }];
+            };
+            const filtered = evaluator.fileMatches.matchesOnLine(line);
+            for (let i = 0; i < filtered.length; ++i) {
+                const lhsMatch = filtered[i];
+                if (lhsMatch.index > column) {
+                    // Cursor is before the match
+                    continue;
+                }
+                if (lhsMatch.index + lhsMatch.full.length < column) {
+                    // Cursor is after the match
+                    continue;
+                }
+                let typeStart = lhsMatch.index;
+                let typeEnd = 0;
+                const computeTypeEnd = (m) => {
+                    if (m.nodeIndex !== undefined) {
+                        return lines[line].value.indexOf(']', typeStart) + 1;
+                    }
+                    return typeStart + m.nodeType.length;
+                };
+                let attrSearchStart = typeEnd;
+                const maybeCompleteTypeOrAttr = async (m, typeFilter = 'allow-all') => {
+                    if (column >= typeStart && column <= typeEnd) {
+                        return completeType(typeFilter);
+                    }
+                    attrSearchStart = typeEnd;
+                    for (let attrIdx = 0; attrIdx < m.attrNames.length; ++attrIdx) {
+                        const attr = m.attrNames[attrIdx];
+                        const attrStart = attr
+                            ? lines[line].value.indexOf(attr, attrSearchStart)
+                            : lines[line].value.indexOf('.', attrSearchStart) + 1;
+                        const attrEnd = attrStart + attr.length;
+                        attrSearchStart = attrEnd;
+                        if (column >= attrStart && column <= attrEnd) {
+                            return completeProp(m.nodeType, m.nodeIndex, m.attrNames.slice(0, attrIdx), [typeStart + 1, attrStart - 1]);
+                        }
+                    }
+                    return null;
+                };
+                if ((0, TextProbeEvaluator_1.isAssignmentMatch)(lhsMatch)) {
+                    const expectStart = lines[line].value.indexOf(':=', lhsMatch.index) + 2;
+                    const expectEnd = lhsMatch.index + lhsMatch.full.length;
+                    if (column >= expectStart && column <= expectEnd) {
+                        // Inside src value
+                        if (!lhsMatch.srcVal) {
+                            return completeType('forbid-variables');
+                        }
+                        const srcMatch = evaluator.matchNodeAndAttrChain({ lineIdx: lhsMatch.lineIdx, value: lhsMatch.srcVal });
+                        if (!srcMatch) {
+                            // Still working on the type
+                            if (/^\w*(\[\d+\])?$/.test(lhsMatch.srcVal)) {
+                                return completeType('forbid-variables');
+                            }
+                            return null;
+                        }
+                        typeStart = expectStart;
+                        typeEnd = computeTypeEnd(srcMatch);
+                        return maybeCompleteTypeOrAttr({
+                            ...srcMatch,
+                            index: expectStart + srcMatch.index,
+                        }, 'forbid-variables');
+                    }
+                    return null;
+                }
+                // Else, probe!
+                typeEnd = computeTypeEnd(lhsMatch.lhs); // lines[line].value.indexOf('.', typeStart);
+                const lhsComplete = await maybeCompleteTypeOrAttr(lhsMatch.lhs);
+                if (lhsComplete) {
+                    return lhsComplete;
+                }
+                if (!lhsMatch.rhs) {
+                    return null;
+                }
+                // if (!lhsMatch.rhs.expectVal) {
+                //   return null;
+                // }
+                const currExpectVal = (_a = lhsMatch.rhs.expectVal) !== null && _a !== void 0 ? _a : '';
+                const expectStart = lines[line].value.indexOf('=', attrSearchStart) + 1;
+                ;
+                const expectEnd = expectStart + currExpectVal.length;
+                if (column >= expectStart && column <= expectEnd) {
+                    if (column > expectStart && currExpectVal.startsWith('$')) {
+                        // Actually, we should treat this as a 'normal' query
+                        const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: line, value: currExpectVal });
+                        if (!rhsMatch) {
+                            if (/^\$\w*$/.test(currExpectVal)) {
+                                return completeType('forbid-types', lines[line].value.slice(expectStart, column));
+                            }
+                            return null;
+                        }
+                        rhsMatch.index += expectStart;
+                        typeStart = expectStart;
+                        typeEnd = computeTypeEnd(rhsMatch);
+                        return maybeCompleteTypeOrAttr(rhsMatch);
+                    }
+                    else {
+                        return completeExpectedValue(lhsMatch.lhs.nodeType, lhsMatch.lhs.nodeIndex, lhsMatch.lhs.attrNames);
+                    }
+                }
+            }
+            const forgivingMatcher = /\[\[(\$?\w*)\]\]/g;
+            let match;
+            while ((match = forgivingMatcher.exec(lines[line].value)) !== null) {
+                const [full, nodeType] = match;
+                if (match.index >= column) {
+                    // Cursor is before the match
+                    continue;
+                }
+                if (match.index + full.length <= column) {
+                    // Cursor is before the match
+                    continue;
+                }
+                const typeStart = match.index + 2;
+                const typeEnd = Math.max(typeStart + nodeType.length, lines[line].value.indexOf('.', typeStart));
+                if (column >= typeStart && column <= typeEnd) {
+                    return completeType();
+                }
+                // if (match.attrNames) {
+                //   let attrSearchStart = typeEnd;
+                //   for (let attrIdx = 0; attrIdx < match.attrNames.length; ++attrIdx) {
+                //     const attrStart = lines[line].indexOf('.', attrSearchStart) + 1;;
+                //     const attrEnd = attrStart + match.attrNames[attrIdx].length;
+                //     attrSearchStart = attrEnd;
+                //     if (column >= attrStart && column <= attrEnd) {
+                //       return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx), [typeStart, attrStart]);
+                //     }
+                //   }
+                // }
+            }
+            return null;
+        };
+        const checkFile = async (requestSrc, knownSrc) => {
+            const ret = {
+                numPass: 0,
+                numFail: 0,
+            };
+            if (settings_3.default.getTextProbeStyle() === 'disabled') {
+                return ret;
+            }
+            const evaluator = (0, TextProbeEvaluator_1.createTextProbeEvaluator)(args.env, { src: requestSrc, contents: knownSrc });
+            const varLoadRes = await evaluator.loadVariables();
+            varLoadRes.forEach((res) => {
+                if (res.type === 'error') {
+                    ret.numFail++;
+                }
+            });
+            const postLoopWaits = [];
+            for (let i = 0; i < evaluator.fileMatches.probes.length; ++i) {
+                // const reg = createTypedProbeRegex();
+                // let outerMatch: ReturnType<typeof reg['exec']>;
+                // while ((outerMatch = reg.exec(lines[lineIdx])) != null) {
+                const match = evaluator.fileMatches.probes[i];
+                const handleMatch = async () => {
+                    const lhsResult = await evaluator.evaluateNodeAndAttr(match.lhs);
+                    if (lhsResult.type === 'error') {
+                        ret.numFail++;
+                        return;
+                    }
+                    const rhs = match.rhs;
+                    const expectVal = rhs === null || rhs === void 0 ? void 0 : rhs.expectVal;
+                    if (!expectVal) {
+                        // Just a probe, no assertion, no need to check further
+                        return;
+                    }
+                    if (expectVal === null || expectVal === void 0 ? void 0 : expectVal.startsWith('$')) {
+                        const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: match.lineIdx, value: expectVal }, true);
+                        if (!rhsMatch) {
+                            ret.numFail++;
+                            return;
+                        }
+                        const rhsResult = await evaluator.evaluateNodeAndAttr(rhsMatch);
+                        if (rhsResult.type === 'error') {
+                            ret.numFail++;
+                            return;
+                        }
+                        const lhsFiltered = filterPropertyBodyForHighIshPrecisionComparison(lhsResult.output);
+                        const rhsFiltered = filterPropertyBodyForHighIshPrecisionComparison(rhsResult.output);
+                        const rawComparisonSuccess = JSON.stringify(lhsFiltered) === JSON.stringify(rhsFiltered);
+                        const adjustedComparisonSuccsess = rhs.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
+                        if (adjustedComparisonSuccsess) {
+                            ret.numPass++;
+                        }
+                        else {
+                            ret.numFail++;
+                        }
+                    }
+                    else {
+                        const cmp = evalPropertyBodyToString(lhsResult.output);
+                        const rawComparisonSuccess = rhs.tilde ? cmp.includes(expectVal) : (cmp === expectVal);
+                        const adjustedComparisonSuccsess = rhs.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
+                        if (adjustedComparisonSuccsess) {
+                            ret.numPass++;
+                        }
+                        else {
+                            ret.numFail++;
+                        }
+                    }
+                };
+                if (args.env.workerProcessCount !== undefined) {
+                    postLoopWaits.push(handleMatch());
+                }
+                else {
+                    await handleMatch();
+                }
+                // }
+            }
+            await Promise.all(postLoopWaits);
+            return ret;
+        };
+        return { hover, complete, checkFile };
+    };
+    exports.setupTextProbeManager = setupTextProbeManager;
+    const filterPropertyBodyForHighIshPrecisionComparison = (body) => body.filter(x => !(x.type === 'plain' && !x.value.trim()));
+    const evalPropertyBodyToString = (body) => {
+        const lineToComparisonString = (line) => {
+            var _a, _b;
+            switch (line.type) {
+                case 'plain':
+                case 'stdout':
+                case 'stderr':
+                case 'streamArg':
+                case 'dotGraph':
+                case 'html':
+                    return line.value;
+                case 'arr':
+                    let mapped = [];
+                    for (let idx = 0; idx < line.value.length; ++idx) {
+                        if (line.value[idx].type === 'node' && ((_a = line.value[idx + 1]) === null || _a === void 0 ? void 0 : _a.type) === 'plain' && line.value[idx + 1].value === '\n') {
+                            const justNode = lineToComparisonString(line.value[idx]);
+                            if (line.value.length === 2) {
+                                return justNode;
+                            }
+                            mapped.push(justNode);
+                            ++idx;
+                        }
+                        else {
+                            mapped.push(lineToComparisonString(line.value[idx]));
+                        }
+                    }
+                    return `[${mapped.join(', ')}]`;
+                case 'node':
+                    const ret = (_b = line.value.result.label) !== null && _b !== void 0 ? _b : line.value.result.type;
+                    return ret.slice(ret.lastIndexOf('.') + 1);
+                case 'highlightMsg':
+                    return line.value.msg;
+                case 'tracing':
+                    return lineToComparisonString(line.value.result);
+                default:
+                    (0, hacks_4.assertUnreachable)(line);
+                    return '';
+            }
+        };
+        return lineToComparisonString(body.length === 1 ? body[0] : { type: 'arr', value: body });
+    };
+});
+define("ui/UIElements", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    class UIElements {
+        // Use lazy getters since the dom elements haven't been loaded
+        // by the time this script initially runs.
+        get positionRecoverySelector() { return document.getElementById('control-position-recovery-strategy'); }
+        get positionRecoveryHelpButton() { return document.getElementById('control-position-recovery-strategy-help'); }
+        get astCacheStrategySelector() { return document.getElementById('ast-cache-strategy'); }
+        get astCacheStrategyHelpButton() { return document.getElementById('control-ast-cache-strategy-help'); }
+        get syntaxHighlightingSelector() { return document.getElementById('syntax-highlighting'); }
+        get syntaxHighlightingHelpButton() { return document.getElementById('control-syntax-highlighting-help'); }
+        get shouldOverrideMainArgsCheckbox() { return document.getElementById('control-should-override-main-args'); }
+        get configureMainArgsOverrideButton() { return document.getElementById('configure-main-args'); }
+        get mainArgsOverrideHelpButton() { return document.getElementById('main-args-override-help'); }
+        get shouldCustomizeFileSuffixCheckbox() { return document.getElementById('control-customize-file-suffix'); }
+        get configureCustomFileSuffixButton() { return document.getElementById('customize-file-suffix'); }
+        get customFileSuffixHelpButton() { return document.getElementById('customize-file-suffix-help'); }
+        get showAllPropertiesCheckbox() { return document.getElementById('control-show-all-properties'); }
+        get showAllPropertiesHelpButton() { return document.getElementById('show-all-properties-help'); }
+        get groupPropertiesByAspectCheckbox() { return document.getElementById('control-group-properties-by-aspect'); }
+        get groupPropertiesByAspectButton() { return document.getElementById('group-properties-by-aspect-help'); }
+        get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr'); }
+        get duplicateProbeHelpButton() { return document.getElementById('duplicate-probe-on-attr-help'); }
+        get captureStdoutCheckbox() { return document.getElementById('control-capture-stdout'); }
+        get captureStdoutHelpButton() { return document.getElementById('capture-stdout-help'); }
+        get captureTracesCheckbox() { return document.getElementById('control-capture-traces'); }
+        get captureTracesHelpButton() { return document.getElementById('capture-traces-help'); }
+        get autoflushTracesCheckbox() { return document.getElementById('control-autoflush-traces'); }
+        get autoflushTracesContainer() { return document.getElementById('container-autoflush-traces'); }
+        get locationStyleSelector() { return document.getElementById('location-style'); }
+        get locationStyleHelpButton() { return document.getElementById('control-location-style-help'); }
+        get textprobeStyleSelector() { return document.getElementById('textprobe-style'); }
+        get textprobeStyleHelpButton() { return document.getElementById('control-textprobe-style-help'); }
+        get workspaceHeaderLabel() { return document.getElementById('workspace-header'); }
+        get workspaceListWrapper() { return document.getElementById('workspace-wrapper'); }
+        get workspaceTestRunner() { return document.getElementById('workspace-test-runner'); }
+        get generalHelpButton() { return document.getElementById('display-help'); }
+        get saveAsUrlButton() { return document.getElementById('saveAsUrl'); }
+        get darkModeCheckbox() { return document.getElementById('control-dark-mode'); }
+        get displayStatisticsButton() { return document.getElementById('display-statistics'); }
+        get displayWorkerStatusButton() { return document.getElementById('display-worker-status'); }
+        get versionInfo() { return document.getElementById('version'); }
+        get settingsHider() { return document.getElementById('settings-hider'); }
+        get settingsRevealer() { return document.getElementById('settings-revealer'); }
+        get showTests() { return document.getElementById('show-tests'); }
+        get minimizedProbeArea() { return document.getElementById('minimized-probe-area'); }
+    }
+    exports.default = UIElements;
+});
+define("settings", ["require", "exports", "model/syntaxHighlighting", "ui/UIElements"], function (require, exports, syntaxHighlighting_1, UIElements_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    UIElements_1 = __importDefault(UIElements_1);
+    let settingsObj = null;
+    const clearHashFromLocation = () => history.replaceState('', document.title, `${window.location.pathname}${window.location.search}`);
+    window.saveStateAsUrl = () => {
+        const encoded = encodeURIComponent(JSON.stringify(settings.get()));
+        // delete location.hash;'
+        // console.log('loc:', location.toString());
+        navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}${window.location.search}${window.location.search.length === 0 ? '?' : '&'}settings=${encoded}`);
+        const btn = new UIElements_1.default().saveAsUrlButton;
+        const saveText = btn.textContent;
+        setTimeout(() => {
+            btn.textContent = saveText;
+            btn.style.border = 'unset';
+            delete btn.style.border;
+        }, 1000);
+        btn.textContent = `Copied to clipboard`;
+        btn.style.border = '1px solid green';
+    };
+    const settings = {
+        get: () => {
+            if (!settingsObj) {
+                let settingsMatch;
+                if ((settingsMatch = /[?&]settings=[^?&]+/.exec(location.search)) != null) {
+                    const trimmedSearch = settingsMatch.index === 0
+                        ? (settingsMatch[0].length < location.search.length
+                            ? `?${location.search.slice(settingsMatch[0].length + 1)}`
+                            : `${location.search.slice(0, settingsMatch.index)}${location.search.slice(settingsMatch.index + settingsMatch[0].length)}`)
+                        : `${location.search.slice(0, settingsMatch.index)}${location.search.slice(settingsMatch.index + settingsMatch[0].length)}`;
+                    history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
+                    try {
+                        settingsObj = JSON.parse(decodeURIComponent(settingsMatch[0].slice(`?settings=`.length)));
+                        clearHashFromLocation();
+                        if (settingsObj) {
+                            settings.set(settingsObj);
+                        }
+                    }
+                    catch (e) {
+                        console.warn('Invalid windowState in hash', e);
+                    }
+                }
+                if (!settingsObj) {
+                    try {
+                        // TODO remove 'pasta-settings' fallback after an appropriate amount of time
+                        settingsObj = JSON.parse(localStorage.getItem('codeprober-settings') || localStorage.getItem('pasta-settings') || '{}');
+                    }
+                    catch (e) {
+                        console.warn('Bad data in localStorage, resetting settings', e);
+                        settingsObj = {};
+                    }
+                }
+            }
+            return settingsObj || {};
+        },
+        set: (newSettings) => {
+            settingsObj = newSettings;
+            localStorage.setItem('codeprober-settings', JSON.stringify(settingsObj));
+        },
+        getEditorContents: () => settings.get().editorContents,
+        setEditorContents: (editorContents) => settings.set({ ...settings.get(), editorContents }),
+        isLightTheme: () => { var _a; return (_a = settings.get().lightTheme) !== null && _a !== void 0 ? _a : false; },
+        setLightTheme: (lightTheme) => settings.set({ ...settings.get(), lightTheme }),
+        shouldDuplicateProbeOnAttrClick: () => { var _a; return (_a = settings.get().duplicateProbeOnAttrClick) !== null && _a !== void 0 ? _a : true; },
+        setShouldDuplicateProbeOnAttrClick: (duplicateProbeOnAttrClick) => settings.set({ ...settings.get(), duplicateProbeOnAttrClick }),
+        shouldCaptureStdio: () => { var _a; return (_a = settings.get().captureStdio) !== null && _a !== void 0 ? _a : true; },
+        setShouldCaptureStdio: (captureStdio) => settings.set({ ...settings.get(), captureStdio }),
+        shouldCaptureTraces: () => { var _a; return (_a = settings.get().captureTraces) !== null && _a !== void 0 ? _a : false; },
+        setShouldCaptureTraces: (captureTraces) => settings.set({ ...settings.get(), captureTraces }),
+        shouldAutoflushTraces: () => { var _a; return (_a = settings.get().autoflushTraces) !== null && _a !== void 0 ? _a : true; },
+        setShouldAutoflushTraces: (autoflushTraces) => settings.set({ ...settings.get(), autoflushTraces }),
+        getPositionRecoveryStrategy: () => { var _a; return (_a = settings.get().positionRecoveryStrategy) !== null && _a !== void 0 ? _a : 'ALTERNATE_PARENT_CHILD'; },
+        setPositionRecoveryStrategy: (positionRecoveryStrategy) => settings.set({ ...settings.get(), positionRecoveryStrategy }),
+        getAstCacheStrategy: () => { var _a; return (_a = settings.get().astCacheStrategy) !== null && _a !== void 0 ? _a : 'PARTIAL'; },
+        setAstCacheStrategy: (astCacheStrategy) => settings.set({ ...settings.get(), astCacheStrategy }),
+        getProbeWindowStates: () => {
+            var _a;
+            const ret = (_a = settings.get().probeWindowStates) !== null && _a !== void 0 ? _a : [];
+            return ret.map((item) => {
+                if (typeof item.data === 'undefined') {
+                    // Older variant of this data, upgrade it
+                    return {
+                        modalPos: item.modalPos,
+                        data: {
+                            type: 'probe',
+                            locator: item.locator,
+                            property: item.property,
+                            nested: {},
+                        }
+                    };
+                }
+                return item;
+            });
+        },
+        setProbeWindowStates: (probeWindowStates) => settings.set({ ...settings.get(), probeWindowStates }),
+        getSyntaxHighlighting: () => { var _a; return (_a = settings.get().syntaxHighlighting) !== null && _a !== void 0 ? _a : 'java'; },
+        setSyntaxHighlighting: (syntaxHighlighting) => settings.set({ ...settings.get(), syntaxHighlighting }),
+        getMainArgsOverride: () => { var _a; return (_a = settings.get().mainArgsOverride) !== null && _a !== void 0 ? _a : null; },
+        setMainArgsOverride: (mainArgsOverride) => settings.set({ ...settings.get(), mainArgsOverride }),
+        getCustomFileSuffix: () => { var _a; return (_a = settings.get().customFileSuffix) !== null && _a !== void 0 ? _a : null; },
+        setCustomFileSuffix: (customFileSuffix) => settings.set({ ...settings.get(), customFileSuffix }),
+        getCurrentFileSuffix: () => { var _a; return (_a = settings.getCustomFileSuffix()) !== null && _a !== void 0 ? _a : `.${(0, syntaxHighlighting_1.getAppropriateFileSuffix)(settings.getSyntaxHighlighting())}`; },
+        shouldShowAllProperties: () => { var _a; return (_a = settings.get().showAllProperties) !== null && _a !== void 0 ? _a : false; },
+        setShouldShowAllProperties: (showAllProperties) => settings.set({ ...settings.get(), showAllProperties }),
+        getLocationStyle: () => { var _a; return (_a = settings.get().locationStyle) !== null && _a !== void 0 ? _a : 'full'; },
+        setLocationStyle: (locationStyle) => settings.set({ ...settings.get(), locationStyle }),
+        getTextProbeStyle: () => { var _a; return (_a = settings.get().textProbeStyle) !== null && _a !== void 0 ? _a : 'angle-brackets'; },
+        setTextProbeStyle: (textProbeStyle) => settings.set({ ...settings.get(), textProbeStyle }),
+        shouldHideSettingsPanel: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.hideSettingsPanel) !== null && _b !== void 0 ? _b : false; },
+        setShouldHideSettingsPanel: (shouldHide) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),
+        shouldGroupPropertiesByAspect: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.groupPropertiesByAspect) !== null && _b !== void 0 ? _b : false; },
+        setShouldGroupPropertiesByAspect: (shouldHide) => settings.set({ ...settings.get(), groupPropertiesByAspect: shouldHide }),
+        getActiveWorkspacePath: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.activeWorkspacePath) !== null && _b !== void 0 ? _b : null; },
+        setActiveWorkspacePath: (activeWorkspacePath) => settings.set({ ...settings.get(), activeWorkspacePath }),
+        shouldRerunWorkspaceTestsOnChange: () => { var _a; return (_a = settings.get().shouldRerunWorkspaceTestsOnChange) !== null && _a !== void 0 ? _a : false; },
+        setShouldRerunWorkspaceTestsOnChange: (shouldRerunWorkspaceTestsOnChange) => settings.set({ ...settings.get(), shouldRerunWorkspaceTestsOnChange }),
+        shouldEnableTesting: () => window.location.search.includes('enableTesting=true'),
+    };
+    exports.default = settings;
+});
+define("ui/create/createTextSpanIndicator", ["require", "exports", "settings", "ui/create/registerOnHover"], function (require, exports, settings_4, registerOnHover_3) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    settings_4 = __importDefault(settings_4);
+    registerOnHover_3 = __importDefault(registerOnHover_3);
+    const createTextSpanIndicator = (args) => {
+        var _a;
+        const { span, marginLeft, marginRight, onHover, onClick } = args;
+        const indicator = document.createElement('span');
+        indicator.style.fontSize = '0.75rem';
+        indicator.style.color = 'gray';
+        if (marginLeft) {
+            indicator.style.marginLeft = '0.25rem';
+        }
+        if (args.autoVerticalMargin) {
+            indicator.style.marginTop = 'auto';
+            indicator.style.marginBottom = 'auto';
+        }
+        if (marginRight) {
+            indicator.style.marginRight = '0.25rem';
+        }
+        const ext = args.external ? '↰' : '';
+        const warn = span.lineStart === 0 && span.colStart === 0 && span.lineEnd === 0 && span.colEnd === 0 ? '⚠️' : '';
+        switch ((_a = args.styleOverride) !== null && _a !== void 0 ? _a : settings_4.default.getLocationStyle()) {
+            case 'full-compact':
+                if (span.lineStart === span.lineEnd) {
+                    indicator.innerText = `${ext}[${span.lineStart}:${span.colStart}-${span.colEnd}]${warn}`;
+                    break;
+                }
+            // Else, fall through
+            case 'full':
+                indicator.innerText = `${ext}[${span.lineStart}:${span.colStart}→${span.lineEnd}:${span.colEnd}]${warn}`;
+                break;
+            case 'lines-compact':
+                if (span.lineStart === span.lineEnd) {
+                    indicator.innerText = `${ext}[${span.lineStart}]${warn}`;
+                    break;
+                }
+            // Else, fall through
+            case 'lines':
+                indicator.innerText = `${ext}[${span.lineStart}→${span.lineEnd}]${warn}`;
+                break;
+            case 'start':
+                indicator.innerText = `${ext}[${span.lineStart}:${span.colStart}]${warn}`;
+                break;
+            case 'start-line':
+                indicator.innerText = `${ext}[${span.lineStart}]${warn}`;
+                break;
+        }
+        if (!args.external) {
+            if (onHover) {
+                indicator.classList.add('highlightOnHover');
+                (0, registerOnHover_3.default)(indicator, onHover);
+            }
+            if (onClick) {
+                indicator.onclick = () => onClick();
+            }
+        }
+        return indicator;
+    };
+    exports.default = createTextSpanIndicator;
+});
+define("ui/popup/displayHelp", ["require", "exports", "model/repositoryUrl", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/showWindow"], function (require, exports, repositoryUrl_1, createModalTitle_4, createTextSpanIndicator_5, showWindow_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    createModalTitle_4 = __importDefault(createModalTitle_4);
+    createTextSpanIndicator_5 = __importDefault(createTextSpanIndicator_5);
+    showWindow_2 = __importDefault(showWindow_2);
+    const createSyntaxNode = (type, text, margins) => {
+        const retNode = document.createElement('span');
+        if (type) {
+            retNode.classList.add(type);
+        }
+        if (margins === null || margins === void 0 ? void 0 : margins.includes('left'))
+            retNode.style.marginLeft = '0.5rem';
+        if (margins === null || margins === void 0 ? void 0 : margins.includes('right'))
+            retNode.style.marginRight = '0.5rem';
+        retNode.innerText = text;
+        return retNode;
+    };
+    const getHelpTitle = (type) => ({
+        'general': 'How to use CodeProber 🔎',
+        'recovery-strategy': 'Position recovery',
+        'probe-window': 'Probe help',
+        'magic-stdout-messages': 'Magic stdout messages',
+        'ast-cache-strategy': 'AST caching',
+        'syntax-highlighting': 'Syntax Highlighting',
+        'main-args-override': 'Main args override',
+        'customize-file-suffix': 'Temp file suffix',
+        'property-list-usage': 'Property list help',
+        'show-all-properties': 'Show all properties',
+        'group-properties-by-aspect': 'Group properties',
+        'duplicate-probe-on-attr': 'Duplicate probe',
+        'capture-stdout': 'Capture stdout',
+        'capture-traces': 'Capture traces',
+        'location-style': 'Location styles',
+        'textprobe-style': 'TextProbe styles',
+        'ast': 'AST',
+        'test-code-vs-codeprober-code': 'Test code vs CodeProber code',
+    })[type];
+    const getHelpContents = (type) => {
+        const createHeader = (text) => {
+            const header = document.createElement('span');
+            header.classList.add('syntax-attr');
+            header.innerText = text;
+            return header;
+        };
+        const joinElements = (...parts) => {
+            const wrapper = document.createElement('div');
+            parts.forEach(p => {
+                if (typeof p === 'string') {
+                    wrapper.appendChild(document.createTextNode(p));
+                }
+                else {
+                    wrapper.appendChild(p);
+                }
+                return p;
+            });
+            return wrapper;
+        };
+        switch (type) {
+            case 'general': {
+                const exampleVisible = document.createElement('div');
+                {
+                    const add = (...args) => exampleVisible.appendChild(createSyntaxNode(args[0], args[1], args[2]));
+                    exampleVisible.appendChild(document.createTextNode('Example (JastAdd syntax): '));
+                    add('syntax-modifier', 'syn', 'right');
+                    add('syntax-type', 'boolean List');
+                    add('syntax-attr', '.cpr_nodeListVisible', '');
+                    add('', '() =', 'right');
+                    add('syntax-modifier', 'false', 'false');
+                    add('', ';', '');
+                }
+                const exampleAttrs = document.createElement('div');
+                {
+                    const add = (...args) => exampleAttrs.appendChild(createSyntaxNode(args[0], args[1], args[2]));
+                    exampleAttrs.appendChild(document.createTextNode('Example (JastAdd syntax): '));
+                    add('syntax-modifier', 'syn', 'right');
+                    add('syntax-type', 'java.util.List<String> Function');
+                    add('syntax-attr', '.cpr_propertyListShow', '');
+                    add('', '() =', 'right');
+                    add('syntax-type', 'Arrays.asList(', '');
+                    add('syntax-string', '"eval"', '');
+                    add('', ', ', '');
+                    add('syntax-string', '"reference"', '');
+                    add('', ');', '');
+                }
+                const exampleView = document.createElement('div');
+                {
+                    const add = (...args) => exampleView.appendChild(createSyntaxNode(args[0], args[1], args[2]));
+                    exampleView.appendChild(document.createTextNode('Example (JastAdd syntax): '));
+                    add('syntax-modifier', 'syn', 'right');
+                    add('syntax-type', 'Object IntType');
+                    add('syntax-attr', '.cpr_getOutput', '');
+                    add('', '() =', 'right');
+                    add('syntax-string', '"int"');
+                    add('', ';', '');
+                }
+                const viewDefault = document.createElement('pre');
+                viewDefault.style.marginTop = '2px';
+                viewDefault.style.marginLeft = '2px';
+                viewDefault.style.fontSize = '0.875rem';
+                viewDefault.innerText = `
+encode(value):
+  if (value is ASTNode):
+    if (value has 'cpr_getOutput'): encode(value.cpr_getOutput())
+    else: output(value.location, value.type)
+
+  if (value is Iterator or Iterable):
+    for (entry in value): encode(entry)
+
+  if no case above matched: output(value.toString())
+`.trim();
+                return [
+                    `Right click on some text in the editor and click 'Create Probe' to get started.`,
+                    `If you get the message 'Node listing failed', then it likely means that something went wrong during parsing.`,
+                    `Look at the terminal where you started codeprober.jar for more information.`,
+                    ``,
+                    `There are a number of 'magic' attributes you can add to your AST nodes to modify their behavior in this tool.`,
+                    `All magic attributes are prefixed with 'cpr_' (CodePRober_) to avoid colliding with your own functionality.`,
+                    `There three main magic attributes you may want to add are:`,
+                    ``,
+                    joinElements(`1) '`, createHeader('cpr_nodeListVisible'), `'. This controls whether or not a node will appear in the 'Create Probe' node list.`),
+                    `Default: `,
+                    `-    false: for 'List' and 'Opt'. Note: this is only default, you can override it.`,
+                    `-     true: for all other types.`,
+                    exampleVisible,
+                    ``,
+                    joinElements(`2) '`, createHeader('cpr_propertyListShow'), `'. A collection (List<String> or String[]) that is used to include extra properties in the property list seen when creating probes.`),
+                    `Functions are shown in the property list if all of the following is true:`,
+                    `- The function is public.`,
+                    `- The argument types are 'String', 'int', 'boolean', 'java.io.OutputStream', 'java.io.PrintStream' or a subtype of the top AST Node type.`,
+                    `- One of the following is true:`,
+                    `-- The function is an attribute (originates from a jrag file, e.g 'z' in 'syn X Y.z() = ...')`,
+                    `-- The function is an AST child accessor (used to get members declared in an .ast file).`,
+                    `-- The function name is either 'toString', 'getChild', 'getNumChild', 'getParent' or 'dumpTree'`,
+                    `-- The function name is found in the return value from cpr_propertyListShow()`,
+                    `Default: empty array.`,
+                    exampleAttrs,
+                    ``,
+                    joinElements(`3) '`, createHeader('cpr_getOutput'), `'. This controls how a value is shown in the output (lower part) of a probe.`),
+                    `Default: encodes one or more options in order. In pseudocode:`,
+                    viewDefault,
+                    exampleView,
+                    ``,
+                    `The way this tool is built, it cannot help you find & fix infinite loops.`,
+                    joinElements(`For infinite loops we instead recommend you use other tools like `, (() => {
+                        const a = document.createElement('a');
+                        a.href = 'https://docs.oracle.com/javase/1.5.0/docs/tooldocs/share/jstack.html';
+                        a.innerText = 'jstack';
+                        a.target = '_blank';
+                        return a;
+                    })(), ' and/or traditional breakpoint/step-debuggers.'),
+                    ``,
+                    joinElements(`Contributions welcome at `, (() => {
+                        const a = document.createElement('a');
+                        a.href = repositoryUrl_1.repositoryUrl;
+                        a.innerText = repositoryUrl_1.repositoryUrl;
+                        a.target = '_blank';
+                        return a;
+                    })()),
+                ];
+            }
+            case 'recovery-strategy': {
+                const settingsExplanation = document.createElement('div');
+                settingsExplanation.style.display = 'grid';
+                settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
+                settingsExplanation.style.gridColumnGap = '0.5rem';
+                [
+                    [`Fail`, `don\'t try to recover information`],
+                    [`Parent`, `search recursively upwards through parent nodes, using the equivalent of 'node.getParent()'`],
+                    [`Child`, `search recursively downwards through child nodes, using the equivalent of 'node.getChild(0)'`],
+                    [`Parent->Child`, `Try 'Parent'. If no position is found, try 'Child'.`],
+                    [`Child->Parent`, `Try 'Child'. If no position is found, try 'Parent'.`],
+                    [`Zigzag`, `Similar to 'Parent->Child', but only search one step in one direction, then try the other direction, then another step in the first direction, etc. Initially searches one step upwards.`],
+                ].forEach(([head, tail]) => {
+                    const headNode = document.createElement('span');
+                    headNode.style.textAlign = 'right';
+                    headNode.classList.add('syntax-attr');
+                    headNode.innerText = head;
+                    settingsExplanation.appendChild(headNode);
+                    settingsExplanation.appendChild(document.createTextNode('-'));
+                    const tailNode = document.createElement('span');
+                    tailNode.innerText = tail;
+                    settingsExplanation.appendChild(tailNode);
+                });
+                const sampleAttr = document.createElement('pre');
+                sampleAttr.style.marginTop = '6px';
+                sampleAttr.style.marginLeft = '2px';
+                sampleAttr.style.fontSize = '0.875rem';
+                sampleAttr.innerText = `
+aspect DumpSubtree {
+
+  // Bypass/inline Opt/List
+  void ASTNode.bypassDumpSubtree(java.util.List<Object> dst, int budget) {
+    if (budget <= 0) return;
+    for (ASTNode child : astChildren()) child.dumpSubtree(dst, budget);
+  }
+  void Opt.dumpSubtree(java.util.List<Object> dst, int budget) { bypassDumpSubtree(dst, budget); }
+  void List.dumpSubtree(java.util.List<Object> dst, int budget) { bypassDumpSubtree(dst, budget); }
+
+  void ASTNode.dumpSubtree(java.util.List<Object> dst, int budget) {
+    dst.add(this);
+    if (getNumChild() == 0 || budget <= 0) { return; }
+
+    final java.util.List<Object> ret = new java.util.ArrayList<>();
+    for (ASTNode child : astChildren()) child.dumpSubtree(ret, budget - 1);
+    dst.add(ret);
+  }
+
+  syn Object ASTNode.dumpSubtree(int budget) {
+    java.util.List<Object> dst = new java.util.ArrayList<>();
+    for (ASTNode child : astChildren()) child.dumpSubtree(dst, budget);
+    if (dst.size() == 1 && dst.get(0) instanceof java.util.List<?>) {
+      return dst.get(0);
+    }
+    return dst;
+  }
+  syn Object ASTNode.dumpSubtree() { return dumpSubtree(999); }
+
+}
+`.trim();
+                const copyButton = document.createElement('button');
+                copyButton.innerText = 'Copy to clipboard';
+                copyButton.onclick = () => {
+                    navigator.clipboard.writeText(sampleAttr.innerText);
+                };
+                return [
+                    'Some nodes in your AST might be missing location information.',
+                    'CodeProber is heavily built around the idea that all AST nodes have positions, and the experience is worsened for nodes where this isn\'t true.',
+                    '',
+                    'There are two solutions:',
+                    '',
+                    '1) Fix your parser',
+                    'Usually position information is missing because of how you structured your parser.',
+                    'Maybe you do some sort of desugaring in the parser, and create multiple AST nodes in a single production rule.',
+                    'Beaver, for example, will only give a single node position information per production rule, so try to ony create a single node per rule.',
+                    `Note that this isn't a solution for nodes generated by NTA's. They will need to use solution 2.`,
+                    '',
+                    '2) Use a recovery strategy',
+                    'If a node is missing location information, then we can sometimes get it from nearby nodes.',
+                    'This setting controls just how we search for information. Which option fits best for you depends on how you built your AST.',
+                    'Settings:',
+                    settingsExplanation,
+                    '',
+                    `No strategy guarantees success. If position is missing, it will be marked with '⚠️', and you\'ll likely run into problems when using it`,
+                    `If you are unsure of what to use, 'Zigzag' is usually a pretty good option.`,
+                    `An efficient way to root out parser problems is to pick 'Fail', then dump the entire tree using the following 'dumpSubtree' attribute (JastAdd syntax):`,
+                    sampleAttr,
+                    copyButton,
+                ];
+            }
+            case 'probe-window': {
+                return [
+                    `This window represents an active 'probe'`,
+                    `The titlebar shows the input to the probe; namely node type and attribute name.`,
+                    `Sometimes you'll also see attribute arguments here, and a pen that lets you edit them.`,
+                    `Finally, the title bar show where the probed node exists. You can hover this to highlight the node in the document.`,
+                    '',
+                    'Below the titlebar is the output of the probe.',
+                    `This is the resolved value of the probe, formatted according to the 'cpr_getOutput' logic (see general help window for more on this).`,
+                    '',
+                    `If you check 'Capture stdout' on the top right, you'll also see any messages printed to System.out and System.err in the window.`,
+                    `If the cache strategy is set to 'None' or 'Purge', then each probe will get evaluated in a fresh compiler instance in isolation, so any values and messages you see in the probe window belongs only to that window.`,
+                    '',
+                    'The probes are automatically reevaluated whenever the document changes.',
+                    `The probes also automatically update when the underlying jar file (usually 'compiler.jar') changes.`,
+                    `Therefore you can use probes as a sort of automatic test case runner. Write some code, open some probes, then move it to a secondary monitor and continue working on your compiler.`,
+                    `Whenever you rebuild your compiler, glance at your probes. They should now display fresh values.`,
+                ];
+            }
+            case 'magic-stdout-messages': {
+                const createParent = () => {
+                    const parent = document.createElement('div');
+                    parent.style.display = 'grid';
+                    parent.style.gridTemplateColumns = 'auto 1fr';
+                    parent.style.rowGap = '0.125rem';
+                    parent.style.columnGap = '0.5rem';
+                    return parent;
+                };
+                let entryParent;
+                const createEntry = (pattern, explanation) => {
+                    const patternHolder = document.createElement('span');
+                    patternHolder.classList.add('syntax-string');
+                    patternHolder.style.textAlign = 'right';
+                    patternHolder.innerText = pattern;
+                    const explanationHolder = document.createElement('span');
+                    explanationHolder.innerText = explanation;
+                    entryParent.appendChild(patternHolder);
+                    entryParent.appendChild(explanationHolder);
+                };
+                // TODO rename the patterns a bit? Prefix everything by PASTA- perhaps?
+                const patternsParent = entryParent = createParent();
+                createEntry('ERR@S;E;MSG', 'Show a red squiggly line.');
+                createEntry('WARN@S;E;MSG', 'Show a yellow squiggly line.');
+                createEntry('INFO@S;E;MSG', 'Show a blue squiggly line.');
+                createEntry('LINE-PP@S;E;COL', 'Draw a plain line.');
+                createEntry('LINE-PA@S;E;COL', 'Draw line that starts plain and ends with an arrow.');
+                createEntry('LINE-AP@S;E;COL', 'Draw line that starts with an arrow and ends plain.');
+                createEntry('LINE-AA@S;E;COL', 'Draw line with arrows on both ends.');
+                const patternsExamples = entryParent = createParent();
+                createEntry('ERR@40964;40966;Hello', `Red squiggly line on line 10, column 4 to 6. Shows 'Hello' when you hover over it`);
+                createEntry('INFO@16384;32767;Hi', `Blue squiggly line on the entirety of lines 4, 5, 6 and 7. Shows 'Hi' when you hover over it`);
+                createEntry('LINE-PA@4096;20490;#0FFF', `Solid cyan line from start of line 1 to line 5, column 10. Has arrow on the end.`);
+                createEntry('LINE-AA@16388;16396;#0F07', `Semi-transparent green double-sided arrow on line of line 4 from column 4 to 12`);
+                const sampleAttr = document.createElement('pre');
+                sampleAttr.style.marginTop = '6px';
+                sampleAttr.style.marginLeft = '2px';
+                sampleAttr.style.fontSize = '0.875rem';
+                sampleAttr.innerText = `
+aspect MagicOutputDemo {
+  void ASTNode.outputMagic(String type, String arg) {
+    System.out.println(type + "@" + getStart() + ";" + getEnd() + ";" + arg);
+  }
+  coll HashSet<ASTNode> Program.thingsToHighlightBlue() root Program;
+  MyNodeType contributes this
+    to Program.thingsToHighlightBlue()
+    for program();
+
+  syn Object Program.drawBlueSquigglys() {
+    for (ASTNode node : thingsToHighlightBlue()) {
+      node.outputMagic("INFO", "This thing is highlighted because [..]");
+    }
+    return null;
+  }
+}
+`.trim();
+                const copyButton = document.createElement('button');
+                copyButton.innerText = 'Copy to clipboard';
+                copyButton.onclick = () => {
+                    navigator.clipboard.writeText(sampleAttr.innerText);
+                };
+                return [
+                    `There are a number of 'magic' messages you can print to System.out.`,
+                    `Whenever probes are evaluated, these messages are intercepted (even if 'Capture stdout' isn't checked!).`,
+                    `The patterns and effects of the magic messages are shown below:`,
+                    '',
+                    patternsParent,
+                    '',
+                    `'S' and 'E' stand for 'start' and 'end', and are ints containing line and column. 20 bits for line, 12 for column, e.g: 0xLLLLLCCC.`,
+                    'Example: 20493 represents line 5 and column 13 (20493 = (5 << 12) + 13).',
+                    '',
+                    `'MSG' is any string. This string is displayed when you hover over the squiggly lines`,
+                    '',
+                    `'COL' is a hex-encoded color in the form #RGBA.`,
+                    'Example: #F007 (semi-transparent red)',
+                    '',
+                    'Some example messages and their effects are listed below:',
+                    patternsExamples,
+                    '',
+                    `The arrows don't work (or only partially work) for lines that are connected to offscreen or invalid positions.`,
+                    'For example, if you try to draw a line with one end at line 2, column 5, but that line only has 3 characters, then the line will instead point at column 3.',
+                    '',
+                    `These special messages can be used as a some custom styling/renderer to help understand how your compiler works.`,
+                    `The following code can be used as a starting point`,
+                    sampleAttr,
+                    copyButton,
+                    `Once you have the code in an aspect and have recompiled, open a probe for the attribute 'drawBlueSquigglys' to see all instances of 'MyNodeType' have blue lines under them.`,
+                    'Note that the squiggly lines (and all other arrows/lines) only remain as long as their related probe window remains open.'
+                ];
+            }
+            case "ast-cache-strategy": {
+                const settingsExplanation = document.createElement('div');
+                settingsExplanation.style.display = 'grid';
+                settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
+                settingsExplanation.style.gridColumnGap = '0.5rem';
+                [
+                    [`Full`, `Cache everything`],
+                    [`Partial`, `Cache the AST, but call 'flushTreeCache' on the root before evaluating any probe. This ensures that cached attributes are invoked for every probe.`],
+                    [`None`, `Don't cache the AST.`],
+                    [`Purge`, `Don't cache the AST or even the underlying jar file, fully reload from the file system each time. This resets all global state, but kills the JVMs ability to optimize your code. This is terrible for performance.`],
+                ].forEach(([head, tail]) => {
+                    const headNode = document.createElement('span');
+                    headNode.style.textAlign = 'right';
+                    headNode.classList.add('syntax-attr');
+                    headNode.innerText = head;
+                    settingsExplanation.appendChild(headNode);
+                    settingsExplanation.appendChild(document.createTextNode('-'));
+                    const tailNode = document.createElement('span');
+                    tailNode.innerText = tail;
+                    settingsExplanation.appendChild(tailNode);
+                });
+                return [
+                    `When multiple probes are active, the same editor state will be evaluated multiple times (once for each probe).`,
+                    `When this happens, we can re-use the AST multiple times to avoid unnecessary re-parses. There are however reasons that you might not want to re-use the AST, or at least not fully.`,
+                    '',
+                    `While it is technically bad practice, you can use "printf-style" debugging in your attributes (System.out.println(..)).`,
+                    `Cached attributes will only output such printf-messages once. With multiple active probes, this makes it uncertain which probe will capture the message.`,
+                    `Even worse, if you have any form of mutable state in your AST (please don't!), then reusing an AST can cause unpredictable behavior when parsing.`,
+                    `There are a few strategies you can use:`,
+                    '',
+                    settingsExplanation,
+                    '',
+                    `Performance is best with 'Full', and worst with 'Purge'.`,
+                    `"Debuggability" is best with 'Purge', and worst with 'Full'.`,
+                    `If you are unsure of what to use, 'Partial' is usually a pretty good option.`,
+                ];
+            }
+            case 'syntax-highlighting': return [
+                `This setting controls which style of highlighting is used in the editor.`,
+                `This also affects the suffix used for temporary files, unless 'Custom file suffix' is checked.`,
+            ];
+            case 'main-args-override': return [
+                `When your underlying tool is invoked, the path to a temporary file is sent as an arg to the main method.`,
+                `Optionally, some extra args are also included.`,
+                `By default, the extra args are defined when you start the CodeProber server.`,
+                `For example, running 'java -jar codeprober.jar path/to/your/tool.jar foo bar baz', will set the extra args array to [foo, bar, baz].`,
+                `By checking 'Override main args' and clicking "Edit", you can override those extra args.`,
+                ``,
+                `Args are separated by spaces and/or newlines.`,
+                `To include a space in an arg, wrap the arg in quotes (e.g "foo bar").`,
+                `To include a newline, quote or backslash in an arg, prefix the char with \\ (e.g \\n, \\" and \\\\).`,
+            ];
+            case 'customize-file-suffix': return [
+                `By default, the editor state is written to a temporary file with a file suffix that matches the chosen syntax highlighting.`,
+                `For example, if the highlighting is set to 'Python', then the temp file will end with '.py'.`,
+                ``,
+                `If you work on a language not represented in the syntax highlighting list, then this might result in your compiler/analyzer rejecting the temporary file due to it having an unknown suffix.`,
+                `By checking 'Custom file suffix' you can change the default suffix to something else.`,
+                `Note that custom suffixes are used as-is. If you want temp files to end with '.txt', then you must set the custom suffix to exactly '.txt' (including the dot).`,
+            ];
+            case 'property-list-usage': return [
+                `This is the list of available properties on the node you selected.`,
+                `The list is filtered according to the 'cpr_propertyListShow' logic (see general help window for more on this).`,
+                `When no filter is added, the properties are sorted by two criteria in order:`,
+                `1) Properties representing AST child accessors. This corresponds to field declarations in ast files. If you write 'MyNode ::= MyChild:TheType;', then the property 'getMyChild()' will appear high up in this list.`,
+                `2) Alphabetical ordering.`,
+                ``,
+                `When a filter is added, this list is instead is sorted by:`,
+                `1) Properties that match the filter. The filter is case insensitive and allows arbitrary characters to appear in between the filter characters. For example, 'gl' matches 'getLorem' but not 'getIpsum'.`,
+                `2) Alphabetical ordering`,
+            ];
+            case 'show-all-properties': return [
+                `By default, the property list shown while creating a probe is filtered according to the 'cpr_propertyListShow' logic (see general help window for more on this).`,
+                `The last criteria of that filter is that the function must follow one of a few predicates to be shown.`,
+                `This checkbox basically adds a '|| true' to the end of that predicate list. I.e any function that is public and has serializable argument types will be shown.`,
+                `There is potentially a very large amount of functions shown is you check this box, which can be annoying.`,
+                `In addition, some of the non-standard functions might cause mutations (like 'setChild(int, ..)'), which can cause undefined behavior when used in this tool.`,
+                `In general, we recommend you keep this box unchecked, and only occasionally re-check it.`,
+            ];
+            case 'group-properties-by-aspect': return [
+                `Check this to group and filter property names by their containing aspect file.`,
+                `This affects the dialog where you select a property, i.e after you've selected an AST node.`,
+                ``,
+                `This is only applicable for JastAdd tools.`
+            ];
+            case 'duplicate-probe-on-attr': return [
+                `When you have created a probe, you can click the property name to create a new probe on the same node, but with a different property.`,
+                `This click can either create a new probe window, or replace the old one.`,
+                `If this box is checked, then a new window will be created.`,
+                `If this box is unchecked, then it will replace the old window.`,
+                `By holding 'Shift' while clicking the property name, you can access the 'reverse' functionality.`,
+                `I.e if the box is checked and you hold shift, then the window will be replaced, and vice versa.`,
+            ];
+            case 'capture-stdout': {
+                const styled = (text, cls) => {
+                    const span = document.createElement('span');
+                    span.classList.add(cls);
+                    span.innerText = text;
+                    return span;
+                };
+                return [
+                    `Check this if you want messages to stdout and stderr to be shown in probe outputs.`,
+                    `'printf-debugging' should generally be avoided if possible, but if you feel it is strictly needed then you can use this checkbox to access it.`,
+                    joinElements(`Captured messages are displayed with a `, styled('blue', 'captured-stdout'), ` color if they were printed to stdout, and a `, styled('red', 'captured-stderr'), ` color if they were printed to stderr.`),
+                    ``,
+                    `Note that only messages printed during property evaluation are captured.`,
+                    `Messages printed during parsing are not shown here, but can still be seen in the terminal where you started codeprober.jar.`,
+                    `An exception to this is when parsing fails, in which case messages during parsing are displayed (even if this checkbox is unchecked).`,
+                ];
+            }
+            case 'capture-traces': {
+                const code = document.createElement('pre');
+                code.innerText = '  ' + [
+                    `public void Program.cpr_setTraceReceiver(final java.util.function.Consumer<Object[]> recv) {`,
+                    `  trace().setReceiver(new ASTState.Trace.Receiver() {`,
+                    `    @Override`,
+                    `    public void accept(ASTState.Trace.Event event, ASTNode node, String attribute, Object params, Object value) {`,
+                    `      recv.accept(new Object[] { event, node, attribute, params, value });`,
+                    `    }`,
+                    `  });`,
+                    `}`,
+                ].join('\n  ');
+                const copyButton = document.createElement('button');
+                copyButton.innerText = 'Copy to clipboard';
+                copyButton.onclick = () => {
+                    navigator.clipboard.writeText(code.innerText);
+                };
+                return [
+                    `Check this if you want to capture traces of indirect dependencies while evaluating properties.`,
+                    `Once checked, you can optionally also decide if you want to call flushTreeCache() before each time traces are collected.`,
+                    `If you perform computations during main() that results in cached values in your AST, then you wouldn't see the traces of those computations when the probe is evaluated.`,
+                    `By always performing an extra flushTreeCache() prior to collecting traces, we get a bigger and more accurate trace, at the cost of some speed.`,
+                    ``,
+                    `Tracing is an advanced feature which requires some customization in your tool to be able to use.`,
+                    `If you are using JastAdd, add a --tracing flag in your build script, and then the following aspect code (replace 'Program' with your root node type):`,
+                    code,
+                    copyButton
+                ];
+            }
+            case 'location-style': {
+                const sp = { lineStart: 1, colStart: 2, lineEnd: 3, colEnd: 4 };
+                const createExplanationPanel = (entries) => {
+                    const settingsExplanation = document.createElement('div');
+                    settingsExplanation.style.paddingLeft = '1rem';
+                    settingsExplanation.style.display = 'grid';
+                    settingsExplanation.style.gridTemplateColumns = 'auto auto 1fr';
+                    settingsExplanation.style.gridColumnGap = '0.5rem';
+                    entries.forEach(([head, tail, span]) => {
+                        const headNode = document.createElement('span');
+                        headNode.style.textAlign = 'right';
+                        headNode.classList.add('syntax-attr');
+                        headNode.innerText = head;
+                        settingsExplanation.appendChild(headNode);
+                        settingsExplanation.appendChild(document.createTextNode('-'));
+                        settingsExplanation.appendChild((0, createTextSpanIndicator_5.default)({
+                            span,
+                            styleOverride: tail,
+                        }));
+                        // const tailNode = document.createElement('span');
+                        // tailNode.innerText = tail;
+                        // settingsExplanation.appendChild(tailNode);
+                    });
+                    return settingsExplanation;
+                };
+                return [
+                    `In several locations in CodeProber you can see location indicators.`,
+                    `This setting control how the location indicators are presented. Example values can be seen below for a location that starts at line 1, column 2 and ends at line 3, column 4.`,
+                    ``,
+                    createExplanationPanel([
+                        [`Full`, 'full', sp],
+                        [`Lines`, 'lines', sp],
+                        [`Start`, 'start', sp],
+                        [`Start line`, `start-line`, sp],
+                    ]),
+                    ``,
+                    `The 'compact' options look like the non-compact options if the start and end lines are different. If start and end lines are equal, then it looks like this:`,
+                    createExplanationPanel([
+                        [`Full compact`, 'full-compact', { ...sp, lineEnd: 1 }],
+                        [`Lines compact`, 'lines-compact', { ...sp, lineEnd: 1 }],
+                    ]),
+                    ``,
+                    `Note that this setting doesn't affect the hover highlighting. The exact line/column is highlighted, even if the indicator only shows the start line for example.`,
+                ];
+            }
+            case 'textprobe-style': {
+                const parted = (parts) => {
+                    const ret = document.createElement('div');
+                    const addPart = (text, clazz = '') => {
+                        const part = document.createElement('span');
+                        part.innerText = text;
+                        if (clazz) {
+                            if (clazz.trim()) {
+                                part.classList.add(clazz);
+                            }
+                            if (clazz === ' ' || clazz.startsWith('syntax-')) {
+                                part.style.fontFamily = 'monospace';
+                            }
+                        }
+                        ret.appendChild(part);
+                    };
+                    parts.forEach(p => typeof p === 'string' ? addPart(p) : addPart(p[0], p[1]));
+                    return ret;
+                };
+                const ol = (items) => {
+                    const ret = document.createElement('ol');
+                    items.forEach(itm => {
+                        const li = document.createElement('li');
+                        if (typeof itm === 'string') {
+                            li.innerText = itm;
+                        }
+                        else {
+                            li.appendChild(itm);
+                        }
+                        ret.appendChild(li);
+                    });
+                    return ret;
+                };
+                const patternExpl = parted([
+                    '[[',
+                    ['A', 'syntax-type'],
+                    '[',
+                    ['i', 'syntax-int'],
+                    '].',
+                    ['b', 'syntax-attr'],
+                    '=',
+                    ['c', 'syntax-string'],
+                    ']]',
+                ]);
+                patternExpl.style.padding = '0.25rem';
+                patternExpl.style.margin = '0.25rem 0 0.25rem 2rem';
+                patternExpl.style.outline = '1px dashed gray';
+                patternExpl.style.fontFamily = 'monospace';
+                patternExpl.style.display = 'inline-block';
+                const example = (pattern, explanation) => {
+                    const ret = document.createElement('div');
+                    ret.style.marginLeft = '2rem';
+                    ret.style.marginBottom = '0.25rem';
+                    const patternNode = parted([pattern, ' ']);
+                    // patternNode.style.display = 'inline';
+                    ret.appendChild(patternNode);
+                    const explNode = parted([[explanation, 'stream-arg-msg']]);
+                    // explNode.style.display = 'inline';
+                    explNode.style.fontStyle = 'italic';
+                    ret.appendChild(explNode);
+                    return ret;
+                };
+                return [
+                    `CodeProber supports probes that exist purely in textual form inside the text editor. These 'text probes' are specified with the follwing pattern by default:`,
+                    patternExpl,
+                    `The above pattern tells CodeProber to do the following:`,
+                    ol([
+                        parted([
+                            `Find all nodes on the line where the text probe is specified that are of (sub-)type `,
+                            ['A', 'syntax-type'],
+                            `, using a left-to-right depth-first search.`,
+                        ]),
+                        parted([
+                            `Select the `,
+                            ['i', 'syntax-int'],
+                            `:th node in the resulting list.`,
+                        ]),
+                        parted([
+                            `Evaluate `,
+                            ['b', 'syntax-attr'],
+                            ` on the node.`,
+                        ]),
+                        parted([
+                            `Compare the result of `,
+                            ['b', 'syntax-attr'],
+                            ` with `,
+                            ['c', 'syntax-string'],
+                            `.`,
+                        ])
+                    ]),
+                    parted([
+                        '"',
+                        ['[', ' '],
+                        ['i', 'syntax-int'],
+                        [']', ' '],
+                        '"  is optional if there is only one node on the given line that matches (sub-)type ',
+                        ['A', 'syntax-type'],
+                        '.',
+                    ]),
+                    parted([
+                        '"',
+                        ['.', ' '],
+                        ['b', 'syntax-attr'],
+                        `" can be a list of multiple properties, like "`,
+                        ['.', ' '], ['b', 'syntax-attr'],
+                        ['.', ' '], ['x', 'syntax-attr'],
+                        ['.', ' '], ['y', 'syntax-attr'],
+                        ['.', ' '], ['z', 'syntax-attr'],
+                        `". All non-last properties must resolve to an AST node reference, similar to nested probes.`,
+                    ]),
+                    parted([
+                        '"',
+                        ['=', ' '],
+                        ['c', 'syntax-string'],
+                        '" is optional.',
+                    ]),
+                    ``,
+                    parted([
+                        `If a comparison is included ("`,
+                        ['=', ' '],
+                        ['c', 'syntax-string'],
+                        `"), then the text probe is highlighted `,
+                        ['green', 'elp-result-success'],
+                        ` or `,
+                        ['red', 'elp-result-fail'],
+                        ` depending on if the comparison succeeded or not.`
+                    ]),
+                    `Comparisons can include '!' and/or '~' before the equals sign. Adding '!' means 'not', i.e. invert the comparison. '~' means 'contains', i.e. do a substring comparison.`,
+                    ``,
+                    `Some example text probes and their possible meanings are listed below`,
+                    ``,
+                    example('[[CallExpr.type=int]]', 'The function call on this line has type int.'),
+                    example('[[Program.errors=[]]]', 'There are no errors in this program.'),
+                    example('[[Program.errors~=duplicate definition]]', 'There is at least one error containing the message "duplicate definition"'),
+                    example('[[IfStmt.getCond.expectedType=bool]]', 'The expected type of the if-condition is boolean'),
+                    example('[[Expr[2].prettyPrint=abc]]', 'Pretty-printing the third Expr on this line results in "abc"'),
+                    ``,
+                    `The exact meaning of text probes depend on the underlying tool (compiler/analyzer) being explored in CodeProber, just as with normal probes.`,
+                    ``,
+                    `CodeProber has no knowledge of the syntax of the underlying tool, therefore it will search for text probes everywhere, including possibly in normal program code. In some languages, text like "[[A.b]]" is a valid expression that you may want to write.`,
+                    `When something is intended to be interpreted as a text probe, consider putting them  in a comment (e.g. prefix with "//", "#" or similar).`,
+                    `When something is intended to be an expression in the language, you have two main options:`,
+                    ol([
+                        `Add whitespace somewhere. For example, "[[ A.b ]]" is not interpreted as a text probe`,
+                        `Disable text probe support entirely by changing "TextProbe style" to "Disabled" in the settings panel`,
+                    ]),
+                ];
+            }
+            case 'ast': {
+                return [
+                    `This window displays the abstract syntax tree (AST) around a node in the tree.`,
+                    `Nodes can be hovered and interacted with, just like when the output of a normal probe is an AST node.`,
+                    `When you see '᠁', the AST has been truncated due to performance reasons.`,
+                    `You can click the '᠁' to continue exploring the AST from that point`,
+                ];
+            }
+            case 'test-code-vs-codeprober-code': {
+                return [
+                    `When a test is created it saves the current state of CodeProber. This includes the code in the main CodeProber text editor, as well as some of the settings (cache settings, main args, file suffix, etc.).`,
+                    ``,
+                    `When tests are executed, they do so with their saved state, *not* the current CodeProber state. This lets you have multiple tests at the same time, each with their on unique configuration.`,
+                    ``,
+                    `When a test fails, you may want to open probes to inspect why. The first step is to change the current CodeProber code to the test code. Open the test in question and click the 'Source Code' tab. There will be a button labeled 'Load Source' or 'Open Probe'.`,
+                    `• Clicking 'Load Source' will replace the code inside the main CodeProber editor with the saved code from the test.`,
+                    `• Clicking 'Open Probe' will open the probe corresponding to the test.`,
+                    `'Open Probe' is only available if the CodeProber code matches the test code.`,
+                ];
+            }
+        }
+    };
+    const displayHelp = (type, setHelpButtonDisabled) => {
+        setHelpButtonDisabled === null || setHelpButtonDisabled === void 0 ? void 0 : setHelpButtonDisabled(true);
+        const cleanup = () => {
+            helpWindow.remove();
+            setHelpButtonDisabled === null || setHelpButtonDisabled === void 0 ? void 0 : setHelpButtonDisabled(false);
+        };
+        const helpWindow = (0, showWindow_2.default)({
+            rootStyle: `
+      width: 32rem;
+      min-height: 8rem;
+    `,
+            onForceClose: cleanup,
+            resizable: true,
+            render: (root) => {
+                root.appendChild((0, createModalTitle_4.default)({
+                    renderLeft: (container) => {
+                        const header = document.createElement('span');
+                        header.innerText = getHelpTitle(type);
+                        container.appendChild(header);
+                    },
+                    onClose: cleanup,
+                }).element);
+                const textHolder = document.createElement('div');
+                textHolder.style.padding = '0.5rem';
+                const paragraphs = getHelpContents(type);
+                paragraphs.forEach(p => {
+                    if (!p) {
+                        textHolder.appendChild(document.createElement('br'));
+                        return;
+                    }
+                    if (typeof p !== 'string') {
+                        textHolder.appendChild(p);
+                        return;
+                    }
+                    const node = document.createElement('p');
+                    node.appendChild(document.createTextNode(p));
+                    node.style.marginTop = '0';
+                    node.style.marginBottom = '0';
+                    textHolder.appendChild(node);
+                });
+                root.appendChild(textHolder);
+            }
+        });
+    };
+    exports.default = displayHelp;
 });
 define("ui/popup/displayTestAdditionModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, createLoadingSpinner_3, createModalTitle_5, showWindow_3) {
     "use strict";
@@ -12137,13 +12585,13 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "ui/create/cr
     };
     exports.default = displayTestAdditionModal;
 });
-define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, createTextSpanIndicator_6, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_4, displayProbeModal_4, formatAttr_3, startEndToSpan_8, trimTypeName_4) {
+define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, createTextSpanIndicator_6, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_5, displayProbeModal_4, formatAttr_3, startEndToSpan_8, trimTypeName_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createTextSpanIndicator_6 = __importDefault(createTextSpanIndicator_6);
     registerNodeSelector_3 = __importDefault(registerNodeSelector_3);
     displayArgModal_2 = __importDefault(displayArgModal_2);
-    displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
+    displayAttributeModal_5 = __importDefault(displayAttributeModal_5);
     formatAttr_3 = __importStar(formatAttr_3);
     startEndToSpan_8 = __importDefault(startEndToSpan_8);
     trimTypeName_4 = __importDefault(trimTypeName_4);
@@ -12186,11 +12634,11 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "ui/create/createT
                     }
                 }
                 if (env.duplicateOnAttr() != e.shiftKey) {
-                    (0, displayAttributeModal_4.default)(env, null, locator.isMutable() ? locator.createMutableClone() : locator, { initialFilter });
+                    (0, displayAttributeModal_5.default)(env, null, locator.isMutable() ? locator.createMutableClone() : locator, { initialFilter });
                 }
                 else {
                     close === null || close === void 0 ? void 0 : close();
-                    (0, displayAttributeModal_4.default)(env, getWindowPos(), locator, { initialFilter });
+                    (0, displayAttributeModal_5.default)(env, getWindowPos(), locator, { initialFilter });
                 }
                 e.stopPropagation();
             };
@@ -12634,7 +13082,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
     exports.createDiagnosticSource = createDiagnosticSource;
     exports.default = createMinimizedProbeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_5, displayAttributeModal_5, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_6, createMinimizedProbeModal_1, evaluateProperty_3, hacks_5, startEndToSpan_10) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_5, displayAttributeModal_6, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_6, createMinimizedProbeModal_1, evaluateProperty_3, hacks_5, startEndToSpan_10) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.searchProbePropertyName = void 0;
@@ -12646,7 +13094,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     displayTestAdditionModal_1 = __importDefault(displayTestAdditionModal_1);
     renderProbeModalTitleLeft_1 = __importDefault(renderProbeModalTitleLeft_1);
     settings_5 = __importDefault(settings_5);
-    displayAttributeModal_5 = __importDefault(displayAttributeModal_5);
+    displayAttributeModal_6 = __importDefault(displayAttributeModal_6);
     displayAstModal_2 = __importDefault(displayAstModal_2);
     createInlineWindowManager_1 = __importDefault(createInlineWindowManager_1);
     evaluateProperty_3 = __importDefault(evaluateProperty_3);
@@ -13156,7 +13604,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                     prevLocator.set(locator);
                                     const area = inlineWindowManager.getArea(nestId, locatorRoot, expansionArea, prevLocator, queryWindow.bumpIntoScreen);
                                     const nestedEnv = area.getNestedModalEnv(env);
-                                    (0, displayAttributeModal_5.default)(nestedEnv, null, (0, UpdatableNodeLocator_6.createImmutableLocator)(prevLocator));
+                                    (0, displayAttributeModal_6.default)(nestedEnv, null, (0, UpdatableNodeLocator_6.createImmutableLocator)(prevLocator));
                                     env.triggerWindowSave();
                                 },
                             }) : undefined,
@@ -13268,12 +13716,12 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     };
     exports.default = displayProbeModal;
 });
-define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_5, createModalTitle_7, displayAttributeModal_6, registerOnHover_5, showWindow_4, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5, UpdatableNodeLocator_7) {
+define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayAttributeModal", "ui/create/registerOnHover", "ui/create/showWindow", "ui/create/registerNodeSelector", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_5, createModalTitle_7, displayAttributeModal_7, registerOnHover_5, showWindow_4, registerNodeSelector_4, encodeRpcBodyLines_4, trimTypeName_5, UpdatableNodeLocator_7) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_5 = __importDefault(createLoadingSpinner_5);
     createModalTitle_7 = __importDefault(createModalTitle_7);
-    displayAttributeModal_6 = __importDefault(displayAttributeModal_6);
+    displayAttributeModal_7 = __importDefault(displayAttributeModal_7);
     registerOnHover_5 = __importDefault(registerOnHover_5);
     showWindow_4 = __importDefault(showWindow_4);
     registerNodeSelector_4 = __importDefault(registerNodeSelector_4);
@@ -13361,7 +13809,7 @@ define("ui/popup/displayRagModal", ["require", "exports", "ui/create/createLoadi
                         node.onclick = () => {
                             cleanup();
                             env.updateSpanHighlight(null);
-                            (0, displayAttributeModal_6.default)(env, popup.getPos(), (0, UpdatableNodeLocator_7.createMutableLocator)(locator));
+                            (0, displayAttributeModal_7.default)(env, popup.getPos(), (0, UpdatableNodeLocator_7.createMutableLocator)(locator));
                         };
                         rowsContainer.appendChild(node);
                     });
@@ -16077,14 +16525,14 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
     };
     exports.initWorkspace = initWorkspace;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox", "model/Workspace", "model/TextProbeManager"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_7, displayRagModal_1, displayHelp_5, displayAttributeModal_7, settings_11, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_5, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_3, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_12, UpdatableNodeLocator_10, hacks_7, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1, Workspace_1, TextProbeManager_1) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox", "model/Workspace", "model/TextProbeManager"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_7, displayRagModal_1, displayHelp_5, displayAttributeModal_8, settings_11, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_5, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_3, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_12, UpdatableNodeLocator_10, hacks_7, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1, Workspace_1, TextProbeManager_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
     displayProbeModal_7 = __importDefault(displayProbeModal_7);
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_5 = __importDefault(displayHelp_5);
-    displayAttributeModal_7 = __importDefault(displayAttributeModal_7);
+    displayAttributeModal_8 = __importDefault(displayAttributeModal_8);
     settings_11 = __importDefault(settings_11);
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
     displayStatistics_1 = __importDefault(displayStatistics_1);
@@ -16116,15 +16564,15 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         if (!settings_11.default.shouldEnableTesting()) {
             uiElements.showTests.style.display = 'none';
         }
-        window.addEventListener("keydown", function (event) {
-            console.log('keydown:', event.ctrlKey, event.metaKey, ':', event.key);
-            const platform = this.navigator.platform || '';
-            const isMacIsh = platform.startsWith("Mac") || platform === "iPhone";
-            if ((isMacIsh ? event.metaKey : event.ctrlKey) && event.key === "p") {
-                event.preventDefault();
-                alert("Printing is disabled on this page.");
-            }
-        });
+        // window.addEventListener("keydown", function (event) {
+        //   console.log('keydown:', event.ctrlKey, event.metaKey, ':', event.key)
+        //   const platform = this.navigator.platform || '';
+        //   const isMacIsh = platform.startsWith("Mac") || platform === "iPhone";
+        //   if ((isMacIsh ? event.metaKey : event.ctrlKey) && event.key === "p") {
+        //       event.preventDefault();
+        //       alert("Printing is disabled on this page.");
+        //   }
+        // });
         let getLocalState = () => { var _a; return (_a = settings_11.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
         let basicHighlight = null;
         const stickyHighlights = {};
@@ -16350,7 +16798,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                                     return;
                                 }
                                 if (activeWorkspace.activeFileIsTempFile()) {
-                                    getLocIndicator().innerText = `(Temp file)`;
+                                    getLocIndicator().innerText = `(Temp files)`;
                                 }
                                 else {
                                     getLocIndicator().innerText = `(${activeWorkspace.getActiveFile()})`;
@@ -16702,7 +17150,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 window.RagQuery = (line, col, autoSelectRoot) => {
                     if (autoSelectRoot) {
                         const node = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1, depth: 0 };
-                        (0, displayAttributeModal_7.default)(modalEnv, null, (0, UpdatableNodeLocator_10.createMutableLocator)({ result: node, steps: [] }));
+                        (0, displayAttributeModal_8.default)(modalEnv, null, (0, UpdatableNodeLocator_10.createMutableLocator)({ result: node, steps: [] }));
                     }
                     else {
                         (0, displayRagModal_1.default)(modalEnv, line, col);

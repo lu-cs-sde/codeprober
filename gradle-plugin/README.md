@@ -7,7 +7,7 @@ This is a gradle plugin that simplifies fetching and starting CodeProber.
 Add the following to your build.gradle:
 ```gradle
 plugins {
-  id 'org.codeprober' version '0.0.2' // Or whichever version is latest, check "https://plugins.gradle.org/plugin/org.codeprober"
+  id 'org.codeprober' version '0.0.3' // Or whichever version is latest, check "https://plugins.gradle.org/plugin/org.codeprober"
 }
 ```
 

@@ -1,13 +1,15 @@
 import { assertUnreachable } from '../hacks';
-import doEvaluateProperty from '../network/evaluateProperty';
-import { ListPropertiesReq, ListPropertiesRes, NodeLocator, ParsingRequestData, ParsingSource, PropertyArg, RpcBodyLine, SynchronousEvaluationResult, TALStep } from '../protocol';
+
+import { ListPropertiesReq, ListPropertiesRes, NodeLocator, ParsingRequestData, ParsingSource, RpcBodyLine, TALStep } from '../protocol';
 import settings from '../settings';
 import { lastKnownMousePos } from '../ui/create/attachDragToX';
+import displayAttributeModal from '../ui/popup/displayAttributeModal';
 import displayProbeModal from '../ui/popup/displayProbeModal';
 import startEndToSpan from '../ui/startEndToSpan';
 import createCullingTaskSubmitterFactory from './cullingTaskSubmitterFactory';
 import ModalEnv from './ModalEnv'
 import SourcedDiagnostic from './SourcedDiagnostic';
+import TextProbeEvaluator, { createTextProbeEvaluator, isAssignmentMatch, isBrokenNodeChain, NodeAndAttrChainMatch } from './TextProbeEvaluator';
 import { createMutableLocator } from './UpdatableNodeLocator';
 import { NestedWindows } from './WindowState';
 
@@ -34,9 +36,10 @@ type HoverResult = {
 }
 interface CompletionItem {
   label: string;
-  insertText: string;
+  insertText?: string;
   kind: number; // See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#completionItemKind
   sortText?: string;
+  detail?: string;
 }
 interface TextProbeManager {
   hover: (line: number, column: number) => Promise<HoverResult | null>,
@@ -46,52 +49,28 @@ interface TextProbeManager {
 
 type TextProbeStyle = 'angle-brackets' | 'disabled';
 
-const createTypedProbeRegex = () => {
-  const reg = /\[\[(\w+)(\[\d+\])?((?:\.(?:l:)?\w*)+)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
+// const createForgivingProbeRegex = () => {
+//   // Neede for autocompletion
+//   const reg = /\[\[(\$?\w*)(\[\d+\])?((?:\.(?:l:)?\w*)*)?(:?)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
 
-  return {
-    exec: (line: string) => {
-      const match = reg.exec(line);
-      if (!match) {
-        return null;
-      }
-      const [full, nodeType, nodeIndex, attrNames, exclamation, tilde, expectVal] = match;
-      return {
-        index: match.index,
-        full,
-        nodeType,
-        nodeIndex: nodeIndex ? +nodeIndex.slice(1, -1) : undefined,
-        attrNames: attrNames.slice(1).split('.'),
-        exclamation: !!exclamation,
-        tilde: !!tilde,
-        expectVal: typeof expectVal === 'string' ? expectVal : undefined,
-      };
-    }
-  }
-}
+//   return {
+//     exec: (line: string) => {
+//       const match = reg.exec(line);
+//       if (!match) {
+//         return null;
+//       }
+//       const [full, nodeType, nodeIndex, attrNames] = match;
+//       return {
+//         index: match.index,
+//         full,
+//         nodeType,
+//         nodeIndex: nodeIndex ? +nodeIndex.slice(1, -1) : undefined,
+//         attrNames: attrNames ? attrNames.slice(1).split('.') : undefined,
+//       };
 
-const createForgivingProbeRegex = () => {
-  // Neede for autocompletion
-  const reg = /\[\[(\w*)(\[\d+\])?((?:\.(?:l:)?\w*)*)?(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
-
-  return {
-    exec: (line: string) => {
-      const match = reg.exec(line);
-      if (!match) {
-        return null;
-      }
-      const [full, nodeType, nodeIndex, attrNames] = match;
-      return {
-        index: match.index,
-        full,
-        nodeType,
-        nodeIndex: nodeIndex ? +nodeIndex.slice(1, -1) : undefined,
-        attrNames: attrNames ? attrNames.slice(1).split('.') : undefined,
-      };
-
-    }
-  }
-}
+//     }
+//   }
+// }
 
 interface SpanFlasher {
   quickFlash: (spans: Span[]) => void;
@@ -99,9 +78,9 @@ interface SpanFlasher {
   clear: () => void;
 }
 const createSpanFlasher = (env: ModalEnv): SpanFlasher => {
-  let activeFlashCleanup = () => {};
+  let activeFlashCleanup = () => { };
   let activeFlashSpan: Span[] | null = null;
-  const activeSpanReferenceHoverPos: typeof lastKnownMousePos = {...lastKnownMousePos};
+  const activeSpanReferenceHoverPos: typeof lastKnownMousePos = { ...lastKnownMousePos };
   const flash: SpanFlasher['flash'] = (spans, removeHighlightsOnMove) => {
     // Remove invalid spans
     spans = spans.filter(x => x.lineStart && x.lineEnd);
@@ -127,7 +106,7 @@ const createSpanFlasher = (env: ModalEnv): SpanFlasher => {
       window.addEventListener('mousemove', (e) => {
         const dx = e.x - activeSpanReferenceHoverPos.x;
         const dy = e.y - activeSpanReferenceHoverPos.y;
-        if (Math.hypot(dx, dy) > 24 /* arbitrary distance */ ) {
+        if (Math.hypot(dx, dy) > 24 /* arbitrary distance */) {
           cleanup();
         }
       })
@@ -143,7 +122,7 @@ const createSpanFlasher = (env: ModalEnv): SpanFlasher => {
       if (activeFlashCleanup === cleaner) {
         activeFlashCleanup();
       } {
-      // Else, we have been replaced by another highlight
+        // Else, we have been replaced by another highlight
       }
     }, 500);
   };
@@ -157,105 +136,6 @@ const createSpanFlasher = (env: ModalEnv): SpanFlasher => {
 const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => {
   const refreshDispatcher = createCullingTaskSubmitterFactory(1)()
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-
-  const evaluateProperty = async (evalArgs: {
-    locator: NodeLocator;
-    prop: string;
-    args?: PropertyArg[];
-    parsingData?: ParsingRequestData;
-  }): Promise<SynchronousEvaluationResult | 'stopped'> => {
-    const rpcQueryStart = performance.now();
-    const res = await doEvaluateProperty(args.env, {
-      captureStdout: false,
-      locator: evalArgs.locator,
-      property: { name: evalArgs.prop, args: evalArgs.args },
-      src: evalArgs.parsingData ?? args.env.createParsingRequestData(),
-      type: 'EvaluateProperty',
-      skipResultLocator: true,
-    }).fetch();
-    if (res !== 'stopped') {
-      if (typeof res.totalTime === 'number'
-        && typeof res.parseTime === 'number'
-        && typeof res.createLocatorTime === 'number'
-        && typeof res.applyLocatorTime === 'number'
-        && typeof res.attrEvalTime === 'number' ) {
-        args.env.statisticsCollector.addProbeEvaluationTime({
-          attrEvalMs: res.attrEvalTime / 1_000_000.0,
-          fullRpcMs: Math.max(performance.now() - rpcQueryStart),
-          serverApplyLocatorMs: res.applyLocatorTime / 1_000_000.0,
-          serverCreateLocatorMs: res.createLocatorTime / 1_000_000.0,
-          serverParseOnlyMs: res.parseTime / 1_000_000.0,
-          serverSideMs: res.totalTime / 1_000_000.0,
-        });
-      }
-    }
-    return res;
-  }
-
-  type BrokenNodeChain = { type: 'broken-node-chain', brokenIndex: number };
-  const isBrokenNodeChain = (val: any): val is BrokenNodeChain => val && (typeof val === 'object') && (val as BrokenNodeChain).type === 'broken-node-chain';
-
-  const evaluatePropertyChain = async (evalArgs: {
-    locator: NodeLocator;
-    propChain: string[];
-    parsingData?: ParsingRequestData;
-  }): Promise<SynchronousEvaluationResult | 'stopped' | BrokenNodeChain> => {
-    const first = await evaluateProperty({ locator: evalArgs.locator, prop: evalArgs.propChain[0], parsingData: evalArgs.parsingData, });
-    if (first === 'stopped') {
-      return 'stopped';
-    }
-    let prevResult = first;
-    for (let subsequentIdx = 1; subsequentIdx < evalArgs.propChain.length; ++subsequentIdx) {
-      // Previous result must be a node locator
-      if (prevResult.body[0]?.type !== 'node') {
-        console.log('prevResult does not look like a reference attribute:', prevResult.body);
-        return { type: 'broken-node-chain', brokenIndex: subsequentIdx - 1 };
-      }
-      const chainedLocator = prevResult.body[0].value;
-
-      const nextRes = await evaluateProperty({ locator: chainedLocator, prop: evalArgs.propChain[subsequentIdx], parsingData: evalArgs.parsingData });
-      if (nextRes === 'stopped') {
-        return 'stopped';
-      }
-      prevResult = nextRes;
-    }
-    return prevResult;
-  }
-
-  const listNodes = async (listArgs: {
-    attrFilter: string;
-    predicate: string;
-    zeroIndexedLine: number;
-    parsingData?: ParsingRequestData;
-  }): Promise<NodeLocator[] | null> => {
-    const rootNode: TALStep = { type: '<ROOT>', start: ((listArgs.zeroIndexedLine + 1) << 12) + 1, end: ((listArgs.zeroIndexedLine + 1) << 12) + 4095, depth: 0 };
-    const propResult = await evaluateProperty({
-      locator: { result: rootNode, steps: [] },
-      prop: 'm:NodesWithProperty',
-      args: [
-        { type: 'string', value: listArgs.attrFilter },
-        { type: 'string', value: listArgs.predicate }
-      ],
-      parsingData: listArgs.parsingData,
-    });
-
-    if (propResult === 'stopped') {
-      return null;
-    }
-
-    if (!propResult.body.length || propResult.body[0].type !== 'arr') {
-      console.error('Unexpected respose from search query:', propResult);
-      return null;
-    }
-    const queryResultList = propResult.body[0].value;
-    const ret: NodeLocator[] = [];
-    queryResultList.forEach(line => {
-      if (line.type === 'node') {
-        ret.push(line.value);
-      }
-    })
-    return ret;
-  };
 
   const diagnostics: SourcedDiagnostic[] = [];
   args.env.probeMarkers[queryId] = () => diagnostics;
@@ -300,114 +180,136 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
 
     const combinedResults: TextProbeCheckResults = { numPass: 0, numFail: 0 };
     try {
-      const preqData = args.env.createParsingRequestData();
-      const lines = args.env.getLocalState().split('\n');
-      for (let lineIdx = 0; lineIdx < lines.length; ++lineIdx) {
-        const line = lines[lineIdx];
-        const reg = createTypedProbeRegex();
-        let match;
-        function addErr(colStart: number, colEnd: number, msg: string) {
-          diagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
+      const evaluator = createTextProbeEvaluator(args.env);
+
+      // TODO rename to addsquiggly
+      function addSquiggly(lineIdx: number, colStart: number, colEnd: number, msg: string) {
+        diagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
+      }
+      function addStickyBox(boxClass: string[], boxSpan: Span, stickyClass: string[], stickyContent: string | null, stickySpan?: Span) {
+        args.env.setStickyHighlight(allocateStickyId(), {
+          classNames: boxClass,
+          span: boxSpan,
+        });
+        args.env.setStickyHighlight(allocateStickyId(), {
+          classNames: [],
+          span: stickySpan ?? { ...boxSpan, colStart: boxSpan.colEnd - 2, colEnd: boxSpan.colEnd - 1 },
+          content: stickyContent ?? undefined,
+          contentClassNames: stickyClass,
+        });
+
+      }
+
+      (await evaluator.loadVariables()).forEach(vres => {
+        const span: Span = { lineStart: vres.lineIdx + 1, colStart: vres.assign.index - 1, lineEnd: vres.lineIdx + 1, colEnd: vres.assign.index + vres.assign.full.length + 2 };
+
+        switch (vres.type) {
+          case 'success': {
+            args.env.setStickyHighlight(allocateStickyId(), {
+              classNames: ['elp-result-stored'],
+              span,
+            });
+            break;
+          }
+          case 'error': {
+            addSquiggly(vres.lineIdx, vres.errRange.colStart, vres.errRange.colEnd, vres.msg);
+            addStickyBox(
+              ['elp-result-fail'], span,
+              ['elp-actual-result-err'], vres.msg,
+            )
+            combinedResults.numFail++;
+            break;
+          }
         }
-        while ((match = reg.exec(line)) !== null) {
-          const matchingNodes = await listNodes({
-            attrFilter: match.attrNames[0],
-            predicate: `this<:${match.nodeType}&@lineSpan~=${lineIdx + 1}`,
-            zeroIndexedLine: lineIdx,
-            parsingData: preqData,
-          });
-          let numPass = 0, numFail = 0;
-          let errMsg: string | null = null;
-          if (!matchingNodes?.length) {
-            ++numFail;
-            errMsg = `No matching nodes`;
-            const typeStart = line.indexOf(match.nodeType, match.index);
-            const firstAttrEnd = line.indexOf(match.attrNames[0], line.indexOf('.', typeStart)) + match.attrNames[0].length;
-            addErr(typeStart + 1, firstAttrEnd, errMsg);
-          } else {
-            let matchedNode: NodeLocator | null = null;
-            if (match.nodeIndex !== undefined) {
-              if (match.nodeIndex < 0 || match.nodeIndex >= matchingNodes.length) {
-                ++numFail;
-                errMsg = `Invalid index`;
-                const typeEnd = line.indexOf(match.nodeType, match.index) + match.nodeType.length;
-                const idxStart = line.indexOf(`${match.nodeIndex}`, typeEnd);
-                addErr(idxStart + 1, idxStart + `${match.nodeIndex}`.length, `Bad Index`);
-              } else {
-                matchedNode = matchingNodes[match.nodeIndex];
-              }
-            } else {
-              if (matchingNodes.length === 1) {
-                // Only one node, no need for an index
-                matchedNode = matchingNodes[0];
-              } else {
-                ++numFail;
-                errMsg = `${matchingNodes.length} nodes of type "${match.nodeType}". Add [idx] to disambiguate, e.g. "${match.nodeType}[0]"`;
-                const typeStart = line.indexOf(match.nodeType, match.index);
-                addErr(typeStart + 1, line.indexOf('.', typeStart), `Ambiguous, add "[idx]" to select which "${match.nodeType}" to match. 0 ≤ idx < ${matchingNodes.length}`);
-              }
-            }
-            if (matchedNode) {
-              const attrEvalResult = await evaluatePropertyChain({
-                locator: matchedNode,
-                propChain: match.attrNames,
-                parsingData: preqData,
-              });
-              if (attrEvalResult == 'stopped') {
-                break;
-              }
-              if (isBrokenNodeChain(attrEvalResult)) {
-                ++numFail;
-                errMsg = 'Invalid attribute chain';
-                let attrStart = line.indexOf('.', match.index) + 1;
-                for (let i = 0; i < attrEvalResult.brokenIndex; ++i) {
-                  attrStart = line.indexOf('.', attrStart) + 1;
-                }
-                addErr(attrStart + 1, attrStart + match.attrNames[attrEvalResult.brokenIndex].length, `No AST node returned by "${match.attrNames[attrEvalResult.brokenIndex]}"`);
-              } else {
-                const cmp = evalPropertyBodyToString(attrEvalResult.body)
-                if (attrEvalResult.body.length === 1 && attrEvalResult.body[0].type === 'plain' && attrEvalResult.body[0].value.startsWith(`No such attribute '${match.attrNames[match.attrNames.length - 1]}' on `)) {
-                  let lastAttrStart = match.index;
-                  for (let i = 0; i < match.attrNames.length; ++i) {
-                    lastAttrStart = line.indexOf('.', lastAttrStart) + 1;
-                  }
-                  addErr(lastAttrStart + 1, lastAttrStart + match.attrNames[match.attrNames.length - 1].length, 'No such attribute');
-                }
-                if (match.expectVal === undefined) {
-                  if (!errMsg) {
-                    // Just a probe, save the result as a message
-                    errMsg = `Result: ${cmp}`;
-                  }
-                } else {
-                  const rawComparisonSuccess = match.tilde ? cmp.includes(match.expectVal) : (cmp === match.expectVal);
-                  const adjustedComparisonSuccsess = match.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
-                  if (adjustedComparisonSuccsess) {
-                    ++numPass;
-                  } else {
-                    errMsg = `Actual: ${cmp}`;
-                    ++numFail;
-                  }
-                }
-              }
-            }
+      });
+
+      // Second, go through all non-assignments
+      for (let i = 0; i < evaluator.fileMatches.probes.length; ++i) {
+        const match = evaluator.fileMatches.probes[i];
+        const lineIdx = match.lineIdx;
+        const lhsEval = await evaluator.evaluateNodeAndAttr(match.lhs);
+        const span: Span = { lineStart: lineIdx + 1, colStart: match.index - 1, lineEnd: lineIdx + 1, colEnd: match.index + match.full.length + 2 };
+        if (lhsEval.type === 'error') {
+          addSquiggly(lineIdx, lhsEval.errRange.colStart, lhsEval.errRange.colEnd, lhsEval.msg);
+          addStickyBox(
+            ['elp-result-fail'], span,
+            ['elp-actual-result-err'], lhsEval.msg,
+          );
+          combinedResults.numFail++;
+          continue;
+        }
+        // Else, success!
+        if (typeof match.rhs?.expectVal === 'undefined') {
+          addStickyBox(
+            ['elp-result-probe'], span,
+            [`elp-actual-result-probe`], `Result: ${evalPropertyBodyToString(lhsEval.output)}`,
+          );
+          continue;
+        }
+        // Else, an assertion!
+        if (match.rhs.expectVal.startsWith('$')) {
+          // Do not flatten to string, make full-precision comparison
+          const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx, value: match.rhs.expectVal }, true);
+          if (!rhsMatch) {
+            const errMsg = `Invalid syntax`;
+            combinedResults.numFail++;
+            addSquiggly(lineIdx, match.index + match.full.indexOf(match.rhs.expectVal), span.colEnd - 1, errMsg);
+            addStickyBox(
+              ['elp-result-fail'], span,
+              ['elp-actual-result-err'], errMsg,
+            );
+            continue;
+          }
+          rhsMatch.index = match.index + match.full.indexOf('$', 2);
+          const rhsEval = await evaluator.evaluateNodeAndAttr(rhsMatch);
+          if (rhsEval.type === 'error') {
+            addSquiggly(lineIdx, rhsEval.errRange.colStart, rhsEval.errRange.colEnd, rhsEval.msg);
+            addStickyBox(
+              ['elp-result-fail'], span,
+              ['elp-actual-result-err'], rhsEval.msg,
+            );
+            continue;
+          }
+          // Else, success!
+          // Ugly stringify comparison, should work but is not the most efficient
+          const lhsFiltered = filterPropertyBodyForHighIshPrecisionComparison(lhsEval.output);
+          const rhsFiltered = filterPropertyBodyForHighIshPrecisionComparison(rhsEval.output);
+          const rawComparisonSuccess = JSON.stringify(lhsFiltered) === JSON.stringify(rhsFiltered);
+          const adjustedComparisonSuccsess = match.rhs.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
+          if (adjustedComparisonSuccsess) {
+            combinedResults.numPass++;
+            args.env.setStickyHighlight(allocateStickyId(), {
+              classNames: ['elp-result-success'], span,
+            });
+            continue;
           }
 
-          combinedResults.numPass += numPass;
-          combinedResults.numFail += numFail;
-
-          const span: Span = { lineStart: (lineIdx + 1), colStart: match.index + 1, lineEnd: (lineIdx + 1), colEnd: (match.index + match.full.length) };
-          const inlineTextSpan = { ...span, colStart: span.colEnd - 2, colEnd: span.colEnd - 1 };
-          args.env.setStickyHighlight(allocateStickyId(), {
-            classNames: [numFail ? 'elp-result-fail' : (numPass ? 'elp-result-success' : 'elp-result-probe')],
-            span,
-          });
-          if (errMsg) {
+          const errMsg = `Assertion failed.`;
+          addSquiggly(lineIdx, span.colStart + 2, span.colEnd - 2, errMsg);
+          addStickyBox(
+            ['elp-result-fail'], span,
+            ['elp-actual-result-err'], errMsg,
+          );
+          combinedResults.numFail++;
+        } else {
+          // Flatten to string and make string comparison
+          const cmp = evalPropertyBodyToString(lhsEval.output);
+          const rawComparisonSuccess = match.rhs.tilde ? cmp.includes(match.rhs.expectVal) : cmp === match.rhs.expectVal;
+          const adjustedComparisonSuccsess = match.rhs.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
+          if (adjustedComparisonSuccsess) {
+            combinedResults.numPass++;
             args.env.setStickyHighlight(allocateStickyId(), {
-              classNames: [],
-              span: inlineTextSpan,
-              content: errMsg,
-              contentClassNames: [`elp-actual-result-${numFail ? 'err' : 'probe'}`],
+              classNames: ['elp-result-success'], span,
             });
+          } else {
+            const errMsg = `Actual: ${cmp}`;
+            addSquiggly(lineIdx, match.index + match.full.indexOf(match.rhs.expectVal), span.colEnd - 1, errMsg);
+            addStickyBox(
+              ['elp-result-fail'], span,
+              ['elp-actual-result-err'], errMsg,
+            );
+            combinedResults.numFail++;
+
           }
         }
       }
@@ -437,6 +339,16 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
 
   const flasher = createSpanFlasher(args.env);
 
+  const resolveNode = async (evaluator: TextProbeEvaluator, match: NodeAndAttrChainMatch): Promise<NodeLocator | null> => {
+    if (match.nodeType.startsWith('$')) {
+      await evaluator.loadVariables();
+      const varVal = evaluator.variables[match.nodeType];
+      return varVal?.[0]?.type === 'node' ? varVal[0].value : null;
+    }
+    const listedNodes = await evaluator.listNodes({ attrFilter: match.attrNames[0] ?? '', predicate: `this<:${match.nodeType}&@lineSpan~=${match.lineIdx + 1}`, lineIdx: match.lineIdx });
+    return listedNodes?.[match.nodeIndex ?? 0] ?? null;
+  }
+
   const hover: TextProbeManager['hover'] = async (line, column) => {
     const res = await doHover(line, column);
     if (res === null) {
@@ -445,20 +357,23 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
     return res;
   }
   const doHover = async (line: number, column: number): Promise<HoverResult | null> => {
-
     if (settings.getTextProbeStyle() === 'disabled') {
       return null;
     }
-    const lines = args.env.getLocalState().split('\n');
+    const evaluator = createTextProbeEvaluator(args.env);
+    // const evaluator.fileMatches = matchFullFile(args.env.getLocalState());
+    const lines = evaluator.fileMatches.lines;
+    // const lines = args.env.getLocalState().split('\n');
     // Make line/col 0-indexed
     --line;
     --column;
     if (line < 0 || line >= lines.length) {
       return null;
     }
-    const reg = createTypedProbeRegex();
-    let match;
-    while ((match = reg.exec(lines[line])) !== null) {
+
+    const filtered = evaluator.fileMatches.matchesOnLine(line);
+    for (let i = 0; i < filtered.length; ++i) {
+      const match = filtered[i];
       const begin = match.index;
       if (column < begin) {
         continue;
@@ -467,109 +382,140 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       if (column >= end) {
         continue;
       }
-      const fmatch = match;
-      const parsingData = args.env.createParsingRequestData();
-      const listedNodes = await listNodes({ attrFilter: fmatch.attrNames[0], predicate: `this<:${fmatch.nodeType}&@lineSpan~=${line + 1}`, zeroIndexedLine: line, parsingData  });
-      const locator = listedNodes?.[match.nodeIndex ?? 0];
-      if (!locator) {
-        return null;
-      }
-
-      const typeStart = match.index + 2;
-      const typeEnd = lines[line].indexOf('.', typeStart);
-      if (column >= typeStart && column < typeEnd) {
-        const retFlash = [];
-        if (!locator.result.external) {
-          retFlash.push(startEndToSpan(locator.result.start, locator.result.end));
-        }
-        retFlash.push({
-          // Type in text probe
-          lineStart: line + 1, colStart: typeStart + 1,
-          lineEnd: line + 1, colEnd: typeEnd,
-        });
-        flasher.flash(retFlash, true);
+      if (isAssignmentMatch(match)) {
+        // TODO
       } else {
-        let searchStart = typeEnd;
-        let hoveringProp = false;
-        for (let propIdx = 0; propIdx < match.attrNames.length - 1 /* -1, only want intermediate props */; ++propIdx) {
-          const propStart = lines[line].indexOf('.', searchStart) + 1;
-          const propEnd = propStart + match.attrNames[propIdx].length;
-          searchStart = propEnd;
-          if (column >= propStart && column < propEnd) {
-            console.log('hovering intermediate prop', propIdx)
-            hoveringProp = true;
-            evaluatePropertyChain({ locator, parsingData, propChain: match.attrNames.slice(0, propIdx + 1)})
-            // 'then', not 'await'. Do not want to block the hover info from appearing
-            .then(res => {
-              if (res === 'stopped' || isBrokenNodeChain(res) || res.body[0].type !== 'node') {
-                return;
-              }
-              const node = res.body[0].value.result;
-              flasher.flash([
-                {
-                  lineStart: line + 1, colStart: propStart + 1,
-                  lineEnd: line + 1, colEnd: propEnd,
-                },
-                startEndToSpan(node.start, node.end)
-              ], true);
-            });
-            break;
-          }
+        // Probe
+        const locator = await resolveNode(evaluator, match.lhs);
+        if (!locator) {
+          return null;
         }
-        if (!hoveringProp && match.expectVal) {
-          const resultStart = lines[line].indexOf('=', searchStart) + 1;
-          const resultEnd = resultStart + match.expectVal.length;
-          if (column >= resultStart && column < resultEnd) {
-            evaluatePropertyChain({ locator, parsingData, propChain: match.attrNames })
-              .then(res => {
-                if (res === 'stopped' || isBrokenNodeChain(res)) {
-                  return;
-                }
-                if (res.body[0].type === 'node') {
-                  const node = res.body[0].value.result;
-                  const spans = [{
-                    lineStart: line + 1, colStart: resultStart + 1,
-                    lineEnd: line + 1, colEnd: resultEnd,
-                  }];
-                  if (!node.external) {
-                    spans.push(startEndToSpan(node.start, node.end));
+        const typeStart = match.index;
+        let typeEnd;
+        if (match.lhs.attrNames.length) {
+          typeEnd = lines[line].value.indexOf('.', typeStart);
+        } else {
+          typeEnd = typeStart + match.full.length;
+        }
+        if (column >= typeStart && column < typeEnd) {
+          const retFlash = [];
+          if (!locator.result.external) {
+            retFlash.push(startEndToSpan(locator.result.start, locator.result.end));
+          }
+          retFlash.push({
+            // Type in text probe
+            lineStart: line + 1, colStart: typeStart + 1,
+            lineEnd: line + 1, colEnd: typeEnd,
+          });
+          flasher.flash(retFlash, true);
+        } else {
+          let searchStart = typeEnd;
+          let hoveringProp = false;
+          for (let propIdx = 0; propIdx < match.lhs.attrNames.length; ++propIdx) {
+            const propStart = lines[line].value.indexOf('.', searchStart) + 1;
+            const propEnd = propStart + match.lhs.attrNames[propIdx].length;
+            searchStart = propEnd;
+            if (column >= propStart && column < propEnd) {
+              hoveringProp = true;
+              evaluator.evaluatePropertyChain({ locator, propChain: match.lhs.attrNames.slice(0, propIdx + 1) })
+                // 'then', not 'await'. Do not want to block the hover info from appearing
+                .then(res => {
+                  if (res === 'stopped' || isBrokenNodeChain(res) || res.body[0].type !== 'node') {
+                    return;
                   }
-                  flasher.flash(spans, true);
-                }
-              })
+                  const node = res.body[0].value.result;
+                  flasher.flash([
+                    {
+                      lineStart: line + 1, colStart: propStart + 1,
+                      lineEnd: line + 1, colEnd: propEnd,
+                    },
+                    startEndToSpan(node.start, node.end)
+                  ], true);
+                });
+              break;
+            }
+          }
+          if (!hoveringProp && match.rhs?.expectVal) {
+            const resultStart = lines[line].value.indexOf('=', searchStart) + 1;
+            const resultEnd = resultStart + match.rhs.expectVal.length;
+            if (column >= resultStart && column < resultEnd) {
+              evaluator.evaluatePropertyChain({ locator, propChain: match.lhs.attrNames })
+                .then(res => {
+                  if (res === 'stopped' || isBrokenNodeChain(res)) {
+                    return;
+                  }
+                  if (res.body[0].type === 'node') {
+                    const node = res.body[0].value.result;
+                    const spans = [{
+                      lineStart: line + 1, colStart: resultStart + 1,
+                      lineEnd: line + 1, colEnd: resultEnd,
+                    }];
+                    if (!node.external) {
+                      spans.push(startEndToSpan(node.start, node.end));
+                    }
+                    flasher.flash(spans, true);
+                  }
+                })
+            }
           }
         }
+
+        (window as any).CPR_CMD_OPEN_TEXTPROBE_CALLBACK = async () => {
+          if (!match.lhs.attrNames.length) {
+            displayAttributeModal(args.env, null, createMutableLocator(locator));
+            return;
+          }
+          const displayForNode = async (locator: NodeLocator, m: NodeAndAttrChainMatch, offset: { x: number, y: number }) => {
+
+            const nestedWindows: NestedWindows = {};
+            let nestTarget = nestedWindows;
+            let nestLocator = locator;
+            for (let chainAttrIdx = 0; chainAttrIdx < m.attrNames.length; ++chainAttrIdx) {
+              const chainAttr = m.attrNames[chainAttrIdx];
+              const res = await evaluator.evaluateProperty({ locator: nestLocator, prop: chainAttr });
+              if (res === 'stopped' || isBrokenNodeChain(res)) {
+                break;
+              }
+              if (chainAttrIdx > 0) {
+                let newNest: NestedWindows = {};
+                nestTarget['[0]'] = [
+                  { data: { type: 'probe', locator, property: { name: chainAttr }, nested: newNest } },
+                ];
+                nestTarget = newNest;
+              }
+              if (res.body[0]?.type !== 'node') {
+                break;
+              }
+              nestLocator = res.body[0].value;
+            }
+            displayProbeModal(args.env,
+              { x: lastKnownMousePos.x + offset.x, y: lastKnownMousePos.y + offset.y },
+              createMutableLocator(locator),
+              { name: m.attrNames[0] },
+              nestedWindows
+            );
+          }
+
+          await displayForNode(locator, match.lhs, { x: 0, y: 0 });
+
+          if (match.rhs?.expectVal) {
+            // Maybe open for right side as well
+            const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: match.lineIdx, value: match.rhs.expectVal});
+            if (rhsMatch?.attrNames?.length) {
+              const rhsLocator = await resolveNode(evaluator, rhsMatch);
+              if (rhsLocator) {
+                await displayForNode(rhsLocator, rhsMatch, { x: 64, y: 4 });
+              }
+            }
+          }
+        };
+        return {
+          range: { startLineNumber: line + 1, startColumn: column + 1, endLineNumber: line + 1, endColumn: column + 3 },
+          contents: [{
+            value: `[${match.lhs.attrNames.length ? `Open Normal Probe` : `Create Normal Probe`}](command:${(window as any).CPR_CMD_OPEN_TEXTPROBE_ID})`, isTrusted: true
+          }],
+        };
       }
-      (window as any).CPR_CMD_OPEN_TEXTPROBE_CALLBACK = async () => {
-        const nestedWindows: NestedWindows = {};
-        let nestTarget = nestedWindows;
-        let nestLocator = locator;
-        for (let chainAttrIdx = 0; chainAttrIdx < fmatch.attrNames.length; ++chainAttrIdx) {
-          const chainAttr = fmatch.attrNames[chainAttrIdx];
-          const res = await evaluateProperty({ locator: nestLocator, prop: chainAttr, parsingData  });
-          if (res === 'stopped' || isBrokenNodeChain(res)) {
-            break;
-          }
-          if (chainAttrIdx > 0) {
-            let newNest: NestedWindows = {};
-            nestTarget['[0]'] = [
-              { data: { type: 'probe', locator, property: { name: chainAttr }, nested: newNest } },
-            ];
-            nestTarget = newNest;
-          }
-          if (res.body[0]?.type !== 'node') {
-            break;
-          }
-          nestLocator = res.body[0].value;
-        }
-        displayProbeModal(args.env, null, createMutableLocator(locator), { name: fmatch.attrNames[0] }, nestedWindows);
-      };
-      return {
-        range: { startLineNumber: line + 1, startColumn: column + 1, endLineNumber: line + 1, endColumn: column + 3},
-        contents: [{
-          value: `[Open Normal Probe](command:${(window as any).CPR_CMD_OPEN_TEXTPROBE_ID})`, isTrusted: true
-        }],
-      };
     }
 
     return null;
@@ -579,29 +525,47 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
     if (settings.getTextProbeStyle() === 'disabled') {
       return null;
     }
-    const lines = args.env.getLocalState().split('\n');
+    const evaluator = createTextProbeEvaluator(args.env);
+    const lines = evaluator.fileMatches.lines;
     // Make line/col 0-indexed
     --line;
     --column;
     if (line < 0 || line >= lines.length) {
       return null;
     }
-    const reg = createTypedProbeRegex();
-    let match;
 
-    const completeType = async (): Promise<CompletionItem[] | null> => {
-      const matchingNodes = await listNodes({
-        attrFilter: '',
-        predicate: `@lineSpan~=${line + 1}`,
-        zeroIndexedLine: line,
-      });
-      if (matchingNodes === null) {
+    type PermittedTypeFilter = 'allow-all' | 'forbid-variables' | 'forbid-types';
+    const completeType = async (
+      filter: PermittedTypeFilter = 'allow-all',
+      existingText = ''
+    ): Promise<CompletionItem[] | null> => {
+      const matchingNodes: TALStep[] = [];
+
+      const setupPromises: Promise<any>[] = [];
+      if (filter !== 'forbid-types') {
+        setupPromises.push(evaluator.listNodes({
+          attrFilter: '',
+          predicate: `@lineSpan~=${line + 1}`,
+          lineIdx: line,
+        }).then(list => list?.forEach(node => matchingNodes.push(node.result))));
+      };
+      if (filter !== 'forbid-variables') {
+        setupPromises.push(evaluator.loadVariables().then(() => {
+          Object.entries(evaluator.variables).forEach(([label, val]) => {
+            if (val[0]?.type === 'node') {
+              matchingNodes.push({ ...val[0].value.result, label });
+            }
+          })
+        }));
+      }
+      await Promise.all(setupPromises);
+      if (!matchingNodes.length) {
         return null;
       }
       const duplicateTypes = new Set();
       const includedTypes = new Set();
       matchingNodes.forEach(node => {
-        const type = node.result.label ?? node.result.type;
+        const type = node.label ?? node.type;
         if (includedTypes.has(type)) {
           duplicateTypes.add(type);
         }
@@ -625,36 +589,55 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         if (!node) {
           return;
         }
-        flasher.flash([startEndToSpan(node.result.start, node.result.end)]);
+        flasher.flash([startEndToSpan(node.start, node.end)]);
       };
       return matchingNodes.map((node, nodeIndex) => {
-        const type = node.result.label ?? node.result.type;
+        const type = node.label ?? node.type;
         const label = type.split('.').slice(-1)[0];
-        const ret = { kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0') };
+        let detail: string | undefined = undefined;
+        if (type.startsWith('$')) {
+          // It is a variable, add the type as detail
+          detail = node.type.split('.').slice(-1)[0];
+        }
+        const ret: (CompletionItem & { nodeIndex: number })= { label, kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0'), detail };
         if (!duplicateTypes.has(type)) {
-          return { label, insertText: label, ...ret};
+          if (label.length > existingText.length && label.startsWith(existingText)) {
+            ret.insertText = label.slice(existingText.length);
+          } else {
+            ret.insertText = label;
+          }
+          return ret;
         }
         let idx = (nodeListCounter[type] ?? -1) + 1;
         nodeListCounter[type] = idx;
 
         const indexed = `${label}[${idx}]`;
-        return { label: indexed, insertText: indexed, ...ret };
+        ret.label = indexed;
+        ret.insertText = indexed;
+        return ret;
       });
     }
     const completeProp = async (nodeType: string, nodeIndex: number | undefined, prerequisiteAttrs: string[], previousStepSpan: [number, number]) => {
-      const parsingData = args.env.createParsingRequestData();
-      const matchingNodes = await listNodes({
-          attrFilter: '',
-          predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
-          zeroIndexedLine: line,
-          parsingData,
-      });
-      let locator = matchingNodes?.[nodeIndex ?? 0];
+      let locator: NodeLocator | undefined = undefined;
+      if (nodeType.startsWith('$')) {
+        await evaluator.loadVariables();
+        const varData = evaluator.variables[nodeType];
+        if (varData?.[0]?.type === 'node') {
+          locator = varData[0].value;
+        }
+      } else {
+        const matchingNodes = await evaluator.listNodes({
+            attrFilter: '',
+            predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
+            lineIdx: line,
+        });
+        locator = matchingNodes?.[nodeIndex ?? 0];
+      }
       if (!locator) {
         return null;
       }
       if (prerequisiteAttrs.length != 0) {
-        const chainResult = await evaluatePropertyChain({ locator, propChain: prerequisiteAttrs, parsingData });
+        const chainResult = await evaluator.evaluatePropertyChain({ locator, propChain: prerequisiteAttrs });
         if (chainResult === 'stopped' || isBrokenNodeChain(chainResult)) {
           return null;
         }
@@ -683,7 +666,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
 
       const props = await args.env.performTypedRpc<ListPropertiesReq, ListPropertiesRes>({
         locator,
-        src: parsingData,
+        src: evaluator.parsingData,
         type: 'ListProperties',
         all: settings.shouldShowAllProperties(),
       });
@@ -696,21 +679,35 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       });
     }
     const completeExpectedValue = async (nodeType: string, nodeIndex: number | undefined, attrNames: string[]) => {
-      const parsingData = args.env.createParsingRequestData();
-      const matchingNodes = await listNodes({
-        attrFilter: '',
-        predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
-        zeroIndexedLine: line,
-        parsingData,
-      });
-      let locator = matchingNodes?.[nodeIndex ?? 0];
+      let locator: NodeLocator | undefined = undefined;
+      if (nodeType.startsWith('$')) {
+        await evaluator.loadVariables();
+        const varData = evaluator.variables[nodeType];
+        if (varData && !attrNames.length) {
+          const cmp = evalPropertyBodyToString(varData);
+          return [{ label: cmp, insertText: cmp, kind: 15 }];
+        }
+        if (varData?.[0]?.type === 'node') {
+          locator = varData[0].value;
+        }
+      } else {
+        const matchingNodes = await evaluator.listNodes({
+          attrFilter: '',
+          predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
+          lineIdx: line,
+        });
+        locator = matchingNodes?.[nodeIndex ?? 0];
+      }
       if (!locator) {
         return null;
       }
-      const attrEvalResult = await evaluatePropertyChain({
+      if (!attrNames.length) {
+        const cmp = evalPropertyBodyToString([{ type: 'node', value: locator }]);
+        return [{ label: cmp, insertText: cmp, kind: 15 }];
+      }
+      const attrEvalResult = await evaluator.evaluatePropertyChain({
         locator,
         propChain: attrNames,
-        parsingData,
       });
       if (attrEvalResult == 'stopped' || isBrokenNodeChain(attrEvalResult)) {
         return null;
@@ -728,66 +725,138 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       return [{ label: cmp, insertText: cmp, kind: 15 }];
     };
 
-    while ((match = reg.exec(lines[line])) !== null) {
-      if (match.index >= column) {
+    const filtered = evaluator.fileMatches.matchesOnLine(line);
+    for (let i = 0; i < filtered.length; ++i) {
+      const lhsMatch = filtered[i];
+      if (lhsMatch.index > column) {
         // Cursor is before the match
         continue;
       }
-      if (match.index + match.full.length <= column) {
-        // Cursor is before the match
+      if (lhsMatch.index + lhsMatch.full.length < column) {
+        // Cursor is after the match
         continue;
       }
 
-      const typeStart = match.index + 2;
-      const typeEnd = lines[line].indexOf('.', typeStart);
-      if (column >= typeStart && column <= typeEnd) {
-        return completeType();
-      }
-      let attrSearchStart = typeEnd;
-      for (let attrIdx = 0; attrIdx < match.attrNames.length; ++attrIdx) {
-        const attrStart = lines[line].indexOf('.', attrSearchStart) + 1;;
-        const attrEnd = attrStart + match.attrNames[attrIdx].length;
-        attrSearchStart = attrEnd;
-        if (column >= attrStart && column <= attrEnd) {
-          return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx), [typeStart, attrStart]);
+      let typeStart = lhsMatch.index;
+      let typeEnd: number = 0;
+      const computeTypeEnd = (m: NodeAndAttrChainMatch) => {
+        if (m.nodeIndex !== undefined) {
+          return lines[line].value.indexOf(']', typeStart) + 1;
         }
+        return typeStart + m.nodeType.length;
+      };
+      let attrSearchStart = typeEnd;
+      const maybeCompleteTypeOrAttr = async (m: NodeAndAttrChainMatch, typeFilter: PermittedTypeFilter = 'allow-all'): Promise<ReturnType<TextProbeManager['complete']>> => {
+        if (column >= typeStart && column <= typeEnd) {
+          return completeType(typeFilter);
+        }
+        attrSearchStart = typeEnd;
+        for (let attrIdx = 0; attrIdx < m.attrNames.length; ++attrIdx) {
+          const attr = m.attrNames[attrIdx];
+          const attrStart = attr
+            ? lines[line].value.indexOf(attr, attrSearchStart)
+            : lines[line].value.indexOf('.', attrSearchStart) + 1;
+          const attrEnd = attrStart + attr.length;
+          attrSearchStart = attrEnd;
+          if (column >= attrStart && column <= attrEnd) {
+            return completeProp(m.nodeType, m.nodeIndex, m.attrNames.slice(0, attrIdx), [typeStart+1, attrStart-1]);
+          }
+        }
+        return null;
+      };
+
+      if (isAssignmentMatch(lhsMatch)) {
+        const expectStart = lines[line].value.indexOf(':=', lhsMatch.index) + 2;
+        const expectEnd = lhsMatch.index + lhsMatch.full.length;
+        if (column >= expectStart && column <= expectEnd) {
+          // Inside src value
+          if (!lhsMatch.srcVal) {
+            return completeType('forbid-variables');
+          }
+          const srcMatch = evaluator.matchNodeAndAttrChain({ lineIdx: lhsMatch.lineIdx, value: lhsMatch.srcVal });
+          if (!srcMatch) {
+            // Still working on the type
+            if (/^\w*(\[\d+\])?$/.test(lhsMatch.srcVal)) {
+              return completeType('forbid-variables');
+            }
+            return null;
+          }
+          typeStart = expectStart;
+          typeEnd = computeTypeEnd(srcMatch);
+
+          return maybeCompleteTypeOrAttr({
+            ...srcMatch,
+            index: expectStart + srcMatch.index,
+          }, 'forbid-variables');
+        }
+        return null;
       }
 
-      if (match.expectVal !== undefined) {
-        const expectStart = lines[line].indexOf('=', attrSearchStart) + 1;;
-        const expectEnd = expectStart + match.expectVal.length;
-        if (column >= expectStart && column <= expectEnd) {
-          return completeExpectedValue(match.nodeType, match.nodeIndex, match.attrNames);
+      // Else, probe!
+      typeEnd = computeTypeEnd(lhsMatch.lhs); // lines[line].value.indexOf('.', typeStart);
+
+      const lhsComplete = await maybeCompleteTypeOrAttr(lhsMatch.lhs);
+      if (lhsComplete) {
+        return lhsComplete;
+      }
+
+      if (!lhsMatch.rhs) {
+        return null;
+      }
+      // if (!lhsMatch.rhs.expectVal) {
+      //   return null;
+      // }
+      const currExpectVal = lhsMatch.rhs.expectVal ?? '';
+      const expectStart = lines[line].value.indexOf('=', attrSearchStart) + 1;;
+      const expectEnd = expectStart + currExpectVal.length;
+      if (column >= expectStart && column <= expectEnd) {
+        if (column > expectStart && currExpectVal.startsWith('$')) {
+          // Actually, we should treat this as a 'normal' query
+          const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: line, value: currExpectVal });
+          if (!rhsMatch) {
+            if (/^\$\w*$/.test(currExpectVal)) {
+              return completeType('forbid-types', lines[line].value.slice(expectStart, column));
+            }
+            return null;
+          }
+          rhsMatch.index += expectStart;
+          typeStart = expectStart;
+          typeEnd = computeTypeEnd(rhsMatch);
+          return maybeCompleteTypeOrAttr(rhsMatch);
+        } else {
+          return completeExpectedValue(lhsMatch.lhs.nodeType, lhsMatch.lhs.nodeIndex, lhsMatch.lhs.attrNames);
         }
       }
     }
 
-    const forgivingReg = createForgivingProbeRegex();
-    while ((match = forgivingReg.exec(lines[line])) !== null) {
+    const forgivingMatcher = /\[\[(\$?\w*)\]\]/g;
+    let match;
+    while ((match = forgivingMatcher.exec(lines[line].value)) !== null) {
+      const [full, nodeType] = match;
       if (match.index >= column) {
         // Cursor is before the match
         continue;
       }
-      if (match.index + match.full.length <= column) {
+      if (match.index + full.length <= column) {
         // Cursor is before the match
         continue;
       }
       const typeStart = match.index + 2;
-      const typeEnd = Math.max(typeStart + match.nodeType.length, lines[line].indexOf('.', typeStart));
+      const typeEnd = Math.max(typeStart + nodeType.length, lines[line].value.indexOf('.', typeStart));
       if (column >= typeStart && column <= typeEnd) {
         return completeType();
       }
-      if (match.attrNames) {
-        let attrSearchStart = typeEnd;
-        for (let attrIdx = 0; attrIdx < match.attrNames.length; ++attrIdx) {
-          const attrStart = lines[line].indexOf('.', attrSearchStart) + 1;;
-          const attrEnd = attrStart + match.attrNames[attrIdx].length;
-          attrSearchStart = attrEnd;
-          if (column >= attrStart && column <= attrEnd) {
-            return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx), [typeStart, attrStart]);
-          }
-        }
-      }
+      // if (match.attrNames) {
+      //   let attrSearchStart = typeEnd;
+      //   for (let attrIdx = 0; attrIdx < match.attrNames.length; ++attrIdx) {
+      //     const attrStart = lines[line].indexOf('.', attrSearchStart) + 1;;
+      //     const attrEnd = attrStart + match.attrNames[attrIdx].length;
+      //     attrSearchStart = attrEnd;
+      //     if (column >= attrStart && column <= attrEnd) {
+      //       return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx), [typeStart, attrStart]);
+      //     }
+      //   }
+      // }
     }
 
     return null;
@@ -800,61 +869,61 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
     if (settings.getTextProbeStyle() === 'disabled') {
       return ret;
     }
-    const parsingData: ParsingRequestData = {
-      ...args.env.createParsingRequestData(),
-      src: requestSrc,
-    };
-    const lines = knownSrc.split('\n');
+    const evaluator = createTextProbeEvaluator(args.env, { src: requestSrc, contents: knownSrc});
+    const varLoadRes = await evaluator.loadVariables();
+    varLoadRes.forEach((res) => {
+      if (res.type === 'error') {
+        ret.numFail++;
+      }
+    });
     const postLoopWaits: Promise<any>[] = [];
-    for (let lineIdx = 0; lineIdx < lines.length; ++lineIdx) {
-      const reg = createTypedProbeRegex();
-      let outerMatch: ReturnType<typeof reg['exec']>;
-      while ((outerMatch = reg.exec(lines[lineIdx])) != null) {
-        const match = outerMatch;
-        if (match.expectVal === undefined) {
-          // Just a probe, no assertion, no need to check
-          continue;
-        }
-        const expectedValue = match.expectVal;
+    for (let i = 0; i < evaluator.fileMatches.probes.length; ++i) {
+      // const reg = createTypedProbeRegex();
+      // let outerMatch: ReturnType<typeof reg['exec']>;
+      // while ((outerMatch = reg.exec(lines[lineIdx])) != null) {
+        const match = evaluator.fileMatches.probes[i];
         const handleMatch = async () => {
-          const allNodes = await listNodes({
-            attrFilter: match.attrNames[0],
-            predicate: `this<:${match.nodeType}&@lineSpan~=${lineIdx+1}`,
-            zeroIndexedLine: lineIdx,
-            parsingData,
-          });
-          if (!allNodes?.length) {
+          const lhsResult = await evaluator.evaluateNodeAndAttr(match.lhs)
+          if (lhsResult.type === 'error') {
             ret.numFail++;
             return;
           }
-          if (match.nodeIndex === undefined && allNodes.length !== 1) {
-            // Must have explicit index when >1 node
-            ++ret.numFail;
-            return;
-          }
-          const locator = allNodes[match.nodeIndex ?? 0];
-          if (!locator) {
-            // Invalid index
-            ++ret.numFail;
+          const rhs = match.rhs;
+          const expectVal = rhs?.expectVal;
+          if (!expectVal) {
+            // Just a probe, no assertion, no need to check further
             return;
           }
 
-          const evalRes = await evaluatePropertyChain({ locator, propChain: match.attrNames, parsingData })
-          if (evalRes === 'stopped') {
-            // TODO is this a failure?
-            return;
-          }
-          if (isBrokenNodeChain(evalRes)) {
-            ret.numFail++;
-            return;
-          }
-          const cmp = evalPropertyBodyToString(evalRes.body)
-          const rawComparisonSuccess = match.tilde ? cmp.includes(expectedValue) : (cmp === expectedValue);
-          const adjustedComparisonSuccsess = match.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
-          if (adjustedComparisonSuccsess) {
-            ret.numPass++;
+          if (expectVal?.startsWith('$')) {
+            const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: match.lineIdx, value: expectVal}, true);
+            if (!rhsMatch) {
+              ret.numFail++;
+              return;
+            }
+            const rhsResult = await evaluator.evaluateNodeAndAttr(rhsMatch);
+            if (rhsResult.type === 'error') {
+              ret.numFail++;
+              return;
+            }
+            const lhsFiltered = filterPropertyBodyForHighIshPrecisionComparison(lhsResult.output);
+            const rhsFiltered = filterPropertyBodyForHighIshPrecisionComparison(rhsResult.output);
+            const rawComparisonSuccess = JSON.stringify(lhsFiltered) === JSON.stringify(rhsFiltered);
+            const adjustedComparisonSuccsess = rhs.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
+            if (adjustedComparisonSuccsess) {
+              ret.numPass++;
+            } else {
+              ret.numFail++;
+            }
           } else {
-            ret.numFail++;
+            const cmp = evalPropertyBodyToString(lhsResult.output);
+            const rawComparisonSuccess = rhs.tilde ? cmp.includes(expectVal) : (cmp === expectVal);
+            const adjustedComparisonSuccsess = rhs.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
+            if (adjustedComparisonSuccsess) {
+              ret.numPass++;
+            } else {
+              ret.numFail++;
+            }
           }
         };
         if (args.env.workerProcessCount !== undefined) {
@@ -862,7 +931,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         } else {
           await handleMatch();
         }
-      }
+      // }
     }
     await Promise.all(postLoopWaits);
 
@@ -872,6 +941,9 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
   return { hover, complete, checkFile }
 }
 
+const filterPropertyBodyForHighIshPrecisionComparison = (body: RpcBodyLine[]): RpcBodyLine[] => body.filter(
+  x => !(x.type === 'plain' && !x.value.trim())
+);
 const evalPropertyBodyToString = (body: RpcBodyLine[]): string => {
   const lineToComparisonString = (line: RpcBodyLine): string => {
     switch (line.type) {
@@ -879,7 +951,7 @@ const evalPropertyBodyToString = (body: RpcBodyLine[]): string => {
       case 'stdout':
       case 'stderr':
       case 'streamArg':
-        case 'dotGraph':
+      case 'dotGraph':
       case 'html':
         return line.value;
       case 'arr':
@@ -907,7 +979,7 @@ const evalPropertyBodyToString = (body: RpcBodyLine[]): string => {
       default:
         assertUnreachable(line);
         return '';
-      }
+    }
   }
   return lineToComparisonString(body.length === 1 ? body[0] : { type: 'arr', value: body });
 }

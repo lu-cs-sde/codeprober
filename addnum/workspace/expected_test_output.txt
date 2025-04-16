@@ -9,7 +9,17 @@
      No matching nodes
   ❌ ts/err_nosuchnode.addn
      No matching nodes
+  ❌ ts/err_nosuchvar.addn
+     No such variable
+  ❌ ts/err_redefvar.addn
+     Duplicate definition of $x
+  ❌ ts/err_syntaxabuse.addn
+     Invalid syntax
+     Invalid syntax
+  ❌ ts/err_varvar.addn
+     Cannot use variables on right-hand side
   ✅ ts/ok_add.addn
   ✅ ts/ok_large.addn
   ✅ ts/ok_num.addn
-Done: 12 pass, 6 fail
+  ✅ ts/ok_vars.addn
+Done: 26 pass, 11 fail

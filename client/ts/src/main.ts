@@ -52,15 +52,15 @@ const doMain = (wsPort: number
     uiElements.showTests.style.display = 'none';
   }
 
-  window.addEventListener("keydown", function (event) {
-    console.log('keydown:', event.ctrlKey, event.metaKey, ':', event.key)
-    const platform = this.navigator.platform || '';
-    const isMacIsh = platform.startsWith("Mac") || platform === "iPhone";
-    if ((isMacIsh ? event.metaKey : event.ctrlKey) && event.key === "p") {
-        event.preventDefault();
-        alert("Printing is disabled on this page.");
-    }
-  });
+  // window.addEventListener("keydown", function (event) {
+  //   console.log('keydown:', event.ctrlKey, event.metaKey, ':', event.key)
+  //   const platform = this.navigator.platform || '';
+  //   const isMacIsh = platform.startsWith("Mac") || platform === "iPhone";
+  //   if ((isMacIsh ? event.metaKey : event.ctrlKey) && event.key === "p") {
+  //       event.preventDefault();
+  //       alert("Printing is disabled on this page.");
+  //   }
+  // });
   let getLocalState = () => settings.getEditorContents() ?? '';
   let basicHighlight: Span | null = null;
   const stickyHighlights: { [probeId: string]: StickyHighlight } = {};
@@ -321,7 +321,7 @@ const doMain = (wsPort: number
                 return;
               }
               if (activeWorkspace.activeFileIsTempFile()) {
-                getLocIndicator().innerText = `(Temp file)`;
+                getLocIndicator().innerText = `(Temp files)`;
               } else {
                 getLocIndicator().innerText = `(${activeWorkspace.getActiveFile()})`;
               }

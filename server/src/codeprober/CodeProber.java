@@ -34,7 +34,6 @@ import codeprober.server.ServerToClientEvent;
 import codeprober.server.ServerToClientMessagePusher;
 import codeprober.server.WebServer;
 import codeprober.server.WebSocketServer;
-import codeprober.server.WorkspaceApi;
 import codeprober.toolglue.UnderlyingTool;
 import codeprober.toolglue.UnderlyingToolProxy;
 import codeprober.util.DirectoryMonitor;

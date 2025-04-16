@@ -1,0 +1,19 @@
+(
+   1+2 // [[$one:=Num[0]]] [[$two:=Num[1]]] [[$three:=Add[1]]]
+) + 5 // [[$five:=Num]] [[$eight:=Add]] [[$pretty:=Program.prettyPrint]]
+
+// 11 pass'
+
+// [[$one.value=1]]
+// [[$two.value=2]]
+// [[$three.value=3]]
+// [[$three.lhs=$one]]
+// [[$three.rhs=$two]]
+
+// [[$five.value=5]]
+// [[$eight.value=8]]
+// [[$eight.lhs.lhs=$one]]
+// [[$eight.lhs.rhs=$three.rhs]]
+
+// [[$eight.prettyPrint=((1 + 2) + 5)]]
+// [[$pretty=((1 + 2) + 5)]]

@@ -538,14 +538,14 @@ body[data-theme-light="true"] .elp-flash-multiline {
                               .elp-result-success  { background: #3933; outline: 1px solid green; }
                               .elp-result-fail     { background: #9333; outline: 1px solid red;  }
                               .elp-result-probe    { background: #3993; outline: 1px solid lightseagreen;   }
-                              .elp-result-noattr   { background: #9333; outline: 1px solid red; }
+                              .elp-result-stored   { background: #3993; outline: 1px solid goldenrod;   }
                                       .elp-flash   { outline: 2px dashed yellow; }
                             .elp-flash-multiline   { box-shadow: 2px 0 0px yellow inset; }
 
 body[data-theme-light="true"] .elp-result-success  { background: #efe7 }
 body[data-theme-light="true"] .elp-result-fail     { background: #fee7 }
 body[data-theme-light="true"] .elp-result-probe    { background: #eff7 }
-body[data-theme-light="true"] .elp-result-noattr   { background: #ffe7 }
+body[data-theme-light="true"] .elp-result-stored   { background: #ffe7 }
 body[data-theme-light="true"] .elp-flash           { outline: 2px dashed magenta; }
 body[data-theme-light="true"] .elp-flash-multiline { box-shadow: 2px 0 0px magenta inset; }
 
