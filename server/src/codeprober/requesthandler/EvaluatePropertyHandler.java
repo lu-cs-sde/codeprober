@@ -182,7 +182,7 @@ public class EvaluatePropertyHandler {
 			final TracingBuilder traceBuilder = new TracingBuilder(parsed.info);
 			final AtomicBoolean ignoreStdio = new AtomicBoolean(false);
 			final Runnable evaluateAttr = () -> {
-				boolean shouldExpandListNodes = true;
+				boolean shouldExpandListNodes = req.flattenForTextProbes == null || !req.flattenForTextProbes;
 				if (req.captureTraces != null && req.captureTraces.booleanValue()) {
 					if (parsed.info.hasOverride1(parsed.info.ast.underlyingAstNode.getClass(), "cpr_setTraceReceiver",
 							Consumer.class)) {

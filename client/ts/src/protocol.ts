@@ -44,6 +44,7 @@ interface EvaluatePropertyReq {
   skipResultLocator?: boolean;
   captureTraces?: boolean;
   flushBeforeTraceCollection?: boolean;
+  flattenForTextProbes?: boolean;
 }
 interface EvaluatePropertyRes {
   response: PropertyEvaluationResult;

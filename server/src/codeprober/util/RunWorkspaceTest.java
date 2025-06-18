@@ -114,7 +114,9 @@ public class RunWorkspaceTest {
 				}
 				if (numPass == startNumPass && numFail == startNumFail) {
 					// No tests, don't output anything
-					System.out.println("Nothing in file " + fullPath + "..");
+					if (verbose) {
+						System.out.println("Nothing in file " + fullPath + "..");
+					}
 				} else if (numFail == startNumFail) {
 					System.out.println("  ✅ " + fullPath);
 				} else {

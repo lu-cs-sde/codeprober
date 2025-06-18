@@ -10231,6 +10231,7 @@ define("model/TextProbeEvaluator", ["require", "exports", "network/evaluatePrope
             src: (_a = evalArgs.parsingData) !== null && _a !== void 0 ? _a : env.createParsingRequestData(),
             type: 'EvaluateProperty',
             skipResultLocator: true,
+            flattenForTextProbes: true,
         }).fetch();
         if (res !== 'stopped') {
             if (typeof res.totalTime === 'number'

@@ -16,6 +16,7 @@ public class EvaluateProperty extends Rpc {
 			public final Object skipResultLocator = opt(Boolean.class);
 			public final Object captureTraces = opt(Boolean.class);
 			public final Object flushBeforeTraceCollection = opt(Boolean.class);
+			public final Object flattenForTextProbes = opt(Boolean.class);
 		};
 	}
 

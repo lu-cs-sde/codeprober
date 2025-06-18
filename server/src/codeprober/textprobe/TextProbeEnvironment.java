@@ -50,7 +50,7 @@ public class TextProbeEnvironment {
 			StdIoInterceptor interceptor) {
 		this.requestHandler = requestHandler;
 		this.parsingRequestData = new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD,
-				AstCacheStrategy.PARTIAL, ParsingSource.fromText(srcFileContents + "\n"), null, "");
+				AstCacheStrategy.PARTIAL, ParsingSource.fromText(srcFileContents + "\n"), null, ".tmp");
 		this.parsedFile = ParsedTextProbes.fromFileContents(srcFileContents);
 		this.interceptor = interceptor;
 	}

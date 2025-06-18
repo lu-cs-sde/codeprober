@@ -177,6 +177,7 @@ const doEvaluateProperty = async (env: ModalEnv, evalArgs: {
     src: evalArgs.parsingData ?? env.createParsingRequestData(),
     type: 'EvaluateProperty',
     skipResultLocator: true,
+    flattenForTextProbes: true,
   }).fetch();
   if (res !== 'stopped') {
     if (typeof res.totalTime === 'number'
