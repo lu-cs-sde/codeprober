@@ -22,4 +22,8 @@ public class Num extends Node {
 	public void prettyPrint(PrintStream out) {
 		out.append("" + val);
 	}
+
+  public String cpr_ppPrefix() {
+    return val + "";
+  }
 }

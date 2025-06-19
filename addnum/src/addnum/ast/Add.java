@@ -46,4 +46,8 @@ public class Add extends Node {
 		rhs().prettyPrint(out);
 		out.append(")");
 	}
+
+  public String cpr_ppInfix(int idx) {
+    return " + ";
+  }
 }
