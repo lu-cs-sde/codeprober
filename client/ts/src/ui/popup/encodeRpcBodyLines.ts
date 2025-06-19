@@ -1,6 +1,6 @@
 import ModalEnv from '../../model/ModalEnv';
 import { createMutableLocator } from '../../model/UpdatableNodeLocator';
-import { NodeLocator, RpcBodyLine, Tracing } from '../../protocol';
+import { NodeContainer, NodeLocator, RpcBodyLine, Tracing } from '../../protocol';
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import registerNodeSelector from "../create/registerNodeSelector";
 import registerOnHover from "../create/registerOnHover";
@@ -9,6 +9,8 @@ import displayAttributeModal from "./displayAttributeModal";
 import { graphviz as d3 } from 'dependencies/graphviz/graphviz';
 import { assertUnreachable } from '../../hacks';
 import startEndToSpan from '../startEndToSpan';
+import { installLazyHoverDialog } from '../create/installLazyHoverDialog';
+import prepareEncodeRpcNodeContainer from './prepareEncodeRpcNodeContainer';
 
 const getCommonStreamArgWhitespacePrefix = (line: RpcBodyLine): number => {
   if (Array.isArray(line)) {
@@ -106,10 +108,6 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
       }
     });
     if (!localDisableNodeExpander && extras.nodeLocatorExpanderHandler) {
-      // if (existing) {
-      //   if (existing.parentElement) existing.parentElement.removeChild(existing);
-      //   target.appendChild(existing);
-      // } else {
       const middleContainer = document.createElement('div');
       middleContainer.style.display = 'flex';
       middleContainer.style.flexDirection = 'row';
@@ -139,7 +137,6 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
       const outerContainer = document.createElement('div');
       outerContainer.classList.add('inline-window-root');
       outerContainer.style.display = 'inline-flex';
-      // outerContainer.style.marginBottom = '0.125rem';
       outerContainer.style.flexDirection = 'column';
       outerContainer.appendChild(middleContainer);
 
@@ -166,6 +163,7 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
       target.appendChild(container);
     }
   };
+
 
 
   const appliedDecoratorResultsTrackers: Partial<Record<ReturnType<LineDecorator>, true>>[] = [];
@@ -215,6 +213,8 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
   interface ExtraEncodingArgs {
     omitArrMarginLeft: Boolean;
   }
+
+  const encodeNodeContainer = prepareEncodeRpcNodeContainer({ env, encodeLine: (...args) => encodeLine(...args), }).createNodeContainerNode;
 
   const encodeLine = (target: HTMLElement, line: RpcBodyLine, nestingLevel: number, bodyPath: number[], extraEncodingArgs?: ExtraEncodingArgs) => {
     const addPlain = (msg: string, plainHoverSpan?: { start: number, end: number }) => {
@@ -344,6 +344,10 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
       }
       case 'node': {
         createNodeNode(target, line.value, nestingLevel, bodyPath)
+        break;
+      }
+      case 'nodeContainer': {
+        encodeNodeContainer(target, line.value, nestingLevel, bodyPath);
         break;
       }
 

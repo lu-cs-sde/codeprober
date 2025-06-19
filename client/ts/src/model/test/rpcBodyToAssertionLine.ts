@@ -6,6 +6,7 @@ const rpcBodyToTestBody = (line: RpcBodyLine): RpcBodyLine | null => {
     case 'plain':
     case 'streamArg':
     case 'node':
+    case 'nodeContainer':
     case 'html':
       return line;
 

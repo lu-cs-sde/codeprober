@@ -31,6 +31,7 @@ const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
   const root = document.createElement('div');
   root.tabIndex = 0;
   root.classList.add('modalWindow');
+  root.classList.add('modalWindowColoring');
   (root.style as any) = `${rootStyle || ''}`;
 
   const bringToFront = () => {

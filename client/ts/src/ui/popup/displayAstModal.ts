@@ -10,7 +10,7 @@ import createStickyHighlightController from '../create/createStickyHighlightCont
 import ModalEnv from '../../model/ModalEnv';
 import { ListedTreeNode, ListTreeReq, ListTreeRes, RpcBodyLine } from '../../protocol';
 import startEndToSpan from '../startEndToSpan';
-import UpdatableNodeLocator, { createImmutableLocator, createMutableLocator } from '../../model/UpdatableNodeLocator';
+import UpdatableNodeLocator, { createMutableLocator } from '../../model/UpdatableNodeLocator';
 
 interface Point { x: number; y: number }
 interface Node extends Omit<ListedTreeNode, 'children'> {

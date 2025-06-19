@@ -1,6 +1,6 @@
 import createLoadingSpinner from "../create/createLoadingSpinner";
 import createModalTitle from "../create/createModalTitle";
-import displayProbeModal, { searchProbePropertyName } from "./displayProbeModal";
+import displayProbeModal, { prettyPrintProbePropertyName, searchProbePropertyName } from "./displayProbeModal";
 import displayArgModal from "./displayArgModal";
 import formatAttr from "./formatAttr";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
@@ -88,6 +88,13 @@ const displayAttributeModal = (
             invoke: () => {
               cleanup();
               displayAstModal(env, popup.getPos(), locator, 'upwards');
+            }
+          },
+          {
+            title: 'Pretty Print',
+            invoke: () => {
+              cleanup();
+              displayProbeModal(env, popup.getPos(), locator, { name: prettyPrintProbePropertyName }, {});
             }
           },
         ],

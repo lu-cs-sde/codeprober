@@ -1,4 +1,3 @@
-import { assertUnreachable } from '../../hacks';
 import { adjustLocatorAndProperty } from '../../model/adjustLocator';
 import { findAllLocatorsWithinNestingPath } from '../../model/findLocatorWithNestingPath';
 import ModalEnv, { JobId } from '../../model/ModalEnv';
@@ -6,7 +5,7 @@ import { createMutableLocator } from '../../model/UpdatableNodeLocator';
 import { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
 import evaluateProperty from '../../network/evaluateProperty';
 import { Diagnostic, NodeLocator, Property, RpcBodyLine, StopJobReq, StopJobRes } from '../../protocol';
-import displayProbeModal, { searchProbePropertyName } from '../popup/displayProbeModal';
+import displayProbeModal, { prettyPrintProbePropertyName, searchProbePropertyName } from '../popup/displayProbeModal';
 import startEndToSpan from '../startEndToSpan';
 import registerOnHover from './registerOnHover';
 
@@ -194,7 +193,12 @@ const createMinimizedProbeModal = (
   const attrLbl = document.createElement('span');
   const fixedPropName = property.name == searchProbePropertyName
     ? `*.${property.args?.[0]?.value}`
-    : property.name;
+    : (
+      property.name == prettyPrintProbePropertyName
+        ? '->PrettyPrint'
+        : property.name
+    )
+    ;
 
   if (locator.steps.length === 0 && property.name == searchProbePropertyName) {
     // Hide title?

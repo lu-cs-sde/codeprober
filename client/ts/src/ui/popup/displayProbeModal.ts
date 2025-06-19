@@ -8,7 +8,7 @@ import ModalEnv, { JobId } from '../../model/ModalEnv';
 import displayTestAdditionModal from './displayTestAdditionModal';
 import renderProbeModalTitleLeft from '../renderProbeModalTitleLeft';
 import settings from '../../settings';
-import { Property, RpcBodyLine, StopJobReq, StopJobRes, SynchronousEvaluationResult, Tracing } from '../../protocol';
+import { NodeLocator, Property, RpcBodyLine, StopJobReq, StopJobRes, SynchronousEvaluationResult, Tracing } from '../../protocol';
 import displayAttributeModal from './displayAttributeModal';
 import displayAstModal from './displayAstModal';
 import createInlineWindowManager, { InlineWindowManager } from '../create/createInlineWindowManager';
@@ -22,6 +22,7 @@ import { assertUnreachable } from '../../hacks';
 import startEndToSpan from '../startEndToSpan';
 
 const searchProbePropertyName = `m:NodesWithProperty`;
+const prettyPrintProbePropertyName = `m:PrettyPrint`;
 
 interface OptionalArgs {
   showDiagnostics?: boolean;
@@ -205,6 +206,10 @@ const displayProbeModal = (
         {
           title: 'Copy output as text to clipboard',
           invoke: () => {
+            const buildNodeLine = (node: NodeLocator): string => {
+              const span = startEndToSpan(node.result.start, node.result.end);
+              return `[${span.lineStart}:${span.colStart}-${span.lineEnd}:${span.colEnd}] ${node.result.label ?? node.result.type.split('.').slice(-1)[0]}`;
+            }
             const buildLine = (line: RpcBodyLine): string => {
               switch (line.type) {
                 case 'plain':
@@ -222,8 +227,7 @@ const displayProbeModal = (
                   return ['', ...line.value.map(buildLine)].join('\n').replace(/\n/g, '\n  ');
                 }
                 case 'node': {
-                  const span = startEndToSpan(line.value.result.start, line.value.result.end);
-                  return `[${span.lineStart}:${span.colStart}-${span.lineEnd}:${span.colEnd}] ${line.value.result.label ?? line.value.result.type.split('.').slice(-1)[0]}`;
+                  return buildNodeLine(line.value);
                 }
                 case 'tracing': {
                   const buildTracingLine = (tr: Tracing): string => {
@@ -234,6 +238,9 @@ const displayProbeModal = (
                     return lines.join('\n').replace(/\n/g, '\n│ ');
                   };
                   return buildTracingLine(line.value);
+                }
+                case 'nodeContainer': {
+                  return `${buildNodeLine(line.value.node)}${line.value.body ? `[${buildLine(line.value.body)}]` : ''}`;
                 }
                 default: {
                   assertUnreachable(line);
@@ -659,5 +666,5 @@ const displayProbeModal = (
   // }
 }
 
-export { searchProbePropertyName }
+export { searchProbePropertyName, prettyPrintProbePropertyName }
 export default displayProbeModal;

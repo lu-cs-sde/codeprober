@@ -20,6 +20,7 @@ import codeprober.locator.ApplyLocator.ResolvedNode;
 import codeprober.locator.CreateLocator;
 import codeprober.locator.CreateLocator.LocatorMergeMethod;
 import codeprober.locator.NodesWithProperty;
+import codeprober.locator.PrettyPrintTree;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.metaprogramming.StdIoInterceptor;
@@ -272,6 +273,16 @@ public class EvaluatePropertyHandler {
 							value = NodesWithProperty.get(parsed.info, match.node, propName, predicate, limit);
 							break;
 						}
+						case "m:PrettyPrint": {
+							final LocatorMergeMethod restoreMethod = CreateLocator.getMergeMethod();
+							CreateLocator.setMergeMethod(LocatorMergeMethod.SKIP);
+							try {
+								value = PrettyPrintTree.prettyPrint(parsed.info, match.node);
+							} finally {
+								CreateLocator.setMergeMethod(restoreMethod);
+							}
+							break;
+						}
 						default: {
 							value = "Invalid meta-attribute '" + queryAttrName + "'";
 							break;
@@ -324,11 +335,15 @@ public class EvaluatePropertyHandler {
 							} else if (value instanceof String && ((String) value).startsWith("@@HTML:")) {
 								// Hacky html support
 								body.add(RpcBodyLine.fromHtml(((String) value).substring("@@HTML:".length())));
+							} else if (value instanceof RpcBodyLine) {
+								// Already correct type
+								body.add((RpcBodyLine) value);
 							} else {
 
 								try {
 									EncodeResponseValue.shouldExpandListNodes = shouldExpandListNodes;
-									EncodeResponseValue.encodeTyped(parsed.info, body, diagnostics, value, new HashSet<>());
+									EncodeResponseValue.encodeTyped(parsed.info, body, diagnostics, value,
+											new HashSet<>());
 								} finally {
 									EncodeResponseValue.shouldExpandListNodes = true;
 								}

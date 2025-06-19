@@ -16,6 +16,7 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
     highlightMsg,
     tracing,
     html,
+    nodeContainer,
   }
   private static final Type[] typeValues = Type.values();
 
@@ -59,8 +60,11 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
         this.value = new Tracing(src);
         break;
     case html:
-    default:
         this.value = src.readUTF();
+        break;
+    case nodeContainer:
+    default:
+        this.value = new NodeContainer(src);
         break;
     }
   }
@@ -74,6 +78,7 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
   public static RpcBodyLine fromHighlightMsg(HighlightableMessage val) { return new RpcBodyLine(Type.highlightMsg, val); }
   public static RpcBodyLine fromTracing(Tracing val) { return new RpcBodyLine(Type.tracing, val); }
   public static RpcBodyLine fromHtml(String val) { return new RpcBodyLine(Type.html, val); }
+  public static RpcBodyLine fromNodeContainer(NodeContainer val) { return new RpcBodyLine(Type.nodeContainer, val); }
 
   public boolean isPlain() { return type == Type.plain; }
   public String asPlain() { if (type != Type.plain) { throw new IllegalStateException("This RpcBodyLine is not of type plain, it is '" + type + "'"); } return (String)value; }
@@ -95,6 +100,8 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
   public Tracing asTracing() { if (type != Type.tracing) { throw new IllegalStateException("This RpcBodyLine is not of type tracing, it is '" + type + "'"); } return (Tracing)value; }
   public boolean isHtml() { return type == Type.html; }
   public String asHtml() { if (type != Type.html) { throw new IllegalStateException("This RpcBodyLine is not of type html, it is '" + type + "'"); } return (String)value; }
+  public boolean isNodeContainer() { return type == Type.nodeContainer; }
+  public NodeContainer asNodeContainer() { if (type != Type.nodeContainer) { throw new IllegalStateException("This RpcBodyLine is not of type nodeContainer, it is '" + type + "'"); } return (NodeContainer)value; }
 
   public static RpcBodyLine fromJSON(JSONObject obj) {
     final Type type;
@@ -165,10 +172,17 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
         throw new org.json.JSONException("Not a valid RpcBodyLine", e);
       }
     case html:
-    default:
       try {
         final String val = obj.getString("value");
         return fromHtml(val);
+      } catch (org.json.JSONException e) {
+        throw new org.json.JSONException("Not a valid RpcBodyLine", e);
+      }
+    case nodeContainer:
+    default:
+      try {
+        final NodeContainer val = NodeContainer.fromJSON(obj.getJSONObject("value"));
+        return fromNodeContainer(val);
       } catch (org.json.JSONException e) {
         throw new org.json.JSONException("Not a valid RpcBodyLine", e);
       }
@@ -206,8 +220,11 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
       ret.put("value", ((Tracing)value).toJSON());
       break;
     case html:
-    default:
       ret.put("value", ((String)value));
+      break;
+    case nodeContainer:
+    default:
+      ret.put("value", ((NodeContainer)value).toJSON());
       break;
     }
     return ret;
@@ -246,8 +263,11 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
       ((Tracing)value).writeTo(dst);
       break;
     case html:
-    default:
       dst.writeUTF(((String)value));
+      break;
+    case nodeContainer:
+    default:
+      ((NodeContainer)value).writeTo(dst);
       break;
     }
   }

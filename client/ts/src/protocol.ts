@@ -162,6 +162,10 @@ interface NestedTest {
   expectedOutput: RpcBodyLine[];
   nestedProperties: NestedTest[];
 }
+interface NodeContainer {
+  node: NodeLocator;
+  body?: RpcBodyLine;
+}
 interface NodeLocator {
   result: TALStep;
   steps: NodeLocatorStep[];
@@ -261,6 +265,7 @@ type RpcBodyLine = (
   | { type: 'highlightMsg'; value: HighlightableMessage; }
   | { type: 'tracing'; value: Tracing; }
   | { type: 'html'; value: string; }
+  | { type: 'nodeContainer'; value: NodeContainer; }
 );
 interface StopJobReq {
   type: "Concurrent:StopJob";
@@ -433,6 +438,7 @@ export {
  , ListedTreeNode
  , LongPollResponse
  , NestedTest
+ , NodeContainer
  , NodeLocator
  , NodeLocatorStep
  , NullableNodeLocator

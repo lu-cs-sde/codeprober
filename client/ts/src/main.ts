@@ -51,6 +51,21 @@ const doMain = (wsPort: number
   if (!settings.shouldEnableTesting()) {
     uiElements.showTests.style.display = 'none';
   }
+  document.onmousemove = e => {
+    document.body.style.setProperty('--mouse-x', (e.pageX + 8) + "px");
+    document.body.style.setProperty('--mouse-y', (e.pageY + 8) + "px");
+
+    const isHoveringLeftSideOfScreen = e.pageX < window.innerWidth * 2 / 3;
+    // console.log('stuff:', e.screenX, window.outerWidth)
+    document.body.style.setProperty('--hover-diag-left', isHoveringLeftSideOfScreen ? ((e.pageX + 8) + 'px') : 'unset');
+    document.body.style.setProperty('--hover-diag-right', isHoveringLeftSideOfScreen ? 'unset' : (window.innerWidth - e.pageX + 8) + 'px');
+
+    const isHoveringUpperSideOfScreen = e.pageY < window.innerHeight * 2 / 3;
+    document.body.style.setProperty('--hover-diag-top', isHoveringUpperSideOfScreen ? ((e.pageY + 8) + 'px') : 'unset');
+    document.body.style.setProperty('--hover-diag-bottom', isHoveringUpperSideOfScreen ? 'unset' : (window.innerHeight - e.pageY + 8) + 'px');
+    // repositionTooltips(editor);
+  }
+
 
   // window.addEventListener("keydown", function (event) {
   //   console.log('keydown:', event.ctrlKey, event.metaKey, ':', event.key)

@@ -7,7 +7,7 @@ import createTextSpanIndicator from './create/createTextSpanIndicator';
 import registerNodeSelector from './create/registerNodeSelector';
 import displayArgModal from './popup/displayArgModal';
 import displayAttributeModal from './popup/displayAttributeModal';
-import { searchProbePropertyName } from './popup/displayProbeModal';
+import { prettyPrintProbePropertyName, searchProbePropertyName } from './popup/displayProbeModal';
 import formatAttr, { formatAttrArgList } from './popup/formatAttr';
 import startEndToSpan from './startEndToSpan';
 import trimTypeName from './trimTypeName';
@@ -35,6 +35,8 @@ const renderProbeModalTitleLeft = (
   if (attr.name === searchProbePropertyName) {
     const propName = attr.args?.[0]?.value ?? '';
     headAttr.innerText = `.*.${propName}`;
+  } else if (attr.name === prettyPrintProbePropertyName) {
+    headAttr.innerText = `->PrettyPrint`;
   } else if (!attr.args || attr.args.length === 0) {
     headAttr.innerText = `.${formatAttr(attr)}`;
   } else {
