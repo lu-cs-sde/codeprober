@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 # tail to remove startup message (Starting server, version ...)
 java \

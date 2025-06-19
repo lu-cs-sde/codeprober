@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -e
 
 LIBS=libs/json.jar:libs/junit-4.13.2.jar:libs/hamcrest-2.2.jar
