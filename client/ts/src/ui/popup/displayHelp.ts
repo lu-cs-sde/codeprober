@@ -33,6 +33,7 @@ const getHelpTitle = (type: HelpType) => ({
   'textprobe-style': 'TextProbe styles',
   'ast': 'AST',
   'test-code-vs-codeprober-code': 'Test code vs CodeProber code',
+  'auto-shorten-property-names': 'Auto Shorten Property Names',
 })[type];
 
 const getHelpContents = (type: HelpType): (string|HTMLElement)[] => {
@@ -748,6 +749,20 @@ aspect MagicOutputDemo {
           `• Clicking 'Open Probe' will open the probe corresponding to the test.`,
           `'Open Probe' is only available if the CodeProber code matches the test code.`,
         ];
+      }
+      case 'auto-shorten-property-names': {
+        const reg = document.createElement('div');
+        reg.innerText = `/^.*?([\\w\\d\\$_]+)$/`;
+        reg.style.marginLeft = '1rem';
+        return [
+          `CodeProber supports multiple styles of language implementations, which in turn have different ways to identify properties. Implementations that are built using JastAdd use Java method names as identifiers for properties. Other implementations may rely on "labelled" properties instead, and those labels are any arbitrary strings. Such strings may be very long, and not necessarily user friendly.`,
+          ``,
+          `If this box is selected then CodeProber will try to automatically shorten property names. More specifically, it shows group 1 in the regex:`,
+          ``,
+          reg,
+          ``,
+          `If more than one property would shorten to the same value in a list of properties, then the full name is shown instead.`,
+        ]
       }
   }
 }

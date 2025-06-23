@@ -2,7 +2,7 @@ import createLoadingSpinner from "../create/createLoadingSpinner";
 import createModalTitle from "../create/createModalTitle";
 import displayProbeModal, { prettyPrintProbePropertyName, searchProbePropertyName } from "./displayProbeModal";
 import displayArgModal from "./displayArgModal";
-import formatAttr from "./formatAttr";
+import { formatAttrArgStr, formatAttrBaseName } from "./formatAttr";
 import createTextSpanIndicator from "../create/createTextSpanIndicator";
 import displayHelp from "./displayHelp";
 import settings from "../../settings";
@@ -13,6 +13,7 @@ import ModalEnv from '../../model/ModalEnv';
 import { Property, ListPropertiesReq, ListPropertiesRes, RpcBodyLine } from '../../protocol';
 import startEndToSpan from '../startEndToSpan';
 import UpdatableNodeLocator from '../../model/UpdatableNodeLocator';
+import { installLazyHoverDialog } from '../create/installLazyHoverDialog';
 
 interface OptionalArgs {
   initialFilter?: string;
@@ -129,6 +130,19 @@ const displayAttributeModal = (
       } else {
 
         let attrs = state.attrs;
+        const attrCounts: { [fullName: string]: number } = {};
+        attrs.forEach((a) => {
+          const shortName = formatAttrBaseName(a.name);
+          attrCounts[shortName] = (attrCounts[shortName] ?? 0) + 1;
+        });
+        const doFormatAttr = (attr: Property, allowShortening = true) => {
+          const prefix = formatAttrBaseName(attr.name, allowShortening);
+          const suffix = formatAttrArgStr(attr.args);
+          if (attrCounts[prefix] > 1) {
+            return `${formatAttrBaseName(attr.name, false)}${suffix}`;
+          }
+          return `${prefix}${suffix}`;
+        }
         const groupByAspect = settings.shouldGroupPropertiesByAspect();
         if (groupByAspect && attrs) {
           attrs = [...attrs].sort((a, b) => {
@@ -140,9 +154,11 @@ const displayAttributeModal = (
             }
             if (a.aspect) {
               const cmp = a.aspect.localeCompare(b.aspect || '', 'en-GB')
-              return cmp || formatAttr(a).localeCompare(formatAttr(b), 'en-GB');
+              if (cmp) {
+                return cmp;
+              }
             }
-            return 0;
+            return doFormatAttr(a).localeCompare(doFormatAttr(b), 'en-GB');
           });
         }
         let resortList = () => {};
@@ -204,7 +220,7 @@ const displayAttributeModal = (
             if (!reg) {
               return !!attr.astChildName;
             }
-            const combinedName = `${(groupByAspect ? (attr.aspect || 'No Aspect') : '')} ${attr.astChildName || ''} ${formatAttr(attr)}`;
+            const combinedName = `${(groupByAspect ? (attr.aspect || 'No Aspect') : '')} ${attr.astChildName || ''} ${doFormatAttr(attr)}`;
             return reg.test(combinedName);
           }
 
@@ -266,7 +282,22 @@ const displayAttributeModal = (
             if (highlight) {
               node.classList.add('bg-syntax-attr-dim');
             }
-            node.appendChild(document.createTextNode(formatAttr(attr)));
+            const shortFmt = doFormatAttr(attr);
+            const txtNode = document.createElement('span');
+            txtNode.innerText = shortFmt;
+            node.appendChild(txtNode);
+
+            const longFmt = doFormatAttr(attr, false);
+            if (shortFmt != longFmt) {
+              installLazyHoverDialog({
+                elem: node,
+                init: (dialog) => {
+                  dialog.classList.add('modalWindowColoring');
+                  dialog.style.padding = '0.25rem';
+                  dialog.innerText = longFmt;
+                },
+              });
+            }
 
             node.onclick = () => showProbe(attr);
             node.onkeydown = (e) => {

@@ -23,7 +23,10 @@ class UIElements {
   get showAllPropertiesHelpButton() { return document.getElementById('show-all-properties-help') as HTMLButtonElement; }
 
   get groupPropertiesByAspectCheckbox() { return document.getElementById('control-group-properties-by-aspect') as HTMLInputElement; }
-  get groupPropertiesByAspectButton() { return document.getElementById('group-properties-by-aspect-help') as HTMLButtonElement; }
+  get groupPropertiesByAspectHelpButton() { return document.getElementById('group-properties-by-aspect-help') as HTMLButtonElement; }
+
+  get autoShortenPropertyNamesCheckbox() { return document.getElementById('control-auto-shorten-property-names') as HTMLInputElement; }
+  get autoShortenPropertyNamesHelpButton() { return document.getElementById('auto-shorten-property-names-help') as HTMLButtonElement; }
 
   get duplicateProbeCheckbox() { return document.getElementById('control-duplicate-probe-on-attr') as HTMLInputElement; }
   get duplicateProbeHelpButton() { return document.getElementById('duplicate-probe-on-attr-help') as HTMLButtonElement; }

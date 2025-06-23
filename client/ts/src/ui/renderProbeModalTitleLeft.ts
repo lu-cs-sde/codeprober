@@ -2,13 +2,15 @@ import ModalEnv from '../model/ModalEnv';
 import UpdatableNodeLocator from '../model/UpdatableNodeLocator';
 import { NestedWindows } from '../model/WindowState';
 import { Property } from '../protocol';
+import settings from '../settings';
 import { StickyHighlightController } from './create/createStickyHighlightController';
 import createTextSpanIndicator from './create/createTextSpanIndicator';
+import { installLazyHoverDialog } from './create/installLazyHoverDialog';
 import registerNodeSelector from './create/registerNodeSelector';
 import displayArgModal from './popup/displayArgModal';
 import displayAttributeModal from './popup/displayAttributeModal';
 import { prettyPrintProbePropertyName, searchProbePropertyName } from './popup/displayProbeModal';
-import formatAttr, { formatAttrArgList } from './popup/formatAttr';
+import formatAttr, { formatAttrArgList, formatAttrBaseName } from './popup/formatAttr';
 import startEndToSpan from './startEndToSpan';
 import trimTypeName from './trimTypeName';
 
@@ -32,18 +34,36 @@ const renderProbeModalTitleLeft = (
 
   const headAttr = document.createElement('span');
   headAttr.classList.add('syntax-attr');
+  let maybeInstallUnshorteningPopup = false;
   if (attr.name === searchProbePropertyName) {
     const propName = attr.args?.[0]?.value ?? '';
     headAttr.innerText = `.*.${propName}`;
   } else if (attr.name === prettyPrintProbePropertyName) {
     headAttr.innerText = `->PrettyPrint`;
-  } else if (!attr.args || attr.args.length === 0) {
+  } else if (!attr.args?.length) {
     headAttr.innerText = `.${formatAttr(attr)}`;
+    maybeInstallUnshorteningPopup = true;
   } else {
     headAttr.appendChild(document.createTextNode(`.${attr.name}(`));
     formatAttrArgList(headAttr, attr);
     headAttr.appendChild(document.createTextNode(`)`));
+    maybeInstallUnshorteningPopup = true;
   }
+  if (maybeInstallUnshorteningPopup && settings.shouldAutoShortenPropertyNames()) {
+    const short = formatAttrBaseName(attr.name, true);
+    const long = formatAttrBaseName(attr.name, false);
+    if (short != long) {
+      installLazyHoverDialog({
+        elem: headAttr,
+        init: (dialog) => {
+          dialog.classList.add('modalWindowColoring');
+          dialog.style.padding = '0.25rem';
+          dialog.innerText = long;
+        },
+      });
+    }
+  }
+
   if (env) {
     headAttr.onmousedown = (e) => { e.stopPropagation(); }
     headAttr.classList.add('clickHighlightOnHover');

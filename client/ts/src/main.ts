@@ -422,6 +422,7 @@ const doMain = (wsPort: number
       setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings.shouldDuplicateProbeOnAttrClick(), cb => settings.setShouldDuplicateProbeOnAttrClick(cb));
       setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings.shouldShowAllProperties(), cb => settings.setShouldShowAllProperties(cb));
       setupSimpleCheckbox(uiElements.groupPropertiesByAspectCheckbox, settings.shouldGroupPropertiesByAspect(), cb => settings.setShouldGroupPropertiesByAspect(cb));
+      setupSimpleCheckbox(uiElements.autoShortenPropertyNamesCheckbox, settings.shouldAutoShortenPropertyNames(), cb => settings.setShouldAutoShortenPropertyNames(cb));
 
       const setupSimpleSelector = (input: HTMLSelectElement, initial: string, update: (val: string) => void) => {
         input.value = initial;
@@ -689,12 +690,13 @@ const doMain = (wsPort: number
           case 'main-args-override': return common('main-args-override', uiElements.mainArgsOverrideHelpButton);
           case 'customize-file-suffix':  return common('customize-file-suffix', uiElements.customFileSuffixHelpButton);
           case 'show-all-properties': return common('show-all-properties', uiElements.showAllPropertiesHelpButton)
-          case 'group-properties-by-aspect': return common('group-properties-by-aspect', uiElements.groupPropertiesByAspectButton)
+          case 'group-properties-by-aspect': return common('group-properties-by-aspect', uiElements.groupPropertiesByAspectHelpButton)
           case 'duplicate-probe-on-attr': return common('duplicate-probe-on-attr', uiElements.duplicateProbeHelpButton)
           case 'capture-stdout': return common('capture-stdout', uiElements.captureStdoutHelpButton);
           case 'capture-traces': return common('capture-traces', uiElements.captureTracesHelpButton);
           case 'location-style': return common('location-style', uiElements.locationStyleHelpButton);
           case 'textprobe-style': return common('textprobe-style', uiElements.textprobeStyleHelpButton);
+          case 'auto-shorten-property-names': return common('auto-shorten-property-names', uiElements.autoShortenPropertyNamesHelpButton);
           default: return console.error('Unknown help type', type);
         }
       }

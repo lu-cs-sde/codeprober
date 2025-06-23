@@ -98,7 +98,6 @@ const prepareEncodeRpcNodeContainer = (args: {
         && inliner.type === 'arr'
         && inliner.value.length === 1
         && inliner.value[0].type === 'nodeContainer'
-        // && inliner.value[0].value.body
       ) {
       // Inline multiple steps into one
       const joiner = document.createElement('span');

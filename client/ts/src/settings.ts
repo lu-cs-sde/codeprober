@@ -23,6 +23,7 @@ interface Settings {
   textProbeStyle?: TextProbeStyle | null;
   hideSettingsPanel?: boolean;
   groupPropertiesByAspect?: boolean;
+  autoShortenPropertyNames?: boolean;
   activeWorkspacePath?: string;
   shouldRerunWorkspaceTestsOnChange?: boolean;
 }
@@ -159,6 +160,9 @@ const settings = {
 
   shouldGroupPropertiesByAspect: () => settings.get()?.groupPropertiesByAspect ?? false,
   setShouldGroupPropertiesByAspect: (shouldHide: boolean) => settings.set({ ...settings.get(), groupPropertiesByAspect: shouldHide }),
+
+  shouldAutoShortenPropertyNames: () => settings.get()?.autoShortenPropertyNames ?? true,
+  setShouldAutoShortenPropertyNames: (autoShortenPropertyNames: boolean) => settings.set({ ...settings.get(), autoShortenPropertyNames }),
 
   getActiveWorkspacePath: () => settings.get()?.activeWorkspacePath ?? null,
   setActiveWorkspacePath: (activeWorkspacePath: string) => settings.set({ ...settings.get(), activeWorkspacePath }),

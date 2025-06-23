@@ -6,6 +6,7 @@ import { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
 import evaluateProperty from '../../network/evaluateProperty';
 import { Diagnostic, NodeLocator, Property, RpcBodyLine, StopJobReq, StopJobRes } from '../../protocol';
 import displayProbeModal, { prettyPrintProbePropertyName, searchProbePropertyName } from '../popup/displayProbeModal';
+import { formatAttrBaseName } from '../popup/formatAttr';
 import startEndToSpan from '../startEndToSpan';
 import registerOnHover from './registerOnHover';
 
@@ -196,7 +197,7 @@ const createMinimizedProbeModal = (
     : (
       property.name == prettyPrintProbePropertyName
         ? '->PrettyPrint'
-        : property.name
+        : formatAttrBaseName(property.name)
     )
     ;
 

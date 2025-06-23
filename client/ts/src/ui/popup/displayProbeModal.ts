@@ -44,7 +44,6 @@ const displayProbeModal = (
   const stickyController = createStickyHighlightController(env, optionalArgs.stickyHighlight ?? '');
   let activelyLoadingJob: OngoingPropertyEvaluation | null = null;
   let loading = false;
-  let isCleanedUp = false;
   nestedWindows = {...nestedWindows}; // Make copy so we can locally modify it
 
   const reinstallDiagnosticsGetter = () => {
@@ -109,7 +108,6 @@ const displayProbeModal = (
 
   const cleanup = () => {
     queryWindow.remove();
-    isCleanedUp = true;
     delete env.onChangeListeners[queryId];
     delete env.probeMarkers[queryId];
     delete env.probeWindowStateSavers[queryId];

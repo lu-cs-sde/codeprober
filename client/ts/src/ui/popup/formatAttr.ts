@@ -1,4 +1,5 @@
 import { Property, PropertyArg } from '../../protocol';
+import settings from '../../settings';
 
 const formatAttrType = (orig: PropertyArg) => {
   switch (orig.type) {
@@ -10,11 +11,29 @@ const formatAttrType = (orig: PropertyArg) => {
   }
 };
 
-const formatAttr = (attr: Property) => `${attr.name.startsWith('l:') ? attr.name.slice(2) : attr.name}${(
-  attr.args
-    ? `(${attr.args.map(a => formatAttrType(a)).join(', ')})`
+const formatAttrBaseName = (name: string, allowShortening = true) => {
+  let prefix = name.startsWith('l:') ? name.slice(2) : name;
+  if (allowShortening && settings.shouldAutoShortenPropertyNames()) {
+    const reg = /^.*?([\w\d\$_]+)$/;
+    const match = prefix.match(reg);
+    if (match) {
+      prefix = match[1];
+    }
+  }
+  return prefix;
+};
+const formatAttrArgStr = (args: PropertyArg[] | undefined) => {
+  return args?.length
+    ? `(${args.map(a => formatAttrType(a)).join(', ')})`
     : ''
-)}`;
+    ;
+}
+
+const formatAttr = (attr: Property) => {
+  const prefix = formatAttrBaseName(attr.name);
+  const suffix = formatAttrArgStr(attr.args);
+  return `${prefix}${suffix}`;
+}
 
 const formatAttrArgList = (target: HTMLElement, attr: Property) => {
   attr.args?.forEach((arg, argIdx) => {
@@ -69,5 +88,5 @@ const formatAttrArgList = (target: HTMLElement, attr: Property) => {
   });
 }
 
-export { formatAttrType, formatAttrArgList };
+export { formatAttrBaseName, formatAttrType, formatAttrArgList, formatAttrArgStr };
 export default formatAttr;

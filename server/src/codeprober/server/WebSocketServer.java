@@ -160,8 +160,8 @@ public class WebSocketServer {
 	}
 
 	static void handleRequestWithPreparsedData(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,
-			Function<ClientRequest, JSONObject> onQuery, AtomicBoolean connectionIsAlive, String data, SessionLogger logger)
-			throws IOException, NoSuchAlgorithmException {
+			Function<ClientRequest, JSONObject> onQuery, AtomicBoolean connectionIsAlive, String data,
+			SessionLogger logger) throws IOException, NoSuchAlgorithmException {
 		final InputStream in = socket.getInputStream();
 		final OutputStream out = socket.getOutputStream();
 

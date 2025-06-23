@@ -9,7 +9,6 @@ import displayAttributeModal from "./displayAttributeModal";
 import { graphviz as d3 } from 'dependencies/graphviz/graphviz';
 import { assertUnreachable } from '../../hacks';
 import startEndToSpan from '../startEndToSpan';
-import { installLazyHoverDialog } from '../create/installLazyHoverDialog';
 import prepareEncodeRpcNodeContainer from './prepareEncodeRpcNodeContainer';
 
 const getCommonStreamArgWhitespacePrefix = (line: RpcBodyLine): number => {
