@@ -3,12 +3,12 @@ set -e
 
 echo "Building dummy version of server, needed for protocol"
 cd server
-sh build.sh
+./build.sh
 cd -
 
 echo "Building protocol"
 cd protocol
-sh build.sh
+./build.sh
 cd -
 
 echo "Building client"
@@ -19,7 +19,7 @@ cd -
 
 echo "Building real server & CodeProber jar"
 cd server
-sh build.sh
+./build.sh
 cd -
 
 echo "Done"

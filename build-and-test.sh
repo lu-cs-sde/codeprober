@@ -1,7 +1,7 @@
 a
 echo "Building"
 touch DUMMY_FILE_TO_FORCE_DEV_BUILD
-sh build.sh
+./build.sh
 if [ "$?" -ne "0" ]; then
   rm DUMMY_FILE_TO_FORCE_DEV_BUILD
   echo "Build failed"
@@ -14,7 +14,7 @@ echo "Build success"
 # -------------------------
 # Test normal JUnit tests
 cd server
-sh test.sh
+./test.sh
 if [ "$?" -ne "0" ]; then
   echo "Server unit tests failed"
   exit 1
@@ -56,7 +56,7 @@ check_expected_outcome
 
 echo "Running AddNum workspace-based test suite"
 cd addnum
-sh check-expected-test-output.sh
+./check-expected-test-output.sh
 if [ "$?" -ne "0" ]; then
   exit 1
 fi

@@ -2,7 +2,7 @@
 
 set -e
 
-CPR_VERSION="${GITHUB_REF/refs\/tags\//}" bash build-and-test.sh
+CPR_VERSION="${GITHUB_REF/refs\/tags\//}" ./build-and-test.sh
 
 UPLOAD_URL="${ASSETS_URL/api.github.com/uploads.github.com}"
 

@@ -2,7 +2,6 @@ package codeprober.locator;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +45,7 @@ public class DataDrivenListTree {
 						ListedTreeChildNode.fromPlaceholder(node.getNumChildren(info)));
 			} else {
 				final List<ListedTreeNode> children = new ArrayList<>();
-				final Map<Object, String> underlyingAstNodeToName = new HashMap<>();
+				final Map<Object, String> underlyingAstNodeToName = new IdentityHashMap<>();
 				for (Method m : node.underlyingAstNode.getClass().getMethods()) {
 					if (m.getParameterCount() != 0) {
 						continue;
@@ -125,9 +124,7 @@ public class DataDrivenListTree {
 				// Normal downwards listing would not follow this edge. We must do it ourselves
 				ListedTreeNode obj = listDownwardsWithInjects(info, swt.target, swt.step.asNta().property.name,
 						budget + 1, forceExploreAndInjects);
-//				obj.put("type", "fn");
-//				obj.put("name", edge.toJson().getJSONObject("value").getString("name"));
-				final ArrayList<ListedTreeNode> extraChildren = new ArrayList<>();
+				final List<ListedTreeNode> extraChildren = new ArrayList<>();
 				extraChildren.add(obj);
 				forceExploreAndInjects.put(swt.source.underlyingAstNode, extraChildren);
 				budget = 1;
