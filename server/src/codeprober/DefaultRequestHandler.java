@@ -160,8 +160,11 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			throw new RuntimeException("Exiting due to unknown position representation");
 		}
 
-		final AstInfo info = new AstInfo(astNode, posRecovery, positionRepresentation,
-				TypeIdentificationStyle.parse(System.getProperty("CPR.TYPE_IDENTIFICATION_STYLE")));
+		final AstInfo info = new AstInfo(astNode, posRecovery, positionRepresentation, TypeIdentificationStyle.parse(
+				// Primarily read from lowercase system property
+				System.getProperty("cpr.type_identification_style",
+						// Upper case (old version) as fallback
+						System.getProperty("CPR.TYPE_IDENTIFICATION_STYLE"))));
 		lastInfo = info;
 		return info;
 	}

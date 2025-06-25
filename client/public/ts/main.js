@@ -16805,6 +16805,11 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
                         if (!newContent) {
                             continue;
                         }
+                        if (workspace.cachedFiles[path]) {
+                            // New data was produced simultaneously as we fetched the contents.
+                            // Ignore this change notification, a more up-to-date notification will come soon.
+                            continue;
+                        }
                         if (prevContent.contents !== newContent.contents) {
                             anyChange = true;
                             if (path === activeFile) {
