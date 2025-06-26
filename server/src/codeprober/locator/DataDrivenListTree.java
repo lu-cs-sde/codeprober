@@ -117,19 +117,21 @@ public class DataDrivenListTree {
 							continue;
 						}
 						final AstNode extraParent = extraNode.parent();
+						final String trimmedExtra = extra.startsWith("l:") ? extra.substring(2) : extra;
 						if (extraParent != null && extraParent.underlyingAstNode == node.underlyingAstNode
 								&& !normalChildren.containsKey(extraVal)) {
 							// Local NTA/HOA.
-							children.add(new ListedTreeNode(extraLoc, extra, ListedTreeChildNode.fromPlaceholder(0)));
+							children.add(
+									new ListedTreeNode(extraLoc, trimmedExtra, ListedTreeChildNode.fromPlaceholder(0)));
 						} else {
 							// Remote reference
 							if (remoteRefs == null) {
 								remoteRefs = new ArrayList<>();
 							}
 							// Inject the property name in the "label" of the node locator
-							remoteRefs.add(new NodeLocator(new TALStep(extraLoc.result.type,
-									extra.startsWith("l:") ? extra.substring(2) : extra, extraLoc.result.start,
-									extraLoc.result.end, extraLoc.result.depth), extraLoc.steps));
+							remoteRefs.add(new NodeLocator(new TALStep(extraLoc.result.type, trimmedExtra,
+									extraLoc.result.start, extraLoc.result.end, extraLoc.result.depth),
+									extraLoc.steps));
 						}
 					} catch (InvokeProblem ip) {
 						System.err.println("Failed invoking 'extra' AST reference " + extra);

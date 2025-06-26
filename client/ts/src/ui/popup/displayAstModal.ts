@@ -11,6 +11,7 @@ import ModalEnv from '../../model/ModalEnv';
 import { ListedTreeNode, ListTreeReq, ListTreeRes, NodeLocator, RpcBodyLine } from '../../protocol';
 import startEndToSpan from '../startEndToSpan';
 import UpdatableNodeLocator, { createMutableLocator } from '../../model/UpdatableNodeLocator';
+import { formatAttrBaseName } from './formatAttr';
 
 interface Point { x: number; y: number }
 type LocatorStr = string;
@@ -432,22 +433,31 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
 
             // ctx.fillStyle = `black`;
             let fonth = (nodeh * 0.5)|0;
+            let renderedName = node.name;
             renderText: while (true) {
               ctx.font = `${fonth}px sans`;
               const typeTail = (node.locator.result.label ?? node.locator.result.type).split('\.').slice(-1)[0];
 
               const txty = rendery + (nodeh - (nodeh-fonth)*0.5);
-              if (node.name) {
+              if (renderedName) {
                 const typeTailMeasure = ctx.measureText(`: ${typeTail}`);
-                const nameMeasure = ctx.measureText(node.name);
+                const nameMeasure = ctx.measureText(renderedName);
                 const totalW = nameMeasure.width + typeTailMeasure.width;
-                if (totalW > nodew && fonth > 16) {
-                  fonth = Math.max(16, fonth * 0.9 | 0);
-                  continue renderText;
+                if (totalW > nodew) {
+                  if (fonth > 16) {
+                    fonth = Math.max(16, fonth * 0.9 | 0);
+                    continue renderText;
+                  }
+                  // Else, try shorten the name
+                  const shorterName = formatAttrBaseName(renderedName);
+                  if (shorterName !== renderedName) {
+                    renderedName = shorterName;
+                    continue renderText;
+                  }
                 }
                 const txtx = renderx + (nodew - totalW)/2;
                 ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable');
-                ctx.fillText(node.name, txtx, txty);
+                ctx.fillText(renderedName, txtx, txty);
                 ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
                 // dark: 4EC9B0
                 ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
@@ -640,7 +650,8 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                 const fonth = (nodeh * 0.3)|0;
                 const boxh = fonth * 1.25;
                 ctx.font = `${fonth}px sans`;
-                const measure = ctx.measureText(rem.lbl);
+                const trimmed = formatAttrBaseName(rem.lbl);
+                const measure = ctx.measureText(trimmed);
 
                 ctx.translate(distance / 2, 0);
                 switch (pointDir) {
@@ -658,7 +669,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
 
                 ctx.fillStyle = getThemedColor(lightTheme, 'syntax-attr')
                 const txty = (fonth - (boxh-fonth)*0.5);
-                ctx.fillText(rem.lbl, 0, txty);
+                ctx.fillText(trimmed, 0, txty);
 
 
                 ctx.restore();

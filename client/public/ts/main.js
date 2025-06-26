@@ -9351,7 +9351,7 @@ define("ui/create/createStickyHighlightController", ["require", "exports", "ui/s
     };
     exports.default = createStickyHighlightController;
 });
-define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_4, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, startEndToSpan_5, UpdatableNodeLocator_4) {
+define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator", "ui/popup/formatAttr"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_4, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, startEndToSpan_5, UpdatableNodeLocator_4, formatAttr_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
@@ -9740,21 +9740,30 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                             }
                             // ctx.fillStyle = `black`;
                             let fonth = (nodeh * 0.5) | 0;
+                            let renderedName = node.name;
                             renderText: while (true) {
                                 ctx.font = `${fonth}px sans`;
                                 const typeTail = ((_a = node.locator.result.label) !== null && _a !== void 0 ? _a : node.locator.result.type).split('\.').slice(-1)[0];
                                 const txty = rendery + (nodeh - (nodeh - fonth) * 0.5);
-                                if (node.name) {
+                                if (renderedName) {
                                     const typeTailMeasure = ctx.measureText(`: ${typeTail}`);
-                                    const nameMeasure = ctx.measureText(node.name);
+                                    const nameMeasure = ctx.measureText(renderedName);
                                     const totalW = nameMeasure.width + typeTailMeasure.width;
-                                    if (totalW > nodew && fonth > 16) {
-                                        fonth = Math.max(16, fonth * 0.9 | 0);
-                                        continue renderText;
+                                    if (totalW > nodew) {
+                                        if (fonth > 16) {
+                                            fonth = Math.max(16, fonth * 0.9 | 0);
+                                            continue renderText;
+                                        }
+                                        // Else, try shorten the name
+                                        const shorterName = (0, formatAttr_2.formatAttrBaseName)(renderedName);
+                                        if (shorterName !== renderedName) {
+                                            renderedName = shorterName;
+                                            continue renderText;
+                                        }
                                     }
                                     const txtx = renderx + (nodew - totalW) / 2;
                                     ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable');
-                                    ctx.fillText(node.name, txtx, txty);
+                                    ctx.fillText(renderedName, txtx, txty);
                                     ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
                                     // dark: 4EC9B0
                                     ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
@@ -9938,7 +9947,8 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                     const fonth = (nodeh * 0.3) | 0;
                                     const boxh = fonth * 1.25;
                                     ctx.font = `${fonth}px sans`;
-                                    const measure = ctx.measureText(rem.lbl);
+                                    const trimmed = (0, formatAttr_2.formatAttrBaseName)(rem.lbl);
+                                    const measure = ctx.measureText(trimmed);
                                     ctx.translate(distance / 2, 0);
                                     switch (pointDir) {
                                         case 'up':
@@ -9953,7 +9963,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                     ctx.strokeRect(-measure.width / 4, 0, measure.width * 1.5, boxh);
                                     ctx.fillStyle = getThemedColor(lightTheme, 'syntax-attr');
                                     const txty = (fonth - (boxh - fonth) * 0.5);
-                                    ctx.fillText(rem.lbl, 0, txty);
+                                    ctx.fillText(trimmed, 0, txty);
                                     ctx.restore();
                                 });
                             }
@@ -10088,7 +10098,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     };
     exports.default = displayAstModal;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan", "ui/create/installLazyHoverDialog"], function (require, exports, createLoadingSpinner_2, createModalTitle_3, displayProbeModal_2, displayArgModal_1, formatAttr_2, createTextSpanIndicator_4, displayHelp_2, settings_3, encodeRpcBodyLines_2, trimTypeName_4, displayAstModal_1, startEndToSpan_6, installLazyHoverDialog_2) {
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan", "ui/create/installLazyHoverDialog"], function (require, exports, createLoadingSpinner_2, createModalTitle_3, displayProbeModal_2, displayArgModal_1, formatAttr_3, createTextSpanIndicator_4, displayHelp_2, settings_3, encodeRpcBodyLines_2, trimTypeName_4, displayAstModal_1, startEndToSpan_6, installLazyHoverDialog_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
@@ -10208,14 +10218,14 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                     const attrCounts = {};
                     attrs.forEach((a) => {
                         var _a;
-                        const shortName = (0, formatAttr_2.formatAttrBaseName)(a.name);
+                        const shortName = (0, formatAttr_3.formatAttrBaseName)(a.name);
                         attrCounts[shortName] = ((_a = attrCounts[shortName]) !== null && _a !== void 0 ? _a : 0) + 1;
                     });
                     const doFormatAttr = (attr, allowShortening = true) => {
-                        const prefix = (0, formatAttr_2.formatAttrBaseName)(attr.name, allowShortening);
-                        const suffix = (0, formatAttr_2.formatAttrArgStr)(attr.args);
+                        const prefix = (0, formatAttr_3.formatAttrBaseName)(attr.name, allowShortening);
+                        const suffix = (0, formatAttr_3.formatAttrArgStr)(attr.args);
                         if (attrCounts[prefix] > 1) {
-                            return `${(0, formatAttr_2.formatAttrBaseName)(attr.name, false)}${suffix}`;
+                            return `${(0, formatAttr_3.formatAttrBaseName)(attr.name, false)}${suffix}`;
                         }
                         return `${prefix}${suffix}`;
                     };
@@ -13152,7 +13162,7 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "ui/create/cr
     };
     exports.default = displayTestAdditionModal;
 });
-define("ui/renderProbeModalTitleLeft", ["require", "exports", "settings", "ui/create/createTextSpanIndicator", "ui/create/installLazyHoverDialog", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, settings_6, createTextSpanIndicator_6, installLazyHoverDialog_3, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_6, displayProbeModal_4, formatAttr_3, startEndToSpan_8, trimTypeName_5) {
+define("ui/renderProbeModalTitleLeft", ["require", "exports", "settings", "ui/create/createTextSpanIndicator", "ui/create/installLazyHoverDialog", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, settings_6, createTextSpanIndicator_6, installLazyHoverDialog_3, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_6, displayProbeModal_4, formatAttr_4, startEndToSpan_8, trimTypeName_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     settings_6 = __importDefault(settings_6);
@@ -13160,7 +13170,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "settings", "ui/cr
     registerNodeSelector_3 = __importDefault(registerNodeSelector_3);
     displayArgModal_2 = __importDefault(displayArgModal_2);
     displayAttributeModal_6 = __importDefault(displayAttributeModal_6);
-    formatAttr_3 = __importStar(formatAttr_3);
+    formatAttr_4 = __importStar(formatAttr_4);
     startEndToSpan_8 = __importDefault(startEndToSpan_8);
     trimTypeName_5 = __importDefault(trimTypeName_5);
     const renderProbeModalTitleLeft = (env, container, close, getWindowPos, stickyController, locator, attr, nested, typeRenderingStyle) => {
@@ -13182,18 +13192,18 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "settings", "ui/cr
             headAttr.innerText = `->PrettyPrint`;
         }
         else if (!((_e = attr.args) === null || _e === void 0 ? void 0 : _e.length)) {
-            headAttr.innerText = `.${(0, formatAttr_3.default)(attr)}`;
+            headAttr.innerText = `.${(0, formatAttr_4.default)(attr)}`;
             maybeInstallUnshorteningPopup = true;
         }
         else {
             headAttr.appendChild(document.createTextNode(`.${attr.name}(`));
-            (0, formatAttr_3.formatAttrArgList)(headAttr, attr);
+            (0, formatAttr_4.formatAttrArgList)(headAttr, attr);
             headAttr.appendChild(document.createTextNode(`)`));
             maybeInstallUnshorteningPopup = true;
         }
         if (maybeInstallUnshorteningPopup && settings_6.default.shouldAutoShortenPropertyNames()) {
-            const short = (0, formatAttr_3.formatAttrBaseName)(attr.name, true);
-            const long = (0, formatAttr_3.formatAttrBaseName)(attr.name, false);
+            const short = (0, formatAttr_4.formatAttrBaseName)(attr.name, true);
+            const long = (0, formatAttr_4.formatAttrBaseName)(attr.name, false);
             if (short != long) {
                 (0, installLazyHoverDialog_3.installLazyHoverDialog)({
                     elem: headAttr,
@@ -13426,7 +13436,7 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
     };
     exports.default = createInlineWindowManager;
 });
-define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/create/registerOnHover"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_6, evaluateProperty_2, displayProbeModal_5, formatAttr_4, startEndToSpan_9, registerOnHover_5) {
+define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/create/registerOnHover"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_6, evaluateProperty_2, displayProbeModal_5, formatAttr_5, startEndToSpan_9, registerOnHover_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.createDiagnosticSource = void 0;
@@ -13595,7 +13605,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
             ? `*.${(_d = (_c = property.args) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.value}`
             : (property.name == displayProbeModal_5.prettyPrintProbePropertyName
                 ? '->PrettyPrint'
-                : (0, formatAttr_4.formatAttrBaseName)(property.name));
+                : (0, formatAttr_5.formatAttrBaseName)(property.name));
         if (locator.steps.length === 0 && property.name == displayProbeModal_5.searchProbePropertyName) {
             // Hide title?
             typeLbl.style.display = 'none';
