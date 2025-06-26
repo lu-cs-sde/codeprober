@@ -317,7 +317,8 @@ public class AstNode {
 				return true;
 			}
 		}
-		return false;
+		final List<String> extras = extraAstReferences(info);
+		return extras != null && !extras.isEmpty();
 	}
 
 	public boolean shouldBeVisibleInAstView() {
@@ -473,7 +474,7 @@ public class AstNode {
 				} else if (override instanceof Object[]) {
 					final String[] cast = (String[]) override;
 					return Arrays.asList(cast);
-				} else {
+				} else if (override != null) {
 					System.out.println("'" + mth + "' is expected to be a collection or String array, got " + override);
 				}
 			} catch (InvokeProblem e) {
@@ -482,7 +483,29 @@ public class AstNode {
 			}
 		}
 		return Collections.emptyList();
+	}
 
+	public List<String> extraAstReferences(AstInfo info) {
+		final String mth = "cpr_extraAstReferences";
+		if (info.hasOverride0(underlyingAstNode.getClass(), mth)) {
+			try {
+				final Object override = Reflect.invoke0(underlyingAstNode, mth);
+				if (override instanceof Collection<?>) {
+					@SuppressWarnings("unchecked")
+					final Collection<String> cast = (Collection<String>) override;
+					return new ArrayList<String>(cast);
+				} else if (override instanceof Object[]) {
+					final String[] cast = (String[]) override;
+					return Arrays.asList(cast);
+				} else if (override != null) {
+					System.out.println("'" + mth + "' is expected to be a collection or String array, got " + override);
+				}
+			} catch (InvokeProblem e) {
+				System.out.println("Error when evaluating " + mth);
+				e.printStackTrace();
+			}
+		}
+		return Collections.emptyList();
 	}
 
 	public boolean hasProperty(AstInfo info, String propName) {

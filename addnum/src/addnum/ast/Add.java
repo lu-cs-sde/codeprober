@@ -1,6 +1,7 @@
 package addnum.ast;
 
 import java.io.PrintStream;
+import java.util.List;
 
 import addnum.ast.ASTNodeAnnotation.Attribute;
 import addnum.ast.ASTNodeAnnotation.Child;
@@ -13,12 +14,12 @@ public class Add extends Node {
 		addChild(rhs);
 	}
 
-	@Child(name="lhs")
+	@Child(name = "lhs")
 	public Node lhs() {
 		return getChild(0);
 	}
 
-	@Child(name="rhs")
+	@Child(name = "rhs")
 	public Node rhs() {
 		return getChild(1);
 	}
@@ -29,7 +30,8 @@ public class Add extends Node {
 	}
 
 	private Node asNum_value = null;
-	@Attribute
+
+	@Attribute(isNTA = true)
 	public Node asNum() {
 		if (asNum_value == null) {
 			asNum_value = new Num(0, 0, value());
@@ -47,7 +49,7 @@ public class Add extends Node {
 		out.append(")");
 	}
 
-  public String cpr_ppInfix(int idx) {
-    return " + ";
-  }
+	public String cpr_ppInfix(int idx) {
+		return " + ";
+	}
 }

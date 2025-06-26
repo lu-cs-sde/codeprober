@@ -57,6 +57,13 @@ public abstract class Node implements Iterable<Node> {
 		return children.get(idx);
 	}
 
+	public Program program() {
+		if (this instanceof Program) {
+			return (Program)this;
+		}
+		return parent.program(); // "Should never crash", as the topmost parent is always a Program node.
+	}
+
 	@Override
 	public Iterator<Node> iterator() {
 		return children.iterator();

@@ -15,6 +15,7 @@ import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.data.ListedTreeChildNode;
 import codeprober.protocol.data.ListedTreeNode;
 import codeprober.protocol.data.NodeLocator;
+import codeprober.protocol.data.TALStep;
 
 public class DataDrivenListTree {
 
@@ -83,11 +84,14 @@ public class DataDrivenListTree {
 						}
 					}
 				}
+				final Map<Object, Boolean> normalChildren = new IdentityHashMap<>();
+
 				for (AstNode child : node.getChildren(info)) {
 					if (!child.shouldBeVisibleInAstView()
 							&& !nodesToForceExploreAndAddExtraChildren.containsKey(child.underlyingAstNode)) {
 						continue;
 					}
+					normalChildren.put(child.underlyingAstNode, true);
 					children.add(
 							listDownwardsWithInjects(info, child, underlyingAstNodeToName.get(child.underlyingAstNode),
 									budget - 1, nodesToForceExploreAndAddExtraChildren));
@@ -95,8 +99,43 @@ public class DataDrivenListTree {
 				if (extraChildren != null) {
 					children.addAll(extraChildren);
 				}
-//				ent.put("children", children);
-				return new ListedTreeNode(locator, name, ListedTreeChildNode.fromChildren(children));
+
+				List<NodeLocator> remoteRefs = null;
+				for (String extra : node.extraAstReferences(info)) {
+					try {
+						Object extraVal = Reflect.invoke0(node.underlyingAstNode, extra);
+						if (extraVal == null) {
+							continue;
+						}
+						if (!info.baseAstClazz.isInstance(extraVal)) {
+							System.err.println("Expected AST node from extra AST reference '" + "', got: " + extraVal);
+							continue;
+						}
+						final AstNode extraNode = new AstNode(extraVal);
+						final NodeLocator extraLoc = CreateLocator.fromNode(info, extraNode);
+						if (extraLoc == null) {
+							continue;
+						}
+						final AstNode extraParent = extraNode.parent();
+						if (extraParent != null && extraParent.underlyingAstNode == node.underlyingAstNode
+								&& !normalChildren.containsKey(extraVal)) {
+							// Local NTA/HOA.
+							children.add(new ListedTreeNode(extraLoc, extra, ListedTreeChildNode.fromPlaceholder(0)));
+						} else {
+							// Remote reference
+							if (remoteRefs == null) {
+								remoteRefs = new ArrayList<>();
+							}
+							// Inject the property name in the "label" of the node locator
+							remoteRefs
+									.add(new NodeLocator(new TALStep(extraLoc.result.type, extra, extraLoc.result.start,
+											extraLoc.result.end, extraLoc.result.depth), extraLoc.steps));
+						}
+					} catch (InvokeProblem ip) {
+						System.err.println("Failed invoking 'extra' AST reference " + extra);
+					}
+				}
+				return new ListedTreeNode(locator, name, ListedTreeChildNode.fromChildren(children), remoteRefs);
 			}
 		}
 

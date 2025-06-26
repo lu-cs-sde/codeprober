@@ -428,6 +428,10 @@ define("ui/create/attachDragToX", ["require", "exports"], function (require, exp
         const refreshPos = (newX, newY) => onUpdate(newX !== null && newX !== void 0 ? newX : 0, newY !== null && newY !== void 0 ? newY : 0);
         let mouse = { down: false, x: 0, y: 0 };
         element.onmousedown = (e) => {
+            if (e.button) {
+                // Not the left button, ignore
+                return;
+            }
             setCurrentMouseDown(mouse);
             // e.preventDefault();
             e.stopPropagation();
@@ -440,6 +444,10 @@ define("ui/create/attachDragToX", ["require", "exports"], function (require, exp
             onBegin(e);
         };
         const onMouseMove = (e) => {
+            if (e.button) {
+                // Not the left button, ignore
+                return;
+            }
             if (mouse.down) {
                 let dx = e.pageX - mouse.x;
                 let dy = e.pageY - mouse.y;
@@ -450,6 +458,10 @@ define("ui/create/attachDragToX", ["require", "exports"], function (require, exp
         };
         document.addEventListener('mousemove', onMouseMove);
         element.onmouseup = (e) => {
+            if (e.button) {
+                // Not the left button, ignore
+                return;
+            }
             mouse.down = false;
             onFinishedMove === null || onFinishedMove === void 0 ? void 0 : onFinishedMove();
         };
@@ -9383,6 +9395,39 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
             height: (_e = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.height) !== null && _e !== void 0 ? _e : 0,
         };
         let resetTranslationOnRender = !initialTransform;
+        const mapListedToNodeCache = {};
+        const placeholderLoadAutoStarts = {};
+        const locatorToStr = (loc) => loc.steps.map(step => {
+            var _a;
+            switch (step.type) {
+                case 'child': return step.value;
+                case 'nta':
+                    if (!((_a = step.value.property.args) === null || _a === void 0 ? void 0 : _a.length)) {
+                        return step.value.property.name;
+                    }
+                    break;
+                default:
+                    break;
+            }
+            return JSON.stringify(step);
+        }).join(' > ');
+        const mapListedToNode = (src) => {
+            var _a, _b;
+            const ret = ({
+                type: src.type,
+                locator: src.locator,
+                name: src.name,
+                children: src.children.type === 'children'
+                    ? src.children.value.map(mapListedToNode)
+                    : 'placeholder',
+                placeholderLoadStared: false,
+                locatorStr: locatorToStr(src.locator),
+                remoteRefs: (_b = (_a = src.remotes) === null || _a === void 0 ? void 0 : _a.map(loc => { var _a; return ({ loc: locatorToStr(loc), lbl: (_a = loc.result.label) !== null && _a !== void 0 ? _a : loc.result.type }); })) !== null && _b !== void 0 ? _b : [],
+            });
+            mapListedToNodeCache[ret.locatorStr] = ret;
+            return ret;
+        };
+        const permanentHovers = {};
         const popup = env.showWindow({
             pos: modalPos,
             size: (initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.width) && (initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.height) ? {
@@ -9411,7 +9456,6 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
             render: (root, { bringToFront }) => {
                 while (root.firstChild)
                     root.firstChild.remove();
-                // root.innerText = 'Loading..';
                 if (!extraArgs.hideTitleBar) {
                     root.appendChild((0, createModalTitle_2.default)({
                         shouldAutoCloseOnWorkspaceSwitch: true,
@@ -9489,8 +9533,19 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     wrapper.style.flexGrow = '1';
                     wrapper.style.minWidth = '4rem';
                     wrapper.style.minHeight = '4rem';
-                    // wrapper.style.width = '100vw';
-                    // wrapper.style.height = '100vh';
+                    const resetBtn = document.createElement('div');
+                    const resetText = document.createElement('span');
+                    resetText.innerText = 'Reset View';
+                    resetBtn.appendChild(resetText);
+                    resetBtn.style.display = 'none';
+                    resetBtn.classList.add('ast-view-reset-btn');
+                    resetBtn.onclick = () => {
+                        trn.scale = 1;
+                        trn.x = (1920 - rootBox.x) / 2;
+                        trn.y = 0;
+                        renderFrame();
+                    };
+                    wrapper.appendChild(resetBtn);
                     root.appendChild(wrapper);
                     const ctx = cv.getContext('2d');
                     if (!ctx) {
@@ -9519,6 +9574,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     };
                     const dragInfo = { x: trn.x, y: trn.y }; // , sx: 1, sy: 1 };
                     let hoverClick = 'no';
+                    let holdingShift = false;
                     (0, attachDragToX_3.default)(cv, (e) => {
                         bringToFront();
                         dragInfo.x = trn.x;
@@ -9527,6 +9583,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         lastClick.x = w.x;
                         lastClick.y = w.y;
                         hoverClick = 'maybe';
+                        holdingShift = e.shiftKey;
                         // dragInfo.sx = 1920 / cv.clientWidth;
                         // dragInfo.sy = 1080 / cv.clientHeight;
                     }, (dx, dy) => {
@@ -9573,7 +9630,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     let hover = null;
                     let hasActiveSpanHighlight = false;
                     cv.addEventListener('mousemove', e => {
-                        hover = clientToWorld({ x: e.offsetX, y: e.offsetY });
+                        hover = { ...clientToWorld({ x: e.offsetX, y: e.offsetY }), ogx: e.offsetX, ogy: e.offsetY };
                         hoverClick = 'no';
                         renderFrame();
                     });
@@ -9595,9 +9652,10 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                             return node.boundingBox;
                         }
                         let bb = { x: nodew, y: nodeh };
-                        if (Array.isArray(node.children)) {
+                        node.boundingBox = bb;
+                        const measureChildren = (children) => {
                             let childW = 0;
-                            node.children.forEach((child, childIdx) => {
+                            children.forEach((child, childIdx) => {
                                 const childBox = measureBoundingBox(child);
                                 if (childIdx >= 1) {
                                     childW += nodepadx;
@@ -9606,8 +9664,10 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 bb.y = Math.max(bb.y, nodeh + nodepady + childBox.y);
                             });
                             bb.x = Math.max(bb.x, childW);
+                        };
+                        if (Array.isArray(node.children)) {
+                            measureChildren(node.children);
                         }
-                        node.boundingBox = bb;
                         return bb;
                     };
                     const rootBox = measureBoundingBox(rootNode);
@@ -9616,6 +9676,8 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         trn.scale = 1;
                         trn.x = (1920 - rootBox.x) / 2;
                         trn.y = 0;
+                        trn.width = root.clientWidth;
+                        trn.height = root.clientHeight;
                     }
                     const renderFrame = () => {
                         const w = cv.width;
@@ -9627,12 +9689,16 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         ctx.scale(trn.scale, getScaleY());
                         cv.style.cursor = 'default';
                         let didHighlightSomething = false;
+                        const hoveredNode = { tgt: undefined };
                         const renderNode = (node, ox, oy) => {
-                            var _a, _b;
+                            var _a;
                             const nodeBox = measureBoundingBox(node);
                             const renderx = ox + (nodeBox.x - nodew) / 2;
                             const rendery = oy;
+                            node.renderx = renderx;
+                            node.rendery = rendery;
                             if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
+                                hoveredNode.tgt = node;
                                 ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
                                 cv.style.cursor = 'pointer';
                                 const { start, end, external } = node.locator.result;
@@ -9646,14 +9712,24 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 }
                                 if (hoverClick === 'yes') {
                                     hoverClick = 'no';
-                                    (0, displayAttributeModal_4.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_4.createMutableLocator)(node.locator));
+                                    if (holdingShift) {
+                                        if (permanentHovers[node.locatorStr]) {
+                                            delete permanentHovers[node.locatorStr];
+                                        }
+                                        else {
+                                            permanentHovers[node.locatorStr] = true;
+                                        }
+                                    }
+                                    else {
+                                        (0, displayAttributeModal_4.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_4.createMutableLocator)(node.locator));
+                                    }
                                 }
                             }
                             else {
                                 ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
                             }
                             ctx.fillRect(renderx, rendery, nodew, nodeh);
-                            ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                            ctx.strokeStyle = getThemedColor(lightTheme, (permanentHovers[node.locatorStr] && node.remoteRefs.length) ? 'syntax-attr' : 'separator');
                             if (node.locator.steps.length > 0 && node.locator.steps[node.locator.steps.length - 1].type === 'nta') {
                                 ctx.setLineDash([5, 5]);
                                 ctx.strokeRect(renderx, rendery, nodew, nodeh);
@@ -9694,60 +9770,193 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 }
                                 break;
                             }
-                            if (!Array.isArray(node.children)) {
-                                if (((_b = node.children) === null || _b === void 0 ? void 0 : _b.type) == 'placeholder') {
-                                    // More children available
-                                    // console.log('placeholder:', node.children);
-                                    const msg = `᠁`;
-                                    const fonth = (nodeh * 0.5) | 0;
-                                    ctx.font = `${fonth}px sans`;
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'separator');
-                                    const cx = renderx + nodew / 2;
-                                    const cy = rendery + nodeh + nodepady + fonth;
-                                    ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
-                                    ctx.beginPath();
-                                    ctx.moveTo(cx, rendery + nodeh);
-                                    ctx.lineTo(cx, cy - fonth);
-                                    ctx.stroke();
-                                    if (hover && Math.hypot(cx - hover.x, cy - hover.y) < fonth) {
-                                        ctx.strokeStyle = 'cyan';
-                                        cv.style.cursor = 'pointer';
-                                        if (hoverClick == 'yes') {
-                                            hoverClick = 'no';
-                                            displayAstModal(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_4.createMutableLocator)(node.locator), 'downwards');
-                                        }
+                            const renderChildren = (children) => {
+                                let childOffX = 0;
+                                const childOffY = nodeh + nodepady;
+                                children.forEach((child, childIdx) => {
+                                    const chbb = measureBoundingBox(child);
+                                    if (childIdx >= 1) {
+                                        childOffX += nodepadx;
                                     }
-                                    const msgMeasure = ctx.measureText(msg);
-                                    ctx.fillText(msg, renderx + (nodew - msgMeasure.width) / 2, cy + fonth * 0.33);
+                                    renderNode(child, ox + childOffX, oy + childOffY);
+                                    ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                                    ctx.lineWidth = 2;
                                     ctx.beginPath();
-                                    ctx.arc(cx, cy, fonth, 0, Math.PI * 2);
+                                    ctx.moveTo(renderx + nodew / 2, rendery + nodeh);
+                                    const paddedBottomY = rendery + nodeh + nodepady * 0.5;
+                                    ctx.lineTo(renderx + nodew / 2, paddedBottomY);
+                                    const chx = ox + childOffX + chbb.x / 2;
+                                    ctx.arcTo(chx, paddedBottomY, chx, oy + childOffY, nodepady / 2);
+                                    ctx.lineTo(chx, oy + childOffY);
                                     ctx.stroke();
-                                }
-                                return;
+                                    ctx.lineWidth = 1;
+                                    childOffX += chbb.x;
+                                });
+                            };
+                            if (Array.isArray(node.children)) {
+                                renderChildren(node.children);
                             }
-                            let childOffX = 0;
-                            const childOffY = nodeh + nodepady;
-                            node.children.forEach((child, childIdx) => {
-                                const chbb = measureBoundingBox(child);
-                                if (childIdx >= 1) {
-                                    childOffX += nodepadx;
-                                }
-                                renderNode(child, ox + childOffX, oy + childOffY);
+                            else { // Placeholder
+                                const locStr = node.locatorStr;
+                                const msg = `...`;
+                                const fonth = (nodeh * 0.5) | 0;
+                                ctx.font = `${fonth}px sans`;
+                                ctx.fillStyle = getThemedColor(lightTheme, 'separator');
+                                const cx = renderx + nodew / 2;
+                                const cy = rendery + nodeh + nodepady + fonth;
                                 ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
-                                ctx.lineWidth = 2;
-                                ctx.beginPath(); // Start a new path
-                                ctx.moveTo(renderx + nodew / 2, rendery + nodeh);
-                                const paddedBottomY = rendery + nodeh + nodepady * 0.5;
-                                ctx.lineTo(renderx + nodew / 2, paddedBottomY);
-                                // ctx.lineTo(ox + childOffX + chbb.x / 2, oy + childOffY); // Draw a line to (150, 100)
-                                const chx = ox + childOffX + chbb.x / 2;
-                                // ctx.bezierCurveTo()
-                                ctx.arcTo(chx, paddedBottomY, chx, oy + childOffY, nodepady / 2);
-                                ctx.lineTo(chx, oy + childOffY);
-                                ctx.stroke(); // Render the path
-                                ctx.lineWidth = 1;
-                                childOffX += chbb.x;
-                            });
+                                ctx.beginPath();
+                                ctx.moveTo(cx, rendery + nodeh);
+                                ctx.lineTo(cx, cy - fonth);
+                                ctx.stroke();
+                                const loadExtras = () => {
+                                    placeholderLoadAutoStarts[locStr] = true;
+                                    node.placeholderLoadStared = true;
+                                    setTimeout(renderFrame);
+                                    console.log('loading extras for', node.locatorStr);
+                                    env.performTypedRpc({
+                                        locator: node.locator,
+                                        src: env.createParsingRequestData(),
+                                        type: 'ListTreeDownwards'
+                                    }).then(res => {
+                                        if (res.node) {
+                                            const mapped = mapListedToNode(res.node);
+                                            node.children = mapped.children;
+                                            node.remoteRefs = mapped.remoteRefs;
+                                            const flushBox = (n) => {
+                                                delete n.boundingBox;
+                                                if (Array.isArray(n.children)) {
+                                                    n.children.forEach(flushBox);
+                                                }
+                                            };
+                                            flushBox(rootNode);
+                                            measureBoundingBox(rootNode);
+                                            setTimeout(renderFrame);
+                                        }
+                                        else {
+                                            console.warn('Failed expanding node..');
+                                        }
+                                    });
+                                };
+                                if (node.placeholderLoadStared) {
+                                    // Already clicked
+                                    ctx.strokeStyle = 'orange';
+                                }
+                                else if (placeholderLoadAutoStarts[node.locatorStr]) {
+                                    loadExtras();
+                                    ctx.strokeStyle = 'orange';
+                                }
+                                else if (hover && Math.hypot(cx - hover.x, cy - hover.y) < fonth) {
+                                    ctx.strokeStyle = 'cyan';
+                                    cv.style.cursor = 'pointer';
+                                    if (hoverClick == 'yes') {
+                                        hoverClick = 'no';
+                                        loadExtras();
+                                        // displayAstModal(env.getGlobalModalEnv(), null, createMutableLocator(node.locator), 'downwards');
+                                    }
+                                }
+                                const msgMeasure = ctx.measureText(msg);
+                                ctx.fillText(msg, renderx + (nodew - msgMeasure.width) / 2, cy + fonth * 0.33);
+                                ctx.beginPath();
+                                ctx.arc(cx, cy, fonth, 0, Math.PI * 2);
+                                ctx.stroke();
+                            }
+                        };
+                        const determineLineAttachPos = (node, otherNode) => {
+                            var _a, _b, _c, _d, _e, _f;
+                            const diffX = ((_a = otherNode.renderx) !== null && _a !== void 0 ? _a : 0) - ((_b = node.renderx) !== null && _b !== void 0 ? _b : 0);
+                            const diffY = ((_c = otherNode.rendery) !== null && _c !== void 0 ? _c : 0) - ((_d = node.rendery) !== null && _d !== void 0 ? _d : 0);
+                            let px = (_e = node.renderx) !== null && _e !== void 0 ? _e : 0;
+                            let py = (_f = node.rendery) !== null && _f !== void 0 ? _f : 0;
+                            if (diffX > 1) {
+                                px += nodew;
+                            }
+                            else if (diffX < -1) {
+                                // No change
+                            }
+                            else {
+                                px += nodew / 2;
+                            }
+                            if (diffY > 1) {
+                                py += nodeh;
+                            }
+                            else if (diffY < -1) {
+                                // No change
+                            }
+                            else {
+                                py += nodeh / 2;
+                            }
+                            // console.log('attach between', node.locatorStr, 'and', otherNode.locatorStr, '::', px, py, '; diff:', diffX, diffY);
+                            return { x: px, y: py };
+                        };
+                        const renderRemoteRefs = (from) => {
+                            if (from.renderx !== undefined && from.rendery !== undefined) {
+                                from.remoteRefs.forEach(rem => {
+                                    const tgt = mapListedToNodeCache[rem.loc];
+                                    if ((tgt === null || tgt === void 0 ? void 0 : tgt.renderx) === undefined || (tgt === null || tgt === void 0 ? void 0 : tgt.rendery) === undefined) {
+                                        // Node has not been rendered yet
+                                        return;
+                                    }
+                                    const fromPos = determineLineAttachPos(from, tgt);
+                                    const toPos = determineLineAttachPos(tgt, from);
+                                    ctx.strokeStyle = getThemedColor(lightTheme, 'syntax-attr');
+                                    ctx.lineWidth = 3;
+                                    ctx.setLineDash([5, 5]);
+                                    ctx.beginPath();
+                                    ctx.moveTo(fromPos.x, fromPos.y);
+                                    ctx.lineTo(toPos.x, toPos.y);
+                                    ctx.stroke();
+                                    ctx.setLineDash([]);
+                                    ctx.lineWidth = 1;
+                                    ctx.save();
+                                    let angle = Math.atan2(toPos.y - fromPos.y, toPos.x - fromPos.x);
+                                    if (angle > 0) {
+                                        angle -= Math.PI * 2;
+                                    }
+                                    const distance = Math.hypot(toPos.y - fromPos.y, toPos.x - fromPos.x);
+                                    const quart = Math.PI / 4;
+                                    let pointDir = 'right';
+                                    if (angle < -quart && angle >= -quart * 3) {
+                                        pointDir = 'up';
+                                    }
+                                    else if (angle < -quart * 3 && angle >= -quart * 5) {
+                                        pointDir = 'left';
+                                    }
+                                    else if (angle < -quart * 5 && angle >= -quart * 7) {
+                                        pointDir = 'down';
+                                    }
+                                    switch (pointDir) {
+                                        case 'up':
+                                        case 'left':
+                                            ctx.translate(toPos.x, toPos.y);
+                                            ctx.rotate(angle + Math.PI);
+                                            break;
+                                        default:
+                                            ctx.translate(fromPos.x, fromPos.y);
+                                            ctx.rotate(angle);
+                                    }
+                                    const fonth = (nodeh * 0.3) | 0;
+                                    const boxh = fonth * 1.25;
+                                    ctx.font = `${fonth}px sans`;
+                                    const measure = ctx.measureText(rem.lbl);
+                                    ctx.translate(distance / 2, 0);
+                                    switch (pointDir) {
+                                        case 'up':
+                                        case 'down':
+                                            ctx.rotate(-Math.PI / 2);
+                                            break;
+                                    }
+                                    ctx.translate(-measure.width / 2, -boxh / 2);
+                                    ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
+                                    ctx.fillRect(-measure.width / 4, 0, measure.width * 1.5, boxh);
+                                    ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                                    ctx.strokeRect(-measure.width / 4, 0, measure.width * 1.5, boxh);
+                                    ctx.fillStyle = getThemedColor(lightTheme, 'syntax-attr');
+                                    const txty = (fonth - (boxh - fonth) * 0.5);
+                                    ctx.fillText(rem.lbl, 0, txty);
+                                    ctx.restore();
+                                });
+                            }
                         };
                         renderNode(rootNode, 0, 32);
                         if (!didHighlightSomething) {
@@ -9755,6 +9964,38 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 hasActiveSpanHighlight = false;
                                 env.updateSpanHighlight(null);
                             }
+                        }
+                        if (hoveredNode.tgt) {
+                            renderRemoteRefs(hoveredNode.tgt);
+                        }
+                        Object.entries(permanentHovers).forEach(([key, val]) => {
+                            if (val) {
+                                const perm = mapListedToNodeCache[key];
+                                if (perm && perm !== hoveredNode.tgt) {
+                                    renderRemoteRefs(perm);
+                                }
+                            }
+                        });
+                        let showOOB = false;
+                        if (rootNode.boundingBox) {
+                            const insetX = nodew;
+                            const insetY = nodeh;
+                            const oobTestTopLeft = clientToWorld({ x: 0, y: 0 });
+                            if (oobTestTopLeft.x > rootNode.boundingBox.x - insetX || oobTestTopLeft.y > rootNode.boundingBox.y - insetY) {
+                                showOOB = true;
+                            }
+                            else {
+                                const oobTestBotRight = clientToWorld({ x: trn.width, y: trn.height });
+                                if (oobTestBotRight.x < insetX || oobTestBotRight.y < insetY) {
+                                    showOOB = true;
+                                }
+                            }
+                        }
+                        if (showOOB) {
+                            resetBtn.style.display = 'block';
+                        }
+                        else {
+                            resetBtn.style.display = 'none';
                         }
                     };
                     renderFrame();
@@ -9817,15 +10058,8 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                 if (result.locator) {
                     locator.set(result.locator);
                 }
-                const mapNode = (src) => ({
-                    type: src.type,
-                    locator: src.locator,
-                    name: src.name,
-                    children: src.children.type === 'children'
-                        ? src.children.value.map(mapNode)
-                        : { type: 'placeholder', num: src.children.value },
-                });
-                state = { type: 'ok', data: mapNode(parsed) };
+                Object.keys(mapListedToNodeCache).forEach(k => delete mapListedToNodeCache[k]);
+                state = { type: 'ok', data: mapListedToNode(parsed) };
                 popup.refresh();
             })
                 .catch(err => {

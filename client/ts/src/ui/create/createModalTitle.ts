@@ -86,7 +86,7 @@ const createModalTitle = (args: CreateModalTitleArgs) => {
   if (onClose) {
     const closeButton = document.createElement('div');
     closeButton.classList.add('modalCloseButton');
-    if (args.shouldAutoCloseOnWorkspaceSwitch) {
+    if (args.shouldAutoCloseOnWorkspaceSwitch) {
       closeButton.classList.add('auto-click-on-workspace-switch');
     }
     const textHolder = document.createElement('span');

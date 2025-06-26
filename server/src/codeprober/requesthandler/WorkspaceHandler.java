@@ -33,7 +33,7 @@ import codeprober.protocol.data.WorkspaceEntry;
 public class WorkspaceHandler {
 
 	public static final String METADATA_DIR_NAME = ".cpr";
-	private static boolean debugApiFailureReasons = true;
+	private static boolean debugApiFailureReasons = false;
 
 	private static Pattern getWorkspaceFilePattern() {
 		final String custom = System.getProperty("cpr.workspaceFilePattern");

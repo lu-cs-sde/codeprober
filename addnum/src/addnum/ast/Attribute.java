@@ -6,7 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 interface ASTNodeAnnotation {
 	@Retention(RetentionPolicy.RUNTIME)
 	@interface Attribute {
-		boolean isNTA() default true;
+		boolean isNTA() default false;
 	}
 
 	@Retention(RetentionPolicy.RUNTIME)

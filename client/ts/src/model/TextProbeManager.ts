@@ -1,6 +1,6 @@
 import { assertUnreachable } from '../hacks';
 
-import { ListPropertiesReq, ListPropertiesRes, NodeLocator, ParsingRequestData, ParsingSource, RpcBodyLine, TALStep } from '../protocol';
+import { ListPropertiesReq, ListPropertiesRes, NodeLocator, ParsingSource, RpcBodyLine, TALStep } from '../protocol';
 import settings from '../settings';
 import { lastKnownMousePos } from '../ui/create/attachDragToX';
 import displayAttributeModal from '../ui/popup/displayAttributeModal';

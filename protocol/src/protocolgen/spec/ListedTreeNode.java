@@ -5,4 +5,5 @@ public class ListedTreeNode extends Streamable {
 	public final Object locator = NodeLocator.class;
 	public final Object name = opt(String.class);
 	public final Object children = ListedTreeChildNode.class;
+	public final Object remotes = opt(arr(NodeLocator.class));
 }

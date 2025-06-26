@@ -48,4 +48,16 @@ public class Program extends Node {
 
 		return ret;
 	}
+
+	public List<String> cpr_extraAstReferences() {
+    return java.util.Arrays.asList("leftmostChild");
+	}
+
+  public Object leftmostChild() {
+    Node child = this;
+    while (child.getNumChild() > 0) {
+      child = child.getChild(0);
+    }
+    return child;
+  }
 }

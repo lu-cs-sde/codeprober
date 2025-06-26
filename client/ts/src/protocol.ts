@@ -151,6 +151,7 @@ interface ListedTreeNode {
   locator: NodeLocator;
   name?: string;
   children: ListedTreeChildNode;
+  remotes?: NodeLocator[];
 }
 type LongPollResponse = (
     { type: 'etag'; value: number; }

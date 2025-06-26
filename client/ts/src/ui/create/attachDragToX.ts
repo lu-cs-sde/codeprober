@@ -33,6 +33,10 @@ const attachDragToX = (
 
   let mouse = { down: false, x: 0, y: 0 };
   element.onmousedown = (e) => {
+    if (e.button) {
+      // Not the left button, ignore
+      return;
+    }
     setCurrentMouseDown(mouse);
     // e.preventDefault();
     e.stopPropagation();
@@ -45,6 +49,10 @@ const attachDragToX = (
     onBegin(e);
   };
   const onMouseMove = (e: MouseEvent) => {
+    if (e.button) {
+      // Not the left button, ignore
+      return;
+    }
     if (mouse.down) {
       let dx = e.pageX - mouse.x;
       let dy = e.pageY - mouse.y;
@@ -55,6 +63,10 @@ const attachDragToX = (
   };
   document.addEventListener('mousemove', onMouseMove);
   element.onmouseup = (e) => {
+    if (e.button) {
+      // Not the left button, ignore
+      return;
+    }
     mouse.down = false;
     onFinishedMove?.();
   }
