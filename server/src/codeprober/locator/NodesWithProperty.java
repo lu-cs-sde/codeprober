@@ -80,7 +80,7 @@ public class NodesWithProperty {
 		return ret;
 	}
 
-	private static Object invokePotentiallyLabelled(AstInfo info, AstNode node, String property) {
+	public static Object invokePotentiallyLabelled(AstInfo info, AstNode node, String property) {
 		if (property.startsWith("l:")) {
 			return Reflect.invokeN(node.underlyingAstNode, "cpr_lInvoke", new Class[] {String.class}, new Object[] { property.substring("l:".length()) } );
 		}

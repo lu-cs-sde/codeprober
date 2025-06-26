@@ -103,7 +103,7 @@ public class DataDrivenListTree {
 				List<NodeLocator> remoteRefs = null;
 				for (String extra : node.extraAstReferences(info)) {
 					try {
-						Object extraVal = Reflect.invoke0(node.underlyingAstNode, extra);
+						Object extraVal = NodesWithProperty.invokePotentiallyLabelled(info, node, extra);
 						if (extraVal == null) {
 							continue;
 						}
@@ -127,9 +127,9 @@ public class DataDrivenListTree {
 								remoteRefs = new ArrayList<>();
 							}
 							// Inject the property name in the "label" of the node locator
-							remoteRefs
-									.add(new NodeLocator(new TALStep(extraLoc.result.type, extra, extraLoc.result.start,
-											extraLoc.result.end, extraLoc.result.depth), extraLoc.steps));
+							remoteRefs.add(new NodeLocator(new TALStep(extraLoc.result.type,
+									extra.startsWith("l:") ? extra.substring(2) : extra, extraLoc.result.start,
+									extraLoc.result.end, extraLoc.result.depth), extraLoc.steps));
 						}
 					} catch (InvokeProblem ip) {
 						System.err.println("Failed invoking 'extra' AST reference " + extra);
