@@ -551,22 +551,17 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
         };
         let lastCancelToken = {};
         const contentRoot = document.createElement('div');
-        // contentRoot.classList.add('HELLO-FIND-ME');
         contentRoot.style.overflow = 'auto';
         contentRoot.style.position = 'relative';
         contentRoot.style.top = '0px';
         contentRoot.style.left = '0px';
-        contentRoot.style.maxHeight = '80vh';
-        // contentRoot.style.display = 'contents';
-        // contentRoot.style.minHeight = '4rem';
-        // contentRoot.style.overflow = 'inherit';
-        // contentRoot.style.display = 'contents';
+        const maxHeight = "90vh";
+        contentRoot.style.maxHeight = maxHeight;
         render(contentRoot, { cancelToken: lastCancelToken, bringToFront });
         root.appendChild(contentRoot);
         let reiszeCleanup = null;
         if (resizable) {
             const resizePositioner = document.createElement('div');
-            // resizePositioner.style.position = 'absolute';
             resizePositioner.style.right = '0px';
             resizePositioner.style.bottom = '0px';
             resizePositioner.style.cursor = 'nwse-resize';
@@ -596,7 +591,7 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
                 root.style.width = `${newW}px`;
                 root.style.height = `${newH}px`;
                 root.style.maxWidth = 'fit-content';
-                root.style.maxHeight = 'fit-content';
+                root.style.maxHeight = maxHeight;
                 (_a = args.onOngoingResize) === null || _a === void 0 ? void 0 : _a.call(args);
             }, args.onFinishedResize).cleanup;
         }
@@ -604,7 +599,7 @@ define("ui/create/showWindow", ["require", "exports", "ui/create/attachDragToMov
             root.style.width = `${initialSize.width}px`;
             root.style.height = `${initialSize.height}px`;
             root.style.maxWidth = 'fit-content';
-            root.style.maxHeight = 'fit-content';
+            root.style.maxHeight = maxHeight;
         }
         document.body.appendChild(root);
         const dragToMove = (0, attachDragToMove_1.default)(root, initialPos, args.onFinishedMove);
@@ -9351,7 +9346,195 @@ define("ui/create/createStickyHighlightController", ["require", "exports", "ui/s
     };
     exports.default = createStickyHighlightController;
 });
-define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator", "ui/popup/formatAttr"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_4, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, startEndToSpan_5, UpdatableNodeLocator_4, formatAttr_2) {
+// From https://github.com/llimllib/pymag-trees/blob/9279ff43bdb6321ac336be8871ad3768f8b5e2e3/buchheim.py
+// Initially translated to TypeScript with ChatGPT, some manual changes applied afterwards, such as adding a type parameter to DrawTree.
+define("ui/create/layoutTree", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DrawTree = void 0;
+    ;
+    class DrawTree {
+        constructor(tree, parent = null, depth = 0, number = 1) {
+            this.x = -1.0;
+            this.thread = null;
+            this.mod = 0;
+            this.change = 0;
+            this.shift = 0;
+            this._lmost_sibling = null;
+            this.y = depth;
+            this.tree = tree;
+            this.parent = parent;
+            this.number = number;
+            switch (tree.children.type) {
+                case 'children': {
+                    this.children = (tree.children.type === 'children' ? tree.children.value : []).map((c, i) => new DrawTree(c, this, depth + 1, i + 1));
+                    break;
+                }
+                case 'placeholder': {
+                    // Need to make room for one simulated placeholder child
+                    if (number === -1) {
+                        // ..unless we are the placeholder
+                        this.children = [];
+                    }
+                    else {
+                        this.children = [new DrawTree(tree, this, depth, -1)];
+                    }
+                    break;
+                }
+            }
+            this.ancestor = this;
+        }
+        left() {
+            return this.thread || (this.children.length > 0 ? this.children[0] : null);
+        }
+        right() {
+            return this.thread || (this.children.length > 0 ? this.children[this.children.length - 1] : null);
+        }
+        lbrother() {
+            let n = null;
+            if (this.parent) {
+                for (const node of this.parent.children) {
+                    if (node === this) {
+                        return n;
+                    }
+                    else {
+                        n = node;
+                    }
+                }
+            }
+            return n;
+        }
+        get lmost_sibling() {
+            if (!this._lmost_sibling && this.parent && this !== this.parent.children[0]) {
+                this._lmost_sibling = this.parent.children[0];
+            }
+            return this._lmost_sibling;
+        }
+        toString() {
+            return `${this.tree}: x=${this.x} mod=${this.mod}`;
+        }
+    }
+    exports.DrawTree = DrawTree;
+    function buchheim(tree) {
+        const dt = firstwalk(new DrawTree(tree));
+        const min = second_walk(dt);
+        if (min < 0) {
+            third_walk(dt, -min);
+        }
+        return dt;
+    }
+    function third_walk(tree, n) {
+        tree.x += n;
+        for (const c of tree.children) {
+            third_walk(c, n);
+        }
+    }
+    function firstwalk(v, distance = 1.0) {
+        var _a, _b;
+        if (v.children.length === 0) {
+            if (v.lmost_sibling) {
+                v.x = ((_b = (_a = v.lbrother()) === null || _a === void 0 ? void 0 : _a.x) !== null && _b !== void 0 ? _b : 0) + distance;
+            }
+            else {
+                v.x = 0.0;
+            }
+        }
+        else {
+            let default_ancestor = v.children[0];
+            for (const w of v.children) {
+                firstwalk(w);
+                default_ancestor = apportion(w, default_ancestor, distance);
+            }
+            execute_shifts(v);
+            const midpoint = (v.children[0].x + v.children[v.children.length - 1].x) / 2;
+            const w = v.lbrother();
+            if (w) {
+                v.x = w.x + distance;
+                v.mod = v.x - midpoint;
+            }
+            else {
+                v.x = midpoint;
+            }
+        }
+        return v;
+    }
+    function apportion(v, default_ancestor, distance) {
+        const w = v.lbrother();
+        if (w) {
+            let vir = v, vor = v;
+            let vil = w;
+            let vol = v.lmost_sibling;
+            let sir = v.mod, sor = v.mod;
+            let sil = vil.mod, sol = vol.mod;
+            while (vil.right() && vir.left()) {
+                vil = vil.right();
+                vir = vir.left();
+                vol = vol.left();
+                vor = vor.right();
+                vor.ancestor = v;
+                const shift = (vil.x + sil) - (vir.x + sir) + distance;
+                if (shift > 0) {
+                    move_subtree(ancestor(vil, v, default_ancestor), v, shift);
+                    sir += shift;
+                    sor += shift;
+                }
+                sil += vil.mod;
+                sir += vir.mod;
+                sol += vol.mod;
+                sor += vor.mod;
+            }
+            if (vil.right() && !vor.right()) {
+                vor.thread = vil.right();
+                vor.mod += sil - sor;
+            }
+            else if (vir.left() && !vol.left()) {
+                vol.thread = vir.left();
+                vol.mod += sir - sol;
+            }
+            default_ancestor = v;
+        }
+        return default_ancestor;
+    }
+    function move_subtree(wl, wr, shift) {
+        const subtrees = wr.number - wl.number;
+        const ratio = shift / subtrees;
+        wr.change -= ratio;
+        wr.shift += shift;
+        wl.change += ratio;
+        wr.x += shift;
+        wr.mod += shift;
+    }
+    function execute_shifts(v) {
+        let shift = 0;
+        let change = 0;
+        for (let i = v.children.length - 1; i >= 0; i--) {
+            const w = v.children[i];
+            w.x += shift;
+            w.mod += shift;
+            change += w.change;
+            shift += w.shift + change;
+        }
+    }
+    function ancestor(vil, v, default_ancestor) {
+        return v.parent && v.parent.children.includes(vil.ancestor) ? vil.ancestor : default_ancestor;
+    }
+    function second_walk(v, m = 0, depth = 0, min = null) {
+        v.x += m;
+        v.y = depth;
+        if (min === null || v.x < min) {
+            min = v.x;
+        }
+        for (const w of v.children) {
+            min = second_walk(w, m + v.mod, depth + 1, min);
+        }
+        return min;
+    }
+    function layoutTree(tree) {
+        return buchheim(tree);
+    }
+    exports.default = layoutTree;
+});
+define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator", "ui/popup/formatAttr", "ui/create/layoutTree"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_4, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, startEndToSpan_5, UpdatableNodeLocator_4, formatAttr_2, layoutTree_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
@@ -9364,6 +9547,11 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
     createStickyHighlightController_1 = __importDefault(createStickyHighlightController_1);
     startEndToSpan_5 = __importDefault(startEndToSpan_5);
+    layoutTree_1 = __importDefault(layoutTree_1);
+    const nodew = 256 + 128;
+    const nodeh = 64;
+    const nodepadx = nodew * 0.05;
+    const nodepady = nodeh * 0.75;
     const displayAstModal = (env, modalPos, locator, listDirection, extraArgs = {}) => {
         var _a, _b, _c, _d, _e;
         const queryId = `ast-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -9411,18 +9599,19 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
             }
             return JSON.stringify(step);
         }).join(' > ');
-        const mapListedToNode = (src) => {
+        const mapListedToNode = (drawTreeNode) => {
             var _a, _b;
+            const src = drawTreeNode.tree;
             const ret = ({
-                type: src.type,
-                locator: src.locator,
-                name: src.name,
-                children: src.children.type === 'children'
-                    ? src.children.value.map(mapListedToNode)
-                    : 'placeholder',
+                ltn: src,
+                dtn: drawTreeNode,
                 placeholderLoadStared: false,
+                children: src.children.type === 'children'
+                    ? drawTreeNode.children.map(mapListedToNode)
+                    : 'placeholder',
                 locatorStr: locatorToStr(src.locator),
                 remoteRefs: (_b = (_a = src.remotes) === null || _a === void 0 ? void 0 : _a.map(loc => { var _a; return ({ loc: locatorToStr(loc), lbl: (_a = loc.result.label) !== null && _a !== void 0 ? _a : loc.result.type }); })) !== null && _b !== void 0 ? _b : [],
+                pos: { x: drawTreeNode.x * (nodew + nodepadx), y: drawTreeNode.y * (nodeh + nodepady) },
             });
             mapListedToNodeCache[ret.locatorStr] = ret;
             return ret;
@@ -9438,7 +9627,6 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
             rootStyle: `
       min-width: 24rem;
       min-height: 12rem;
-      80vh;
     `,
             onForceClose: cleanup,
             onFinishedMove: () => {
@@ -9541,8 +9729,8 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     resetBtn.classList.add('ast-view-reset-btn');
                     resetBtn.onclick = () => {
                         trn.scale = 1;
-                        trn.x = (1920 - rootBox.x) / 2;
-                        trn.y = 0;
+                        trn.x = 1920 / 2 - rootNode.pos.x - nodew / 2;
+                        trn.y = nodepady;
                         renderFrame();
                     };
                     wrapper.appendChild(resetBtn);
@@ -9569,7 +9757,12 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         const csy = 1080 / cv.clientHeight;
                         const y = (pt.y * csy - trny) / scaleY;
                         // ((pt.x * 1920 / (cv.clientWidth)) - (trnx)) / scaleX == REF
-                        //
+                        return { x, y };
+                    };
+                    const worldToClient = (pt, trnx = trn.x, trny = trn.y, scaleX = trn.scale, scaleY = getScaleY()) => {
+                        // Opposite equations of clientToWorld
+                        const x = ((pt.x * scaleX + trnx) * cv.clientWidth) / 1920;
+                        const y = ((pt.y * scaleY + trny) * cv.clientHeight) / 1080;
                         return { x, y };
                     };
                     const dragInfo = { x: trn.x, y: trn.y }; // , sx: 1, sy: 1 };
@@ -9642,39 +9835,11 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         }
                         renderFrame();
                     });
-                    const rootNode = state.data;
-                    const nodew = 256 + 128;
-                    const nodeh = 64;
-                    const nodepadx = nodew * 0.05;
-                    const nodepady = nodeh * 0.75;
-                    const measureBoundingBox = (node) => {
-                        if (node.boundingBox) {
-                            return node.boundingBox;
-                        }
-                        let bb = { x: nodew, y: nodeh };
-                        node.boundingBox = bb;
-                        const measureChildren = (children) => {
-                            let childW = 0;
-                            children.forEach((child, childIdx) => {
-                                const childBox = measureBoundingBox(child);
-                                if (childIdx >= 1) {
-                                    childW += nodepadx;
-                                }
-                                childW += childBox.x;
-                                bb.y = Math.max(bb.y, nodeh + nodepady + childBox.y);
-                            });
-                            bb.x = Math.max(bb.x, childW);
-                        };
-                        if (Array.isArray(node.children)) {
-                            measureChildren(node.children);
-                        }
-                        return bb;
-                    };
-                    const rootBox = measureBoundingBox(rootNode);
+                    let rootNode = state.data;
                     if (resetTranslationOnRender) {
                         resetTranslationOnRender = false;
                         trn.scale = 1;
-                        trn.x = (1920 - rootBox.x) / 2;
+                        trn.x = (1920 - rootNode.dtn.x) / 2;
                         trn.y = 0;
                         trn.width = root.clientWidth;
                         trn.height = root.clientHeight;
@@ -9682,6 +9847,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     const renderFrame = () => {
                         const w = cv.width;
                         const h = cv.height;
+                        let numRenders = 0;
                         ctx.resetTransform();
                         ctx.fillStyle = getThemedColor(lightTheme, 'probe-result-area');
                         ctx.fillRect(0, 0, w, h);
@@ -9690,117 +9856,129 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         cv.style.cursor = 'default';
                         let didHighlightSomething = false;
                         const hoveredNode = { tgt: undefined };
-                        const renderNode = (node, ox, oy) => {
+                        const renderNode = (node) => {
                             var _a;
-                            const nodeBox = measureBoundingBox(node);
-                            const renderx = ox + (nodeBox.x - nodew) / 2;
-                            const rendery = oy;
-                            node.renderx = renderx;
-                            node.rendery = rendery;
-                            if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
-                                hoveredNode.tgt = node;
-                                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
-                                cv.style.cursor = 'pointer';
-                                const { start, end, external } = node.locator.result;
-                                if (start && end && !external) {
-                                    didHighlightSomething = true;
-                                    hasActiveSpanHighlight = true;
-                                    env.updateSpanHighlight({
-                                        lineStart: (start >>> 12), colStart: (start & 0xFFF),
-                                        lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
-                                    });
-                                }
-                                if (hoverClick === 'yes') {
-                                    hoverClick = 'no';
-                                    if (holdingShift) {
-                                        if (permanentHovers[node.locatorStr]) {
-                                            delete permanentHovers[node.locatorStr];
+                            const renderx = node.pos.x;
+                            const rendery = node.pos.y;
+                            const wtc = worldToClient(node.pos);
+                            const oobPadding = 16;
+                            if (wtc.y > cv.clientHeight + oobPadding) {
+                                // Out of bounds, no need to render anything
+                                return 'no-render';
+                            }
+                            let localOOB = wtc.x > cv.clientWidth + oobPadding;
+                            if (!localOOB) {
+                                const rhsWtc = worldToClient({ x: node.pos.x + nodew, y: node.pos.y + nodeh });
+                                localOOB || (localOOB = rhsWtc.x < -oobPadding || rhsWtc.y < -oobPadding);
+                            }
+                            if (!localOOB) {
+                                ++numRenders;
+                            }
+                            if (!localOOB) {
+                                if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
+                                    hoveredNode.tgt = node;
+                                    ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
+                                    cv.style.cursor = 'pointer';
+                                    const { start, end, external } = node.ltn.locator.result;
+                                    if (start && end && !external) {
+                                        didHighlightSomething = true;
+                                        hasActiveSpanHighlight = true;
+                                        env.updateSpanHighlight({
+                                            lineStart: (start >>> 12), colStart: (start & 0xFFF),
+                                            lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
+                                        });
+                                    }
+                                    if (hoverClick === 'yes') {
+                                        hoverClick = 'no';
+                                        if (holdingShift) {
+                                            if (permanentHovers[node.locatorStr]) {
+                                                delete permanentHovers[node.locatorStr];
+                                            }
+                                            else {
+                                                permanentHovers[node.locatorStr] = true;
+                                            }
                                         }
                                         else {
-                                            permanentHovers[node.locatorStr] = true;
+                                            (0, displayAttributeModal_4.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_4.createMutableLocator)(node.ltn.locator));
                                         }
                                     }
-                                    else {
-                                        (0, displayAttributeModal_4.default)(env.getGlobalModalEnv(), null, (0, UpdatableNodeLocator_4.createMutableLocator)(node.locator));
-                                    }
                                 }
-                            }
-                            else {
-                                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
-                            }
-                            ctx.fillRect(renderx, rendery, nodew, nodeh);
-                            ctx.strokeStyle = getThemedColor(lightTheme, (permanentHovers[node.locatorStr] && node.remoteRefs.length) ? 'syntax-attr' : 'separator');
-                            if (node.locator.steps.length > 0 && node.locator.steps[node.locator.steps.length - 1].type === 'nta') {
-                                ctx.setLineDash([5, 5]);
-                                ctx.strokeRect(renderx, rendery, nodew, nodeh);
-                                ctx.setLineDash([]);
-                            }
-                            else {
-                                ctx.strokeRect(renderx, rendery, nodew, nodeh);
-                            }
-                            // ctx.fillStyle = `black`;
-                            let fonth = (nodeh * 0.5) | 0;
-                            let renderedName = node.name;
-                            renderText: while (true) {
-                                ctx.font = `${fonth}px sans`;
-                                const typeTail = ((_a = node.locator.result.label) !== null && _a !== void 0 ? _a : node.locator.result.type).split('\.').slice(-1)[0];
-                                const txty = rendery + (nodeh - (nodeh - fonth) * 0.5);
-                                if (renderedName) {
-                                    const typeTailMeasure = ctx.measureText(`: ${typeTail}`);
-                                    const nameMeasure = ctx.measureText(renderedName);
-                                    const totalW = nameMeasure.width + typeTailMeasure.width;
-                                    if (totalW > nodew) {
-                                        if (fonth > 16) {
+                                else {
+                                    ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
+                                }
+                                ctx.fillRect(renderx, rendery, nodew, nodeh);
+                                ctx.strokeStyle = getThemedColor(lightTheme, (permanentHovers[node.locatorStr] && node.remoteRefs.length) ? 'syntax-attr' : 'separator');
+                                if (node.ltn.locator.steps.length > 0 && node.ltn.locator.steps[node.ltn.locator.steps.length - 1].type === 'nta') {
+                                    ctx.setLineDash([5, 5]);
+                                    ctx.strokeRect(renderx, rendery, nodew, nodeh);
+                                    ctx.setLineDash([]);
+                                }
+                                else {
+                                    ctx.strokeRect(renderx, rendery, nodew, nodeh);
+                                }
+                                let fonth = (nodeh * 0.5) | 0;
+                                let renderedName = node.ltn.name;
+                                renderText: while (true) {
+                                    ctx.font = `${fonth}px sans`;
+                                    const typeTail = ((_a = node.ltn.locator.result.label) !== null && _a !== void 0 ? _a : node.ltn.locator.result.type).split('\.').slice(-1)[0];
+                                    const txty = rendery + (nodeh - (nodeh - fonth) * 0.5);
+                                    if (renderedName) {
+                                        const typeTailMeasure = ctx.measureText(`: ${typeTail}`);
+                                        const nameMeasure = ctx.measureText(renderedName);
+                                        const totalW = nameMeasure.width + typeTailMeasure.width;
+                                        if (totalW > nodew) {
+                                            if (fonth > 16) {
+                                                fonth = Math.max(16, fonth * 0.9 | 0);
+                                                continue renderText;
+                                            }
+                                            // Else, try shorten the name
+                                            const shorterName = (0, formatAttr_2.formatAttrBaseName)(renderedName);
+                                            if (shorterName !== renderedName) {
+                                                renderedName = shorterName;
+                                                continue renderText;
+                                            }
+                                        }
+                                        const txtx = renderx + (nodew - totalW) / 2;
+                                        ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable');
+                                        ctx.fillText(renderedName, txtx, txty);
+                                        ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
+                                        // dark: 4EC9B0
+                                        ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
+                                    }
+                                    else {
+                                        ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
+                                        const typeTailMeasure = ctx.measureText(typeTail);
+                                        if (typeTailMeasure.width > nodew && fonth > 16) {
                                             fonth = Math.max(16, fonth * 0.9 | 0);
                                             continue renderText;
                                         }
-                                        // Else, try shorten the name
-                                        const shorterName = (0, formatAttr_2.formatAttrBaseName)(renderedName);
-                                        if (shorterName !== renderedName) {
-                                            renderedName = shorterName;
-                                            continue renderText;
-                                        }
+                                        ctx.fillText(typeTail, renderx + (nodew - typeTailMeasure.width) / 2, txty);
                                     }
-                                    const txtx = renderx + (nodew - totalW) / 2;
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable');
-                                    ctx.fillText(renderedName, txtx, txty);
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
-                                    // dark: 4EC9B0
-                                    ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
+                                    break;
                                 }
-                                else {
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
-                                    const typeTailMeasure = ctx.measureText(typeTail);
-                                    if (typeTailMeasure.width > nodew && fonth > 16) {
-                                        fonth = Math.max(16, fonth * 0.9 | 0);
-                                        continue renderText;
-                                    }
-                                    ctx.fillText(typeTail, renderx + (nodew - typeTailMeasure.width) / 2, txty);
-                                }
-                                break;
                             }
                             const renderChildren = (children) => {
-                                let childOffX = 0;
-                                const childOffY = nodeh + nodepady;
-                                children.forEach((child, childIdx) => {
-                                    const chbb = measureBoundingBox(child);
-                                    if (childIdx >= 1) {
-                                        childOffX += nodepadx;
+                                let anyChildRender = false;
+                                children.forEach((child) => {
+                                    if (renderNode(child) == 'did-render') {
+                                        anyChildRender = true;
                                     }
-                                    renderNode(child, ox + childOffX, oy + childOffY);
-                                    ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
-                                    ctx.lineWidth = 2;
-                                    ctx.beginPath();
-                                    ctx.moveTo(renderx + nodew / 2, rendery + nodeh);
-                                    const paddedBottomY = rendery + nodeh + nodepady * 0.5;
-                                    ctx.lineTo(renderx + nodew / 2, paddedBottomY);
-                                    const chx = ox + childOffX + chbb.x / 2;
-                                    ctx.arcTo(chx, paddedBottomY, chx, oy + childOffY, nodepady / 2);
-                                    ctx.lineTo(chx, oy + childOffY);
-                                    ctx.stroke();
-                                    ctx.lineWidth = 1;
-                                    childOffX += chbb.x;
                                 });
+                                if (!localOOB || anyChildRender) {
+                                    children.forEach((child) => {
+                                        ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                                        ctx.lineWidth = 2;
+                                        ctx.beginPath();
+                                        ctx.moveTo(renderx + nodew / 2, rendery + nodeh);
+                                        const paddedBottomY = rendery + nodeh + nodepady * 0.5;
+                                        ctx.lineTo(renderx + nodew / 2, paddedBottomY);
+                                        const { x: chx, y: chy } = child.pos;
+                                        ctx.arcTo(chx + nodew / 2, paddedBottomY, chx + nodew / 2, chy, nodepady / 2);
+                                        ctx.lineTo(chx + nodew / 2, chy);
+                                        ctx.stroke();
+                                        ctx.lineWidth = 1;
+                                    });
+                                }
                             };
                             if (Array.isArray(node.children)) {
                                 renderChildren(node.children);
@@ -9822,24 +10000,20 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                     placeholderLoadAutoStarts[locStr] = true;
                                     node.placeholderLoadStared = true;
                                     setTimeout(renderFrame);
-                                    console.log('loading extras for', node.locatorStr);
                                     env.performTypedRpc({
-                                        locator: node.locator,
+                                        locator: node.ltn.locator,
                                         src: env.createParsingRequestData(),
                                         type: 'ListTreeDownwards'
                                     }).then(res => {
                                         if (res.node) {
-                                            const mapped = mapListedToNode(res.node);
-                                            node.children = mapped.children;
-                                            node.remoteRefs = mapped.remoteRefs;
-                                            const flushBox = (n) => {
-                                                delete n.boundingBox;
-                                                if (Array.isArray(n.children)) {
-                                                    n.children.forEach(flushBox);
-                                                }
-                                            };
-                                            flushBox(rootNode);
-                                            measureBoundingBox(rootNode);
+                                            const newChildren = res.node.children;
+                                            if (newChildren.type === 'placeholder') {
+                                                console.error('Search budget seems to be set to zero - got placeholder on root of ListTree request');
+                                                return;
+                                            }
+                                            node.ltn.children = newChildren;
+                                            node.ltn.remotes = res.node.remotes;
+                                            rootNode = mapListedToNode((0, layoutTree_1.default)(rootNode.ltn));
                                             setTimeout(renderFrame);
                                         }
                                         else {
@@ -9861,7 +10035,6 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                     if (hoverClick == 'yes') {
                                         hoverClick = 'no';
                                         loadExtras();
-                                        // displayAstModal(env.getGlobalModalEnv(), null, createMutableLocator(node.locator), 'downwards');
                                     }
                                 }
                                 const msgMeasure = ctx.measureText(msg);
@@ -9870,22 +10043,14 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 ctx.arc(cx, cy, fonth, 0, Math.PI * 2);
                                 ctx.stroke();
                             }
+                            return localOOB ? 'no-render' : 'did-render';
                         };
                         const determineLineAttachPos = (node, otherNode) => {
-                            var _a, _b, _c, _d, _e, _f;
-                            const diffX = ((_a = otherNode.renderx) !== null && _a !== void 0 ? _a : 0) - ((_b = node.renderx) !== null && _b !== void 0 ? _b : 0);
-                            const diffY = ((_c = otherNode.rendery) !== null && _c !== void 0 ? _c : 0) - ((_d = node.rendery) !== null && _d !== void 0 ? _d : 0);
-                            let px = (_e = node.renderx) !== null && _e !== void 0 ? _e : 0;
-                            let py = (_f = node.rendery) !== null && _f !== void 0 ? _f : 0;
-                            if (diffX > 1) {
-                                px += nodew;
-                            }
-                            else if (diffX < -1) {
-                                // No change
-                            }
-                            else {
-                                px += nodew / 2;
-                            }
+                            const diffX = (otherNode.pos.x) - (node.pos.x);
+                            const diffY = (otherNode.pos.y) - (node.pos.y);
+                            let px = node.pos.x + nodew / 2;
+                            let py = node.pos.y;
+                            px = Math.max(px - nodew / 2, Math.min(px + nodew / 2, px + diffX / 2));
                             if (diffY > 1) {
                                 py += nodeh;
                             }
@@ -9895,80 +10060,77 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                             else {
                                 py += nodeh / 2;
                             }
-                            // console.log('attach between', node.locatorStr, 'and', otherNode.locatorStr, '::', px, py, '; diff:', diffX, diffY);
                             return { x: px, y: py };
                         };
                         const renderRemoteRefs = (from) => {
-                            if (from.renderx !== undefined && from.rendery !== undefined) {
-                                from.remoteRefs.forEach(rem => {
-                                    const tgt = mapListedToNodeCache[rem.loc];
-                                    if ((tgt === null || tgt === void 0 ? void 0 : tgt.renderx) === undefined || (tgt === null || tgt === void 0 ? void 0 : tgt.rendery) === undefined) {
-                                        // Node has not been rendered yet
-                                        return;
-                                    }
-                                    const fromPos = determineLineAttachPos(from, tgt);
-                                    const toPos = determineLineAttachPos(tgt, from);
-                                    ctx.strokeStyle = getThemedColor(lightTheme, 'syntax-attr');
-                                    ctx.lineWidth = 3;
-                                    ctx.setLineDash([5, 5]);
-                                    ctx.beginPath();
-                                    ctx.moveTo(fromPos.x, fromPos.y);
-                                    ctx.lineTo(toPos.x, toPos.y);
-                                    ctx.stroke();
-                                    ctx.setLineDash([]);
-                                    ctx.lineWidth = 1;
-                                    ctx.save();
-                                    let angle = Math.atan2(toPos.y - fromPos.y, toPos.x - fromPos.x);
-                                    if (angle > 0) {
-                                        angle -= Math.PI * 2;
-                                    }
-                                    const distance = Math.hypot(toPos.y - fromPos.y, toPos.x - fromPos.x);
-                                    const quart = Math.PI / 4;
-                                    let pointDir = 'right';
-                                    if (angle < -quart && angle >= -quart * 3) {
-                                        pointDir = 'up';
-                                    }
-                                    else if (angle < -quart * 3 && angle >= -quart * 5) {
-                                        pointDir = 'left';
-                                    }
-                                    else if (angle < -quart * 5 && angle >= -quart * 7) {
-                                        pointDir = 'down';
-                                    }
-                                    switch (pointDir) {
-                                        case 'up':
-                                        case 'left':
-                                            ctx.translate(toPos.x, toPos.y);
-                                            ctx.rotate(angle + Math.PI);
-                                            break;
-                                        default:
-                                            ctx.translate(fromPos.x, fromPos.y);
-                                            ctx.rotate(angle);
-                                    }
-                                    const fonth = (nodeh * 0.3) | 0;
-                                    const boxh = fonth * 1.25;
-                                    ctx.font = `${fonth}px sans`;
-                                    const trimmed = (0, formatAttr_2.formatAttrBaseName)(rem.lbl);
-                                    const measure = ctx.measureText(trimmed);
-                                    ctx.translate(distance / 2, 0);
-                                    switch (pointDir) {
-                                        case 'up':
-                                        case 'down':
-                                            ctx.rotate(-Math.PI / 2);
-                                            break;
-                                    }
-                                    ctx.translate(-measure.width / 2, -boxh / 2);
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
-                                    ctx.fillRect(-measure.width / 4, 0, measure.width * 1.5, boxh);
-                                    ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
-                                    ctx.strokeRect(-measure.width / 4, 0, measure.width * 1.5, boxh);
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'syntax-attr');
-                                    const txty = (fonth - (boxh - fonth) * 0.5);
-                                    ctx.fillText(trimmed, 0, txty);
-                                    ctx.restore();
-                                });
-                            }
+                            from.remoteRefs.forEach(rem => {
+                                const tgt = mapListedToNodeCache[rem.loc];
+                                if (!tgt) {
+                                    // Target currently not visible
+                                    return;
+                                }
+                                const fromPos = determineLineAttachPos(from, tgt);
+                                const toPos = determineLineAttachPos(tgt, from);
+                                ctx.strokeStyle = getThemedColor(lightTheme, 'syntax-attr');
+                                ctx.lineWidth = 3;
+                                ctx.setLineDash([5, 5]);
+                                ctx.beginPath();
+                                ctx.moveTo(fromPos.x, fromPos.y);
+                                ctx.lineTo(toPos.x, toPos.y);
+                                ctx.stroke();
+                                ctx.setLineDash([]);
+                                ctx.lineWidth = 1;
+                                ctx.save();
+                                let angle = Math.atan2(toPos.y - fromPos.y, toPos.x - fromPos.x);
+                                if (angle > 0) {
+                                    angle -= Math.PI * 2;
+                                }
+                                const distance = Math.hypot(toPos.y - fromPos.y, toPos.x - fromPos.x);
+                                const quart = Math.PI / 4;
+                                let pointDir = 'right';
+                                if (angle < -quart && angle >= -quart * 3) {
+                                    pointDir = 'up';
+                                }
+                                else if (angle < -quart * 3 && angle >= -quart * 5) {
+                                    pointDir = 'left';
+                                }
+                                else if (angle < -quart * 5 && angle >= -quart * 7) {
+                                    pointDir = 'down';
+                                }
+                                switch (pointDir) {
+                                    case 'up':
+                                    case 'left':
+                                        ctx.translate(toPos.x, toPos.y);
+                                        ctx.rotate(angle + Math.PI);
+                                        break;
+                                    default:
+                                        ctx.translate(fromPos.x, fromPos.y);
+                                        ctx.rotate(angle);
+                                }
+                                const fonth = (nodeh * 0.3) | 0;
+                                const boxh = fonth * 1.25;
+                                ctx.font = `${fonth}px sans`;
+                                const trimmed = (0, formatAttr_2.formatAttrBaseName)(rem.lbl);
+                                const measure = ctx.measureText(trimmed);
+                                ctx.translate(distance / 2, 0);
+                                switch (pointDir) {
+                                    case 'up':
+                                    case 'down':
+                                        ctx.rotate(-Math.PI / 2);
+                                        break;
+                                }
+                                ctx.translate(-measure.width / 2, -boxh / 2);
+                                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
+                                ctx.fillRect(-measure.width / 4, 0, measure.width * 1.5, boxh);
+                                ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                                ctx.strokeRect(-measure.width / 4, 0, measure.width * 1.5, boxh);
+                                ctx.fillStyle = getThemedColor(lightTheme, 'syntax-attr');
+                                const txty = (fonth - (boxh - fonth) * 0.5);
+                                ctx.fillText(trimmed, 0, txty);
+                                ctx.restore();
+                            });
                         };
-                        renderNode(rootNode, 0, 32);
+                        renderNode(rootNode);
                         if (!didHighlightSomething) {
                             if (hasActiveSpanHighlight) {
                                 hasActiveSpanHighlight = false;
@@ -9986,22 +10148,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 }
                             }
                         });
-                        let showOOB = false;
-                        if (rootNode.boundingBox) {
-                            const insetX = nodew;
-                            const insetY = nodeh;
-                            const oobTestTopLeft = clientToWorld({ x: 0, y: 0 });
-                            if (oobTestTopLeft.x > rootNode.boundingBox.x - insetX || oobTestTopLeft.y > rootNode.boundingBox.y - insetY) {
-                                showOOB = true;
-                            }
-                            else {
-                                const oobTestBotRight = clientToWorld({ x: trn.width, y: trn.height });
-                                if (oobTestBotRight.x < insetX || oobTestBotRight.y < insetY) {
-                                    showOOB = true;
-                                }
-                            }
-                        }
-                        if (showOOB) {
+                        if (numRenders === 0) {
                             resetBtn.style.display = 'block';
                         }
                         else {
@@ -10069,7 +10216,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     locator.set(result.locator);
                 }
                 Object.keys(mapListedToNodeCache).forEach(k => delete mapListedToNodeCache[k]);
-                state = { type: 'ok', data: mapListedToNode(parsed) };
+                state = { type: 'ok', data: mapListedToNode((0, layoutTree_1.default)(parsed)) };
                 popup.refresh();
             })
                 .catch(err => {
@@ -10129,7 +10276,6 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
             rootStyle: `
       min-width: 16rem;
       min-height: 8rem;
-      80vh;
     `,
             onForceClose: cleanup,
             render: (root) => {
@@ -15020,7 +15166,6 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
     min-width: 12rem;
     min-height: 4rem;
     max-width: 80vw;
-    max-height: 80vh;
     overflow: auto;
     `,
             resizable: true,

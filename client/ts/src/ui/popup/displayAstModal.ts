@@ -12,17 +12,22 @@ import { ListedTreeNode, ListTreeReq, ListTreeRes, NodeLocator, RpcBodyLine } fr
 import startEndToSpan from '../startEndToSpan';
 import UpdatableNodeLocator, { createMutableLocator } from '../../model/UpdatableNodeLocator';
 import { formatAttrBaseName } from './formatAttr';
+import layoutTree, { DrawTree } from '../create/layoutTree';
 
 interface Point { x: number; y: number }
 type LocatorStr = string;
-interface Node extends Omit<ListedTreeNode, 'children' | 'remotes'> {
-  boundingBox?: Point;
-  children: (Node[]) | 'placeholder';
+const nodew = 256 + 128;
+const nodeh = 64;
+const nodepadx = nodew * 0.05;
+const nodepady = nodeh * 0.75;
+interface Node {
+  ltn: ListedTreeNode;
+  dtn: DrawTree<ListedTreeNode>;
   placeholderLoadStared: boolean;
   remoteRefs: { loc: LocatorStr; lbl: string; }[];
   locatorStr: LocatorStr;
-  renderx?: number;
-  rendery?: number;
+  pos: Point;
+  children: (Node[]) | 'placeholder';
 }
 interface ExtraArgs {
   initialTransform?: { [id: string]: number };
@@ -77,17 +82,18 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     }
     return JSON.stringify(step);
   }).join(' > ');
-  const mapListedToNode = (src: ListedTreeNode): Node => {
+  const mapListedToNode = (drawTreeNode: DrawTree<ListedTreeNode>): Node => {
+    const src = drawTreeNode.tree;
     const ret: Node = ({
-      type: src.type,
-      locator: src.locator,
-      name: src.name,
-      children: src.children.type === 'children'
-        ? src.children.value.map(mapListedToNode)
-        : 'placeholder',
+      ltn: src,
+      dtn: drawTreeNode,
       placeholderLoadStared: false,
+      children: src.children.type === 'children'
+        ? drawTreeNode.children.map(mapListedToNode)
+        : 'placeholder',
       locatorStr: locatorToStr(src.locator),
       remoteRefs: src.remotes?.map(loc => ({ loc: locatorToStr(loc), lbl: loc.result.label ?? loc.result.type })) ?? [],
+      pos: { x: drawTreeNode.x * (nodew + nodepadx), y: drawTreeNode.y * (nodeh + nodepady) },
     });
     mapListedToNodeCache[ret.locatorStr] = ret;
     return ret;
@@ -104,7 +110,6 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     rootStyle: `
       min-width: 24rem;
       min-height: 12rem;
-      80vh;
     `,
     onForceClose: cleanup,
     onFinishedMove: () => {
@@ -215,8 +220,8 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
         resetBtn.classList.add('ast-view-reset-btn');
         resetBtn.onclick = () => {
           trn.scale = 1;
-          trn.x = (1920 -rootBox.x) / 2;
-          trn.y = 0;
+          trn.x = 1920/2 - rootNode.pos.x - nodew/2;
+          trn.y = nodepady;
           renderFrame();
         }
 
@@ -251,9 +256,13 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           const csy = 1080 / cv.clientHeight;
           const y = (pt.y * csy - trny) / scaleY;
 
-
           // ((pt.x * 1920 / (cv.clientWidth)) - (trnx)) / scaleX == REF
-          //
+          return { x, y };
+        };
+        const worldToClient = (pt: Point, trnx = trn.x, trny = trn.y, scaleX = trn.scale, scaleY = getScaleY()): Point => {
+          // Opposite equations of clientToWorld
+          const x = ((pt.x * scaleX + trnx) * cv.clientWidth) / 1920;
+          const y = ((pt.y * scaleY + trny) * cv.clientHeight) / 1080;
           return { x, y };
         };
         const dragInfo = { x: trn.x, y: trn.y }; // , sx: 1, sy: 1 };
@@ -334,40 +343,12 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             renderFrame();
           })
 
-          const rootNode = state.data;
+          let rootNode = state.data;
 
-          const nodew = 256 + 128;
-          const nodeh = 64;
-          const nodepadx = nodew * 0.05;
-          const nodepady = nodeh * 0.75;
-          const measureBoundingBox = (node: Node): Point => {
-            if (node.boundingBox) { return node.boundingBox ; }
-            let bb: Point = { x: nodew, y: nodeh };
-            node.boundingBox = bb;
-
-            const measureChildren = (children: Node[]) => {
-              let childW = 0;
-              children.forEach((child, childIdx) => {
-                const childBox = measureBoundingBox(child);
-                if (childIdx >= 1) {
-                  childW += nodepadx;
-                }
-                childW += childBox.x;
-                bb.y = Math.max(bb.y, nodeh + nodepady + childBox.y);
-              });
-              bb.x = Math.max(bb.x, childW);
-            }
-
-            if (Array.isArray(node.children)) {
-              measureChildren(node.children);
-            }
-            return bb;
-          };
-          const rootBox = measureBoundingBox(rootNode);
           if (resetTranslationOnRender) {
             resetTranslationOnRender = false;
             trn.scale = 1;
-            trn.x = (1920 -rootBox.x) / 2;
+            trn.x = (1920 -rootNode.dtn.x) / 2;
             trn.y = 0;
             trn.width = root.clientWidth;
             trn.height = root.clientHeight;
@@ -376,6 +357,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           const renderFrame = () => {
           const w = cv.width;
           const h = cv.height;
+          let numRenders = 0;
 
           ctx.resetTransform();
           ctx.fillStyle = getThemedColor(lightTheme, 'probe-result-area');
@@ -386,120 +368,130 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           cv.style.cursor = 'default';
           let didHighlightSomething = false;
           const hoveredNode: { tgt:  Node | undefined } = { tgt: undefined };
-          const renderNode = (node: Node, ox: number, oy: number) => {
-            const nodeBox = measureBoundingBox(node);
-            const renderx = ox + (nodeBox.x - nodew) / 2;
-            const rendery = oy;
-            node.renderx = renderx;
-            node.rendery = rendery;
-            if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
-              hoveredNode.tgt = node;
-              ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
-              cv.style.cursor = 'pointer';
-              const { start, end, external } = node.locator.result;
-              if (start && end && !external) {
-                didHighlightSomething = true;
-                hasActiveSpanHighlight = true;
-                env.updateSpanHighlight({
-                  lineStart: (start >>> 12), colStart: (start & 0xFFF),
-                  lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
-                });
-              }
-              if (hoverClick === 'yes') {
-                hoverClick = 'no';
-                if (holdingShift) {
-                  if (permanentHovers[node.locatorStr])  {
-                    delete permanentHovers[node.locatorStr];
-                  } else {
-                    permanentHovers[node.locatorStr] = true;
-                  }
-                } else {
-                  displayAttributeModal(env.getGlobalModalEnv(), null, createMutableLocator(node.locator));
+          const renderNode = (node: Node): 'did-render' | 'no-render' => { // , ox: number, oy: number
+
+            const renderx = node.pos.x;
+            const rendery = node.pos.y;
+            const wtc = worldToClient(node.pos);
+            const oobPadding = 16;
+            if (wtc.y > cv.clientHeight + oobPadding) {
+              // Out of bounds, no need to render anything
+              return 'no-render';
+            }
+            let localOOB = wtc.x > cv.clientWidth + oobPadding;
+            if (!localOOB) {
+              const rhsWtc = worldToClient({ x: node.pos.x + nodew, y: node.pos.y + nodeh});
+              localOOB ||= rhsWtc.x < -oobPadding || rhsWtc.y < -oobPadding;
+            }
+            if (!localOOB) {
+              ++numRenders;
+            }
+            if (!localOOB) {
+              if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
+                hoveredNode.tgt = node;
+                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
+                cv.style.cursor = 'pointer';
+                const { start, end, external } = node.ltn.locator.result;
+                if (start && end && !external) {
+                  didHighlightSomething = true;
+                  hasActiveSpanHighlight = true;
+                  env.updateSpanHighlight({
+                    lineStart: (start >>> 12), colStart: (start & 0xFFF),
+                    lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
+                  });
                 }
+                if (hoverClick === 'yes') {
+                  hoverClick = 'no';
+                  if (holdingShift) {
+                    if (permanentHovers[node.locatorStr])  {
+                      delete permanentHovers[node.locatorStr];
+                    } else {
+                      permanentHovers[node.locatorStr] = true;
+                    }
+                  } else {
+                    displayAttributeModal(env.getGlobalModalEnv(), null, createMutableLocator(node.ltn.locator));
+                  }
+                }
+              } else {
+                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
               }
-            } else {
-              ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
-            }
-            ctx.fillRect(renderx, rendery, nodew, nodeh);
+              ctx.fillRect(renderx, rendery, nodew, nodeh);
+              ctx.strokeStyle = getThemedColor(lightTheme, (permanentHovers[node.locatorStr] && node.remoteRefs.length) ? 'syntax-attr' : 'separator');
+              if (node.ltn.locator.steps.length > 0 && node.ltn.locator.steps[node.ltn.locator.steps.length - 1].type === 'nta') {
+                ctx.setLineDash([5, 5])
+                ctx.strokeRect(renderx, rendery, nodew, nodeh);
+                ctx.setLineDash([])
+              } else {
+                ctx.strokeRect(renderx, rendery, nodew, nodeh);
+              }
+              let fonth = (nodeh * 0.5)|0;
+              let renderedName = node.ltn.name;
+              renderText: while (true) {
+                ctx.font = `${fonth}px sans`;
+                const typeTail = (node.ltn.locator.result.label ?? node.ltn.locator.result.type).split('\.').slice(-1)[0];
 
-            ctx.strokeStyle = getThemedColor(lightTheme, (permanentHovers[node.locatorStr] && node.remoteRefs.length) ? 'syntax-attr' : 'separator');
-            if (node.locator.steps.length > 0 && node.locator.steps[node.locator.steps.length - 1].type === 'nta') {
-              ctx.setLineDash([5, 5])
-              ctx.strokeRect(renderx, rendery, nodew, nodeh);
-              ctx.setLineDash([])
-            } else {
-              ctx.strokeRect(renderx, rendery, nodew, nodeh);
-            }
-
-            // ctx.fillStyle = `black`;
-            let fonth = (nodeh * 0.5)|0;
-            let renderedName = node.name;
-            renderText: while (true) {
-              ctx.font = `${fonth}px sans`;
-              const typeTail = (node.locator.result.label ?? node.locator.result.type).split('\.').slice(-1)[0];
-
-              const txty = rendery + (nodeh - (nodeh-fonth)*0.5);
-              if (renderedName) {
-                const typeTailMeasure = ctx.measureText(`: ${typeTail}`);
-                const nameMeasure = ctx.measureText(renderedName);
-                const totalW = nameMeasure.width + typeTailMeasure.width;
-                if (totalW > nodew) {
-                  if (fonth > 16) {
+                const txty = rendery + (nodeh - (nodeh-fonth)*0.5);
+                if (renderedName) {
+                  const typeTailMeasure = ctx.measureText(`: ${typeTail}`);
+                  const nameMeasure = ctx.measureText(renderedName);
+                  const totalW = nameMeasure.width + typeTailMeasure.width;
+                  if (totalW > nodew) {
+                    if (fonth > 16) {
+                      fonth = Math.max(16, fonth * 0.9 | 0);
+                      continue renderText;
+                    }
+                    // Else, try shorten the name
+                    const shorterName = formatAttrBaseName(renderedName);
+                    if (shorterName !== renderedName) {
+                      renderedName = shorterName;
+                      continue renderText;
+                    }
+                  }
+                  const txtx = renderx + (nodew - totalW)/2;
+                  ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable');
+                  ctx.fillText(renderedName, txtx, txty);
+                  ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
+                  // dark: 4EC9B0
+                  ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
+                } else {
+                  ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
+                  const typeTailMeasure = ctx.measureText(typeTail);
+                  if (typeTailMeasure.width > nodew && fonth > 16) {
                     fonth = Math.max(16, fonth * 0.9 | 0);
                     continue renderText;
                   }
-                  // Else, try shorten the name
-                  const shorterName = formatAttrBaseName(renderedName);
-                  if (shorterName !== renderedName) {
-                    renderedName = shorterName;
-                    continue renderText;
-                  }
+                  ctx.fillText(typeTail, renderx + (nodew - typeTailMeasure.width) / 2, txty);
                 }
-                const txtx = renderx + (nodew - totalW)/2;
-                ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable');
-                ctx.fillText(renderedName, txtx, txty);
-                ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
-                // dark: 4EC9B0
-                ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
-              } else {
-                ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
-                const typeTailMeasure = ctx.measureText(typeTail);
-                if (typeTailMeasure.width > nodew && fonth > 16) {
-                  fonth = Math.max(16, fonth * 0.9 | 0);
-                  continue renderText;
-                }
-                ctx.fillText(typeTail, renderx + (nodew - typeTailMeasure.width) / 2, txty);
+                break;
               }
-              break;
             }
 
             const renderChildren = (children: Node[]) => {
-              let childOffX = 0;
-              const childOffY = nodeh + nodepady;
-
-              children.forEach((child, childIdx) => {
-                const chbb = measureBoundingBox(child);
-                if (childIdx >= 1) {
-                  childOffX += nodepadx;
+              let anyChildRender = false;
+              children.forEach((child) => {
+                if (renderNode(child) == 'did-render') {
+                  anyChildRender = true;
                 }
-                renderNode(child, ox + childOffX, oy + childOffY);
-
-                ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(renderx + nodew/2, rendery + nodeh);
-
-                const paddedBottomY = rendery + nodeh + nodepady * 0.5;
-                ctx.lineTo(renderx + nodew/2, paddedBottomY);
-
-                const chx = ox + childOffX + chbb.x / 2;
-                ctx.arcTo(chx, paddedBottomY, chx, oy + childOffY, nodepady / 2);
-                ctx.lineTo(chx, oy + childOffY);
-                ctx.stroke();
-                ctx.lineWidth = 1;
-
-                childOffX += chbb.x;
               });
+
+              if (!localOOB || anyChildRender) {
+                children.forEach((child) => {
+
+                  ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                  ctx.lineWidth = 2;
+                  ctx.beginPath();
+                  ctx.moveTo(renderx + nodew/2, rendery + nodeh);
+
+                  const paddedBottomY = rendery + nodeh + nodepady * 0.5;
+                  ctx.lineTo(renderx + nodew/2, paddedBottomY);
+
+                  const { x: chx, y: chy } = child.pos
+                  ctx.arcTo(chx +  nodew/2, paddedBottomY, chx + nodew/2, chy, nodepady/2);
+                  ctx.lineTo(chx + nodew/2, chy);
+                  ctx.stroke();
+                  ctx.lineWidth = 1;
+                });
+              }
             }
 
             if (Array.isArray(node.children)) {
@@ -524,24 +516,21 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                 placeholderLoadAutoStarts[locStr] = true;
                 node.placeholderLoadStared = true;
                 setTimeout(renderFrame);
-                console.log('loading extras for', node.locatorStr);
                 env.performTypedRpc<ListTreeReq, ListTreeRes>({
-                  locator: node.locator,
+                  locator: node.ltn.locator,
                   src: env.createParsingRequestData(),
                   type: 'ListTreeDownwards'
                 }).then(res => {
                   if (res.node) {
-                    const mapped = mapListedToNode(res.node);
-                    node.children = mapped.children;
-                    node.remoteRefs = mapped.remoteRefs;
-                    const flushBox = (n: Node) => {
-                      delete n.boundingBox;
-                      if (Array.isArray(n.children)) {
-                        n.children.forEach(flushBox);
-                      }
+                    const newChildren = res.node.children;
+                    if (newChildren.type === 'placeholder') {
+                      console.error('Search budget seems to be set to zero - got placeholder on root of ListTree request');
+                      return;
                     }
-                    flushBox(rootNode);
-                    measureBoundingBox(rootNode);
+                    node.ltn.children = newChildren;
+                    node.ltn.remotes = res.node.remotes;
+                    rootNode = mapListedToNode(layoutTree(rootNode.ltn));
+
                     setTimeout(renderFrame);
                   } else {
                     console.warn('Failed expanding node..');
@@ -560,7 +549,6 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                 if (hoverClick == 'yes') {
                   hoverClick = 'no';
                   loadExtras();
-                  // displayAstModal(env.getGlobalModalEnv(), null, createMutableLocator(node.locator), 'downwards');
                 }
               }
               const msgMeasure = ctx.measureText(msg);
@@ -569,22 +557,17 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               ctx.arc(cx, cy, fonth , 0, Math.PI * 2);
               ctx.stroke();
             }
+            return localOOB ? 'no-render' : 'did-render';
           };
 
           const determineLineAttachPos = (node: Node, otherNode: Node) => {
-            const diffX = (otherNode.renderx ?? 0) - (node.renderx ?? 0);
-            const diffY = (otherNode.rendery ?? 0) - (node.rendery ?? 0);
+            const diffX = (otherNode.pos.x) - (node.pos.x);
+            const diffY = (otherNode.pos.y) - (node.pos.y);
 
-            let px = node.renderx ?? 0;
-            let py = node.rendery ?? 0;
+            let px = node.pos.x + nodew/2;
+            let py = node.pos.y;
 
-            if (diffX > 1) {
-              px += nodew;
-            } else if (diffX < -1) {
-              // No change
-            } else {
-              px += nodew/2;
-            }
+            px = Math.max(px - nodew/2, Math.min(px + nodew/2, px + diffX/2));
             if (diffY > 1) {
               py += nodeh;
             } else if (diffY < -1) {
@@ -592,92 +575,87 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             } else {
               py += nodeh/2;
             }
-            // console.log('attach between', node.locatorStr, 'and', otherNode.locatorStr, '::', px, py, '; diff:', diffX, diffY);
             return { x: px, y: py };
           }
 
           const renderRemoteRefs = (from: Node) =>  {
-            if (from.renderx !== undefined && from.rendery !== undefined) {
+            from.remoteRefs.forEach(rem => {
+              const tgt = mapListedToNodeCache[rem.loc];
+              if (!tgt) {
+                // Target currently not visible
+                return;
+              }
 
-              from.remoteRefs.forEach(rem => {
-                const tgt = mapListedToNodeCache[rem.loc];
+              const fromPos = determineLineAttachPos(from, tgt);
+              const toPos = determineLineAttachPos(tgt, from);
+              ctx.strokeStyle = getThemedColor(lightTheme, 'syntax-attr')
+              ctx.lineWidth = 3;
+              ctx.setLineDash([5, 5])
+              ctx.beginPath();
+              ctx.moveTo(fromPos.x, fromPos.y);
+              ctx.lineTo(toPos.x, toPos.y);
+              ctx.stroke();
+              ctx.setLineDash([])
+              ctx.lineWidth = 1;
 
-                if (tgt?.renderx === undefined || tgt?.rendery === undefined) {
-                  // Node has not been rendered yet
-                  return;
-                }
+              ctx.save();
+              let angle = Math.atan2(toPos.y - fromPos.y, toPos.x - fromPos.x);
+              if (angle > 0) {
+                angle -= Math.PI * 2;
+              }
+              const distance = Math.hypot(toPos.y - fromPos.y, toPos.x - fromPos.x);
+              const quart = Math.PI/4;
 
-                const fromPos = determineLineAttachPos(from, tgt);
-                const toPos = determineLineAttachPos(tgt, from);
-                ctx.strokeStyle = getThemedColor(lightTheme, 'syntax-attr')
-                ctx.lineWidth = 3;
-                ctx.setLineDash([5, 5])
-                ctx.beginPath();
-                ctx.moveTo(fromPos.x, fromPos.y);
-                ctx.lineTo(toPos.x, toPos.y);
-                ctx.stroke();
-                ctx.setLineDash([])
-                ctx.lineWidth = 1;
-
-                ctx.save();
-                let angle = Math.atan2(toPos.y - fromPos.y, toPos.x - fromPos.x);
-                if (angle > 0) {
-                  angle -= Math.PI * 2;
-                }
-                const distance = Math.hypot(toPos.y - fromPos.y, toPos.x - fromPos.x);
-                const quart = Math.PI/4;
-
-                let pointDir: 'up' | 'right' | 'left' | 'down' = 'right';
-                if (angle < -quart && angle >= -quart*3) {
-                  pointDir = 'up';
-                } else if (angle < -quart*3 && angle >= -quart*5) {
-                  pointDir = 'left';
-                } else if (angle < -quart*5 && angle >= -quart*7) {
-                  pointDir = 'down';
-                }
-                switch (pointDir) {
-                    case 'up':
-                    case 'left':
-                    ctx.translate(toPos.x, toPos.y);
-                    ctx.rotate(angle + Math.PI);
-                    break;
-
-                  default:
-                    ctx.translate(fromPos.x, fromPos.y);
-                    ctx.rotate(angle);
-                }
-
-                const fonth = (nodeh * 0.3)|0;
-                const boxh = fonth * 1.25;
-                ctx.font = `${fonth}px sans`;
-                const trimmed = formatAttrBaseName(rem.lbl);
-                const measure = ctx.measureText(trimmed);
-
-                ctx.translate(distance / 2, 0);
-                switch (pointDir) {
+              let pointDir: 'up' | 'right' | 'left' | 'down' = 'right';
+              if (angle < -quart && angle >= -quart*3) {
+                pointDir = 'up';
+              } else if (angle < -quart*3 && angle >= -quart*5) {
+                pointDir = 'left';
+              } else if (angle < -quart*5 && angle >= -quart*7) {
+                pointDir = 'down';
+              }
+              switch (pointDir) {
                   case 'up':
-                  case 'down':
-                    ctx.rotate(-Math.PI/2);
-                    break;
-                }
-                ctx.translate(-measure.width/2, -boxh/2);
+                  case 'left':
+                  ctx.translate(toPos.x, toPos.y);
+                  ctx.rotate(angle + Math.PI);
+                  break;
 
-                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
-                ctx.fillRect(-measure.width /4, 0, measure.width * 1.5, boxh)
-                ctx.strokeStyle = getThemedColor(lightTheme, 'separator')
-                ctx.strokeRect(-measure.width /4, 0, measure.width * 1.5, boxh)
+                default:
+                  ctx.translate(fromPos.x, fromPos.y);
+                  ctx.rotate(angle);
+              }
 
-                ctx.fillStyle = getThemedColor(lightTheme, 'syntax-attr')
-                const txty = (fonth - (boxh-fonth)*0.5);
-                ctx.fillText(trimmed, 0, txty);
+              const fonth = (nodeh * 0.3)|0;
+              const boxh = fonth * 1.25;
+              ctx.font = `${fonth}px sans`;
+              const trimmed = formatAttrBaseName(rem.lbl);
+              const measure = ctx.measureText(trimmed);
+
+              ctx.translate(distance / 2, 0);
+              switch (pointDir) {
+                case 'up':
+                case 'down':
+                  ctx.rotate(-Math.PI/2);
+                  break;
+              }
+              ctx.translate(-measure.width/2, -boxh/2);
+
+              ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
+              ctx.fillRect(-measure.width /4, 0, measure.width * 1.5, boxh)
+              ctx.strokeStyle = getThemedColor(lightTheme, 'separator')
+              ctx.strokeRect(-measure.width /4, 0, measure.width * 1.5, boxh)
+
+              ctx.fillStyle = getThemedColor(lightTheme, 'syntax-attr')
+              const txty = (fonth - (boxh-fonth)*0.5);
+              ctx.fillText(trimmed, 0, txty);
 
 
-                ctx.restore();
-              })
-            }
+              ctx.restore();
+            })
           }
 
-          renderNode(rootNode, 0, 32);
+          renderNode(rootNode);
           if (!didHighlightSomething) {
             if (hasActiveSpanHighlight) {
               hasActiveSpanHighlight = false;
@@ -694,23 +672,9 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                 renderRemoteRefs(perm);
               }
             }
-          })
+          });
 
-          let showOOB = false;
-          if (rootNode.boundingBox) {
-            const insetX = nodew;
-            const insetY = nodeh;
-            const oobTestTopLeft = clientToWorld({ x: 0, y: 0 });
-            if (oobTestTopLeft.x > rootNode.boundingBox.x -insetX || oobTestTopLeft.y > rootNode.boundingBox.y - insetY) {
-              showOOB = true;
-            } else {
-              const oobTestBotRight = clientToWorld({ x: trn.width, y: trn.height });
-              if (oobTestBotRight.x < insetX || oobTestBotRight.y < insetY) {
-                showOOB = true;
-              }
-            }
-          }
-          if (showOOB) {
+          if (numRenders === 0) {
             resetBtn.style.display = 'block';
           } else {
             resetBtn.style.display = 'none';
@@ -780,7 +744,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
         locator.set(result.locator);
       }
       Object.keys(mapListedToNodeCache).forEach(k => delete mapListedToNodeCache[k]);
-      state = { type: 'ok', data: mapListedToNode(parsed) };
+      state = { type: 'ok', data: mapListedToNode(layoutTree(parsed)) };
       popup.refresh();
 
     })

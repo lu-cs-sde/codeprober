@@ -40,7 +40,6 @@ const displayAttributeModal = (
     rootStyle: `
       min-width: 16rem;
       min-height: 8rem;
-      80vh;
     `,
     onForceClose: cleanup,
     render: (root) => {

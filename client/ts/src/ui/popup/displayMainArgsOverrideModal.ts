@@ -272,7 +272,6 @@ const displayMainArgsOverrideModal = (
     min-width: 12rem;
     min-height: 4rem;
     max-width: 80vw;
-    max-height: 80vh;
     overflow: auto;
     `,
     resizable: true,

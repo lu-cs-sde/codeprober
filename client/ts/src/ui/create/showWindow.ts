@@ -48,22 +48,17 @@ const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
         btn.onclick?.(null as any);
       }
     }
-
   }
 
   let lastCancelToken: CancelToken = {};
 
   const contentRoot = document.createElement('div');
-  // contentRoot.classList.add('HELLO-FIND-ME');
   contentRoot.style.overflow = 'auto';
   contentRoot.style.position = 'relative';
   contentRoot.style.top = '0px';
   contentRoot.style.left = '0px';
-  contentRoot.style.maxHeight = '80vh';
-  // contentRoot.style.display = 'contents';
-  // contentRoot.style.minHeight = '4rem';
-  // contentRoot.style.overflow = 'inherit';
-  // contentRoot.style.display = 'contents';
+  const maxHeight = "90vh";
+  contentRoot.style.maxHeight = maxHeight;
   render(contentRoot, { cancelToken: lastCancelToken, bringToFront });
   root.appendChild(contentRoot);
 
@@ -71,7 +66,6 @@ const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
   let reiszeCleanup:( () => void) | null = null;
   if (resizable) {
     const resizePositioner = document.createElement('div');
-    // resizePositioner.style.position = 'absolute';
     resizePositioner.style.right = '0px';
     resizePositioner.style.bottom = '0px';
     resizePositioner.style.cursor = 'nwse-resize';
@@ -105,7 +99,7 @@ const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
         root.style.width = `${newW}px`;
         root.style.height = `${newH}px`;
         root.style.maxWidth = 'fit-content';
-        root.style.maxHeight = 'fit-content';
+        root.style.maxHeight = maxHeight;
         args.onOngoingResize?.();
       },
       args.onFinishedResize).cleanup;
@@ -114,7 +108,7 @@ const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
     root.style.width = `${initialSize.width}px`;
     root.style.height = `${initialSize.height}px`;
     root.style.maxWidth = 'fit-content';
-    root.style.maxHeight = 'fit-content';
+    root.style.maxHeight = maxHeight;
   }
 
   document.body.appendChild(root);
