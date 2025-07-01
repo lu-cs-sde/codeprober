@@ -306,7 +306,8 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             const csx = 1920 / cv.clientWidth;
             const trx1 = trn.x;
             const z1 = trn.scale;
-            const z2 = Math.max(0.1, Math.min(10, trn.scale * (e.deltaY > 0 ? 1.02 : 0.98)));
+            const delta = (e as any).wheelDelta ?? (e.deltaY * 10);
+            const z2 = Math.max(0.1, Math.min(10, trn.scale * (1 + delta / 1000)));
             /*
               -- We want to modify trn.x so that transforming {e.offsetX, e.offsetY} gets the same result before and after zooming.
               -- For trn.x we want this relation to hold:
@@ -368,7 +369,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           cv.style.cursor = 'default';
           let didHighlightSomething = false;
           const hoveredNode: { tgt:  Node | undefined } = { tgt: undefined };
-          const renderNode = (node: Node): 'did-render' | 'no-render' => { // , ox: number, oy: number
+          const renderNode = (node: Node) => { // , ox: number, oy: number
 
             const renderx = node.pos.x;
             const rendery = node.pos.y;
@@ -376,17 +377,15 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             const oobPadding = 16;
             if (wtc.y > cv.clientHeight + oobPadding) {
               // Out of bounds, no need to render anything
-              return 'no-render';
+              return;
             }
             let localOOB = wtc.x > cv.clientWidth + oobPadding;
             if (!localOOB) {
               const rhsWtc = worldToClient({ x: node.pos.x + nodew, y: node.pos.y + nodeh});
-              localOOB ||= rhsWtc.x < -oobPadding || rhsWtc.y < -oobPadding;
+              localOOB = rhsWtc.x < -oobPadding || rhsWtc.y < -oobPadding;
             }
             if (!localOOB) {
               ++numRenders;
-            }
-            if (!localOOB) {
               if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
                 hoveredNode.tgt = node;
                 ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
@@ -467,31 +466,23 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             }
 
             const renderChildren = (children: Node[]) => {
-              let anyChildRender = false;
               children.forEach((child) => {
-                if (renderNode(child) == 'did-render') {
-                  anyChildRender = true;
-                }
+                renderNode(child)
+
+                ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(renderx + nodew/2, rendery + nodeh);
+
+                const paddedBottomY = rendery + nodeh + nodepady * 0.5;
+                ctx.lineTo(renderx + nodew/2, paddedBottomY);
+
+                const { x: chx, y: chy } = child.pos
+                ctx.arcTo(chx +  nodew/2, paddedBottomY, chx + nodew/2, chy, nodepady/2);
+                ctx.lineTo(chx + nodew/2, chy);
+                ctx.stroke();
+                ctx.lineWidth = 1;
               });
-
-              if (!localOOB || anyChildRender) {
-                children.forEach((child) => {
-
-                  ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
-                  ctx.lineWidth = 2;
-                  ctx.beginPath();
-                  ctx.moveTo(renderx + nodew/2, rendery + nodeh);
-
-                  const paddedBottomY = rendery + nodeh + nodepady * 0.5;
-                  ctx.lineTo(renderx + nodew/2, paddedBottomY);
-
-                  const { x: chx, y: chy } = child.pos
-                  ctx.arcTo(chx +  nodew/2, paddedBottomY, chx + nodew/2, chy, nodepady/2);
-                  ctx.lineTo(chx + nodew/2, chy);
-                  ctx.stroke();
-                  ctx.lineWidth = 1;
-                });
-              }
             }
 
             if (Array.isArray(node.children)) {
@@ -557,7 +548,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               ctx.arc(cx, cy, fonth , 0, Math.PI * 2);
               ctx.stroke();
             }
-            return localOOB ? 'no-render' : 'did-render';
+            return;
           };
 
           const determineLineAttachPos = (node: Node, otherNode: Node) => {
