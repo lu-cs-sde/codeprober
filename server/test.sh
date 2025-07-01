@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
-LIBS=libs/json.jar:libs/junit-4.13.2.jar:libs/hamcrest-2.2.jar
+if [[ "$(uname -a)" == "CYGWIN"* ]]; then
+	# Required for building on CYGWIN. Not sure if same is needed for WSL
+	SEP=";"
+else
+	SEP=":"
+fi
+LIBS="libs/json.jar$(echo $SEP)libs/junit-4.13.2.jar$(echo $SEP)libs/hamcrest-2.2.jar"
 
 ## BUILD
 rm -rf test_tmp/
@@ -36,5 +42,5 @@ addTest () {
 for i in $(find src-test -name "*.java"); do [ -f "$i" ] && addTest "$i"; done
 
 echo "Test classes: $TEST_CLASSES"
-java -cp $LIBS:test_tmp org.junit.runner.JUnitCore $TEST_CLASSES
+java -cp "$LIBS$(echo $SEP)test_tmp" org.junit.runner.JUnitCore $TEST_CLASSES
 echo "All Tests pass successfully"

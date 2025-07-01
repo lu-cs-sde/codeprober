@@ -11984,7 +11984,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                     }
                     const rhs = match.rhs;
                     const expectVal = rhs === null || rhs === void 0 ? void 0 : rhs.expectVal;
-                    if (!expectVal) {
+                    if (!rhs || typeof expectVal !== 'string') {
                         // Just a probe, no assertion, no need to check further
                         return;
                     }
@@ -13778,13 +13778,21 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
         };
         env.triggerWindowSave();
         (0, registerOnHover_5.default)(clickableUi, (on) => env.updateSpanHighlight((on && !locator.result.external) ? (0, startEndToSpan_9.default)(locator.result.start, locator.result.end) : null));
-        clickableUi.onclick = (e) => {
-            if (!e.shiftKey && ui.parentElement) {
+        clickableUi.classList.add('auto-click-on-workspace-switch');
+        clickableUi.customWorkspaceSwitchHandler = () => {
+            if (ui.parentElement) {
                 ui.parentElement.removeChild(ui);
             }
             env.updateSpanHighlight(null);
-            (0, displayProbeModal_5.default)(env, null, (0, UpdatableNodeLocator_6.createMutableLocator)(locator), property, nestedWindows, { showDiagnostics });
             cleanup();
+        };
+        clickableUi.onclick = (e) => {
+            if (!e.shiftKey && ui.parentElement) {
+                ui.parentElement.removeChild(ui);
+                cleanup();
+            }
+            env.updateSpanHighlight(null);
+            (0, displayProbeModal_5.default)(env, null, (0, UpdatableNodeLocator_6.createMutableLocator)(locator), property, nestedWindows, { showDiagnostics });
         };
         const squigglyCheckboxWrapper = createSquigglyCheckbox({
             onInput: (checked) => {
@@ -16709,10 +16717,11 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
                             }
                             numPass += res.numPass;
                             numFail += res.numFail;
-                            if (res.numFail) {
+                            const debug = location.search.includes('debug=true');
+                            if (res.numFail || debug) {
                                 const logEntry = document.createElement('div');
                                 logEntry.classList.add('workspace-test-failure-log-entry');
-                                logEntry.innerText = `${res.numFail} failure${res.numFail > 1 ? 's' : ''} in ${fullPath}`;
+                                logEntry.innerText = `${res.numFail} failure${res.numFail > 1 ? 's' : ''}${debug ? `, ${res.numPass} pass` : ''} in ${fullPath}`;
                                 failureLog.appendChild(logEntry);
                                 failureLog.style.display = 'flex';
                             }
@@ -17252,7 +17261,12 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
             setActiveFile = (path, data) => {
                 activeFile = path;
                 document.querySelectorAll('.auto-click-on-workspace-switch').forEach(btn => {
-                    btn.click();
+                    if (btn.customWorkspaceSwitchHandler) {
+                        btn.customWorkspaceSwitchHandler();
+                    }
+                    else {
+                        btn.click();
+                    }
                 });
                 testModalExtras.shouldIgnoreChangeCallbacks = true;
                 args.setLocalContent(data.contents);
@@ -17508,6 +17522,17 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         }
                     },
                 };
+                const loadSavedWindows = () => {
+                    setTimeout(() => {
+                        try {
+                            let windowStates = settings_13.default.getProbeWindowStates();
+                            windowStates.forEach(state => loadWindowState(modalEnv, state));
+                        }
+                        catch (e) {
+                            console.warn('Invalid probe window state?', e);
+                        }
+                    }, 300); // JUUUUUUUST in case the stored window state causes issues, this 300ms timeout allows people to click the 'clear state' button
+                };
                 if ((0, getEditorDefinitionPlace_2.default)().definedEditors[editorType]) {
                     const { preload, init, } = (0, getEditorDefinitionPlace_2.default)().definedEditors[editorType];
                     (0, getEditorDefinitionPlace_2.default)().loadPreload(preload, () => {
@@ -17584,11 +17609,17 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                                     installWsNotificationHandler('workspace_paths_updated', ({ paths }) => {
                                         ws.onServerNotifyPathsChanged(paths);
                                     });
+                                    if (ws.activeFileIsTempFile()) {
+                                        loadSavedWindows();
+                                    }
                                 }
                             })
                                 .catch((err) => {
                                 console.warn('Failed initializing workspace', err);
                             });
+                        }
+                        else {
+                            loadSavedWindows();
                         }
                     });
                 }
@@ -17883,33 +17914,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         default: return console.error('Unknown help type', type);
                     }
                 };
-                setTimeout(() => {
-                    try {
-                        let windowStates = settings_13.default.getProbeWindowStates();
-                        // let wsMatch: RegExpExecArray | null;
-                        // if ((wsMatch = /[?&]?ws=[^?&]+/.exec(location.search)) != null) {
-                        //   const trimmedSearch = wsMatch.index === 0
-                        //   ? (
-                        //     wsMatch[0].length < location.search.length
-                        //       ? `?${location.search.slice(wsMatch[0].length + 1)}`
-                        //       : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`
-                        //   )
-                        //   : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`
-                        //   ;
-                        //   history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
-                        //   try {
-                        //     windowStates = JSON.parse(decodeURIComponent(wsMatch[0].slice('?ws='.length)));
-                        //     clearHashFromLocation();
-                        //   } catch (e) {
-                        //     console.warn('Invalid windowState in hash', e);
-                        //   }
-                        // }
-                        windowStates.forEach(state => loadWindowState(modalEnv, state));
-                    }
-                    catch (e) {
-                        console.warn('Invalid probe window state?', e);
-                    }
-                }, 300); // JUUUUUUUST in case the stored window state causes issues, this 300ms timeout allows people to click the 'clear state' button
                 window.RagQuery = (line, col, autoSelectRoot) => {
                     if (autoSelectRoot) {
                         const node = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1, depth: 0 };

@@ -227,7 +227,6 @@ const doMain = (wsPort: number
         shouldTryInitializingWorkspace = true;
       }
 
-
       const onChange = (newValue: string, adjusters?: LocationAdjuster[]) => {
         if (!activeWorkspace || activeWorkspace.activeFileIsTempFile()) {
           settings.setEditorContents(newValue);
@@ -277,6 +276,18 @@ const doMain = (wsPort: number
             recv(modalEnvHolder.cachedEnv);
           }
         },
+      }
+
+
+      const loadSavedWindows = () => {
+        setTimeout(() => {
+          try {
+            let windowStates: WindowState[] = settings.getProbeWindowStates();
+            windowStates.forEach(state => loadWindowState(modalEnv, state));
+          }  catch (e) {
+            console.warn('Invalid probe window state?', e);
+          }
+        }, 300); // JUUUUUUUST in case the stored window state causes issues, this 300ms timeout allows people to click the 'clear state' button
       }
 
       if (getEditorDefinitionPlace().definedEditors[editorType]) {
@@ -361,12 +372,18 @@ const doMain = (wsPort: number
                   installWsNotificationHandler<WorkspacePathsUpdated>('workspace_paths_updated', ({ paths }) => {
                     ws.onServerNotifyPathsChanged(paths);
                   });
+
+                  if (ws.activeFileIsTempFile()) {
+                    loadSavedWindows();
+                  }
                 }
               })
               .catch((err) => {
                 console.warn('Failed initializing workspace', err);
               })
             ;
+          } else {
+            loadSavedWindows();
           }
         })
 
@@ -602,7 +619,6 @@ const doMain = (wsPort: number
 
       showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, disableVersionCheckerByDefault, modalEnv.performTypedRpc);
 
-
       const deferLspToBackend = location.search.includes('debug=true');
       window.HandleLspLikeInteraction = async (type, pos) => {
         switch (type) {
@@ -700,33 +716,6 @@ const doMain = (wsPort: number
           default: return console.error('Unknown help type', type);
         }
       }
-      setTimeout(() => {
-        try {
-          let windowStates: WindowState[] = settings.getProbeWindowStates();
-          // let wsMatch: RegExpExecArray | null;
-          // if ((wsMatch = /[?&]?ws=[^?&]+/.exec(location.search)) != null) {
-          //   const trimmedSearch = wsMatch.index === 0
-          //   ? (
-          //     wsMatch[0].length < location.search.length
-          //       ? `?${location.search.slice(wsMatch[0].length + 1)}`
-          //       : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`
-          //   )
-          //   : `${location.search.slice(0, wsMatch.index)}${location.search.slice(wsMatch.index + wsMatch[0].length)}`
-          //   ;
-
-          //   history.replaceState('', document.title, `${window.location.pathname}${trimmedSearch}`);
-          //   try {
-          //     windowStates = JSON.parse(decodeURIComponent(wsMatch[0].slice('?ws='.length)));
-          //     clearHashFromLocation();
-          //   } catch (e) {
-          //     console.warn('Invalid windowState in hash', e);
-          //   }
-          // }
-          windowStates.forEach(state => loadWindowState(modalEnv, state));
-        }  catch (e) {
-          console.warn('Invalid probe window state?', e);
-        }
-      }, 300); // JUUUUUUUST in case the stored window state causes issues, this 300ms timeout allows people to click the 'clear state' button
       window.RagQuery = (line, col, autoSelectRoot) => {
         if (autoSelectRoot) {
           const node: TALStep = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1, depth: 0 };

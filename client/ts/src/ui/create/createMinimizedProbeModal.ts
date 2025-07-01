@@ -240,9 +240,19 @@ const createMinimizedProbeModal = (
     clickableUi, (on) => env.updateSpanHighlight((on && !locator.result.external) ? startEndToSpan(locator.result.start, locator.result.end) : null),
   )
 
+  clickableUi.classList.add('auto-click-on-workspace-switch');
+  (clickableUi as any).customWorkspaceSwitchHandler = () => {
+    if (ui.parentElement) {
+      ui.parentElement.removeChild(ui);
+    }
+    env.updateSpanHighlight(null);
+    cleanup();
+  }
+
   clickableUi.onclick = (e) => {
     if (!e.shiftKey && ui.parentElement) {
       ui.parentElement.removeChild(ui);
+      cleanup();
     }
     env.updateSpanHighlight(null);
     displayProbeModal(
@@ -253,7 +263,6 @@ const createMinimizedProbeModal = (
       nestedWindows,
       { showDiagnostics }
     );
-    cleanup();
   }
   const squigglyCheckboxWrapper = createSquigglyCheckbox({
     onInput: (checked) => {

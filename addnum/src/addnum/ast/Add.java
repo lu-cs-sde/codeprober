@@ -52,4 +52,9 @@ public class Add extends Node {
 	public String cpr_ppInfix(int idx) {
 		return " + ";
 	}
+
+	@Attribute
+	public String emptyString() {
+		return "";
+	}
 }

@@ -890,7 +890,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
           }
           const rhs = match.rhs;
           const expectVal = rhs?.expectVal;
-          if (!expectVal) {
+          if (!rhs || typeof expectVal !== 'string') {
             // Just a probe, no assertion, no need to check further
             return;
           }

@@ -101,10 +101,11 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: Workspace, extras:
             }
             numPass += res.numPass;
             numFail += res.numFail;
-            if (res.numFail) {
+            const debug = location.search.includes('debug=true');
+            if (res.numFail || debug) {
               const logEntry = document.createElement('div');
               logEntry.classList.add('workspace-test-failure-log-entry')
-              logEntry.innerText = `${res.numFail} failure${res.numFail > 1 ? 's' : ''} in ${fullPath}`;
+              logEntry.innerText = `${res.numFail} failure${res.numFail > 1 ? 's' : ''}${debug ? `, ${res.numPass} pass` : ''} in ${fullPath}`;
 
               failureLog.appendChild(logEntry);
               failureLog.style.display = 'flex';
@@ -682,7 +683,11 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
     setActiveFile = (path: string, data: CachedFileEntry) => {
       activeFile = path;
       document.querySelectorAll('.auto-click-on-workspace-switch').forEach(btn => {
-        (btn as HTMLButtonElement).click();
+        if ((btn as any).customWorkspaceSwitchHandler) {
+          (btn as any).customWorkspaceSwitchHandler();
+        } else {
+          (btn as HTMLElement).click();
+        }
       })
       testModalExtras.shouldIgnoreChangeCallbacks = true;
       args.setLocalContent(data.contents);

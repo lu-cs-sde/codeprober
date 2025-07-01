@@ -22,4 +22,4 @@
   ✅ ts/ok_large.addn
   ✅ ts/ok_num.addn
   ✅ ts/ok_vars.addn
-Done: 26 pass, 11 fail
+Done: 27 pass, 11 fail

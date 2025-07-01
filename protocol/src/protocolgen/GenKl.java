@@ -127,8 +127,8 @@ public class GenKl {
 			out.append("        $handler = lHandle" + info.userReadableName +" ?: fail(\"No handler registered for " + info.userReadableName + "\"); \n");
 			out.append("        return handler("+ info.payloadType+".parse(new(.obj: obj)) ?: fail(\"Failed parsing message for request " + info.userReadableName +"\"))?.json?.compactStr;\n");
 			out.append("      }\n");
-
 		}
+		out.append("      default: fail(\"Unknown message type '$str'\");\n");
 		out.append("    }\n");
 
 		out.append("  }\n");
@@ -245,7 +245,7 @@ public class GenKl {
 						out.println(" " + fname + ";");
 					}
 					out.println("");
-					out.println("  static " + sn +"? parse(ParseSrc src): switch (src.namedGetStr(\"type\")) {");
+					out.println("  static " + sn +"? parse(ParseSrc src): switch (src.namedGetStr(\"type\") ?: fail) {");
 					int parseIdx = 0;
 					for (Field f : su.getClass().getFields()) {
 						f.setAccessible(true);
@@ -432,6 +432,7 @@ public class GenKl {
 			}
 		} else if (rawRef instanceof String) {
 			out.print("// \"" + rawRef + "\"");
+			out.encodeCmds.add("dst.set( .str: \"" + rawRef +"\");");
 		} else if (rawRef instanceof StreamableUnion) {
 			requestedTypes.add(rawRef);
 			out.print(((StreamableUnion) rawRef).getClass().getSimpleName());
