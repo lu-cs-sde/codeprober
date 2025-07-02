@@ -204,8 +204,7 @@ public class EvaluatePropertyHandler {
 					} else {
 						body.add(RpcBodyLine.fromStderr(
 								"Asked to collect trace information, but cpr_setTraceReceiver is not implemented."));
-						body.add(RpcBodyLine.fromStderr("See CodeProber README for more information."));
-//					System.out.println("no traceReceiver on " + parsed.info.ast.underlyingAstNode);
+						body.add(RpcBodyLine.fromStderr("See CodeProber documentation for more information."));
 					}
 
 				}

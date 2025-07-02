@@ -10836,7 +10836,6 @@ define("model/TextProbeEvaluator", ["require", "exports", "network/evaluatePrope
                 const contents = match.contents;
                 const assign = matchAssignment(contents);
                 if (assign) {
-                    console.log('matched assign:', assign);
                     ret.assignments.push({ ...assign, lineIdx, index: assign.index + match.index + 2 /* 2 for "[[" */ });
                 }
                 else {
@@ -16850,6 +16849,10 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
         };
     };
     async function getFileContents(workspace, path) {
+        if (path === unsavedFileKey) {
+            console.warn('Tried loading temp file contents from server?');
+            return null;
+        }
         const cached = workspace.cachedFiles[path];
         if (cached) {
             return cached;
@@ -16980,8 +16983,11 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
             updateTestStatus,
         };
         const click = () => {
+            var _a, _b;
             switch (kind) {
                 case 'unsaved':
+                    setActive(path, (_a = workspace.cachedFiles[path]) !== null && _a !== void 0 ? _a : { contents: (_b = settings_12.default.getEditorContents()) !== null && _b !== void 0 ? _b : '', windows: settings_12.default.getProbeWindowStates() });
+                    break;
                 case 'file':
                     getFileContents(workspace, path)
                         .then(text => {

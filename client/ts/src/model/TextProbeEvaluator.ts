@@ -58,7 +58,6 @@ const matchFullFile = (fullFile: string) => {
 
       const assign = matchAssignment(contents);
       if (assign) {
-        console.log('matched assign:', assign);
         ret.assignments.push({ ...assign, lineIdx, index: assign.index + match.index + 2 /* 2 for "[[" */ });
       } else {
         const probe = matchTypedProbeRegex({ lineIdx, value: contents });

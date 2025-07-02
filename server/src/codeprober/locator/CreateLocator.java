@@ -458,7 +458,7 @@ public class CreateLocator {
 						return true;
 					}
 					default: {
-						System.err.println("Unknown shape of parent connection array. Expected 1 or 2 elements, got "
+						System.err.println("Unknown shape of parent connection array. Expected 1 element, got "
 								+ parts.length);
 						break;
 					}

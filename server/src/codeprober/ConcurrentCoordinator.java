@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -276,9 +277,12 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 		public Worker(String jarPath, String[] args) throws IOException {
 			final List<String> cmd = new ArrayList<>();
 			cmd.add("java");
-			final String wsSpec = System.getProperty(WorkspaceHandler.WORKSPACE_SYSTEM_PROPERTY_KEY);
-			if (wsSpec != null) {
-				cmd.add(String.format("-D%s=%s", WorkspaceHandler.WORKSPACE_SYSTEM_PROPERTY_KEY, wsSpec));
+			for (Entry<Object, Object> props : System.getProperties().entrySet()) {
+				final String key = String.valueOf(props.getKey());
+				if (key.startsWith("cpr.")) {
+					final String val = String.valueOf(props.getValue());
+					cmd.add(String.format("-D%s=%s", key, val));
+				}
 			}
 			cmd.add("-jar");
 

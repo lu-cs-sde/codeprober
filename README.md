@@ -73,17 +73,10 @@ CodeProber will use this as a fallback if neither `CodeProber_parse` nor `CodePr
 However, the help/warning messages inside `CodeProber` that reference the root node will reference `CodeProber_root_node`, even if you don't have it.
 So for a more consistent experience, consider adding a specific declaration for CodeProber (or even better, use `CodeProber_parse`).
 
-### Environment variables
+### Configuration
 
-There are a few optional environment variables that can be set.
-| Key      | Default value | Description |
-| ----------- | ----------- | ----------- |
-| PORT | 8000 | The port to serve HTML/JS/websocket request on. This is the port you visit in your browser, e.g the '8000' in 'http://localhost:8000' |
-| WEB_SERVER_PORT | null | The port for for HTML/JS (non-websocket) requests. If not set, PORT will be used. |
-| WEBSOCKET_SERVER_PORT   | null        | The port for websocket requests.  This isn't visible to the user, and normally doesn't need to be changed. If not set, PORT will be used. This can be set to `http` to delegate all websocket traffic to normal HTTP requests instead. This is worse for performance, but can be necessary if hosting CodeProber in a place where websocket doesn't work as expected. |
-| PERMIT_REMOTE_CONNECTIONS   | false        | Whether or not to permit unauthenticated remote (non-local) connections to the server. Most compilers/analyzers read/write files on your computer based on user input. By allowing remote connections, you open up a potential vulnerability. Only set to true when on a trusted network, or if running inside a sandboxed environment. |
-| WEB_RESOURCES_OVERRIDE   | null        | A file path that should be used to serve web resources (e.g HTML/JS/etc). If null, then resources are read from the classpath. Setting this can be benificial during development of the code prober tool itself (set it to `client/public/`), but there is very little point in setting it for normal tool users. |
-| CODESPACES_COMPATIBILITY_HACK   | true        | When running CodeProber inside the Github Codespaces web editor, CodeProber will need to modify the protocol and url used to connect to the websocket server. Normally, CodeProber connects to `ws://host:8080` (or whichever port is used). In Codespaces, CodeProber needs to connect to `wss://{host.replace(8000, 8080)}`, i.e `wss` instead of `ws`, and the port(s) are part of the host rather than the normal `:` port part of the URL. If the compatibility hack doesn't work for you, you can disable it by setting `CODESPACES_COMPATIBILITY_HACK=false`. If you get it to work without the hack; please open an issue on the CodeProber repository and tell us how you did it! Otherwise, try setting `WEBSOCKET_SERVER_PORT` to `http` instead. |
+There are a few optional environment variables and system properties that can be set.
+These are documented in the [docs](docs/README.md).
 
 Example invocation where some of these are set:
 ```sh
@@ -162,7 +155,7 @@ Release builds can be retried by editing the release in any way.
 ## I didn't use JastAdd, what now?
 
 It is possible that your AST will just "magically" work with CodeProber. Add `CodeProber_parse` or `CodeProber_root_node` as described above and just try running with it.
-CodeProber has a few different styles of ASTs it tries to detect and interact with.
+CodeProber has a few different styles of ASTs it tries to detect and interact with, see [AST API](docs/ast_api.md).
 
 If that doesn't work, the quickest way to get started is to use the [minimal-prober-wrapper example implementation](minimal-probe-wrapper).
 
@@ -181,67 +174,6 @@ def find_super(type)
 
 `find_super` is called with your AST root (returned from `CodeProber_parse` or `CodeProber_root_node`). In other words, it finds the top supertype that belongs to the same package as the AST root.
 If your native AST structure uses a hierarchy of packages rather than a single flat package, then this will likely cause problems so you should probably rely on a wrapper type instead.
-
-## Tracing
-
-In the CodeProber settings panel there is a checkbox with the label `Capture traces`.
-This allows you to capture information about indirect dependencies of properties.
-For this to work, the AST root must have a function `cpr_setTraceReceiver` that looks like this:
-
-```java
-public void cpr_setTraceReceiver(java.util.function.Consumer<Object[]> recv) {
-  // 'recv' records trace information.
-  // You should assign it to a field for later use.
-  this.theTraceReceiver = recv;
-}
-
-// Later, when something should be added to a trace, call it
-// It will be non-null if `Capture traces` is checked.
-if (this.theTraceReceiver != null) {
-  this.theTraceReceiver.accept(new Object[]{ ... })
-}
-```
-
-If `recv` is called while CodeProber is evaluating a property, then the information there will be visible in the CodeProber UI, *if* the user has checked `Capture traces`.
-
-
-### Kinds of trace events
-
-CodeProber will `toString` the first element in the object array to identify the kinds of trace event.
-Currently, two types of events are supported, and they match tracing events produced by JastAdd:
-
-
-#### COMPUTE_BEGIN
-
-Expected structure:
-```
-["COMPUTE_BEGIN", ASTNode node, String attribute, Object params, Object value]
-```
-Example invocation to `recv` in `cpr_setTraceReceiver`:
-```java
-recv.accept(new Object[]{ "COMPUTE_BEGIN", someAstNode, "foo()", null, null })
-```
-
-#### COMPUTE_END
-Expected structure:
-```
-["COMPUTE_END", ASTNode node, String attribute, Object params, Object value]
-```
-Example invocation to `recv` in `cpr_setTraceReceiver`:
-```java
-recv.accept(new Object[]{ "COMPUTE_END", someAstNode, "foo()", null, "ResultValue" })
-```
-
-### Tracing locator issues
-
-Tracing can be tricky to get right. You may get errors in the terminal where you started `codeprober.jar` stating something like:
-```
-Failed creating locator for AstNode< [..]
-```
-This happens if one of the AST nodes passed to a trace events aren't attached to the AST anymore. This can happen for example if you mutate the tree through rewrites.
-You can try toggling the `flush tree first` checkbox under `Capture traces` on and off. You can also try changing the `cache strategy` values back and forth. Some combination of the two might work.
-
-If changing the settings doesn't work, then you must change which events are reported to CodeProber. Try to avoid setting the `ASTNode` arguments to nodes that get removed from the tree.
 
 ## Artifact
 

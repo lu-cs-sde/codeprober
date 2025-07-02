@@ -247,6 +247,10 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: Workspace, extras:
 }
 
 async function getFileContents(workspace: Workspace, path: string): Promise<CachedFileEntry | null> {
+  if (path === unsavedFileKey) {
+    console.warn('Tried loading temp file contents from server?');
+    return null;
+  }
   const cached = workspace.cachedFiles[path];
   if (cached) {
     return cached;
@@ -389,6 +393,8 @@ const createRow = (
   const click = () => {
     switch (kind) {
       case 'unsaved':
+        setActive(path, workspace.cachedFiles[path] ?? { contents: settings.getEditorContents() ?? '', windows: settings.getProbeWindowStates() });
+        break;
       case 'file':
         getFileContents(workspace, path)
           .then(text => {

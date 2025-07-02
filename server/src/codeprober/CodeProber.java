@@ -232,6 +232,10 @@ public class CodeProber {
 		CodespacesCompat.getChangeBufferTime();
 		final File workspaceRoot = WorkspaceHandler.getWorkspaceRoot(true);
 		if (workspaceRoot != null) {
+			if (backingFile != null) {
+				System.err.println("ERROR: Cannot mix cpr.backing_file and cpr.workspace");
+				System.exit(1);
+			}
 			new WorkspaceDirectoryMonitor(workspaceRoot, msgPusher).start();
 		}
 

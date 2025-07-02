@@ -369,7 +369,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           cv.style.cursor = 'default';
           let didHighlightSomething = false;
           const hoveredNode: { tgt:  Node | undefined } = { tgt: undefined };
-          const renderNode = (node: Node) => { // , ox: number, oy: number
+          const renderNode = (node: Node) => {
 
             const renderx = node.pos.x;
             const rendery = node.pos.y;
