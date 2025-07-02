@@ -6,6 +6,7 @@ A small number of methods **must** be set on the AST nodes, including:
 | ------------- | -------- | ------------------------------------------------------------------- |
 | getParent     | AST Node | Get the parent for the given node, or `null` if it is the root node |
 | getChild(int) | AST node | The a child by index                                                |
+
 In addition, CodeProber requires one of 5 variants of line/column and child counting methods. It checks for the presence of these accessors in numerical order (Variant 1, Variant 2, ...).
 CodeProber has supports for these multiple variants in order to maximize compatibility with different styles of language implementation. If your are able to chose which variant to support, then variant 1 is preferred.
 

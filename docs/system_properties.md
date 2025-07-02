@@ -4,10 +4,10 @@ Most properties must be explicitly set in the terminal (or use `jvmArgs` in the 
 A small number of properties are possible to set programatically in your `CodeProber_parse` function.
 For example:
 ```
-	public static Object CodeProber_parse(String[] args) {
-		System.setProperty("cpr.type_identification_style", "NODE_LABEL");
-		// ... then proceed with actual parsing ...
-	}
+public static Object CodeProber_parse(String[] args) {
+  System.setProperty("cpr.type_identification_style", "NODE_LABEL");
+  // ... then proceed with actual parsing ...
+}
 ```
 This works because CodeProber only reads certain properties **after** calling `CodeProber_parse`.
 The properties for which this works are marked with `Y` in the `Late Read` column.
