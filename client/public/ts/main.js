@@ -12247,7 +12247,7 @@ define("settings", ["require", "exports", "model/syntaxHighlighting", "ui/UIElem
         setTextProbeStyle: (textProbeStyle) => settings.set({ ...settings.get(), textProbeStyle }),
         shouldHideSettingsPanel: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.hideSettingsPanel) !== null && _b !== void 0 ? _b : false; },
         setShouldHideSettingsPanel: (shouldHide) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),
-        shouldGroupPropertiesByAspect: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.groupPropertiesByAspect) !== null && _b !== void 0 ? _b : false; },
+        shouldGroupPropertiesByAspect: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.groupPropertiesByAspect) !== null && _b !== void 0 ? _b : true; },
         setShouldGroupPropertiesByAspect: (shouldHide) => settings.set({ ...settings.get(), groupPropertiesByAspect: shouldHide }),
         shouldAutoShortenPropertyNames: () => { var _a, _b; return (_b = (_a = settings.get()) === null || _a === void 0 ? void 0 : _a.autoShortenPropertyNames) !== null && _b !== void 0 ? _b : true; },
         setShouldAutoShortenPropertyNames: (autoShortenPropertyNames) => settings.set({ ...settings.get(), autoShortenPropertyNames }),

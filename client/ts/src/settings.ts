@@ -158,7 +158,7 @@ const settings = {
   shouldHideSettingsPanel: () => settings.get()?.hideSettingsPanel ?? false,
   setShouldHideSettingsPanel: (shouldHide: boolean) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),
 
-  shouldGroupPropertiesByAspect: () => settings.get()?.groupPropertiesByAspect ?? false,
+  shouldGroupPropertiesByAspect: () => settings.get()?.groupPropertiesByAspect ?? true,
   setShouldGroupPropertiesByAspect: (shouldHide: boolean) => settings.set({ ...settings.get(), groupPropertiesByAspect: shouldHide }),
 
   shouldAutoShortenPropertyNames: () => settings.get()?.autoShortenPropertyNames ?? true,
