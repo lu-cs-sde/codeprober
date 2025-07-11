@@ -78,7 +78,7 @@ function syntaxHighlightEffect() {
     return classColorCache[clazz];
   }
   const addClassMark = StateEffect.define({
-    map: ({from, to, clazz}, change) => ({from: change.mapPos(from), to: change.mapPos(to), clazz})
+    map: ({from, to, clazz}, change) => ({from: change.mapPos(from), to: change.mapPos(to), clazz}),
   })
   const clearClassMarks = StateEffect.define({
       map: ({}, change) => ({})
@@ -295,10 +295,10 @@ window.defineEditor(
         }
         const startLine = editor.state.doc.line(clampLine(span.lineStart));
         const endLine = editor.state.doc.line(clampLine(span.lineEnd));
-        const clampPos = pos => Math.max(startLine.from, Math.min(pos, startLine.to));
+        const clampPos = (pos, line) => Math.max(line.from, Math.min(pos, line.to));
         effects.push(addClassMark.of({
-          from: clampPos(startLine.from + span.colStart - 1, startLine.to),
-          to: clampPos(endLine.from + span.colEnd),
+          from: clampPos(startLine.from + span.colStart - 1, startLine),
+          to: clampPos(endLine.from + span.colEnd, endLine),
           clazz
         }));
       }

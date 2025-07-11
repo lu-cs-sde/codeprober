@@ -532,6 +532,11 @@ body[data-theme-light="true"] .elp-flash-multiline {
   background: #8081;
 }
 
+/* Fix multiline highlights in CodeMirror */
+.cm-editor .monaco-rag-highlight-sticky,
+.cm-editor .elp-flash-multiline {
+  display: inline-block;
+}
 
 /* Progressively higher alpha values so that overlapping sticky highlights are easier to distinguish */
 .monaco-rag-highlight-sticky-0 { background: rgba(  0, 255,   0, 0.200); /* lime */ }
