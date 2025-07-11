@@ -11390,6 +11390,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                         if (rhsEval.type === 'error') {
                             addSquiggly(lineIdx, rhsEval.errRange.colStart, rhsEval.errRange.colEnd, rhsEval.msg);
                             addStickyBox(['elp-result-fail'], span, ['elp-actual-result-err'], rhsEval.msg);
+                            combinedResults.numFail++;
                             continue;
                         }
                         // Else, success!

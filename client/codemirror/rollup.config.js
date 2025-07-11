@@ -20,7 +20,7 @@ export default [
             (process.env.NODE_ENV === 'production' && babel({
                 exclude: ['node_modules/**'],
             })),
-            terser(),
+            terser(), // Comment for easier debugging
         ],
     }
 ];

@@ -7,11 +7,7 @@ function completionChangePlugin(callback) {
   const { ViewPlugin, selectedCompletion } = cmImport();
   return ViewPlugin.fromClass(class {
       prevCompletion = null;
-
-      constructor(view) {
-        // this.prevCompletion = selectedCompletion(view.state);
-        // callback(this.prevCompletion);
-      }
+      constructor(view) { }
 
       update(update) {
         if (update.docChanged || update.selectionSet || update.transactions.length) {
@@ -28,7 +24,6 @@ function completionChangePlugin(callback) {
 function syntaxHighlightEffect() {
   const { Decoration, StateEffect, StateField, EditorView, WidgetType, ViewPlugin } = cmImport();
 
-
   class AfterLabelWidget extends WidgetType {
     constructor(params) {
       super()
@@ -38,10 +33,8 @@ function syntaxHighlightEffect() {
     eq(other) { return other.checked == this.checked }
 
     toDOM() {
-      // console.log('toDOMming ', this.checked)
       let wrap = document.createElement("span")
       wrap.setAttribute("aria-hidden", "true")
-      // wrap.className = "cm-boolean-toggle"
       wrap.className = (this.params.contentClassNames ?? []).join(' ');
       wrap.innerText = this.params.content;
       return wrap
@@ -49,59 +42,67 @@ function syntaxHighlightEffect() {
 
     ignoreEvent() { return false }
   }
-  const pluginDecorationSetWrapper = { decorations: Decoration.set([]) }
-  const checkboxPlugin = ViewPlugin.fromClass(class {
-    decorations
-    constructor() {
-      this.decorations = pluginDecorationSetWrapper.decorations;
-    }
-    update(upd) {
-      if (upd.docChanged) {
-        pluginDecorationSetWrapper.decorations = pluginDecorationSetWrapper.decorations.map(upd.changes);
-      }
-      this.decorations = pluginDecorationSetWrapper.decorations;
-    }
-  }, {
-    decorations: v => pluginDecorationSetWrapper.decorations,
-  })
 
-  const syntaxColorCache = {};
-  const getSyntaxColorMarker = (color) => {
-    if (!syntaxColorCache[color]) {
-      syntaxColorCache[color] = Decoration.mark({ class: `${color}`});
-    }
-    return syntaxColorCache[color];
-  }
-  const setSyntaxHighlight = StateEffect.define({
-    map: ({from, to, color}, change) => ({from: change.mapPos(from), to: change.mapPos(to), color})
+  const setAfterLabels = StateEffect.define({
+    map: (labels, change) => labels.map(lbl => ({...lbl, loc: change.mapPos(lbl.loc)}))
   })
-
-  const clearSyntaxHighlight = StateEffect.define({
-      map: ({}, change) => ({})
-  })
-
-  const syntaxHighlightField = StateField.define({
+  const afterLabelField = StateField.define({
     create() {
       return Decoration.none
     },
     update(underlines, tr) {
-      // console.log('mapping underlinges:', underlines, 'w/ tr:', tr);
       underlines =  underlines.map(tr.changes)
       for (let e of tr.effects) {
+        if (e.is(setAfterLabels)) {
+          underlines = underlines.update({
+            filter: () => false,
+            add: e.value
+              .sort((a, b) => a.pos - b.pos)
+              .map(lblCfg => Decoration
+                  .widget({ widget: new AfterLabelWidget(lblCfg), side: 1, })
+                  .range(lblCfg.pos, lblCfg.pos)
+              ),
+          });
+        }
+      }
+      return underlines
+    },
+    provide: f => EditorView.decorations.from(f)
+  })
 
-        if (e.is(setSyntaxHighlight)) {
-          // console.log('added hl from', e.value.from,' to', e.value.to, ', doclen:', );
+  const classColorCache = {};
+  const getClassColorMarker = (clazz) => {
+    if (!classColorCache[clazz]) {
+      classColorCache[clazz] = Decoration.mark({ class: `${clazz}`});
+    }
+    return classColorCache[clazz];
+  }
+  const addClassMark = StateEffect.define({
+    map: ({from, to, clazz}, change) => ({from: change.mapPos(from), to: change.mapPos(to), clazz})
+  })
+  const clearClassMarks = StateEffect.define({
+      map: ({}, change) => ({})
+  })
+
+  const classMarkField = StateField.define({
+    create() {
+      return Decoration.none
+    },
+    update(underlines, tr) {
+      underlines =  underlines.map(tr.changes)
+      for (let e of tr.effects) {
+        if (e.is(addClassMark)) {
           const doclen = tr.state.doc.length;
           const from = Math.max(0, Math.min(doclen, e.value.from));
           const to = Math.max(from + 1, Math.min(doclen + 1, e.value.to));
           const additions = [
-            getSyntaxColorMarker(e.value.color).range(from, to),
+            getClassColorMarker(e.value.clazz).range(from, to),
           ];
           underlines = underlines.update({
             add: additions,
           })
-          }
-        if (e.is(clearSyntaxHighlight)) {
+        }
+        if (e.is(clearClassMarks)) {
             underlines = underlines.update({ filter: () => false });
         }
       }
@@ -110,9 +111,11 @@ function syntaxHighlightEffect() {
     provide: f => EditorView.decorations.from(f)
   })
 
-  return { setSyntaxHighlight, clearSyntaxHighlight, syntaxHighlightField, checkboxPlugin, AfterLabelWidget, pluginDecorationSetWrapper };
+  return {
+    addClassMark, clearClassMarks, classMarkField,
+    setAfterLabels, afterLabelField,
+  };
 }
-
 
 window.defineEditor(
   'CodeMirror',
@@ -124,7 +127,7 @@ window.defineEditor(
   predicate: () => 'editor_codemirror' in window,
   }),
   (value, onChange, initialSyntaxHighlight) => {
-    const { EditorView, basicSetup, Compartment, languages, vscodeDark, vscodeLight, indentWithTab, keymap, StateEffect, linter, Decoration, autocompletion, hoverTooltip, closeHoverTooltips} = cmImport();
+    const { EditorView, basicSetup, Compartment, languages, vscodeDark, vscodeLight, indentWithTab, keymap, StateEffect, linter, autocompletion, hoverTooltip, closeHoverTooltips, completionStatus, selectedCompletion } = cmImport();
 
     const themeCompartment = new Compartment();
     const langCompartment = new Compartment();
@@ -133,18 +136,26 @@ window.defineEditor(
       const line = editor.state.doc.lineAt(context.pos);
       const column = context.pos - line.from + 1;
       const completeRes = await window.HandleLspLikeInteraction?.('complete', { line: line.number, column, });
-      console.log('awaited:', completeRes, 'from', { line, column });
       if (!completeRes) {
         return null;
       }
-      console.log('TODO map', completeRes);
       const fromLine = editor.state.doc.line(Math.max(1, Math.min(completeRes.from.line, editor.state.doc.lines)));
+      setTimeout(() => {
+        if (completionStatus(editor.state) === null) {
+          // The popup never showed, because no item can be inserted at this point
+          // Manually trigger "onClosed"
+          if (typeof OnCompletionItemListClosed === 'function') {
+            window.OnCompletionItemListClosed();
+          }
+        }
+      })
       return {
         from: fromLine.from + Math.max(0, Math.min(completeRes.from.column - 1, fromLine.length)),
         options: completeRes.suggestions.map((sug, nodeIndex) => ({
           label: sug.label,
           type: 'text',
           nodeIndex, // <-- used by TextProbeManager to detect index
+          sort: nodeIndex,
         })),
       };
     }
@@ -172,7 +183,7 @@ window.defineEditor(
       return diagList;
     });
 
-    const { setSyntaxHighlight, clearSyntaxHighlight, syntaxHighlightField, checkboxPlugin, AfterLabelWidget, pluginDecorationSetWrapper } = syntaxHighlightEffect();
+    const { addClassMark, clearClassMarks, classMarkField, afterLabelField, setAfterLabels } = syntaxHighlightEffect();
 
     const completionChangeListener = completionChangePlugin(compl => {
       setTimeout(() => {
@@ -249,9 +260,9 @@ window.defineEditor(
           themeCompartment.of(vscodeDark),
           langCompartment.of(selectSyntaxHighlightExtension(initialSyntaxHighlight)),
           lintExtension,
-          checkboxPlugin,
           autocompletion({
-            override: [myCompletions]
+            override: [myCompletions],
+            compareCompletions: (a, b) => (b.sort ?? 0) - (a.sort ?? 0),
           }),
           completionChangeListener,
           hoverExt,
@@ -274,53 +285,55 @@ window.defineEditor(
       updateSpanHighlightTimeout = setTimeout(() => doUpdateSpanHighlight(span, stickies), 10);
     }
     const clampLine = (line, state = editor.state) => Math.max(1, Math.min(line, state.doc.lines))
+    let hadStickiesRecently = false;
     const doUpdateSpanHighlight = (span, stickies) => {
       const effects = [];
 
-      const createSetter = (span, color) => {
+      const createSetter = (span, clazz) => {
         if (!span.lineStart || !span.lineEnd) {
           return;
         }
         const startLine = editor.state.doc.line(clampLine(span.lineStart));
         const endLine = editor.state.doc.line(clampLine(span.lineEnd));
         const clampPos = pos => Math.max(startLine.from, Math.min(pos, startLine.to));
-        effects.push(setSyntaxHighlight.of({ from: clampPos(startLine.from + span.colStart - 1, startLine.to), to: clampPos(endLine.from + span.colEnd), color }));
+        effects.push(addClassMark.of({
+          from: clampPos(startLine.from + span.colStart - 1, startLine.to),
+          to: clampPos(endLine.from + span.colEnd),
+          clazz
+        }));
       }
       if (span && span.lineStart && span.lineEnd) {
-        // if (!lastSetSpan || Object.keys(lastSetSpan).every(key => lastSetSpan[key] === span[key])) {
-        //   lastSetSpan = span;
-          createSetter(span, 'cm-highlight-rag');
-        // }
+        createSetter(span, 'cm-highlight-rag');
       } else {
-        // if (lastSetSpan !== null) {
-        //   lastSetSpan = null;
-          effects.push(clearSyntaxHighlight.of({}));
-        // }
+        effects.push(clearClassMarks.of({}));
       }
-      if (stickies) {
-        // stickies.forEach(({ classNames, span,  content, contentClassNames }) => {
 
-        // });
-        // pluginDecorationSetWrapper.decorations = () => {
-          const widgets = [];
-          stickies.forEach(({ classNames, span,  content, contentClassNames }) => {
-            if (content) {
-              const line = editor.state.doc.line(clampLine(span.lineEnd));
-              const loc = Math.max(line.from, Math.min(line.to, line.from + span.colEnd))
-              widgets.push(
-                Decoration.widget({ widget: new AfterLabelWidget({ content, contentClassNames}), side: 1, }).range(loc, loc)
-              );
-            } else {
-              createSetter(span, classNames.join(' '));
-            }
-          });
-          // return widgets;
-          pluginDecorationSetWrapper.decorations = Decoration.set(widgets, /*sort=*/true);;
-        // }
-        // Decoration.set(widgets, /*sort=*/true);
+      let addedAnyAfterLabels = false;
+      if (stickies?.length) {
+        const afterLabels = [];
+        stickies.forEach(lblCfg => {
+          if (lblCfg.content) {
+            const line = editor.state.doc.line(clampLine(lblCfg.span.lineEnd));
+            const pos = Math.max(line.from, Math.min(line.to, line.from + lblCfg.span.colEnd))
+            afterLabels.push({ ...lblCfg, pos });
+          } else {
+            createSetter(lblCfg.span, lblCfg.classNames.join(' '));
+          }
+        });
+        if (afterLabels.length) {
+          addedAnyAfterLabels = true;
+          effects.push(setAfterLabels.of(afterLabels));
+          if (!editor.state.field(afterLabelField, false)) {
+              effects.push(StateEffect.appendConfig.of([afterLabelField]));
+          }
+        }
       }
-      if (!editor.state.field(syntaxHighlightField, false)) {
-          effects.push(StateEffect.appendConfig.of([syntaxHighlightField]));
+      if (addedAnyAfterLabels && !hadStickiesRecently) {
+        hadStickiesRecently = false;
+        effects.push(setAfterLabels.of([]))
+      }
+      if (!editor.state.field(classMarkField, false)) {
+          effects.push(StateEffect.appendConfig.of([classMarkField]));
       }
       editor.dispatch({effects})
     };
@@ -343,15 +356,11 @@ window.defineEditor(
         if (!endPos) {
           return;
         }
-        const round = pos => {
-          // pos.bottom = pos.bottom | 0;
-          // pos.top = pos.top | 0;
-          // pos.left = pos.left | 0;
-          // pos.right = pos.right | 0;
+        const calcHeight = pos => {
           pos.height = pos.bottom - pos.top;
         }
-        round(startPos);
-        round(endPos);
+        calcHeight(startPos);
+        calcHeight(endPos);
 
         if (startPos.top < 0 && endPos.top < 0) {
           return;
@@ -366,9 +375,6 @@ window.defineEditor(
           const cv = document.createElement('canvas');
           cv.width = len;
           cv.height = height + vpad;
-          // console.log('len:', len, 'from', startPos, endPos)
-
-
           let colorBase = '#F00';
           if (/^#[a-fA-F0-9]{4}$/.test(message)) {
             colorBase = message;
@@ -495,7 +501,6 @@ window.defineEditor(
               // }
               // Curved edge
               {
-                // const barOffset = barBot - barBot;
                 drawCurve((cos, sin) => {
                   const x = len - tipw - 2 + (-curvedMidsectionLen * cos);
                   const y = barTop + (-vpad/2 - barTop) * sin;
@@ -507,11 +512,6 @@ window.defineEditor(
                   const y = -vpad/2 + (barTop - (-vpad/2)) * cos;
                   ctx.lineTo(x, midh + y);
                 });
-                // drawCurve((cos, sin) => {
-                //   const x = tipw + 2 + (curvedMidsectionLen * cos);
-                //   const y = barTop + (-vpad/2 - barTop) * sin;
-                //   ctx.lineTo(x, barOffset + y);
-                // });
               }
               ctx.lineTo(tipw + 2, barBot);
             } else {
@@ -530,9 +530,6 @@ window.defineEditor(
           cv.style.userSelect = 'none';
           cv.style.pointerEvents = 'none';
           cv.style.position = 'absolute';
-          cv.onpointerenter = () => {
-            console.log('enter');
-          }
 
           cv.style.top = `${startPos.top + (startPos.height - cv.height) / 2}px`;
           cv.style.left = `${startPos.left}px`;
@@ -598,7 +595,6 @@ window.defineEditor(
       return false;
     });
     editor.dom.querySelector('.cm-scroller').addEventListener('scroll', (e) => {
-      // console.log('refreshing cool markers');
       refreshCoolMarkers();
     });
     editor.dispatch({ effects: [StateEffect.appendConfig.of(EditorView.updateListener.of(update => {
@@ -643,8 +639,6 @@ window.defineEditor(
           };
         }
 
-
-
         const diag = {
           from: lineColToOffset(lineStart, colStart),
           to: lineColToOffset(lineEnd, colEnd + 1),
@@ -656,14 +650,11 @@ window.defineEditor(
           source,
           message: message,
         };
-        // console.log('adding proble', problemId)
         diagnostics[problemId] = diag;
         return {
           clear: () => {
-            // console.log('deleting proble', problemId)
             delete diagnostics[problemId];
             // Force lint updates: https://discuss.codemirror.net/t/can-we-manually-force-linting-even-if-the-document-hasnt-changed/3570/17
-
             clearTimeout(forceUpdateDiagnosticsTimeout);
             forceUpdateDiagnosticsTimeout = setTimeout(() => {
               const p = editor.plugin(lintExtension[1]);

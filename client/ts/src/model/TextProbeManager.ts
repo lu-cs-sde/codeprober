@@ -255,6 +255,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
               ['elp-result-fail'], span,
               ['elp-actual-result-err'], rhsEval.msg,
             );
+            combinedResults.numFail++;
             continue;
           }
           // Else, success!
