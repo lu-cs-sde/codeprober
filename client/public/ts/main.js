@@ -11236,20 +11236,26 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                 sticky: { span, classNames: [span.lineStart === span.lineEnd ? 'elp-flash' : 'elp-flash-multiline'] }
             }));
             flashes.forEach(flash => env.setStickyHighlight(flash.id, flash.sticky));
+            let numCleanups = 0;
+            let mouseMoveListener = null;
             const cleanup = () => {
+                ++numCleanups;
                 flashes.forEach(flash => env.clearStickyHighlight(flash.id));
                 activeFlashSpan = null;
-                window.removeEventListener('mousemove', cleanup);
+                if (mouseMoveListener) {
+                    window.removeEventListener('mousemove', mouseMoveListener);
+                }
             };
             Object.assign(activeSpanReferenceHoverPos, attachDragToX_4.lastKnownMousePos);
             if (removeHighlightsOnMove) {
-                window.addEventListener('mousemove', (e) => {
+                mouseMoveListener = (e) => {
                     const dx = e.x - activeSpanReferenceHoverPos.x;
                     const dy = e.y - activeSpanReferenceHoverPos.y;
                     if (Math.hypot(dx, dy) > 24 /* arbitrary distance */) {
                         cleanup();
                     }
-                });
+                };
+                window.addEventListener('mousemove', mouseMoveListener);
             }
             activeFlashCleanup();
             activeFlashCleanup = cleanup;
@@ -11674,7 +11680,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                     flasher.clear();
                 };
                 window.OnCompletionItemFocused = item => {
-                    if (item.nodeIndex === 'undefined') {
+                    if ((item === null || item === void 0 ? void 0 : item.nodeIndex) === 'undefined') {
                         return;
                     }
                     const nodeIndex = item.nodeIndex;
@@ -11688,34 +11694,37 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                     }
                     flasher.flash([(0, startEndToSpan_7.default)(node.start, node.end)]);
                 };
-                return matchingNodes.map((node, nodeIndex) => {
-                    var _a, _b;
-                    const type = (_a = node.label) !== null && _a !== void 0 ? _a : node.type;
-                    const label = type.split('.').slice(-1)[0];
-                    let detail = undefined;
-                    if (type.startsWith('$')) {
-                        // It is a variable, add the type as detail
-                        detail = node.type.split('.').slice(-1)[0];
-                    }
-                    const ret = { label, kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0'), detail };
-                    if (!duplicateTypes.has(type)) {
-                        if (label.length > existingText.length && label.startsWith(existingText)) {
-                            ret.insertText = label.slice(existingText.length);
+                return {
+                    from: { line: line + 1, column: column + 1 - existingText.length },
+                    items: matchingNodes.map((node, nodeIndex) => {
+                        var _a, _b;
+                        const type = (_a = node.label) !== null && _a !== void 0 ? _a : node.type;
+                        const label = type.split('.').slice(-1)[0];
+                        let detail = undefined;
+                        if (type.startsWith('$')) {
+                            // It is a variable, add the type as detail
+                            detail = node.type.split('.').slice(-1)[0];
                         }
-                        else {
-                            ret.insertText = label;
+                        const ret = { label, kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0'), detail };
+                        if (!duplicateTypes.has(type)) {
+                            if (label.length > existingText.length && label.startsWith(existingText)) {
+                                ret.insertText = label.slice(existingText.length);
+                            }
+                            else {
+                                ret.insertText = label;
+                            }
+                            return ret;
                         }
+                        let idx = ((_b = nodeListCounter[type]) !== null && _b !== void 0 ? _b : -1) + 1;
+                        nodeListCounter[type] = idx;
+                        const indexed = `${label}[${idx}]`;
+                        ret.label = indexed;
+                        ret.insertText = indexed;
                         return ret;
-                    }
-                    let idx = ((_b = nodeListCounter[type]) !== null && _b !== void 0 ? _b : -1) + 1;
-                    nodeListCounter[type] = idx;
-                    const indexed = `${label}[${idx}]`;
-                    ret.label = indexed;
-                    ret.insertText = indexed;
-                    return ret;
-                });
+                    })
+                };
             };
-            const completeProp = async (nodeType, nodeIndex, prerequisiteAttrs, previousStepSpan) => {
+            const completeProp = async (nodeType, nodeIndex, prerequisiteAttrs, previousStepSpan, existingText) => {
                 var _a, _b;
                 let locator = undefined;
                 if (nodeType.startsWith('$')) {
@@ -11746,9 +11755,6 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                     }
                     locator = chainResult.body[0].value;
                 }
-                // const typeStart = match.index + 2;
-                // const typeEnd = typeStart + match.nodeType.length;
-                // const firstPropStart =
                 flasher.flash([
                     {
                         lineStart: line + 1, colStart: previousStepSpan[0],
@@ -11772,11 +11778,14 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                     return null;
                 }
                 const zeroArgPropNames = new Set(props.properties.filter(prop => { var _a, _b; return ((_b = (_a = prop.args) === null || _a === void 0 ? void 0 : _a.length) !== null && _b !== void 0 ? _b : 0) === 0; }).map(prop => prop.name));
-                return [...zeroArgPropNames].sort().map(label => {
-                    return { label, insertText: label, kind: 2 };
-                });
+                return {
+                    from: { line: line + 1, column: column + 1 - existingText.length },
+                    items: [...zeroArgPropNames].sort().map(label => {
+                        return { label, insertText: label, kind: 2 };
+                    })
+                };
             };
-            const completeExpectedValue = async (nodeType, nodeIndex, attrNames) => {
+            const completeExpectedValue = async (nodeType, nodeIndex, attrNames, existingText) => {
                 var _a, _b;
                 let locator = undefined;
                 if (nodeType.startsWith('$')) {
@@ -11784,7 +11793,10 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                     const varData = evaluator.variables[nodeType];
                     if (varData && !attrNames.length) {
                         const cmp = evalPropertyBodyToString(varData);
-                        return [{ label: cmp, insertText: cmp, kind: 15 }];
+                        return {
+                            from: { line: line + 1, column: column + 1 },
+                            items: [{ label: cmp, insertText: cmp, kind: 15 }],
+                        };
                     }
                     if (((_a = varData === null || varData === void 0 ? void 0 : varData[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node') {
                         locator = varData[0].value;
@@ -11803,7 +11815,10 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                 }
                 if (!attrNames.length) {
                     const cmp = evalPropertyBodyToString([{ type: 'node', value: locator }]);
-                    return [{ label: cmp, insertText: cmp, kind: 15 }];
+                    return {
+                        from: { line: line + 1, column: column + 1 },
+                        items: [{ label: cmp, insertText: cmp, kind: 15 }],
+                    };
                 }
                 const attrEvalResult = await evaluator.evaluatePropertyChain({
                     locator,
@@ -11822,7 +11837,10 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                     }
                 }
                 const cmp = evalPropertyBodyToString(attrEvalResult.body);
-                return [{ label: cmp, insertText: cmp, kind: 15 }];
+                return {
+                    from: { line: line + 1, column: column + 1 - existingText.length },
+                    items: [{ label: cmp, insertText: cmp, kind: 15 }],
+                };
             };
             const filtered = evaluator.fileMatches.matchesOnLine(line);
             for (let i = 0; i < filtered.length; ++i) {
@@ -11846,7 +11864,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                 let attrSearchStart = typeEnd;
                 const maybeCompleteTypeOrAttr = async (m, typeFilter = 'allow-all') => {
                     if (column >= typeStart && column <= typeEnd) {
-                        return completeType(typeFilter);
+                        return completeType(typeFilter, lines[line].value.slice(typeStart, column));
                     }
                     attrSearchStart = typeEnd;
                     for (let attrIdx = 0; attrIdx < m.attrNames.length; ++attrIdx) {
@@ -11857,7 +11875,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                         const attrEnd = attrStart + attr.length;
                         attrSearchStart = attrEnd;
                         if (column >= attrStart && column <= attrEnd) {
-                            return completeProp(m.nodeType, m.nodeIndex, m.attrNames.slice(0, attrIdx), [typeStart + 1, attrStart - 1]);
+                            return completeProp(m.nodeType, m.nodeIndex, m.attrNames.slice(0, attrIdx), [typeStart + 1, attrStart - 1], attr.slice(0, column - attrStart));
                         }
                     }
                     return null;
@@ -11901,7 +11919,6 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                 // }
                 const currExpectVal = (_a = lhsMatch.rhs.expectVal) !== null && _a !== void 0 ? _a : '';
                 const expectStart = lines[line].value.indexOf('=', attrSearchStart) + 1;
-                ;
                 const expectEnd = expectStart + currExpectVal.length;
                 if (column >= expectStart && column <= expectEnd) {
                     if (column > expectStart && currExpectVal.startsWith('$')) {
@@ -11919,7 +11936,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                         return maybeCompleteTypeOrAttr(rhsMatch);
                     }
                     else {
-                        return completeExpectedValue(lhsMatch.lhs.nodeType, lhsMatch.lhs.nodeIndex, lhsMatch.lhs.attrNames);
+                        return completeExpectedValue(lhsMatch.lhs.nodeType, lhsMatch.lhs.nodeIndex, lhsMatch.lhs.attrNames, currExpectVal.slice(0, column - expectStart));
                     }
                 }
             }
@@ -11938,19 +11955,8 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                 const typeStart = match.index + 2;
                 const typeEnd = Math.max(typeStart + nodeType.length, lines[line].value.indexOf('.', typeStart));
                 if (column >= typeStart && column <= typeEnd) {
-                    return completeType();
+                    return completeType('allow-all', lines[line].value.slice(typeStart, column));
                 }
-                // if (match.attrNames) {
-                //   let attrSearchStart = typeEnd;
-                //   for (let attrIdx = 0; attrIdx < match.attrNames.length; ++attrIdx) {
-                //     const attrStart = lines[line].indexOf('.', attrSearchStart) + 1;;
-                //     const attrEnd = attrStart + match.attrNames[attrIdx].length;
-                //     attrSearchStart = attrEnd;
-                //     if (column >= attrStart && column <= attrEnd) {
-                //       return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx), [typeStart, attrStart]);
-                //     }
-                //   }
-                // }
             }
             return null;
         };
@@ -16540,7 +16546,6 @@ define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionP
                 // setLocalState?: (newValue: string) => void;
                 // getLocalState?: () => string;
                 // updateSpanHighlight?: (baseHighlight: Span | null, stickyHighlights: StickyHighlight[]) => void;
-                // registerStickyMarker?: (initialSpan: Span) => StickyMarker;
                 // markText?: TextMarkFn;
                 themeToggler: (isLightTheme) => {
                     // Do anything?
@@ -17228,7 +17233,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
         };
         {
             const fromSettings = settings_12.default.getActiveWorkspacePath();
-            if (fromSettings !== null) {
+            if (fromSettings !== null && fromSettings !== unsavedFileKey) {
                 if ((await getFileContents(workspace, fromSettings)) !== null) {
                     activeFile = fromSettings;
                     const parts = fromSettings.split('/');
@@ -17498,10 +17503,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 let setLocalState = (value) => { };
                 let markText = () => ({});
-                let registerStickyMarker = (initialSpan) => ({
-                    getSpan: () => initialSpan,
-                    remove: () => { },
-                });
                 const darkModeCheckbox = uiElements.darkModeCheckbox;
                 darkModeCheckbox.checked = !settings_13.default.isLightTheme();
                 const themeChangeListeners = {};
@@ -17542,12 +17543,28 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 if ((0, getEditorDefinitionPlace_2.default)().definedEditors[editorType]) {
                     const { preload, init, } = (0, getEditorDefinitionPlace_2.default)().definedEditors[editorType];
                     (0, getEditorDefinitionPlace_2.default)().loadPreload(preload, () => {
-                        var _a, _b;
-                        const res = init((_a = settings_13.default.getEditorContents()) !== null && _a !== void 0 ? _a : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_13.default.getSyntaxHighlighting());
+                        var _a, _b, _c;
+                        if (editorType === 'CodeMirror') {
+                            // Filter down the list of languages to those CM supports
+                            const cmLangs = (_a = window['editor_codemirror']) === null || _a === void 0 ? void 0 : _a.languages;
+                            if (cmLangs) {
+                                const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
+                                const options = syntaxHighlightingSelector.children;
+                                for (let i = 0; i < options.length; ++i) {
+                                    const elem = options.item(i);
+                                    if ((elem === null || elem === void 0 ? void 0 : elem.nodeType) == Node.ELEMENT_NODE && elem instanceof HTMLOptionElement) {
+                                        if (!cmLangs[elem.value]) {
+                                            elem.remove();
+                                            --i;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        const res = init((_b = settings_13.default.getEditorContents()) !== null && _b !== void 0 ? _b : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_13.default.getSyntaxHighlighting());
                         setLocalState = res.setLocalState || setLocalState;
                         getLocalState = res.getLocalState || getLocalState;
                         updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
-                        registerStickyMarker = res.registerStickyMarker || registerStickyMarker;
                         markText = res.markText || markText;
                         if (res.registerModalEnv) {
                             modalEnvHolder.setRecv(res.registerModalEnv);
@@ -17598,7 +17615,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             };
                             (0, Workspace_1.initWorkspace)({
                                 env: modalEnv,
-                                initialLocalContent: (_b = settings_13.default.getEditorContents()) !== null && _b !== void 0 ? _b : '',
+                                initialLocalContent: (_c = settings_13.default.getEditorContents()) !== null && _c !== void 0 ? _c : '',
                                 setLocalContent: contents => setLocalState(contents),
                                 onActiveFileChanged,
                                 getCurrentWindows: getCurrentWindowStates,
@@ -17618,6 +17635,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                                     if (ws.activeFileIsTempFile()) {
                                         loadSavedWindows();
                                     }
+                                }
+                                else {
+                                    loadSavedWindows();
                                 }
                             })
                                 .catch((err) => {
@@ -17795,7 +17815,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     setLocalState: (newVal) => setLocalState(newVal),
                     captureStdout: () => uiElements.captureStdoutCheckbox.checked,
                     duplicateOnAttr: () => uiElements.duplicateProbeCheckbox.checked,
-                    registerStickyMarker: (...args) => registerStickyMarker(...args),
                     updateSpanHighlight: (hl) => {
                         basicHighlight = hl;
                         updateSpanHighlight(basicHighlight, Object.values(stickyHighlights));
@@ -17870,7 +17889,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             if (activeTextProbeManager) {
                                 const res = await activeTextProbeManager.complete(pos.line, pos.column);
                                 if (res) {
-                                    return { suggestions: res };
+                                    return { suggestions: res.items, from: res.from };
                                 }
                             }
                             if (!deferLspToBackend) {
@@ -17936,8 +17955,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 notifyLocalChangeListeners(undefined, 'refresh-from-server');
             });
         }
-        if (location.search.split(/[?&]/).includes('editor=AST')) {
-            initEditor('AST');
+        const editorParam = location.search.split(/[?&]/).find(ent => ent.startsWith('editor='));
+        if (editorParam) {
+            initEditor(editorParam.slice(`editor=`.length));
         }
         else {
             initEditor('Monaco');

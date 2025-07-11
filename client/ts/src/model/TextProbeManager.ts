@@ -41,36 +41,17 @@ interface CompletionItem {
   sortText?: string;
   detail?: string;
 }
+interface CompletionResponse {
+  from: { line: number, column: number };
+  items: CompletionItem[];
+}
 interface TextProbeManager {
   hover: (line: number, column: number) => Promise<HoverResult | null>,
-  complete: (line: number, column: number) => Promise<CompletionItem[] | null>,
+  complete: (line: number, column: number) => Promise<CompletionResponse | null>,
   checkFile: (requestSrc: ParsingSource, knownSrc: string) => Promise<TextProbeCheckResults | null>,
 };
 
 type TextProbeStyle = 'angle-brackets' | 'disabled';
-
-// const createForgivingProbeRegex = () => {
-//   // Neede for autocompletion
-//   const reg = /\[\[(\$?\w*)(\[\d+\])?((?:\.(?:l:)?\w*)*)?(:?)(!?)(~?)(?:=(((?!\[\[).)*))?\]\](?!\])/g;
-
-//   return {
-//     exec: (line: string) => {
-//       const match = reg.exec(line);
-//       if (!match) {
-//         return null;
-//       }
-//       const [full, nodeType, nodeIndex, attrNames] = match;
-//       return {
-//         index: match.index,
-//         full,
-//         nodeType,
-//         nodeIndex: nodeIndex ? +nodeIndex.slice(1, -1) : undefined,
-//         attrNames: attrNames ? attrNames.slice(1).split('.') : undefined,
-//       };
-
-//     }
-//   }
-// }
 
 interface SpanFlasher {
   quickFlash: (spans: Span[]) => void;
@@ -96,20 +77,26 @@ const createSpanFlasher = (env: ModalEnv): SpanFlasher => {
       sticky: { span, classNames: [span.lineStart === span.lineEnd ? 'elp-flash' : 'elp-flash-multiline'] }
     }));
     flashes.forEach(flash => env.setStickyHighlight(flash.id, flash.sticky));
+    let numCleanups = 0;
+    let mouseMoveListener: null | ((e: MouseEvent) => void) = null;
     const cleanup = () => {
+      ++numCleanups;
       flashes.forEach(flash => env.clearStickyHighlight(flash.id));
       activeFlashSpan = null;
-      window.removeEventListener('mousemove', cleanup);
+      if (mouseMoveListener) {
+        window.removeEventListener('mousemove', mouseMoveListener);
+      }
     };
     Object.assign(activeSpanReferenceHoverPos, lastKnownMousePos);
     if (removeHighlightsOnMove) {
-      window.addEventListener('mousemove', (e) => {
+      mouseMoveListener = (e: MouseEvent) => {
         const dx = e.x - activeSpanReferenceHoverPos.x;
         const dy = e.y - activeSpanReferenceHoverPos.y;
         if (Math.hypot(dx, dy) > 24 /* arbitrary distance */) {
           cleanup();
         }
-      })
+      };
+      window.addEventListener('mousemove', mouseMoveListener)
     }
     activeFlashCleanup();
     activeFlashCleanup = cleanup;
@@ -538,7 +525,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
     const completeType = async (
       filter: PermittedTypeFilter = 'allow-all',
       existingText = ''
-    ): Promise<CompletionItem[] | null> => {
+    ): Promise<CompletionResponse | null> => {
       const matchingNodes: TALStep[] = [];
 
       const setupPromises: Promise<any>[] = [];
@@ -577,7 +564,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         flasher.clear();
       }
       window.OnCompletionItemFocused = item => {
-        if ((item as any).nodeIndex === 'undefined') {
+        if ((item as any)?.nodeIndex === 'undefined') {
           return;
         }
         const nodeIndex = (item as any).nodeIndex;
@@ -591,33 +578,41 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         }
         flasher.flash([startEndToSpan(node.start, node.end)]);
       };
-      return matchingNodes.map((node, nodeIndex) => {
-        const type = node.label ?? node.type;
-        const label = type.split('.').slice(-1)[0];
-        let detail: string | undefined = undefined;
-        if (type.startsWith('$')) {
-          // It is a variable, add the type as detail
-          detail = node.type.split('.').slice(-1)[0];
-        }
-        const ret: (CompletionItem & { nodeIndex: number })= { label, kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0'), detail };
-        if (!duplicateTypes.has(type)) {
-          if (label.length > existingText.length && label.startsWith(existingText)) {
-            ret.insertText = label.slice(existingText.length);
-          } else {
-            ret.insertText = label;
+      return {
+        from: { line: line + 1, column: column + 1 - existingText.length },
+        items: matchingNodes.map((node, nodeIndex) => {
+          const type = node.label ?? node.type;
+          const label = type.split('.').slice(-1)[0];
+          let detail: string | undefined = undefined;
+          if (type.startsWith('$')) {
+            // It is a variable, add the type as detail
+            detail = node.type.split('.').slice(-1)[0];
           }
-          return ret;
-        }
-        let idx = (nodeListCounter[type] ?? -1) + 1;
-        nodeListCounter[type] = idx;
+          const ret: (CompletionItem & { nodeIndex: number })= { label, kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0'), detail };
+          if (!duplicateTypes.has(type)) {
+            if (label.length > existingText.length && label.startsWith(existingText)) {
+              ret.insertText = label.slice(existingText.length);
+            } else {
+              ret.insertText = label;
+            }
+            return ret;
+          }
+          let idx = (nodeListCounter[type] ?? -1) + 1;
+          nodeListCounter[type] = idx;
 
-        const indexed = `${label}[${idx}]`;
-        ret.label = indexed;
-        ret.insertText = indexed;
-        return ret;
-      });
+          const indexed = `${label}[${idx}]`;
+          ret.label = indexed;
+          ret.insertText = indexed;
+          return ret;
+        })
+      };
     }
-    const completeProp = async (nodeType: string, nodeIndex: number | undefined, prerequisiteAttrs: string[], previousStepSpan: [number, number]) => {
+    const completeProp = async (
+      nodeType: string,
+      nodeIndex: number | undefined,
+      prerequisiteAttrs: string[], previousStepSpan: [number, number],
+      existingText: string,
+    ): Promise<CompletionResponse | null> => {
       let locator: NodeLocator | undefined = undefined;
       if (nodeType.startsWith('$')) {
         await evaluator.loadVariables();
@@ -646,10 +641,6 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         }
         locator = chainResult.body[0].value;
       }
-      // const typeStart = match.index + 2;
-      // const typeEnd = typeStart + match.nodeType.length;
-
-      // const firstPropStart =
       flasher.flash([
         {
           lineStart: line + 1, colStart: previousStepSpan[0],
@@ -674,18 +665,29 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         return null;
       }
       const zeroArgPropNames = new Set(props.properties.filter(prop => (prop.args?.length ?? 0) === 0).map(prop => prop.name));
-      return [...zeroArgPropNames].sort().map(label => {
-        return { label, insertText: label, kind: 2 };
-      });
+      return {
+        from: { line: line + 1, column: column + 1 - existingText.length },
+        items: [...zeroArgPropNames].sort().map(label => {
+          return { label, insertText: label, kind: 2 };
+        })
+      };
     }
-    const completeExpectedValue = async (nodeType: string, nodeIndex: number | undefined, attrNames: string[]) => {
+    const completeExpectedValue = async (
+      nodeType: string,
+      nodeIndex: number | undefined,
+      attrNames: string[],
+      existingText: string,
+    ): Promise<CompletionResponse | null> => {
       let locator: NodeLocator | undefined = undefined;
       if (nodeType.startsWith('$')) {
         await evaluator.loadVariables();
         const varData = evaluator.variables[nodeType];
         if (varData && !attrNames.length) {
           const cmp = evalPropertyBodyToString(varData);
-          return [{ label: cmp, insertText: cmp, kind: 15 }];
+          return {
+            from: { line: line + 1, column: column + 1 },
+            items: [{ label: cmp, insertText: cmp, kind: 15 }],
+          };
         }
         if (varData?.[0]?.type === 'node') {
           locator = varData[0].value;
@@ -703,7 +705,10 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       }
       if (!attrNames.length) {
         const cmp = evalPropertyBodyToString([{ type: 'node', value: locator }]);
-        return [{ label: cmp, insertText: cmp, kind: 15 }];
+        return {
+          from: { line: line + 1, column: column + 1 },
+          items: [{ label: cmp, insertText: cmp, kind: 15 }],
+        };
       }
       const attrEvalResult = await evaluator.evaluatePropertyChain({
         locator,
@@ -722,7 +727,10 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         }
       }
       const cmp = evalPropertyBodyToString(attrEvalResult.body)
-      return [{ label: cmp, insertText: cmp, kind: 15 }];
+      return {
+        from: { line: line + 1, column: column + 1 - existingText.length },
+        items: [{ label: cmp, insertText: cmp, kind: 15 }],
+      };
     };
 
     const filtered = evaluator.fileMatches.matchesOnLine(line);
@@ -748,7 +756,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       let attrSearchStart = typeEnd;
       const maybeCompleteTypeOrAttr = async (m: NodeAndAttrChainMatch, typeFilter: PermittedTypeFilter = 'allow-all'): Promise<ReturnType<TextProbeManager['complete']>> => {
         if (column >= typeStart && column <= typeEnd) {
-          return completeType(typeFilter);
+          return completeType(typeFilter, lines[line].value.slice(typeStart, column));
         }
         attrSearchStart = typeEnd;
         for (let attrIdx = 0; attrIdx < m.attrNames.length; ++attrIdx) {
@@ -759,7 +767,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
           const attrEnd = attrStart + attr.length;
           attrSearchStart = attrEnd;
           if (column >= attrStart && column <= attrEnd) {
-            return completeProp(m.nodeType, m.nodeIndex, m.attrNames.slice(0, attrIdx), [typeStart+1, attrStart-1]);
+            return completeProp(m.nodeType, m.nodeIndex, m.attrNames.slice(0, attrIdx), [typeStart+1, attrStart-1], attr.slice(0, column - attrStart));
           }
         }
         return null;
@@ -807,7 +815,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       //   return null;
       // }
       const currExpectVal = lhsMatch.rhs.expectVal ?? '';
-      const expectStart = lines[line].value.indexOf('=', attrSearchStart) + 1;;
+      const expectStart = lines[line].value.indexOf('=', attrSearchStart) + 1;
       const expectEnd = expectStart + currExpectVal.length;
       if (column >= expectStart && column <= expectEnd) {
         if (column > expectStart && currExpectVal.startsWith('$')) {
@@ -824,7 +832,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
           typeEnd = computeTypeEnd(rhsMatch);
           return maybeCompleteTypeOrAttr(rhsMatch);
         } else {
-          return completeExpectedValue(lhsMatch.lhs.nodeType, lhsMatch.lhs.nodeIndex, lhsMatch.lhs.attrNames);
+          return completeExpectedValue(lhsMatch.lhs.nodeType, lhsMatch.lhs.nodeIndex, lhsMatch.lhs.attrNames, currExpectVal.slice(0, column - expectStart));
         }
       }
     }
@@ -844,19 +852,8 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       const typeStart = match.index + 2;
       const typeEnd = Math.max(typeStart + nodeType.length, lines[line].value.indexOf('.', typeStart));
       if (column >= typeStart && column <= typeEnd) {
-        return completeType();
+        return completeType('allow-all', lines[line].value.slice(typeStart, column));
       }
-      // if (match.attrNames) {
-      //   let attrSearchStart = typeEnd;
-      //   for (let attrIdx = 0; attrIdx < match.attrNames.length; ++attrIdx) {
-      //     const attrStart = lines[line].indexOf('.', attrSearchStart) + 1;;
-      //     const attrEnd = attrStart + match.attrNames[attrIdx].length;
-      //     attrSearchStart = attrEnd;
-      //     if (column >= attrStart && column <= attrEnd) {
-      //       return completeProp(match.nodeType, match.nodeIndex, match.attrNames.slice(0, attrIdx), [typeStart, attrStart]);
-      //     }
-      //   }
-      // }
     }
 
     return null;

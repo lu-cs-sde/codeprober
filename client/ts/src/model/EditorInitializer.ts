@@ -4,7 +4,6 @@ type EditorInitializer = (initialValue: string, onChange: (newValue: string, adj
   setLocalState?: (newValue: string) => void;
   getLocalState?: () => string;
   updateSpanHighlight?: (baseHighlight: Span | null, stickyHighlights: StickyHighlight[]) => void;
-  registerStickyMarker?: (initialSpan: Span) => StickyMarker;
   markText?: TextMarkFn;
   themeToggler: (isLightTheme: boolean) => void;
   syntaxHighlightingToggler: (langId: SyntaxHighlightingLanguageId) => void;

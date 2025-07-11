@@ -649,7 +649,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
 
   {
     const fromSettings = settings.getActiveWorkspacePath();
-    if (fromSettings !== null) {
+    if (fromSettings !== null && fromSettings !== unsavedFileKey) {
       if ((await getFileContents(workspace, fromSettings)) !== null) {
         activeFile = fromSettings;
         const parts = fromSettings.split('/');

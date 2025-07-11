@@ -91,6 +91,17 @@ body.hide-settings #workspace-wrapper { grid-area: w2 }
 .input-Monaco {
   overflow: auto;
 }
+.input-CodeMirror {
+  position: relative;
+  font-size: 12px; /* 12px matches monaco */
+  display: flex;
+  max-height: 100%;
+  overflow: auto;
+}
+.input-CodeMirror > .cm-editor {
+  flex-grow: 1;
+}
+
 
 .input-Ace .feedback-highlight {
   position: absolute;
@@ -502,11 +513,13 @@ textarea {
   color: black;
 }
 
-.monaco-rag-highlight {
+.monaco-rag-highlight,
+.cm-highlight-rag {
   font-style: oblique;
   background: #8888;
 }
-body[data-theme-light="true"] .monaco-rag-highlight {
+body[data-theme-light="true"] .monaco-rag-highlight,
+body[data-theme-light="true"] .cm-highlight-rag {
   background: #8884;
 }
 
@@ -536,7 +549,7 @@ body[data-theme-light="true"] .elp-flash-multiline {
                               .elp-result-fail     { background: #9333; outline: 1px solid red;  }
                               .elp-result-probe    { background: #3993; outline: 1px solid lightseagreen;   }
                               .elp-result-stored   { background: #3993; outline: 1px solid goldenrod;   }
-                                      .elp-flash   { outline: 2px dashed yellow; }
+                                      .elp-flash   { outline: 2px dashed yellow; pointer-events: none; }
                             .elp-flash-multiline   { box-shadow: 2px 0 0px yellow inset; }
 
 body[data-theme-light="true"] .elp-result-success  { background: #efe7 }
@@ -1203,4 +1216,47 @@ body[data-theme-light="true"] .workspace-row-active {
 }
 body[data-theme-light="true"] .ast-view-reset-btn:hover {
   background-color: #DDD;
+}
+
+.codemirror_context_menu:focus {
+  border: 1px solid cyan;
+}
+.codemirror_context_menu {
+  display: none;
+  position: absolute;
+  background: #3d3d3d;
+  border: 1px solid black;
+  padding: 0.25rem 0;
+  font-size: 1rem;
+  z-index: 510; /* needs to be higher than CodeMirror tooltips (500) */
+  color: white;
+}
+body[data-theme-light="true"] .codemirror_context_menu {
+  background: white;
+  color: #616161;
+}
+.codemirror_context_menu.show {
+  display: block;
+}
+
+.codemirror_context_menu > div.row {
+  padding: 0.25rem 0.5rem;
+}
+.codemirror_context_menu > div.row:hover {
+  background: #1E466E;
+  cursor: pointer;
+}
+body[data-theme-light="true"] .codemirror_context_menu > div.row:hover {
+  background: #275EBA;
+  color: white;
+}
+.cm-focused {
+  outline: none !important;
+}
+.codemirror_action_link {
+  color: #3794ff;
+  cursor: pointer;
+}
+body[data-theme-light="true"] .codemirror_action_link {
+  color: #006ab1;
 }

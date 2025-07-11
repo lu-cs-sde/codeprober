@@ -455,31 +455,6 @@ window.defineEditor(
       lastDecorations = editor.deltaDecorations(lastDecorations, newDecorations);
     };
 
-    const registerStickyMarker = (span) => {
-      console.log('regSticky..')
-      let decoIds = editor.deltaDecorations([], [{
-        range: new monaco.Range(span.lineStart, span.colStart, span.lineEnd, span.colEnd + 1),
-        options: { inlineClassName: 'monaco-rag-highlight' },
-      }]);
-      let lastKnownPos = {...span};
-      return ({
-        // TODO update function so that probeModal can move around if needed
-        getSpan: () => {
-          const range = editor.getModel().getDecorationRange(decoIds[0]);
-          // console.log('got deco range:', range);
-          if (range) {
-            lastKnownPos.lineStart = range.startLineNumber;
-            lastKnownPos.colStart = range.startColumn;
-            lastKnownPos.lineEnd = range.endLineNumber;
-            lastKnownPos.colEnd = range.endColumn;
-          }
-          return lastKnownPos;
-        },
-        remove: () => {
-          editor.deltaDecorations(decoIds, []);
-        }
-      })
-    };
     // window.onresize = () => {
     //   console.log('Window resize');
     //   editor.layout({});
@@ -491,7 +466,6 @@ window.defineEditor(
       setLocalState: (value) => editor.setValue(value),
       getLocalState: () => editor.getValue(),
       updateSpanHighlight,
-      registerStickyMarker,
       markText: ({ severity, lineStart, colStart, lineEnd, colEnd, source, message }) => {
         const problemId = `problem_${++problemIdGenerator}`;
 

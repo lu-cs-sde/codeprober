@@ -31,7 +31,6 @@ const installASTEditor = () => {
         // setLocalState?: (newValue: string) => void;
         // getLocalState?: () => string;
         // updateSpanHighlight?: (baseHighlight: Span | null, stickyHighlights: StickyHighlight[]) => void;
-        // registerStickyMarker?: (initialSpan: Span) => StickyMarker;
         // markText?: TextMarkFn;
         themeToggler: (isLightTheme) => {
           // Do anything?

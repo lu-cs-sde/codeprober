@@ -239,10 +239,6 @@ const doMain = (wsPort: number
 
       let setLocalState = (value: string) => { };
       let markText: TextMarkFn = () => ({});
-      let registerStickyMarker: (initialSpan: Span) => StickyMarker = (initialSpan) => ({
-        getSpan: () => initialSpan,
-        remove: () => {},
-      });
 
       const darkModeCheckbox  = uiElements.darkModeCheckbox;
       darkModeCheckbox.checked = !settings.isLightTheme();
@@ -292,12 +288,29 @@ const doMain = (wsPort: number
 
       if (getEditorDefinitionPlace().definedEditors[editorType]) {
         const { preload, init, } = getEditorDefinitionPlace().definedEditors[editorType];
+
         getEditorDefinitionPlace().loadPreload(preload, () => {
+          if (editorType === 'CodeMirror') {
+            // Filter down the list of languages to those CM supports
+            const cmLangs: { [langId: string]: unknown } = (window as any)['editor_codemirror']?.languages;
+            if (cmLangs) {
+              const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
+              const options = syntaxHighlightingSelector.children;
+              for (let i = 0; i < options.length; ++i) {
+                const elem = options.item(i);
+                if (elem?.nodeType == Node.ELEMENT_NODE && elem instanceof HTMLOptionElement) {
+                  if (!cmLangs[elem.value]) {
+                    elem.remove();
+                    --i;
+                  }
+                }
+              }
+            }
+          }
           const res = init(settings.getEditorContents() ?? `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings.getSyntaxHighlighting());
           setLocalState = res.setLocalState || setLocalState;
           getLocalState = res.getLocalState || getLocalState;
           updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
-          registerStickyMarker = res.registerStickyMarker || registerStickyMarker;
           markText = res.markText || markText;
           if (res.registerModalEnv) {
             modalEnvHolder.setRecv(res.registerModalEnv);
@@ -376,6 +389,8 @@ const doMain = (wsPort: number
                   if (ws.activeFileIsTempFile()) {
                     loadSavedWindows();
                   }
+                } else {
+                  loadSavedWindows();
                 }
               })
               .catch((err) => {
@@ -571,7 +586,6 @@ const doMain = (wsPort: number
         setLocalState: (newVal) => setLocalState(newVal),
         captureStdout: () => uiElements.captureStdoutCheckbox.checked,
         duplicateOnAttr: () => uiElements.duplicateProbeCheckbox.checked,
-        registerStickyMarker: (...args) => registerStickyMarker(...args),
         updateSpanHighlight: (hl) => {
           basicHighlight = hl;
           updateSpanHighlight(basicHighlight, Object.values(stickyHighlights));
@@ -629,7 +643,7 @@ const doMain = (wsPort: number
                 return res;
               }
             }
-            if (!deferLspToBackend) {
+            if (!deferLspToBackend) {
               return null;
             }
             const req: HoverReq = {
@@ -656,7 +670,7 @@ const doMain = (wsPort: number
             if (activeTextProbeManager) {
               const res = await activeTextProbeManager.complete(pos.line, pos.column);
               if (res) {
-                return { suggestions: res };
+                return { suggestions: res.items, from: res.from };
               }
             }
             if (!deferLspToBackend) {
@@ -733,8 +747,9 @@ const doMain = (wsPort: number
     });
   }
 
-  if (location.search.split(/[?&]/).includes('editor=AST')) {
-    initEditor('AST');
+  const editorParam = location.search.split(/[?&]/).find(ent => ent.startsWith('editor='));
+  if (editorParam) {
+    initEditor(editorParam.slice(`editor=`.length));
   } else {
     initEditor('Monaco');
   }

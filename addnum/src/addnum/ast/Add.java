@@ -57,4 +57,12 @@ public class Add extends Node {
 	public String emptyString() {
 		return "";
 	}
+
+	@Attribute
+	public Object pointLeftToRight() {
+		return new Diagnostic(
+      "Pointing in editor",
+      String.format("LINE-PA@%d;%d;#F007", lhs().getStart(), rhs().getStart())
+    );
+	}
 }

@@ -21,7 +21,6 @@ interface ModalEnv {
   themeIsLight: () => boolean,
   probeWindowStateSavers: { [key: string]: (target: WindowState[]) => void };
   triggerWindowSave: () => void;
-  registerStickyMarker: (initialSpan: Span) => StickyMarker;
   updateMarkers: () => void;
   captureStdout: () => boolean;
   duplicateOnAttr: () => boolean;
