@@ -573,7 +573,7 @@ window.defineEditor(
       }
       const rows = [
         { lbl: 'Create Probe',
-          click: performRagQuery,
+          click: () => performRagQuery(false),
         }
       ];
       rows.forEach(cfg => {
