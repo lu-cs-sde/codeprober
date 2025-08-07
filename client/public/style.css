@@ -1203,9 +1203,57 @@ body[data-theme-light="true"] .workspace-row-active {
   animation: fade-in 0.25s;
 }
 
+.ast-view-filter-field {
+  position: absolute;
+  top: 0.5rem;
+  right: 0;
+  left: 0;
+  margin-left: auto;
+  margin-right: auto;
+  border: 1px solid gray;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  width: fit-content;
+  background: #333333;
+}
+.ast-view-filter-field:has(input:focus):not(:has(input:placeholder-shown))::after {
+  position: absolute;
+  top: 2rem;
+  right: -1rem;
+  left: -1rem;
+  font-size: 0.75rem;
+  font-style: italic;
+  text-align: center;
+  color:inherit;
+  background: inherit;
+}
+.ast-view-filter-field.ast-filter-found-something:has(input:focus):not(:has(input:placeholder-shown))::after {
+  content: 'Press enter to cycle between matches';
+}
+.ast-view-filter-field.ast-filter-found-nothing:has(input:focus):not(:has(input:placeholder-shown))::after {
+  content: 'No matches';
+}
+body[data-theme-light="true"] .ast-view-filter-field {
+  background: #F4F4F4;
+}
+
+.ast-view-filter-field > input {
+  background: black;
+  color: white;
+  border-radius: 0.125rem;
+  border-width: 1px;
+}
+body[data-theme-light="true"] .ast-view-filter-field > input {
+  background: white;
+  color: black;
+}
+
+.ast-view-filter-field > input::placeholder {
+  text-align: center;
+}
 .ast-view-reset-btn {
   position: absolute;
-  top: 50%;
+  bottom: 20%;
   right: 0;
   left: 0;
   margin-left: auto;

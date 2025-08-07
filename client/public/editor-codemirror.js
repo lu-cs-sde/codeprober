@@ -301,10 +301,9 @@ window.defineEditor(
           clazz
         }));
       }
+      effects.push(clearClassMarks.of({}));
       if (span && span.lineStart && span.lineEnd) {
         createSetter(span, 'cm-highlight-rag');
-      } else {
-        effects.push(clearClassMarks.of({}));
       }
 
       let addedAnyAfterLabels = false;

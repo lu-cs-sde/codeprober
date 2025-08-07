@@ -13,6 +13,7 @@ interface WindowStateDataAst {
   locator: NodeLocator;
   direction: 'upwards' | 'downwards';
   transform: { [id: string]: number },
+  filterText?: string;
 }
 interface WindowStateDataMinimized {
   type: 'minimized-probe';

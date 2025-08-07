@@ -9553,7 +9553,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     const nodepadx = nodew * 0.05;
     const nodepady = nodeh * 0.75;
     const displayAstModal = (env, modalPos, locator, listDirection, extraArgs = {}) => {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d, _e, _f;
         const queryId = `ast-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let state = null;
         let lightTheme = env.themeIsLight();
@@ -9571,7 +9571,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
             callback: () => { },
         };
         const bufferingSaver = (0, cullingTaskSubmitterFactory_1.default)(100)();
-        const saveAfterTransformChange = () => {
+        const queueSave = () => {
             bufferingSaver.submit(() => { env.triggerWindowSave(); });
         };
         const initialTransform = extraArgs.initialTransform;
@@ -9583,6 +9583,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
             height: (_e = initialTransform === null || initialTransform === void 0 ? void 0 : initialTransform.height) !== null && _e !== void 0 ? _e : 0,
         };
         let resetTranslationOnRender = !initialTransform;
+        let filterText = (_f = extraArgs.filterText) !== null && _f !== void 0 ? _f : '';
         const mapListedToNodeCache = {};
         const placeholderLoadAutoStarts = {};
         const locatorToStr = (loc) => loc.steps.map(step => {
@@ -9671,6 +9672,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                         displayAstModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), listDirection, {
                                             initialTransform,
                                             hideTitleBar: extraArgs.hideTitleBar,
+                                            filterText,
                                         });
                                     }
                                 }]),
@@ -9721,18 +9723,75 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     wrapper.style.flexGrow = '1';
                     wrapper.style.minWidth = '4rem';
                     wrapper.style.minHeight = '4rem';
-                    const resetBtn = document.createElement('div');
-                    const resetText = document.createElement('span');
-                    resetText.innerText = 'Reset View';
-                    resetBtn.appendChild(resetText);
-                    resetBtn.style.display = 'none';
-                    resetBtn.classList.add('ast-view-reset-btn');
-                    resetBtn.onclick = () => {
+                    wrapper.style.position = 'relative';
+                    const searchField = document.createElement('div');
+                    const updateSearchFieldClass = () => {
+                        if (undimmedNodes.length) {
+                            searchField.classList.remove('ast-filter-found-nothing');
+                            searchField.classList.add('ast-filter-found-something');
+                        }
+                        else {
+                            searchField.classList.remove('ast-filter-found-something');
+                            searchField.classList.add('ast-filter-found-nothing');
+                        }
+                    };
+                    {
+                        const searchInput = document.createElement('input');
+                        searchInput.value = filterText;
+                        searchInput.type = 'text';
+                        searchInput.placeholder = 'Filter';
+                        searchField.appendChild(searchInput);
+                        searchInput.oninput = () => {
+                            filterText = searchInput.value;
+                            renderFrame();
+                            queueSave();
+                            updateSearchFieldClass();
+                        };
+                        let onDimmedNodeFocusIndex = -1;
+                        searchInput.onkeydown = e => {
+                            if (e.key != 'Enter') {
+                                return;
+                            }
+                            if (undimmedNodes.length === 0) {
+                                return;
+                            }
+                            onDimmedNodeFocusIndex = (onDimmedNodeFocusIndex + 1) % undimmedNodes.length;
+                            const tgtNode = undimmedNodes[onDimmedNodeFocusIndex];
+                            trn.scale = 1;
+                            trn.x = 1920 / 2 - tgtNode.pos.x - nodew / 2;
+                            trn.y = 1080 / 2 - tgtNode.pos.y;
+                            temporaryHighlightedNode = tgtNode;
+                            const { start, end } = tgtNode.ltn.locator.result;
+                            env.updateSpanHighlight({
+                                lineStart: (start >>> 12), colStart: (start & 0xFFF),
+                                lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
+                            });
+                            queueSave();
+                            renderFrame();
+                        };
+                        searchField.classList.add('ast-view-filter-field');
+                    }
+                    const resetTransform = () => {
                         trn.scale = 1;
                         trn.x = 1920 / 2 - rootNode.pos.x - nodew / 2;
-                        trn.y = nodepady;
-                        renderFrame();
+                        trn.y = nodepady * 3;
+                        trn.width = root.clientWidth;
+                        trn.height = root.clientHeight;
+                        queueSave();
                     };
+                    const resetBtn = document.createElement('div');
+                    {
+                        const resetText = document.createElement('span');
+                        resetText.innerText = 'Reset View';
+                        resetBtn.appendChild(resetText);
+                        resetBtn.style.display = 'none';
+                        resetBtn.classList.add('ast-view-reset-btn');
+                        resetBtn.onclick = () => {
+                            resetTransform();
+                            renderFrame();
+                        };
+                    }
+                    wrapper.appendChild(searchField);
                     wrapper.appendChild(resetBtn);
                     root.appendChild(wrapper);
                     const ctx = cv.getContext('2d');
@@ -9742,13 +9801,10 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     }
                     cv.style.width = '100%';
                     cv.style.height = '100%';
-                    // cv.width  = cv.offsetWidth;
-                    // cv.height = cv.offsetHeight;
                     cv.onmousedown = (e) => {
                         e.stopPropagation();
                     };
                     cv.style.cursor = 'default';
-                    // const trn = Array(9).fill(0);
                     const lastClick = { x: 0, y: 0 };
                     const getScaleY = () => trn.scale * (cv.clientWidth / 1920) / (cv.clientHeight / 1080);
                     const clientToWorld = (pt, trnx = trn.x, trny = trn.y, scaleX = trn.scale, scaleY = getScaleY()) => {
@@ -9777,8 +9833,6 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         lastClick.y = w.y;
                         hoverClick = 'maybe';
                         holdingShift = e.shiftKey;
-                        // dragInfo.sx = 1920 / cv.clientWidth;
-                        // dragInfo.sy = 1080 / cv.clientHeight;
                     }, (dx, dy) => {
                         hoverClick = 'no';
                         const w = clientToWorld({
@@ -9790,7 +9844,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         // trn.x = dragInfo.x + dx * dragInfo.sx;
                         // trn.y = dragInfo.y + dy * dragInfo.sy;
                         renderFrame();
-                        saveAfterTransformChange();
+                        queueSave();
                     }, () => {
                         if (hoverClick == 'maybe') {
                             hoverClick = 'yes';
@@ -9820,7 +9874,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         // trn.x += (w.x / trn.scale) * e.deltaX / 1000;
                         trn.scale = z2;
                         renderFrame();
-                        saveAfterTransformChange();
+                        queueSave();
                     });
                     let hover = null;
                     let hasActiveSpanHighlight = false;
@@ -9829,6 +9883,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         hoverClick = 'no';
                         renderFrame();
                     });
+                    setTimeout(() => renderFrame(), 15000);
                     cv.addEventListener('mouseleave', () => {
                         hover = null;
                         if (hasActiveSpanHighlight) {
@@ -9840,18 +9895,17 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     let rootNode = state.data;
                     if (resetTranslationOnRender) {
                         resetTranslationOnRender = false;
-                        trn.scale = 1;
-                        trn.x = (1920 - rootNode.dtn.x) / 2;
-                        trn.y = 0;
-                        trn.width = root.clientWidth;
-                        trn.height = root.clientHeight;
+                        resetTransform();
                     }
+                    let temporaryHighlightedNode = null;
+                    const undimmedNodes = [];
                     const renderFrame = () => {
                         const w = cv.width;
                         const h = cv.height;
                         let numRenders = 0;
+                        undimmedNodes.length = 0;
                         ctx.resetTransform();
-                        ctx.fillStyle = getThemedColor(lightTheme, 'probe-result-area');
+                        ctx.fillStyle = getThemedColor(lightTheme, 'probe-result-area').opaque;
                         ctx.fillRect(0, 0, w, h);
                         ctx.translate(trn.x, trn.y);
                         ctx.scale(trn.scale, getScaleY());
@@ -9864,20 +9918,35 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                             const rendery = node.pos.y;
                             const wtc = worldToClient(node.pos);
                             const oobPadding = 16;
+                            const typeTail = ((_a = node.ltn.locator.result.label) !== null && _a !== void 0 ? _a : node.ltn.locator.result.type).split('\.').slice(-1)[0];
+                            let dimmed = false;
+                            if (filterText) {
+                                let nodeText = typeTail;
+                                if (node.ltn.name) {
+                                    nodeText = `${node.ltn.name}: ${nodeText}`;
+                                }
+                                dimmed = !nodeText.toLocaleLowerCase('en-GB').includes(filterText.toLocaleLowerCase('en-GB'));
+                                if (!dimmed) {
+                                    undimmedNodes.push(node);
+                                }
+                            }
                             if (wtc.y > cv.clientHeight + oobPadding) {
-                                // Out of bounds, no need to render anything
-                                return;
+                                // Out of bounds, no need to render anything else
+                                return { dimmed };
                             }
                             let localOOB = wtc.x > cv.clientWidth + oobPadding;
                             if (!localOOB) {
                                 const rhsWtc = worldToClient({ x: node.pos.x + nodew, y: node.pos.y + nodeh });
                                 localOOB = rhsWtc.x < -oobPadding || rhsWtc.y < -oobPadding;
                             }
-                            if (!localOOB) {
+                            const renderSelf = () => {
+                                if (localOOB) {
+                                    return;
+                                }
                                 ++numRenders;
                                 if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
                                     hoveredNode.tgt = node;
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
+                                    ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover').maybeDimmed(dimmed);
                                     cv.style.cursor = 'pointer';
                                     const { start, end, external } = node.ltn.locator.result;
                                     if (start && end && !external) {
@@ -9904,10 +9973,22 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                     }
                                 }
                                 else {
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
+                                    if (node === temporaryHighlightedNode) {
+                                        ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover').maybeDimmed(dimmed);
+                                        setTimeout(() => {
+                                            if (node === temporaryHighlightedNode) {
+                                                temporaryHighlightedNode = null;
+                                                env.updateSpanHighlight(null);
+                                                renderFrame();
+                                            }
+                                        }, 100);
+                                    }
+                                    else {
+                                        ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg').maybeDimmed(dimmed);
+                                    }
                                 }
                                 ctx.fillRect(renderx, rendery, nodew, nodeh);
-                                ctx.strokeStyle = getThemedColor(lightTheme, (permanentHovers[node.locatorStr] && node.remoteRefs.length) ? 'syntax-attr' : 'separator');
+                                ctx.strokeStyle = getThemedColor(lightTheme, (permanentHovers[node.locatorStr] && node.remoteRefs.length) ? 'syntax-attr' : 'separator').maybeDimmed(dimmed);
                                 if (node.ltn.locator.steps.length > 0 && node.ltn.locator.steps[node.ltn.locator.steps.length - 1].type === 'nta') {
                                     ctx.setLineDash([5, 5]);
                                     ctx.strokeRect(renderx, rendery, nodew, nodeh);
@@ -9920,7 +10001,6 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 let renderedName = node.ltn.name;
                                 renderText: while (true) {
                                     ctx.font = `${fonth}px sans`;
-                                    const typeTail = ((_a = node.ltn.locator.result.label) !== null && _a !== void 0 ? _a : node.ltn.locator.result.type).split('\.').slice(-1)[0];
                                     const txty = rendery + (nodeh - (nodeh - fonth) * 0.5);
                                     if (renderedName) {
                                         const typeTailMeasure = ctx.measureText(`: ${typeTail}`);
@@ -9939,14 +10019,14 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                             }
                                         }
                                         const txtx = renderx + (nodew - totalW) / 2;
-                                        ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable');
+                                        ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable').maybeDimmed(dimmed);
                                         ctx.fillText(renderedName, txtx, txty);
-                                        ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
+                                        ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type').maybeDimmed(dimmed);
                                         // dark: 4EC9B0
                                         ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
                                     }
                                     else {
-                                        ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
+                                        ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type').maybeDimmed(dimmed);
                                         const typeTailMeasure = ctx.measureText(typeTail);
                                         if (typeTailMeasure.width > nodew && fonth > 16) {
                                             fonth = Math.max(16, fonth * 0.9 | 0);
@@ -9956,22 +10036,47 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                     }
                                     break;
                                 }
-                            }
+                            };
                             const renderChildren = (children) => {
-                                children.forEach((child) => {
-                                    renderNode(child);
-                                    ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                                if (!children.length) {
+                                    return;
+                                }
+                                const renderChildConnection = (child, renderDimmed) => {
+                                    ctx.strokeStyle = getThemedColor(lightTheme, 'separator').maybeDimmed(renderDimmed);
                                     ctx.lineWidth = 2;
                                     ctx.beginPath();
-                                    ctx.moveTo(renderx + nodew / 2, rendery + nodeh);
-                                    const paddedBottomY = rendery + nodeh + nodepady * 0.5;
-                                    ctx.lineTo(renderx + nodew / 2, paddedBottomY);
+                                    ctx.moveTo(renderx + nodew / 2, paddedBottomY);
                                     const { x: chx, y: chy } = child.pos;
-                                    ctx.arcTo(chx + nodew / 2, paddedBottomY, chx + nodew / 2, chy, nodepady / 2);
-                                    ctx.lineTo(chx + nodew / 2, chy);
+                                    // ctx.lineTo(chx + nodew / 2 + nodepady/2, paddedBottomY);
+                                    ctx.arcTo(chx + nodew / 2, paddedBottomY, chx + nodew / 2, chy, nodepady / 2 - 0.5);
+                                    ctx.lineTo(chx + nodew / 2, chy - 0.5);
                                     ctx.stroke();
                                     ctx.lineWidth = 1;
+                                };
+                                let allDimmedChildren = true;
+                                const paddedBottomY = rendery + nodeh + nodepady * 0.5;
+                                const dimChildren = children.map((child) => {
+                                    const childRender = renderNode(child);
+                                    allDimmedChildren && (allDimmedChildren = childRender.dimmed);
+                                    renderChildConnection(child, dimmed || childRender.dimmed);
+                                    return childRender.dimmed;
                                 });
+                                if (!dimmed) {
+                                    children.forEach((child, childIdx) => {
+                                        if (dimChildren[childIdx]) {
+                                            return;
+                                        }
+                                        renderChildConnection(child, false);
+                                    });
+                                }
+                                // Line from our bottom to the baseline above all children
+                                ctx.strokeStyle = getThemedColor(lightTheme, 'separator').maybeDimmed(dimmed || allDimmedChildren);
+                                ctx.lineWidth = 2;
+                                ctx.beginPath();
+                                ctx.moveTo(renderx + nodew / 2, rendery + nodeh);
+                                ctx.lineTo(renderx + nodew / 2, paddedBottomY + 1);
+                                ctx.stroke();
+                                ctx.lineWidth = 1;
                             };
                             if (Array.isArray(node.children)) {
                                 renderChildren(node.children);
@@ -9981,10 +10086,10 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 const msg = `...`;
                                 const fonth = (nodeh * 0.5) | 0;
                                 ctx.font = `${fonth}px sans`;
-                                ctx.fillStyle = getThemedColor(lightTheme, 'separator');
+                                ctx.fillStyle = getThemedColor(lightTheme, 'separator').opaque;
                                 const cx = renderx + nodew / 2;
                                 const cy = rendery + nodeh + nodepady + fonth;
-                                ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                                ctx.strokeStyle = getThemedColor(lightTheme, 'separator').opaque;
                                 ctx.beginPath();
                                 ctx.moveTo(cx, rendery + nodeh);
                                 ctx.lineTo(cx, cy - fonth);
@@ -10036,7 +10141,8 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 ctx.arc(cx, cy, fonth, 0, Math.PI * 2);
                                 ctx.stroke();
                             }
-                            return;
+                            renderSelf();
+                            return { dimmed };
                         };
                         const determineLineAttachPos = (node, otherNode) => {
                             const diffX = (otherNode.pos.x) - (node.pos.x);
@@ -10064,7 +10170,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 }
                                 const fromPos = determineLineAttachPos(from, tgt);
                                 const toPos = determineLineAttachPos(tgt, from);
-                                ctx.strokeStyle = getThemedColor(lightTheme, 'syntax-attr');
+                                ctx.strokeStyle = getThemedColor(lightTheme, 'syntax-attr').opaque;
                                 ctx.lineWidth = 3;
                                 ctx.setLineDash([5, 5]);
                                 ctx.beginPath();
@@ -10113,11 +10219,11 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                         break;
                                 }
                                 ctx.translate(-measure.width / 2, -boxh / 2);
-                                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
+                                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg').opaque;
                                 ctx.fillRect(-measure.width / 4, 0, measure.width * 1.5, boxh);
-                                ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+                                ctx.strokeStyle = getThemedColor(lightTheme, 'separator').opaque;
                                 ctx.strokeRect(-measure.width / 4, 0, measure.width * 1.5, boxh);
-                                ctx.fillStyle = getThemedColor(lightTheme, 'syntax-attr');
+                                ctx.fillStyle = getThemedColor(lightTheme, 'syntax-attr').opaque;
                                 const txty = (fonth - (boxh - fonth) * 0.5);
                                 ctx.fillText(trimmed, 0, txty);
                                 ctx.restore();
@@ -10148,7 +10254,15 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                             resetBtn.style.display = 'none';
                         }
                     };
-                    renderFrame();
+                    // Delay initial render for 2 frames. Initially the canvas clientHeight is off by ~3 pixels, which makes the y-axis scale wrong.
+                    // By delaying, the user doesn't see the brief incorrect frame
+                    requestAnimationFrame(() => requestAnimationFrame(() => {
+                        if (!initialTransform) {
+                            resetTransform();
+                        }
+                        renderFrame();
+                        updateSearchFieldClass();
+                    }));
                     onResizePtr.callback = () => {
                         renderFrame();
                     };
@@ -10195,11 +10309,9 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     fetchAttrs();
                 const parsed = result.node;
                 if (!parsed) {
-                    // root.appendChild(createTitle('err'));
                     if ((_a = result.body) === null || _a === void 0 ? void 0 : _a.length) {
                         state = { type: 'err', body: result.body };
                         popup.refresh();
-                        // root.appendChild(encodeRpcBodyLines(env, parsed.body));
                         return;
                     }
                     throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
@@ -10227,6 +10339,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     locator: locator.get(),
                     direction: listDirection,
                     transform: { ...trn, },
+                    filterText,
                 },
             });
         };
@@ -14341,7 +14454,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                                                 }
                                                 case 'ast': {
                                                     const dat = nest.data;
-                                                    (0, displayAstModal_2.default)(nestedEnv, null, immutLoc, dat.direction, dat.transform);
+                                                    (0, displayAstModal_2.default)(nestedEnv, null, immutLoc, dat.direction, { initialTransform: dat.transform, filterText: dat.filterText, });
                                                     break;
                                                 }
                                             }
@@ -17452,6 +17565,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     case 'ast': {
                         (0, displayAstModal_4.default)(modalEnv, state.modalPos, (0, UpdatableNodeLocator_11.createMutableLocator)(state.data.locator), state.data.direction, {
                             initialTransform: state.data.transform,
+                            filterText: state.data.filterText,
                         });
                         break;
                     }
@@ -18003,27 +18117,39 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         });
     };
 });
+const mkCol = (rgb) => {
+    const opaque = `#${rgb}`;
+    const dimmed = `#${rgb}40`;
+    return {
+        opaque,
+        dimmed,
+        maybeDimmed: (gd) => gd ? dimmed : opaque,
+    };
+};
+const mkPredimmed = (opaque, dimmed) => ({
+    opaque, dimmed, maybeDimmed: (gd) => gd ? dimmed : opaque
+});
 const lightColors = {
-    'window-border': '#999',
-    'probe-result-area': '#F4F4F4',
-    'syntax-type': '#267F99',
-    'syntax-attr': '#795E26',
-    'syntax-modifier': '#0000FF',
-    'syntax-variable': '#001080',
-    'separator': '#000',
-    'ast-node-bg': '#DDD',
-    'ast-node-bg-hover': '#AAA',
+    'window-border': mkCol('999999'),
+    'probe-result-area': mkCol('F4F4F4'),
+    'syntax-type': mkCol('267F99'),
+    'syntax-attr': mkCol('795E26'),
+    'syntax-modifier': mkCol('0000FF'),
+    'syntax-variable': mkCol('001080'),
+    'separator': mkPredimmed('#000000', '#B6B6B6'),
+    'ast-node-bg': mkCol('DDDDDD'),
+    'ast-node-bg-hover': mkCol('AAAAAA'),
 };
 const darkColors = {
-    'window-border': '#999',
-    'probe-result-area': '#333',
-    'syntax-type': '#4EC9B0',
-    'syntax-attr': '#DCDCAA',
-    'syntax-modifier': '#569CD6',
-    'syntax-variable': '#9CDCFE',
-    'separator': '#FFF',
-    'ast-node-bg': '#1C1C1C',
-    'ast-node-bg-hover': '#666',
+    'window-border': mkCol('999999'),
+    'probe-result-area': mkCol('333333'),
+    'syntax-type': mkCol('4EC9B0'),
+    'syntax-attr': mkCol('DCDCAA'),
+    'syntax-modifier': mkCol('569CD6'),
+    'syntax-variable': mkCol('9CDCFE'),
+    'separator': mkPredimmed('#FFFFFF', '#666666'),
+    'ast-node-bg': mkCol('1C1C1C'),
+    'ast-node-bg-hover': mkCol('666666'),
 };
 const getThemedColor = (lightTheme, type) => {
     return (lightTheme ? lightColors : darkColors)[type];

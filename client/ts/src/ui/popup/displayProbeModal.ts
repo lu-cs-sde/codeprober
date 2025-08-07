@@ -531,7 +531,7 @@ const displayProbeModal = (
                         }
                         case 'ast': {
                           const dat = nest.data;
-                          displayAstModal(nestedEnv, null, immutLoc, dat.direction, dat.transform);
+                          displayAstModal(nestedEnv, null, immutLoc, dat.direction, { initialTransform: dat.transform, filterText: dat.filterText, });
                           break;
                         }
                       }

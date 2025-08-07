@@ -185,6 +185,7 @@ const doMain = (wsPort: number
         case 'ast': {
           displayAstModal(modalEnv, state.modalPos, createMutableLocator(state.data.locator), state.data.direction, {
             initialTransform: state.data.transform,
+            filterText: state.data.filterText,
           });
           break;
         }

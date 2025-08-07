@@ -32,6 +32,7 @@ interface Node {
 interface ExtraArgs {
   initialTransform?: { [id: string]: number };
   hideTitleBar?: boolean;
+  filterText?: string;
 }
 
 type AstListDirection = 'downwards' | 'upwards';
@@ -41,7 +42,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
   let lightTheme = env.themeIsLight();
   const stickyController = createStickyHighlightController(env);
 
- let fetchState: 'idle' | 'fetching' | 'queued' = 'idle';
+  let fetchState: 'idle' | 'fetching' | 'queued' = 'idle';
   const cleanup = () => {
     delete env.onChangeListeners[queryId];
     delete env.probeWindowStateSavers[queryId];
@@ -51,21 +52,22 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     stickyController.cleanup();
   };
   const onResizePtr = {
-    callback: () => {},
+    callback: () => { },
   };
   const bufferingSaver = createCullingTaskSubmitterFactory(100)();
-  const saveAfterTransformChange = () => {
+  const queueSave = () => {
     bufferingSaver.submit(() => { env.triggerWindowSave() });
   };
   const initialTransform = extraArgs.initialTransform;
   const trn = {
-    x: initialTransform?.x ?? 1920/2,
+    x: initialTransform?.x ?? 1920 / 2,
     y: initialTransform?.y ?? 0,
     scale: initialTransform?.scale ?? 1,
     width: initialTransform?.width ?? 0,
     height: initialTransform?.height ?? 0,
   };
   let resetTranslationOnRender = !initialTransform;
+  let filterText = extraArgs.filterText ?? '';
 
   const mapListedToNodeCache: { [nodeLocatorStr: string]: Node } = {};
   const placeholderLoadAutoStarts: { [locStr: LocatorStr]: boolean } = {};
@@ -148,20 +150,21 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             cleanup();
           },
           extraActions: [
-            ...(env.getGlobalModalEnv() === env ? [] :[{
+            ...(env.getGlobalModalEnv() === env ? [] : [{
               title: 'Detatch window',
               invoke: () => {
                 cleanup();
                 displayAstModal(env.getGlobalModalEnv(), null, locator.createMutableClone(), listDirection, {
                   initialTransform,
                   hideTitleBar: extraArgs.hideTitleBar,
+                  filterText,
                 });
               }
             }]),
             {
               title: 'Help',
               invoke: () => {
-                displayHelp('ast', () => {});
+                displayHelp('ast', () => { });
               }
             },
           ],
@@ -172,8 +175,8 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
         const spinner = createLoadingSpinner();
         spinner.classList.add('absoluteCenter');
         const spinnerWrapper = document.createElement('div');
-        spinnerWrapper.style.height = '7rem' ;
-        spinnerWrapper.style.display = 'block' ;
+        spinnerWrapper.style.height = '7rem';
+        spinnerWrapper.style.display = 'block';
         spinnerWrapper.style.position = 'relative';
         spinnerWrapper.appendChild(spinner);
         root.appendChild(spinnerWrapper);
@@ -199,6 +202,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
         root.style.display = 'flex';
         root.style.flexDirection = 'column';
         root.style.flexGrow = '1';
+
         root.style.overflow = 'hidden';
 
         const cv = document.createElement('canvas');
@@ -210,21 +214,78 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
         wrapper.style.flexGrow = '1';
         wrapper.style.minWidth = '4rem';
         wrapper.style.minHeight = '4rem';
+        wrapper.style.position = 'relative';
 
-        const resetBtn = document.createElement('div');
-
-        const resetText = document.createElement('span');
-        resetText.innerText = 'Reset View';
-        resetBtn.appendChild(resetText);
-        resetBtn.style.display = 'none';
-        resetBtn.classList.add('ast-view-reset-btn');
-        resetBtn.onclick = () => {
-          trn.scale = 1;
-          trn.x = 1920/2 - rootNode.pos.x - nodew/2;
-          trn.y = nodepady;
-          renderFrame();
+        const searchField = document.createElement('div');
+        const updateSearchFieldClass = () => {
+          if (undimmedNodes.length) {
+            searchField.classList.remove('ast-filter-found-nothing');
+            searchField.classList.add('ast-filter-found-something');
+          } else {
+            searchField.classList.remove('ast-filter-found-something');
+            searchField.classList.add('ast-filter-found-nothing');
+          }
+        };
+        {
+          const searchInput = document.createElement('input');
+          searchInput.value = filterText;
+          searchInput.type = 'text';
+          searchInput.placeholder = 'Filter'
+          searchField.appendChild(searchInput);
+          searchInput.oninput = () => {
+            filterText = searchInput.value;
+            renderFrame();
+            queueSave();
+            updateSearchFieldClass();
+          }
+          let onDimmedNodeFocusIndex = -1;
+          searchInput.onkeydown = e => {
+            if (e.key != 'Enter') {
+              return;
+            }
+            if (undimmedNodes.length === 0) {
+              return;
+            }
+            onDimmedNodeFocusIndex = (onDimmedNodeFocusIndex + 1) % undimmedNodes.length;
+            const tgtNode = undimmedNodes[onDimmedNodeFocusIndex];
+            trn.scale = 1;
+            trn.x = 1920 / 2 - tgtNode.pos.x - nodew / 2;
+            trn.y = 1080 / 2 - tgtNode.pos.y;
+            temporaryHighlightedNode = tgtNode;
+            const { start, end } = tgtNode.ltn.locator.result;
+            env.updateSpanHighlight({
+              lineStart: (start >>> 12), colStart: (start & 0xFFF),
+              lineEnd: (end >>> 12), colEnd: (end & 0xFFF),
+            });
+            queueSave();
+            renderFrame();
+          }
+          searchField.classList.add('ast-view-filter-field');
         }
 
+        const resetTransform = () => {
+          trn.scale = 1;
+          trn.x = 1920 / 2 - rootNode.pos.x - nodew / 2;
+          trn.y = nodepady * 3;
+          trn.width = root.clientWidth;
+          trn.height = root.clientHeight;
+          queueSave();
+        };
+
+        const resetBtn = document.createElement('div');
+        {
+          const resetText = document.createElement('span');
+          resetText.innerText = 'Reset View';
+          resetBtn.appendChild(resetText);
+          resetBtn.style.display = 'none';
+          resetBtn.classList.add('ast-view-reset-btn');
+          resetBtn.onclick = () => {
+            resetTransform();
+            renderFrame();
+          }
+        }
+
+        wrapper.appendChild(searchField);
         wrapper.appendChild(resetBtn);
         root.appendChild(wrapper);
 
@@ -236,16 +297,11 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
 
         cv.style.width = '100%';
         cv.style.height = '100%';
-        // cv.width  = cv.offsetWidth;
-        // cv.height = cv.offsetHeight;
 
         cv.onmousedown = (e) => {
           e.stopPropagation();
         };
         cv.style.cursor = 'default';
-
-
-        // const trn = Array(9).fill(0);
 
         const lastClick = { x: 0, y: 0 };
         const getScaleY = () => trn.scale * (cv.clientWidth / 1920) / (cv.clientHeight / 1080);
@@ -273,13 +329,11 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             bringToFront();
             dragInfo.x = trn.x;
             dragInfo.y = trn.y;
-            const w = clientToWorld({ x: e.offsetX, y: e.offsetY});
+            const w = clientToWorld({ x: e.offsetX, y: e.offsetY });
             lastClick.x = w.x;
             lastClick.y = w.y;
             hoverClick = 'maybe';
             holdingShift = e.shiftKey;
-            // dragInfo.sx = 1920 / cv.clientWidth;
-            // dragInfo.sy = 1080 / cv.clientHeight;
           },
           (dx, dy) => {
             hoverClick = 'no';
@@ -292,7 +346,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             // trn.x = dragInfo.x + dx * dragInfo.sx;
             // trn.y = dragInfo.y + dy * dragInfo.sy;
             renderFrame();
-            saveAfterTransformChange();
+            queueSave();
           },
           () => {
             if (hoverClick == 'maybe') {
@@ -301,94 +355,109 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             }
           });
 
-          cv.addEventListener('wheel', (e) => {
-            const ptx = e.offsetX;
-            const csx = 1920 / cv.clientWidth;
-            const trx1 = trn.x;
-            const z1 = trn.scale;
-            const delta = (e as any).wheelDelta ?? (e.deltaY * 10);
-            const z2 = Math.max(0.1, Math.min(10, trn.scale * (1 + delta / 1000)));
-            /*
-              -- We want to modify trn.x so that transforming {e.offsetX, e.offsetY} gets the same result before and after zooming.
-              -- For trn.x we want this relation to hold:
-              (ptx*csx - trx1) / z1 = (ptx*csx - trx2) / z2
-              -- All variables are known but trx2. rewrite a bit and we get:
-              trx2 = ptx*csx - (z2/z1)*(ptx*csx - trx1)
-            */
-           trn.x = (ptx*csx - (z2/z1)*(ptx*csx - trx1));
+        cv.addEventListener('wheel', (e) => {
+          const ptx = e.offsetX;
+          const csx = 1920 / cv.clientWidth;
+          const trx1 = trn.x;
+          const z1 = trn.scale;
+          const delta = (e as any).wheelDelta ?? (e.deltaY * 10);
+          const z2 = Math.max(0.1, Math.min(10, trn.scale * (1 + delta / 1000)));
+          /*
+            -- We want to modify trn.x so that transforming {e.offsetX, e.offsetY} gets the same result before and after zooming.
+            -- For trn.x we want this relation to hold:
+            (ptx*csx - trx1) / z1 = (ptx*csx - trx2) / z2
+            -- All variables are known but trx2. rewrite a bit and we get:
+            trx2 = ptx*csx - (z2/z1)*(ptx*csx - trx1)
+          */
+          trn.x = (ptx * csx - (z2 / z1) * (ptx * csx - trx1));
 
-           // Same idea for trn.y
-           const csy = 1080 / cv.clientHeight;
-           trn.y = (e.offsetY*csy - (z2/z1)*(e.offsetY*csy - trn.y));
+          // Same idea for trn.y
+          const csy = 1080 / cv.clientHeight;
+          trn.y = (e.offsetY * csy - (z2 / z1) * (e.offsetY * csy - trn.y));
 
-            // const w = clientToWorld({ x: e.offsetX, y: e.offsetY });
-            // trn.x += (w.x / trn.scale) * e.deltaX / 1000;
-            trn.scale = z2;
-            renderFrame();
-            saveAfterTransformChange();
-          });
+          // const w = clientToWorld({ x: e.offsetX, y: e.offsetY });
+          // trn.x += (w.x / trn.scale) * e.deltaX / 1000;
+          trn.scale = z2;
+          renderFrame();
+          queueSave();
+        });
 
-          let hover: (Point & { ogx: number; ogy: number })|null = null;
-          let hasActiveSpanHighlight = false;
-          cv.addEventListener('mousemove', e => {
-            hover = { ...clientToWorld({ x: e.offsetX, y: e.offsetY }), ogx: e.offsetX, ogy: e.offsetY};
-            hoverClick = 'no';
-            renderFrame();
-          });
-          cv.addEventListener('mouseleave', () => {
-            hover = null;
-            if (hasActiveSpanHighlight) {
-              hasActiveSpanHighlight = false;
-              env.updateSpanHighlight(null);
-            }
-            renderFrame();
-          })
-
-          let rootNode = state.data;
-
-          if (resetTranslationOnRender) {
-            resetTranslationOnRender = false;
-            trn.scale = 1;
-            trn.x = (1920 -rootNode.dtn.x) / 2;
-            trn.y = 0;
-            trn.width = root.clientWidth;
-            trn.height = root.clientHeight;
+        let hover: (Point & { ogx: number; ogy: number }) | null = null;
+        let hasActiveSpanHighlight = false;
+        cv.addEventListener('mousemove', e => {
+          hover = { ...clientToWorld({ x: e.offsetX, y: e.offsetY }), ogx: e.offsetX, ogy: e.offsetY };
+          hoverClick = 'no';
+          renderFrame();
+        });
+        setTimeout(() => renderFrame(), 15000);
+        cv.addEventListener('mouseleave', () => {
+          hover = null;
+          if (hasActiveSpanHighlight) {
+            hasActiveSpanHighlight = false;
+            env.updateSpanHighlight(null);
           }
+          renderFrame();
+        })
 
-          const renderFrame = () => {
+        let rootNode = state.data;
+
+        if (resetTranslationOnRender) {
+          resetTranslationOnRender = false;
+          resetTransform();
+        }
+
+        let temporaryHighlightedNode: Node | null = null;
+        const undimmedNodes: Node[] = [];
+        const renderFrame = () => {
           const w = cv.width;
           const h = cv.height;
           let numRenders = 0;
+          undimmedNodes.length = 0;
 
           ctx.resetTransform();
-          ctx.fillStyle = getThemedColor(lightTheme, 'probe-result-area');
+          ctx.fillStyle = getThemedColor(lightTheme, 'probe-result-area').opaque;
           ctx.fillRect(0, 0, w, h);
           ctx.translate(trn.x, trn.y);
           ctx.scale(trn.scale, getScaleY());
 
           cv.style.cursor = 'default';
           let didHighlightSomething = false;
-          const hoveredNode: { tgt:  Node | undefined } = { tgt: undefined };
-          const renderNode = (node: Node) => {
+          const hoveredNode: { tgt: Node | undefined } = { tgt: undefined };
+          const renderNode = (node: Node): { dimmed: boolean } => {
 
             const renderx = node.pos.x;
             const rendery = node.pos.y;
             const wtc = worldToClient(node.pos);
             const oobPadding = 16;
+            const typeTail = (node.ltn.locator.result.label ?? node.ltn.locator.result.type).split('\.').slice(-1)[0];
+            let dimmed = false;
+            if (filterText) {
+              let nodeText = typeTail;
+              if (node.ltn.name) {
+                nodeText = `${node.ltn.name}: ${nodeText}`;
+              }
+              dimmed = !nodeText.toLocaleLowerCase('en-GB').includes(filterText.toLocaleLowerCase('en-GB'));
+              if (!dimmed) {
+                undimmedNodes.push(node);
+              }
+            }
             if (wtc.y > cv.clientHeight + oobPadding) {
-              // Out of bounds, no need to render anything
-              return;
+              // Out of bounds, no need to render anything else
+              return { dimmed };
             }
             let localOOB = wtc.x > cv.clientWidth + oobPadding;
             if (!localOOB) {
-              const rhsWtc = worldToClient({ x: node.pos.x + nodew, y: node.pos.y + nodeh});
+              const rhsWtc = worldToClient({ x: node.pos.x + nodew, y: node.pos.y + nodeh });
               localOOB = rhsWtc.x < -oobPadding || rhsWtc.y < -oobPadding;
             }
-            if (!localOOB) {
+            const renderSelf = () => {
+              if (localOOB) {
+                return;
+              }
               ++numRenders;
               if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
                 hoveredNode.tgt = node;
-                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover');
+                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover').maybeDimmed(dimmed);
                 cv.style.cursor = 'pointer';
                 const { start, end, external } = node.ltn.locator.result;
                 if (start && end && !external) {
@@ -402,7 +471,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                 if (hoverClick === 'yes') {
                   hoverClick = 'no';
                   if (holdingShift) {
-                    if (permanentHovers[node.locatorStr])  {
+                    if (permanentHovers[node.locatorStr]) {
                       delete permanentHovers[node.locatorStr];
                     } else {
                       permanentHovers[node.locatorStr] = true;
@@ -412,10 +481,22 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                   }
                 }
               } else {
-                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
+                if (node === temporaryHighlightedNode) {
+                  ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover').maybeDimmed(dimmed);
+                  setTimeout(() => {
+                    if (node === temporaryHighlightedNode) {
+                      temporaryHighlightedNode = null;
+                      env.updateSpanHighlight(null);
+                      renderFrame();
+                    }
+                  }, 100);
+                } else {
+
+                  ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg').maybeDimmed(dimmed);
+                }
               }
               ctx.fillRect(renderx, rendery, nodew, nodeh);
-              ctx.strokeStyle = getThemedColor(lightTheme, (permanentHovers[node.locatorStr] && node.remoteRefs.length) ? 'syntax-attr' : 'separator');
+              ctx.strokeStyle = getThemedColor(lightTheme, (permanentHovers[node.locatorStr] && node.remoteRefs.length) ? 'syntax-attr' : 'separator').maybeDimmed(dimmed);
               if (node.ltn.locator.steps.length > 0 && node.ltn.locator.steps[node.ltn.locator.steps.length - 1].type === 'nta') {
                 ctx.setLineDash([5, 5])
                 ctx.strokeRect(renderx, rendery, nodew, nodeh);
@@ -423,13 +504,12 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               } else {
                 ctx.strokeRect(renderx, rendery, nodew, nodeh);
               }
-              let fonth = (nodeh * 0.5)|0;
+              let fonth = (nodeh * 0.5) | 0;
               let renderedName = node.ltn.name;
               renderText: while (true) {
                 ctx.font = `${fonth}px sans`;
-                const typeTail = (node.ltn.locator.result.label ?? node.ltn.locator.result.type).split('\.').slice(-1)[0];
 
-                const txty = rendery + (nodeh - (nodeh-fonth)*0.5);
+                const txty = rendery + (nodeh - (nodeh - fonth) * 0.5);
                 if (renderedName) {
                   const typeTailMeasure = ctx.measureText(`: ${typeTail}`);
                   const nameMeasure = ctx.measureText(renderedName);
@@ -446,14 +526,14 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                       continue renderText;
                     }
                   }
-                  const txtx = renderx + (nodew - totalW)/2;
-                  ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable');
+                  const txtx = renderx + (nodew - totalW) / 2;
+                  ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable').maybeDimmed(dimmed);
                   ctx.fillText(renderedName, txtx, txty);
-                  ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
+                  ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type').maybeDimmed(dimmed);
                   // dark: 4EC9B0
                   ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
                 } else {
-                  ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type');
+                  ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type').maybeDimmed(dimmed);
                   const typeTailMeasure = ctx.measureText(typeTail);
                   if (typeTailMeasure.width > nodew && fonth > 16) {
                     fonth = Math.max(16, fonth * 0.9 | 0);
@@ -466,23 +546,46 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             }
 
             const renderChildren = (children: Node[]) => {
-              children.forEach((child) => {
-                renderNode(child)
-
-                ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+              if (!children.length) {
+                return;
+              }
+              const renderChildConnection = (child: Node, renderDimmed: boolean) => {
+                ctx.strokeStyle = getThemedColor(lightTheme, 'separator').maybeDimmed(renderDimmed);
                 ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.moveTo(renderx + nodew/2, rendery + nodeh);
-
-                const paddedBottomY = rendery + nodeh + nodepady * 0.5;
-                ctx.lineTo(renderx + nodew/2, paddedBottomY);
-
+                ctx.moveTo(renderx + nodew / 2, paddedBottomY);
                 const { x: chx, y: chy } = child.pos
-                ctx.arcTo(chx +  nodew/2, paddedBottomY, chx + nodew/2, chy, nodepady/2);
-                ctx.lineTo(chx + nodew/2, chy);
+                // ctx.lineTo(chx + nodew / 2 + nodepady/2, paddedBottomY);
+                ctx.arcTo(chx + nodew / 2, paddedBottomY, chx + nodew / 2, chy, nodepady / 2 - 0.5);
+                ctx.lineTo(chx + nodew / 2, chy - 0.5);
                 ctx.stroke();
                 ctx.lineWidth = 1;
+              };
+              let allDimmedChildren = true;
+              const paddedBottomY = rendery + nodeh + nodepady * 0.5;
+              const dimChildren = children.map((child) => {
+                const childRender = renderNode(child)
+                allDimmedChildren &&= childRender.dimmed;
+                renderChildConnection(child, dimmed || childRender.dimmed);
+                return childRender.dimmed;
               });
+              if (!dimmed) {
+                children.forEach((child, childIdx) => {
+                  if (dimChildren[childIdx]) {
+                    return;
+                  }
+                  renderChildConnection(child, false);
+                });
+              }
+
+              // Line from our bottom to the baseline above all children
+              ctx.strokeStyle = getThemedColor(lightTheme, 'separator').maybeDimmed(dimmed || allDimmedChildren);
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(renderx + nodew / 2, rendery + nodeh);
+              ctx.lineTo(renderx + nodew / 2, paddedBottomY + 1);
+              ctx.stroke();
+              ctx.lineWidth = 1;
             }
 
             if (Array.isArray(node.children)) {
@@ -491,13 +594,13 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               const locStr = node.locatorStr;
 
               const msg = `...`;
-              const fonth = (nodeh * 0.5)|0;
+              const fonth = (nodeh * 0.5) | 0;
               ctx.font = `${fonth}px sans`;
-              ctx.fillStyle = getThemedColor(lightTheme, 'separator');
-              const cx = renderx + nodew/2;
-              const cy = rendery + nodeh + nodepady  + fonth;
+              ctx.fillStyle = getThemedColor(lightTheme, 'separator').opaque;
+              const cx = renderx + nodew / 2;
+              const cy = rendery + nodeh + nodepady + fonth;
 
-              ctx.strokeStyle = getThemedColor(lightTheme, 'separator');
+              ctx.strokeStyle = getThemedColor(lightTheme, 'separator').opaque;
               ctx.beginPath();
               ctx.moveTo(cx, rendery + nodeh);
               ctx.lineTo(cx, cy - fonth);
@@ -545,31 +648,32 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               const msgMeasure = ctx.measureText(msg);
               ctx.fillText(msg, renderx + (nodew - msgMeasure.width) / 2, cy + fonth * 0.33);
               ctx.beginPath();
-              ctx.arc(cx, cy, fonth , 0, Math.PI * 2);
+              ctx.arc(cx, cy, fonth, 0, Math.PI * 2);
               ctx.stroke();
             }
-            return;
+            renderSelf();
+            return { dimmed };
           };
 
           const determineLineAttachPos = (node: Node, otherNode: Node) => {
             const diffX = (otherNode.pos.x) - (node.pos.x);
             const diffY = (otherNode.pos.y) - (node.pos.y);
 
-            let px = node.pos.x + nodew/2;
+            let px = node.pos.x + nodew / 2;
             let py = node.pos.y;
 
-            px = Math.max(px - nodew/2, Math.min(px + nodew/2, px + diffX/2));
+            px = Math.max(px - nodew / 2, Math.min(px + nodew / 2, px + diffX / 2));
             if (diffY > 1) {
               py += nodeh;
             } else if (diffY < -1) {
               // No change
             } else {
-              py += nodeh/2;
+              py += nodeh / 2;
             }
             return { x: px, y: py };
           }
 
-          const renderRemoteRefs = (from: Node) =>  {
+          const renderRemoteRefs = (from: Node) => {
             from.remoteRefs.forEach(rem => {
               const tgt = mapListedToNodeCache[rem.loc];
               if (!tgt) {
@@ -579,7 +683,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
 
               const fromPos = determineLineAttachPos(from, tgt);
               const toPos = determineLineAttachPos(tgt, from);
-              ctx.strokeStyle = getThemedColor(lightTheme, 'syntax-attr')
+              ctx.strokeStyle = getThemedColor(lightTheme, 'syntax-attr').opaque
               ctx.lineWidth = 3;
               ctx.setLineDash([5, 5])
               ctx.beginPath();
@@ -595,19 +699,19 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                 angle -= Math.PI * 2;
               }
               const distance = Math.hypot(toPos.y - fromPos.y, toPos.x - fromPos.x);
-              const quart = Math.PI/4;
+              const quart = Math.PI / 4;
 
               let pointDir: 'up' | 'right' | 'left' | 'down' = 'right';
-              if (angle < -quart && angle >= -quart*3) {
+              if (angle < -quart && angle >= -quart * 3) {
                 pointDir = 'up';
-              } else if (angle < -quart*3 && angle >= -quart*5) {
+              } else if (angle < -quart * 3 && angle >= -quart * 5) {
                 pointDir = 'left';
-              } else if (angle < -quart*5 && angle >= -quart*7) {
+              } else if (angle < -quart * 5 && angle >= -quart * 7) {
                 pointDir = 'down';
               }
               switch (pointDir) {
-                  case 'up':
-                  case 'left':
+                case 'up':
+                case 'left':
                   ctx.translate(toPos.x, toPos.y);
                   ctx.rotate(angle + Math.PI);
                   break;
@@ -617,7 +721,7 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                   ctx.rotate(angle);
               }
 
-              const fonth = (nodeh * 0.3)|0;
+              const fonth = (nodeh * 0.3) | 0;
               const boxh = fonth * 1.25;
               ctx.font = `${fonth}px sans`;
               const trimmed = formatAttrBaseName(rem.lbl);
@@ -627,18 +731,18 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
               switch (pointDir) {
                 case 'up':
                 case 'down':
-                  ctx.rotate(-Math.PI/2);
+                  ctx.rotate(-Math.PI / 2);
                   break;
               }
-              ctx.translate(-measure.width/2, -boxh/2);
+              ctx.translate(-measure.width / 2, -boxh / 2);
 
-              ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg');
-              ctx.fillRect(-measure.width /4, 0, measure.width * 1.5, boxh)
-              ctx.strokeStyle = getThemedColor(lightTheme, 'separator')
-              ctx.strokeRect(-measure.width /4, 0, measure.width * 1.5, boxh)
+              ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg').opaque;
+              ctx.fillRect(-measure.width / 4, 0, measure.width * 1.5, boxh)
+              ctx.strokeStyle = getThemedColor(lightTheme, 'separator').opaque
+              ctx.strokeRect(-measure.width / 4, 0, measure.width * 1.5, boxh)
 
-              ctx.fillStyle = getThemedColor(lightTheme, 'syntax-attr')
-              const txty = (fonth - (boxh-fonth)*0.5);
+              ctx.fillStyle = getThemedColor(lightTheme, 'syntax-attr').opaque
+              const txty = (fonth - (boxh - fonth) * 0.5);
               ctx.fillText(trimmed, 0, txty);
 
 
@@ -671,7 +775,15 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             resetBtn.style.display = 'none';
           }
         };
-        renderFrame();
+        // Delay initial render for 2 frames. Initially the canvas clientHeight is off by ~3 pixels, which makes the y-axis scale wrong.
+        // By delaying, the user doesn't see the brief incorrect frame
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (!initialTransform) {
+            resetTransform();
+          }
+          renderFrame();
+          updateSearchFieldClass();
+        }));
         onResizePtr.callback = () => {
           renderFrame();
         };
@@ -695,74 +807,73 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     });
   };
 
- const fetchAttrs = () => {
-  switch (fetchState) {
-    case 'idle': {
-      fetchState = 'fetching'
-      break;
-    }
-    case 'fetching': {
-      fetchState = 'queued';
-      return;
-    }
-    case 'queued': return;
-  }
-
-  env.performTypedRpc<ListTreeReq, ListTreeRes>({
-    locator: locator.get(),
-    src: env.createParsingRequestData(),
-    type: listDirection === 'upwards' ? 'ListTreeUpwards' : 'ListTreeDownwards'
-  })
-    .then((result) => {
-      const refetch = fetchState == 'queued';
-      fetchState = 'idle';
-      if (refetch) fetchAttrs();
-
-      const parsed = result.node;
-      if (!parsed) {
-        // root.appendChild(createTitle('err'));
-        if (result.body?.length) {
-          state = { type: 'err', body: result.body };
-          popup.refresh();
-          // root.appendChild(encodeRpcBodyLines(env, parsed.body));
-          return;
-        }
-        throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
+  const fetchAttrs = () => {
+    switch (fetchState) {
+      case 'idle': {
+        fetchState = 'fetching'
+        break;
       }
-
-      // Handle resp
-      if (result.locator) {
-        locator.set(result.locator);
+      case 'fetching': {
+        fetchState = 'queued';
+        return;
       }
-      Object.keys(mapListedToNodeCache).forEach(k => delete mapListedToNodeCache[k]);
-      state = { type: 'ok', data: mapListedToNode(layoutTree(parsed)) };
-      popup.refresh();
+      case 'queued': return;
+    }
 
-    })
-    .catch(err => {
-      console.warn('Error when loading attributes', err);
-      state = { type: 'err', body: [] };
-      popup.refresh();
-    });
- };
- fetchAttrs();
-
- env.probeWindowStateSavers[queryId] = (target) => {
-  target.push({
-    modalPos: popup.getPos(),
-    data: {
-      type: 'ast',
+    env.performTypedRpc<ListTreeReq, ListTreeRes>({
       locator: locator.get(),
-      direction: listDirection,
-      transform: { ...trn, },
-    },
-  });
-};
-env.themeChangeListeners[queryId] = (light) => {
-  lightTheme = light;
-  onResizePtr.callback();
-};
-env.triggerWindowSave();
+      src: env.createParsingRequestData(),
+      type: listDirection === 'upwards' ? 'ListTreeUpwards' : 'ListTreeDownwards'
+    })
+      .then((result) => {
+        const refetch = fetchState == 'queued';
+        fetchState = 'idle';
+        if (refetch) fetchAttrs();
+
+        const parsed = result.node;
+        if (!parsed) {
+          if (result.body?.length) {
+            state = { type: 'err', body: result.body };
+            popup.refresh();
+            return;
+          }
+          throw new Error('Unexpected response body "' + JSON.stringify(result) + '"');
+        }
+
+        // Handle resp
+        if (result.locator) {
+          locator.set(result.locator);
+        }
+        Object.keys(mapListedToNodeCache).forEach(k => delete mapListedToNodeCache[k]);
+        state = { type: 'ok', data: mapListedToNode(layoutTree(parsed)) };
+        popup.refresh();
+
+      })
+      .catch(err => {
+        console.warn('Error when loading attributes', err);
+        state = { type: 'err', body: [] };
+        popup.refresh();
+      });
+  };
+  fetchAttrs();
+
+  env.probeWindowStateSavers[queryId] = (target) => {
+    target.push({
+      modalPos: popup.getPos(),
+      data: {
+        type: 'ast',
+        locator: locator.get(),
+        direction: listDirection,
+        transform: { ...trn, },
+        filterText,
+      },
+    });
+  };
+  env.themeChangeListeners[queryId] = (light) => {
+    lightTheme = light;
+    onResizePtr.callback();
+  };
+  env.triggerWindowSave();
 }
 
 export default displayAstModal;
