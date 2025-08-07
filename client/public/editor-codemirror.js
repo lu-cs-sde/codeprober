@@ -285,7 +285,6 @@ window.defineEditor(
       updateSpanHighlightTimeout = setTimeout(() => doUpdateSpanHighlight(span, stickies), 10);
     }
     const clampLine = (line, state = editor.state) => Math.max(1, Math.min(line, state.doc.lines))
-    let hadStickiesRecently = false;
     const doUpdateSpanHighlight = (span, stickies) => {
       const effects = [];
 
@@ -328,8 +327,7 @@ window.defineEditor(
           }
         }
       }
-      if (addedAnyAfterLabels && !hadStickiesRecently) {
-        hadStickiesRecently = false;
+      if (!addedAnyAfterLabels) {
         effects.push(setAfterLabels.of([]))
       }
       if (!editor.state.field(classMarkField, false)) {
