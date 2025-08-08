@@ -40,7 +40,6 @@ import codeprober.protocol.data.TopRequestReq;
 import codeprober.protocol.data.TopRequestRes;
 import codeprober.protocol.data.UnsubscribeFromWorkerStatusReq;
 import codeprober.protocol.data.UnsubscribeFromWorkerStatusRes;
-import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.rpc.JsonRequestHandler;
 
 public class ConcurrentCoordinator implements JsonRequestHandler {

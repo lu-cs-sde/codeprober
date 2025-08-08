@@ -36,7 +36,8 @@ public interface JsonRequestHandler {
 				final JSONObject encoded = unwrappedHandler.apply(
 						// Strip away data wrapper
 						new ClientRequest(parsed.data, //
-								request::sendAsyncResponse, request.connectionIsAlive));
+								request::sendAsyncResponse, request.connectionIsAlive,
+								request.onDidUpdateWorkspacePath));
 				response = TopRequestResponseData.fromSuccess(encoded);
 			} catch (RuntimeException e) {
 				System.out.println("Request threw an error");

@@ -177,7 +177,8 @@ public class WebSocketServer {
 				out.write(response, 0, response.length);
 				out.flush();
 
-				final Consumer<ServerToClientEvent> onJarChange = (event) -> {
+				final WorkspacePathFilteringUpdateListener wsPathFilter = new WorkspacePathFilteringUpdateListener();
+				final Consumer<ServerToClientEvent> changeListener = wsPathFilter.getFilteringChangeListener(event -> {
 					final JSONObject message = event.getUpdateMessage();
 					if (message == null) {
 						return;
@@ -189,10 +190,9 @@ public class WebSocketServer {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
-
-				};
-				msgPusher.addChangeListener(onJarChange);
-				final Runnable cleanup = () -> msgPusher.removeChangeListener(onJarChange);
+				});
+				msgPusher.addChangeListener(changeListener);
+				final Runnable cleanup = () -> msgPusher.removeChangeListener(changeListener);
 
 				if (logger != null) {
 					logger.log(new JSONObject() //
@@ -262,9 +262,9 @@ public class WebSocketServer {
 								// Only a single frame
 								final JSONObject jobj = new JSONObject(new String(reqData, StandardCharsets.UTF_8));
 
-								writeWsMessage(out,
-										onQuery.apply(new ClientRequest(jobj, asyncMessageWriter, connectionIsAlive))
-												.toString());
+								writeWsMessage(out, onQuery.apply(
+										new ClientRequest(jobj, asyncMessageWriter, connectionIsAlive, wsPathFilter))
+										.toString());
 								break readFrame;
 							} else {
 								if (frameBuffer == null) {
@@ -274,10 +274,8 @@ public class WebSocketServer {
 								if (isFin) {
 									final JSONObject jobj = new JSONObject(
 											new String(frameBuffer.toByteArray(), StandardCharsets.UTF_8));
-									writeWsMessage(out,
-											onQuery.apply(
-													new ClientRequest(jobj, asyncMessageWriter, connectionIsAlive))
-													.toString());
+									writeWsMessage(out, onQuery.apply(new ClientRequest(jobj, asyncMessageWriter,
+											connectionIsAlive, wsPathFilter)).toString());
 									break readFrame;
 								} else {
 									first = in.read();

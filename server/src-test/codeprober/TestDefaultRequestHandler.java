@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.junit.After;
 import org.junit.Test;
 
 import codeprober.ast.TestData;
@@ -22,7 +23,10 @@ import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.ParsingRequestData;
 import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.Property;
+import codeprober.protocol.data.PutWorkspaceContentReq;
+import codeprober.protocol.data.PutWorkspaceContentRes;
 import codeprober.protocol.data.TALStep;
+import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.toolglue.ParseResult;
 import codeprober.toolglue.UnderlyingTool;
 
@@ -74,15 +78,18 @@ public class TestDefaultRequestHandler {
 		}
 	}
 
-	private ClientRequest constructRequest(String text, String attrName) {
-		final EvaluatePropertyReq req = new EvaluatePropertyReq( //
+	private EvaluatePropertyReq constructEvalRequest(String text, String attrName) {
+		return new EvaluatePropertyReq( //
 				new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD, AstCacheStrategy.FULL,
 						ParsingSource.fromText(text), null, ".tmp"), //
 				new NodeLocator(new TALStep("", "", 0, 0, 0, false), Collections.emptyList()),
-				new Property(attrName, Collections.emptyList(), null),
-				false, null, null, null, null);
-		return new ClientRequest(req.toJSON(), obj -> {
-		}, new AtomicBoolean(true));
+				new Property(attrName, Collections.emptyList(), null), false, null, null, null, null);
+	}
+
+	private ClientRequest constructRequest(String text, String attrName) {
+		return new ClientRequest(constructEvalRequest(text, attrName).toJSON(), obj -> {
+		}, new AtomicBoolean(true), (p) -> {
+		});
 	}
 
 	@Test
@@ -144,5 +151,38 @@ public class TestDefaultRequestHandler {
 		final EvaluatePropertyRes resp = EvaluatePropertyRes
 				.fromJSON(handler.handleRequest(constructRequest("", "toString")));
 		assertEquals((456 << 12) + 456, resp.response.asSync().locator.result.start);
+	}
+
+	@Test
+	public void testPutWorkspaceCallback() {
+		final DefaultRequestHandler handler = new DefaultRequestHandler(
+				args -> new ParseResult(new TestData.WithTwoLineVariants(null, 456)));
+
+		final int[] callbackCount = new int[1];
+		final ClientRequest request = new ClientRequest(new PutWorkspaceContentReq("foo/bar", "baz").toJSON(),
+				(msg) -> {
+				}, new AtomicBoolean(false), path -> {
+					assertEquals("foo/bar", path);
+					++callbackCount[0];
+				});
+
+		// Do it with unchanged workspace handler. It has no workspace directory
+		// configured, so request will fail.
+		handler.handleRequest(request);
+		assertEquals(0, callbackCount[0]);
+
+
+		WorkspaceHandler.setDefaultWorkspaceHandlerForTesting(new WorkspaceHandler() {
+			public PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
+				return new PutWorkspaceContentRes(true);
+			};
+		});
+		handler.handleRequest(request);
+		assertEquals(1, callbackCount[0]);
+	}
+
+	@After
+	public void restore() {
+		WorkspaceHandler.setDefaultWorkspaceHandlerForTesting(new WorkspaceHandler());
 	}
 }

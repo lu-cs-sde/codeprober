@@ -513,6 +513,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
   let activeFile = unsavedFileKey;
   const workspaceList = uiElements.workspaceListWrapper;
   let setActiveFile = (path: string, data: CachedFileEntry) => {}
+  const mostRecentPutFileRequestContents: { [path: string]: string } = {};
   const workspace: Workspace = {
     env: args.env,
     cachedFiles: {},
@@ -532,6 +533,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
       }
       if (activeFile !== unsavedFileKey) {
         const path = activeFile;
+        mostRecentPutFileRequestContents[path] = contents;
         args.env.performTypedRpc<PutWorkspaceContentReq, PutWorkspaceContentRes>({ type: 'PutWorkspaceContent', path, content: contents })
           .then((res) => {
             if (!res.ok) {
@@ -542,6 +544,10 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
     },
     onActiveWindowsChange: (states) => {
       if (workspace.cachedFiles[activeFile]) {
+        if (JSON.stringify(workspace.cachedFiles[activeFile].windows) === JSON.stringify(states)) {
+          // No change
+          return;
+        }
         workspace.cachedFiles[activeFile].windows = states;
       }
       if (activeFile !== unsavedFileKey) {
@@ -619,11 +625,13 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
         if (workspace.cachedFiles[path]) {
           const prevContent = workspace.cachedFiles[path];
           delete workspace.cachedFiles[path];
+          const prePutReq = mostRecentPutFileRequestContents[path] ?? '';
           const newContent = await getFileContents(workspace, path);
           if (!newContent) {
             continue;
           }
-          if (workspace.cachedFiles[path]) {
+          const freshPutReq = mostRecentPutFileRequestContents[path] ?? '';
+          if (prePutReq !== freshPutReq) {
             // New data was produced simultaneously as we fetched the contents.
             // Ignore this change notification, a more up-to-date notification will come soon.
             continue;

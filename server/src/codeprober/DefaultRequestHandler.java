@@ -316,7 +316,11 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 				@Override
 				protected PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
-					return WorkspaceHandler.getDefault().handlePutWorkspaceContent(req);
+					final PutWorkspaceContentRes ret = WorkspaceHandler.getDefault().handlePutWorkspaceContent(req);
+					if (ret.ok) {
+						request.onDidUpdateWorkspacePath.accept(req.path);
+					}
+					return ret;
 				};
 
 				@Override

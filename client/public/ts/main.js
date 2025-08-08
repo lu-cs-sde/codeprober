@@ -9755,11 +9755,17 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                             if (undimmedNodes.length === 0) {
                                 return;
                             }
-                            onDimmedNodeFocusIndex = (onDimmedNodeFocusIndex + 1) % undimmedNodes.length;
+                            if (e.shiftKey) {
+                                // Go backwards
+                                onDimmedNodeFocusIndex = (onDimmedNodeFocusIndex - 1 + undimmedNodes.length) % undimmedNodes.length;
+                            }
+                            else {
+                                onDimmedNodeFocusIndex = (onDimmedNodeFocusIndex + 1) % undimmedNodes.length;
+                            }
                             const tgtNode = undimmedNodes[onDimmedNodeFocusIndex];
                             trn.scale = 1;
                             trn.x = 1920 / 2 - tgtNode.pos.x - nodew / 2;
-                            trn.y = 1080 / 2 - tgtNode.pos.y;
+                            trn.y = 1080 / 2 - tgtNode.pos.y * getScaleY();
                             temporaryHighlightedNode = tgtNode;
                             const { start, end } = tgtNode.ltn.locator.result;
                             env.updateSpanHighlight({
@@ -9841,8 +9847,6 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         }, 0, 0, 1, 1);
                         trn.x = dragInfo.x + w.x;
                         trn.y = dragInfo.y + w.y;
-                        // trn.x = dragInfo.x + dx * dragInfo.sx;
-                        // trn.y = dragInfo.y + dy * dragInfo.sy;
                         renderFrame();
                         queueSave();
                     }, () => {
@@ -9930,11 +9934,13 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                     undimmedNodes.push(node);
                                 }
                             }
+                            let localOOB;
                             if (wtc.y > cv.clientHeight + oobPadding) {
-                                // Out of bounds, no need to render anything else
-                                return { dimmed };
+                                localOOB = true;
                             }
-                            let localOOB = wtc.x > cv.clientWidth + oobPadding;
+                            else {
+                                localOOB = wtc.x > cv.clientWidth + oobPadding;
+                            }
                             if (!localOOB) {
                                 const rhsWtc = worldToClient({ x: node.pos.x + nodew, y: node.pos.y + nodeh });
                                 localOOB = rhsWtc.x < -oobPadding || rhsWtc.y < -oobPadding;
@@ -17209,6 +17215,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
         let activeFile = unsavedFileKey;
         const workspaceList = uiElements.workspaceListWrapper;
         let setActiveFile = (path, data) => { };
+        const mostRecentPutFileRequestContents = {};
         const workspace = {
             env: args.env,
             cachedFiles: {},
@@ -17228,6 +17235,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
                 }
                 if (activeFile !== unsavedFileKey) {
                     const path = activeFile;
+                    mostRecentPutFileRequestContents[path] = contents;
                     args.env.performTypedRpc({ type: 'PutWorkspaceContent', path, content: contents })
                         .then((res) => {
                         if (!res.ok) {
@@ -17238,6 +17246,10 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
             },
             onActiveWindowsChange: (states) => {
                 if (workspace.cachedFiles[activeFile]) {
+                    if (JSON.stringify(workspace.cachedFiles[activeFile].windows) === JSON.stringify(states)) {
+                        // No change
+                        return;
+                    }
                     workspace.cachedFiles[activeFile].windows = states;
                 }
                 if (activeFile !== unsavedFileKey) {
@@ -17308,6 +17320,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
                 }
             },
             onServerNotifyPathsChanged: async (paths) => {
+                var _a, _b;
                 // Poll all changed paths
                 let anyChange = false;
                 let activeFileAtTimeofNewContent = activeFile;
@@ -17317,11 +17330,13 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
                     if (workspace.cachedFiles[path]) {
                         const prevContent = workspace.cachedFiles[path];
                         delete workspace.cachedFiles[path];
+                        const prePutReq = (_a = mostRecentPutFileRequestContents[path]) !== null && _a !== void 0 ? _a : '';
                         const newContent = await getFileContents(workspace, path);
                         if (!newContent) {
                             continue;
                         }
-                        if (workspace.cachedFiles[path]) {
+                        const freshPutReq = (_b = mostRecentPutFileRequestContents[path]) !== null && _b !== void 0 ? _b : '';
+                        if (prePutReq !== freshPutReq) {
                             // New data was produced simultaneously as we fetched the contents.
                             // Ignore this change notification, a more up-to-date notification will come soon.
                             continue;
@@ -17607,8 +17622,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 else {
                     shouldTryInitializingWorkspace = true;
                 }
+                let preventSavingChangesToSettings = false;
                 const onChange = (newValue, adjusters) => {
-                    if (!activeWorkspace || activeWorkspace.activeFileIsTempFile()) {
+                    if (!preventSavingChangesToSettings && (!activeWorkspace || activeWorkspace.activeFileIsTempFile())) {
                         settings_13.default.setEditorContents(newValue);
                     }
                     if (activeWorkspace) {
@@ -17728,6 +17744,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                                     getLocIndicator().innerText = `(${activeWorkspace.getActiveFile()})`;
                                 }
                             };
+                            // While workspace is initializing, we may get new editor contents related to the workspace
+                            // This should not be saved as our temp file
+                            preventSavingChangesToSettings = true;
                             (0, Workspace_1.initWorkspace)({
                                 env: modalEnv,
                                 initialLocalContent: (_c = settings_13.default.getEditorContents()) !== null && _c !== void 0 ? _c : '',
@@ -17757,6 +17776,9 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             })
                                 .catch((err) => {
                                 console.warn('Failed initializing workspace', err);
+                            })
+                                .finally(() => {
+                                preventSavingChangesToSettings = false;
                             });
                         }
                         else {

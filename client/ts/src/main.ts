@@ -228,8 +228,9 @@ const doMain = (wsPort: number
         shouldTryInitializingWorkspace = true;
       }
 
+      let preventSavingChangesToSettings = false;
       const onChange = (newValue: string, adjusters?: LocationAdjuster[]) => {
-        if (!activeWorkspace || activeWorkspace.activeFileIsTempFile()) {
+        if (!preventSavingChangesToSettings && (!activeWorkspace || activeWorkspace.activeFileIsTempFile())) {
           settings.setEditorContents(newValue);
         }
         if (activeWorkspace) {
@@ -366,6 +367,9 @@ const doMain = (wsPort: number
                 getLocIndicator().innerText = `(${activeWorkspace.getActiveFile()})`;
               }
             };
+            // While workspace is initializing, we may get new editor contents related to the workspace
+            // This should not be saved as our temp file
+            preventSavingChangesToSettings = true;
             initWorkspace({
               env: modalEnv,
               initialLocalContent: settings.getEditorContents() ?? '',
@@ -396,6 +400,9 @@ const doMain = (wsPort: number
               })
               .catch((err) => {
                 console.warn('Failed initializing workspace', err);
+              })
+              .finally(() => {
+                preventSavingChangesToSettings = false;
               })
             ;
           } else {

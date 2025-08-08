@@ -169,7 +169,8 @@ public class CodeProber {
 							return;
 						}
 						writeToCoordinator.accept(rpcHandler.apply(new ClientRequest(obj,
-								asyncMsg -> writeToCoordinator.accept(asyncMsg.toJSON()), connectionIsAlive)));
+								asyncMsg -> writeToCoordinator.accept(asyncMsg.toJSON()), connectionIsAlive, (p) -> {
+								})));
 					}
 				}.runForever();
 			}).start();
@@ -211,7 +212,8 @@ public class CodeProber {
 				protected TunneledWsPutRequestRes handleTunneledWsPutRequest(TunneledWsPutRequestReq req) {
 					final ClientRequest cr = new ClientRequest(req.request, asyncMsg -> {
 						throw new IllegalStateException("Async message in oneshot request");
-					}, new AtomicBoolean(true));
+					}, new AtomicBoolean(true), (p) -> {
+					});
 
 					final JSONObject resp = userFacingHandler.handleRequest(cr);
 					return new TunneledWsPutRequestRes(resp);

@@ -43,7 +43,8 @@ public class TestClient {
 
 	private ClientRequest constructMessage(JSONObject query) {
 		return new ClientRequest(query, obj -> {
-		}, new AtomicBoolean(true));
+		}, new AtomicBoolean(true), (p) -> {
+		});
 	}
 
 	public List<String> getTestSuites() {
@@ -141,24 +142,20 @@ public class TestClient {
 //		final Object lock = new Object();
 		final Consumer<JSONObject> handleCallback = rawMsg -> {
 			final EvaluatePropertyRes res = EvaluatePropertyRes.fromJSON(rawMsg);
-//			synchronized (lock) {
-				switch (res.response.type) {
-				case job:
-					// Do nothing
-					break;
-				case sync:
-					responseHandler.accept(res.response.asSync());
-					break;
-				default:
-					System.out.println("Unknown response type");
-					break;
-				}
-//			}
+			switch (res.response.type) {
+			case job:
+				// Do nothing
+				break;
+			case sync:
+				responseHandler.accept(res.response.asSync());
+				break;
+			default:
+				System.out.println("Unknown response type");
+				break;
+			}
 		};
 
 		handleCallback.accept(requestHandler.handleRequest(new ClientRequest(req.toJSON(), asyncMsg -> {
-//			System.out.println("AsyncUpdate: " + asyncMsg.toJSON());
-//					AsyncRpcUpdate.fromJSON(asyncMsg);
 			switch (asyncMsg.value.type) {
 //					case status:
 //						break;
@@ -176,7 +173,8 @@ public class TestClient {
 				break;
 			}
 //					handleCallback.accept(asyncMsg.toJSON());
-		}, new AtomicBoolean(true))));
+		}, new AtomicBoolean(true), (p) -> {
+		})));
 	}
 
 	private void doRunNested(boolean allowAsync, boolean identityComparison, String where, ParsingRequestData src,
@@ -203,7 +201,7 @@ public class TestClient {
 			runEvaluateProperty(req, sync -> {
 				if (!(identityComparison //
 						? compareIdentityLines(nt.expectedOutput, sync.body)
-								: compareSetLines(nt.expectedOutput, sync.body))) {
+						: compareSetLines(nt.expectedOutput, sync.body))) {
 					onDone.accept(new TestResult(false, ourWhere, nt.expectedOutput, sync.body, new ArrayList<>()));
 					return;
 				}

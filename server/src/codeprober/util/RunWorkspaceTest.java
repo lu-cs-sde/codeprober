@@ -133,7 +133,7 @@ public class RunWorkspaceTest {
 
 	private static ClientRequest constructMessage(JSONObject query) {
 		return new ClientRequest(query, obj -> {
-		}, new AtomicBoolean(true));
+		}, new AtomicBoolean(true), (p) -> {});
 	}
 
 	public static List<NodeLocator> listNodes(JsonRequestHandler requestHandler, ParsingRequestData prd, int line,

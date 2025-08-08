@@ -55,6 +55,10 @@ public class WorkspaceHandler {
 
 	private static WorkspaceHandler sInstance = new WorkspaceHandler();
 
+	public static void setDefaultWorkspaceHandlerForTesting(WorkspaceHandler wh) {
+		sInstance = wh;
+	}
+
 	public static WorkspaceHandler getDefault() {
 		return sInstance;
 	}

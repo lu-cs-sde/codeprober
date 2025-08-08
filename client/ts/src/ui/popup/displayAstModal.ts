@@ -246,11 +246,17 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             if (undimmedNodes.length === 0) {
               return;
             }
-            onDimmedNodeFocusIndex = (onDimmedNodeFocusIndex + 1) % undimmedNodes.length;
+            if (e.shiftKey) {
+              // Go backwards
+              onDimmedNodeFocusIndex = (onDimmedNodeFocusIndex - 1 + undimmedNodes.length) % undimmedNodes.length;
+            } else {
+              onDimmedNodeFocusIndex = (onDimmedNodeFocusIndex + 1) % undimmedNodes.length;
+            }
             const tgtNode = undimmedNodes[onDimmedNodeFocusIndex];
             trn.scale = 1;
             trn.x = 1920 / 2 - tgtNode.pos.x - nodew / 2;
-            trn.y = 1080 / 2 - tgtNode.pos.y;
+            trn.y = 1080 / 2 - tgtNode.pos.y * getScaleY();
+
             temporaryHighlightedNode = tgtNode;
             const { start, end } = tgtNode.ltn.locator.result;
             env.updateSpanHighlight({
@@ -343,8 +349,6 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
             }, 0, 0, 1, 1);
             trn.x = dragInfo.x + w.x;
             trn.y = dragInfo.y + w.y;
-            // trn.x = dragInfo.x + dx * dragInfo.sx;
-            // trn.y = dragInfo.y + dy * dragInfo.sy;
             renderFrame();
             queueSave();
           },
@@ -441,11 +445,12 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
                 undimmedNodes.push(node);
               }
             }
+            let localOOB: boolean;
             if (wtc.y > cv.clientHeight + oobPadding) {
-              // Out of bounds, no need to render anything else
-              return { dimmed };
+              localOOB = true;
+            } else {
+              localOOB = wtc.x > cv.clientWidth + oobPadding;
             }
-            let localOOB = wtc.x > cv.clientWidth + oobPadding;
             if (!localOOB) {
               const rhsWtc = worldToClient({ x: node.pos.x + nodew, y: node.pos.y + nodeh });
               localOOB = rhsWtc.x < -oobPadding || rhsWtc.y < -oobPadding;

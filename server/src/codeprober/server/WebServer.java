@@ -58,9 +58,10 @@ public class WebServer {
 	private static class WsPutSession {
 		public final String id;
 		public long lastActivity = System.currentTimeMillis();
-		private final ConcurrentLinkedQueue<JSONObject> outgoingMessages = new ConcurrentLinkedQueue<>();
+		private final ConcurrentLinkedQueue<ServerToClientEvent> outgoingMessages = new ConcurrentLinkedQueue<>();
 		public final AtomicInteger activeConnections = new AtomicInteger();
 		public final AtomicBoolean isConnected = new AtomicBoolean(true);
+		public final WorkspacePathFilteringUpdateListener updateListener = new WorkspacePathFilteringUpdateListener();
 
 		private final AtomicInteger lastEventVersion = new AtomicInteger(0);
 
@@ -75,7 +76,7 @@ public class WebServer {
 			notifyAll();
 		}
 
-		public synchronized void addMessage(JSONObject obj) {
+		public synchronized void addMessage(ServerToClientEvent obj) {
 			outgoingMessages.add(obj);
 			notifyAll();
 		}
@@ -92,9 +93,15 @@ public class WebServer {
 		}
 
 		private LongPollResponse pollWithoutWaiting(int clientKnownEventVersion) {
-			final JSONObject msg = outgoingMessages.poll();
-			if (msg != null) {
-				return LongPollResponse.fromPush(msg);
+			final ServerToClientEvent event = outgoingMessages.poll();
+			if (event != null) {
+				if (updateListener.canIgnore(event)) {
+					return pollWithoutWaiting(clientKnownEventVersion);
+				}
+				final JSONObject update = event.getUpdateMessage();
+				if (update != null) {
+					return LongPollResponse.fromPush(update);
+				}
 			}
 			if (lastEventVersion.get() != clientKnownEventVersion) {
 				return LongPollResponse.fromEtag(lastEventVersion.get());
@@ -122,7 +129,7 @@ public class WebServer {
 			}
 		}
 
-		public void broadcastMessage(JSONObject json) {
+		public void broadcastMessage(ServerToClientEvent json) {
 			System.out.println("Broadcasting " + json);
 			for (WsPutSession wps : sessions) {
 				wps.addMessage(json);
@@ -233,14 +240,13 @@ public class WebServer {
 					System.out.printf(
 							"Try running with the environment variable 'WEBSOCKET_SERVER_PORT=http' or 'WEBSOCKET_SERVER_PORT=%d' (or another port) if this problem persists\n",
 							WebServer.getPort() + 1);
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 			} finally {
 				try {
 					socket.close();
 				} catch (IOException e) {
-					// TODO Auto-generated catch block
+					System.err.print("Error closing socket");
 					e.printStackTrace();
 				}
 				connectionIsAlive.set(false);
@@ -486,7 +492,8 @@ public class WebServer {
 					protected TunneledWsPutRequestRes handleTunneledWsPutRequest(TunneledWsPutRequestReq req) {
 						final WsPutSession wps = monitor.getOrCreate(req.session);
 						final ClientRequest cr = new ClientRequest(req.request,
-								asyncMsg -> wps.addMessage(asyncMsg.toJSON()), wps.isConnected);
+								asyncMsg -> wps.addMessage(ServerToClientEvent.rawMessage(asyncMsg.toJSON())),
+								wps.isConnected, wps.updateListener::onWorkspacePathChanged);
 
 						wps.activeConnections.incrementAndGet();
 						try {
@@ -862,10 +869,7 @@ public class WebServer {
 					break;
 				}
 				default: {
-					final JSONObject msg = event.getUpdateMessage();
-					if (msg != null) {
-						ws.monitor.broadcastMessage(msg);
-					}
+					ws.monitor.broadcastMessage(event);
 					break;
 				}
 				}

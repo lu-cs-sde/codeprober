@@ -51,7 +51,8 @@ public class ConcurrentWorker implements JsonRequestHandler {
 					final JSONObject result = underlyingHandler.handleRequest(new ClientRequest( //
 							task.parsedRequestData.data,
 							task.request::sendAsyncResponse, //
-							task.request.connectionIsAlive));
+							task.request.connectionIsAlive,
+							task.request.onDidUpdateWorkspacePath));
 					CodeProber.flog("🕵️ conc done " + task.jobId);
 					System.out.println("running conc worker.. DONE");
 

@@ -99,7 +99,7 @@ public class TextProbeEnvironment {
 
 	private static ClientRequest constructMessage(JSONObject query) {
 		return new ClientRequest(query, obj -> {
-		}, new AtomicBoolean(true));
+		}, new AtomicBoolean(true), (p) -> {});
 	}
 
 	public List<NodeLocator> listNodes(int line, String attrPredicate, String tailPredicate) {
