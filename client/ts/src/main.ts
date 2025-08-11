@@ -594,16 +594,27 @@ const doMain = (wsPort: number
       let jobIdGenerator = 0;
       const createCullingTaskSubmitter = createCullingTaskSubmitterFactory(changeBufferTime);
       const workspacePathUpdaters: { [path: string]: CullingTaskSubmitter } = {};
+      let pendingWorkspacePathTask: Promise<any> | null = null;
       const performTypedRpc: ModalEnv['performTypedRpc'] = async (req) => {
+        if (pendingWorkspacePathTask) {
+          await pendingWorkspacePathTask;
+        }
         const entries = Object.entries(workspacePathUpdaters);
         if (entries.length) {
-          // Need to submit all workspace updates first
-          // First, synchonously delete all from pending to avoid submitting them twice
-          for (let i = 0; i < entries.length; ++i) {
-            delete workspacePathUpdaters[entries[i][0]];
-          }
-          // Second, apply the updates
-          await Promise.all(entries.map(x => x[1].fireImmediately()));
+          pendingWorkspacePathTask = new Promise(async (res) => {
+            // Need to submit all workspace updates first
+            // First, synchonously delete all from pending to avoid submitting them twice
+            for (let i = 0; i < entries.length; ++i) {
+              delete workspacePathUpdaters[entries[i][0]];
+            }
+            // Second, apply the updates
+            try {
+              await Promise.all(entries.map(x => x[1].fireImmediately()));
+            } catch (ignore) {}
+            res('');
+          })
+          await pendingWorkspacePathTask;
+          pendingWorkspacePathTask = null;
         }
         return wsHandler.sendRpc(req);
       };
@@ -614,7 +625,11 @@ const doMain = (wsPort: number
             workspacePathUpdaters[path] = createCullingTaskSubmitter();
           }
           workspacePathUpdaters[path].submit(async () => {
-            const res = await performTypedRpc<PutWorkspaceContentReq, PutWorkspaceContentRes>({ type: 'PutWorkspaceContent', path, content: contents });
+            // Note: we use sendRpc rather than performTypedRpc here. This is to avoid getting stuck in a deadlock
+            // where performTypedRpc is waiting for all workspace updates to finish, while the workspace updates
+            // are waiting on performTypedRpc, etc.
+            const req: PutWorkspaceContentReq = { type: 'PutWorkspaceContent', path, content: contents };
+            const res: PutWorkspaceContentRes = await wsHandler.sendRpc(req);
             if (!res.ok) {
               console.warn('Failed updating content for', path);
             }

@@ -2,6 +2,7 @@ package codeprober.locator;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.util.Arrays;
 import java.util.List;
@@ -16,7 +17,12 @@ import codeprober.ast.TestData.Bar;
 public class TestNodesWithProperty {
 
 	private void assertPredicates(String src, String... expected) {
-		assertEquals(Arrays.asList(expected), NodesWithProperty.parsePredicates(src));
+		try {
+			assertEquals(Arrays.asList(expected).toString(), NodesWithProperty
+					.parsePredicates(TestData.getInfo(new AstNode(TestData.getSimple())), src).toString());
+		} catch (ClassNotFoundException e) {
+			fail(e.toString());
+		}
 	}
 
 	@Test

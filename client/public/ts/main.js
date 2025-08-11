@@ -11466,7 +11466,6 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
             const combinedResults = { numPass: 0, numFail: 0 };
             try {
                 const evaluator = (0, TextProbeEvaluator_1.createTextProbeEvaluator)(args.env);
-                // TODO rename to addsquiggly
                 function addSquiggly(lineIdx, colStart, colEnd, msg) {
                     newDiagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
                 }
@@ -17967,16 +17966,28 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 let jobIdGenerator = 0;
                 const createCullingTaskSubmitter = (0, cullingTaskSubmitterFactory_2.default)(changeBufferTime);
                 const workspacePathUpdaters = {};
+                let pendingWorkspacePathTask = null;
                 const performTypedRpc = async (req) => {
+                    if (pendingWorkspacePathTask) {
+                        await pendingWorkspacePathTask;
+                    }
                     const entries = Object.entries(workspacePathUpdaters);
                     if (entries.length) {
-                        // Need to submit all workspace updates first
-                        // First, synchonously delete all from pending to avoid submitting them twice
-                        for (let i = 0; i < entries.length; ++i) {
-                            delete workspacePathUpdaters[entries[i][0]];
-                        }
-                        // Second, apply the updates
-                        await Promise.all(entries.map(x => x[1].fireImmediately()));
+                        pendingWorkspacePathTask = new Promise(async (res) => {
+                            // Need to submit all workspace updates first
+                            // First, synchonously delete all from pending to avoid submitting them twice
+                            for (let i = 0; i < entries.length; ++i) {
+                                delete workspacePathUpdaters[entries[i][0]];
+                            }
+                            // Second, apply the updates
+                            try {
+                                await Promise.all(entries.map(x => x[1].fireImmediately()));
+                            }
+                            catch (ignore) { }
+                            res('');
+                        });
+                        await pendingWorkspacePathTask;
+                        pendingWorkspacePathTask = null;
                     }
                     return wsHandler.sendRpc(req);
                 };
@@ -17987,7 +17998,11 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             workspacePathUpdaters[path] = createCullingTaskSubmitter();
                         }
                         workspacePathUpdaters[path].submit(async () => {
-                            const res = await performTypedRpc({ type: 'PutWorkspaceContent', path, content: contents });
+                            // Note: we use sendRpc rather than performTypedRpc here. This is to avoid getting stuck in a deadlock
+                            // where performTypedRpc is waiting for all workspace updates to finish, while the workspace updates
+                            // are waiting on performTypedRpc, etc.
+                            const req = { type: 'PutWorkspaceContent', path, content: contents };
+                            const res = await wsHandler.sendRpc(req);
                             if (!res.ok) {
                                 console.warn('Failed updating content for', path);
                             }

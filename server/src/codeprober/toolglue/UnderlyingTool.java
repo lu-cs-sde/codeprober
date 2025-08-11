@@ -14,8 +14,8 @@ public interface UnderlyingTool {
 	 * caching purposes. Parsed ASTs may be reused whenever a request is received
 	 * with identical sources as before, and when the underlying tool is unchanged.
 	 * <p>
-	 * Default implementation assumes a short-lived tool that doesn't change during.
-	 * Therefore the version is by default hard-coded to 0.
+	 * Default implementation assumes a short-lived tool that doesn't change during
+	 * execution. Therefore the version is by default hard-coded to 0.
 	 */
 	default long getVersionId() {
 		return 0;

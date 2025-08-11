@@ -168,7 +168,6 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
     try {
       const evaluator = createTextProbeEvaluator(args.env);
 
-      // TODO rename to addsquiggly
       function addSquiggly(lineIdx: number, colStart: number, colEnd: number, msg: string) {
         newDiagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
       }
