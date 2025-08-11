@@ -51,6 +51,7 @@ interface StickyHighlight {
 interface CullingTaskSubmitter {
   submit: (callback: () => void) => void;
   cancel: () => void;
+  fireImmediately: () => Promise<void>;
 }
 
 interface ModalPosition { x: number, y: number };

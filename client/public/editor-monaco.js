@@ -48,10 +48,19 @@ window.defineEditor(
       })
       monaco.languages.registerCompletionItemProvider(languageId, {
         provideCompletionItems: async (model, position, token) => {
-          return window.HandleLspLikeInteraction?.(
+          const compData = await window.HandleLspLikeInteraction?.(
             'complete',
             { line: position.lineNumber, column: position.column }
           );
+          if (Array.isArray(compData?.suggestions)) {
+            compData.suggestions.forEach(sug => {
+              // The insertText field is the content that should be inserted
+              // It is interpreted as "replaceText" by monaco though, meaning it replaces the existing content with insertText
+              // Therefore we must set insertText to the full insert string (=label).
+              sug.insertText = sug.label;
+            });
+          }
+          return compData;
         },
         triggerCharacters: ['.', '[', '='],
         resolveCompletionItem: (item) => {

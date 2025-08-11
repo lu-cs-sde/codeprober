@@ -534,12 +534,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
       if (activeFile !== unsavedFileKey) {
         const path = activeFile;
         mostRecentPutFileRequestContents[path] = contents;
-        args.env.performTypedRpc<PutWorkspaceContentReq, PutWorkspaceContentRes>({ type: 'PutWorkspaceContent', path, content: contents })
-          .then((res) => {
-            if (!res.ok) {
-              console.warn('Failed updating content for', path);
-            }
-          })
+        args.env.putWorkspaceContent(path, contents);
       }
     },
     onActiveWindowsChange: (states) => {

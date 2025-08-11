@@ -722,14 +722,9 @@ define("ui/startEndToSpan", ["require", "exports"], function (require, exports) 
 define("model/adjustTypeAtLoc", ["require", "exports", "ui/startEndToSpan"], function (require, exports, startEndToSpan_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.adjustSpan = exports.adjustStartEnd = void 0;
     startEndToSpan_1 = __importDefault(startEndToSpan_1);
-    const adjustTypeAtLoc = (adjuster, tal) => {
-        if (tal.external) {
-            // Refuse to adjust things in external files.
-            // CodeProber is only expected to get change events for our own "internal" file.
-            return;
-        }
-        const span = (0, startEndToSpan_1.default)(tal.start, tal.end);
+    const adjustSpan = (adjuster, span) => {
         let [ls, cs] = adjuster(span.lineStart, span.colStart);
         let [le, ce] = adjuster(span.lineEnd, span.colEnd);
         if (ls == le && cs == ce) {
@@ -742,8 +737,25 @@ define("model/adjustTypeAtLoc", ["require", "exports", "ui/startEndToSpan"], fun
                 ce = cs + (span.colEnd - span.colStart);
             }
         }
-        tal.start = (ls << 12) + Math.max(0, cs);
-        tal.end = (le << 12) + ce;
+        return {
+            start: (ls << 12) + Math.max(0, cs),
+            end: (le << 12) + ce,
+        };
+    };
+    exports.adjustSpan = adjustSpan;
+    const adjustStartEnd = (adjuster, start, end) => {
+        return adjustSpan(adjuster, (0, startEndToSpan_1.default)(start, end));
+    };
+    exports.adjustStartEnd = adjustStartEnd;
+    const adjustTypeAtLoc = (adjuster, tal) => {
+        if (tal.external) {
+            // Refuse to adjust things in external files.
+            // CodeProber is only expected to get change events for our own "internal" file.
+            return;
+        }
+        const adj = adjustStartEnd(adjuster, tal.start, tal.end);
+        tal.start = adj.start;
+        tal.end = adj.end;
     };
     exports.default = adjustTypeAtLoc;
 });
@@ -9251,19 +9263,32 @@ define("model/cullingTaskSubmitterFactory", ["require", "exports"], function (re
     Object.defineProperty(exports, "__esModule", { value: true });
     const createCullingTaskSubmitterFactory = (cullTime) => {
         if (typeof cullTime !== 'number') {
-            return () => ({ submit: (cb) => cb(), cancel: () => { }, });
+            return () => ({ submit: (cb) => cb(), cancel: () => { }, fireImmediately: async () => { }, });
         }
         return () => {
             let localChangeDebounceTimer = -1;
-            return {
-                submit: (cb) => {
-                    clearTimeout(localChangeDebounceTimer);
-                    localChangeDebounceTimer = setTimeout(() => cb(), cullTime);
-                },
-                cancel: () => {
-                    clearTimeout(localChangeDebounceTimer);
-                },
+            let pendingTask = null;
+            const submit = (cb) => {
+                clearTimeout(localChangeDebounceTimer);
+                pendingTask = cb;
+                localChangeDebounceTimer = setTimeout(() => {
+                    cb();
+                    pendingTask = null;
+                }, cullTime);
             };
+            const cancel = () => {
+                clearTimeout(localChangeDebounceTimer);
+                pendingTask = null;
+            };
+            const fireImmediately = async () => {
+                const pt = pendingTask;
+                pendingTask = null;
+                clearTimeout(localChangeDebounceTimer);
+                if (pt) {
+                    await pt();
+                }
+            };
+            return { submit, cancel, fireImmediately, };
         };
     };
     exports.default = createCullingTaskSubmitterFactory;
@@ -11326,7 +11351,7 @@ define("model/TextProbeEvaluator", ["require", "exports", "network/evaluatePrope
     };
     exports.createTextProbeEvaluator = createTextProbeEvaluator;
 });
-define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/startEndToSpan", "model/cullingTaskSubmitterFactory", "model/TextProbeEvaluator", "model/UpdatableNodeLocator"], function (require, exports, hacks_4, settings_4, attachDragToX_4, displayAttributeModal_5, displayProbeModal_3, startEndToSpan_7, cullingTaskSubmitterFactory_2, TextProbeEvaluator_1, UpdatableNodeLocator_5) {
+define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/startEndToSpan", "model/TextProbeEvaluator", "model/UpdatableNodeLocator"], function (require, exports, hacks_4, settings_4, attachDragToX_4, displayAttributeModal_5, displayProbeModal_3, startEndToSpan_7, TextProbeEvaluator_1, UpdatableNodeLocator_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.setupTextProbeManager = void 0;
@@ -11334,7 +11359,6 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
     displayAttributeModal_5 = __importDefault(displayAttributeModal_5);
     displayProbeModal_3 = __importDefault(displayProbeModal_3);
     startEndToSpan_7 = __importDefault(startEndToSpan_7);
-    cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
     ;
     const createSpanFlasher = (env) => {
         let activeFlashCleanup = () => { };
@@ -11397,10 +11421,10 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
         return { flash, clear, quickFlash };
     };
     const setupTextProbeManager = (args) => {
-        const refreshDispatcher = (0, cullingTaskSubmitterFactory_2.default)(1)();
+        const refreshDispatcher = args.env.createCullingTaskSubmitter();
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const diagnostics = [];
-        args.env.probeMarkers[queryId] = () => diagnostics;
+        args.env.probeMarkers[queryId] = diagnostics;
         let activeRefresh = false;
         let repeatOnDone = false;
         const activeStickies = [];
@@ -11423,7 +11447,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                 repeatOnDone = true;
                 return;
             }
-            diagnostics.length = 0;
+            const newDiagnostics = [];
             activeRefresh = true;
             repeatOnDone = false;
             let nextStickyIndex = 0;
@@ -11444,7 +11468,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                 const evaluator = (0, TextProbeEvaluator_1.createTextProbeEvaluator)(args.env);
                 // TODO rename to addsquiggly
                 function addSquiggly(lineIdx, colStart, colEnd, msg) {
-                    diagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
+                    newDiagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
                 }
                 function addStickyBox(boxClass, boxSpan, stickyClass, stickyContent, stickySpan) {
                     args.env.setStickyHighlight(allocateStickyId(), {
@@ -11553,6 +11577,8 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
             catch (e) {
                 console.warn('Error during refresh', e);
             }
+            diagnostics.length = 0;
+            diagnostics.push(...newDiagnostics);
             if (diagnostics.length || hadDiagnosticsBefore) {
                 args.env.updateMarkers();
             }
@@ -11825,13 +11851,10 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
                             // It is a variable, add the type as detail
                             detail = node.type.split('.').slice(-1)[0];
                         }
-                        const ret = { label, kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0'), detail };
+                        const ret = { label, insertText: label, kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0'), detail };
                         if (!duplicateTypes.has(type)) {
                             if (label.length > existingText.length && label.startsWith(existingText)) {
                                 ret.insertText = label.slice(existingText.length);
-                            }
-                            else {
-                                ret.insertText = label;
                             }
                             return ret;
                         }
@@ -17236,12 +17259,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
                 if (activeFile !== unsavedFileKey) {
                     const path = activeFile;
                     mostRecentPutFileRequestContents[path] = contents;
-                    args.env.performTypedRpc({ type: 'PutWorkspaceContent', path, content: contents })
-                        .then((res) => {
-                        if (!res.ok) {
-                            console.warn('Failed updating content for', path);
-                        }
-                    });
+                    args.env.putWorkspaceContent(path, contents);
                 }
             },
             onActiveWindowsChange: (states) => {
@@ -17428,7 +17446,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
     };
     exports.initWorkspace = initWorkspace;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox", "model/Workspace", "model/TextProbeManager"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_7, displayRagModal_1, displayHelp_5, displayAttributeModal_9, settings_13, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_5, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_3, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_12, UpdatableNodeLocator_11, hacks_7, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1, Workspace_1, TextProbeManager_1) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox", "model/Workspace", "model/TextProbeManager", "model/adjustTypeAtLoc"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_7, displayRagModal_1, displayHelp_5, displayAttributeModal_9, settings_13, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_5, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_12, UpdatableNodeLocator_11, hacks_7, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1, Workspace_1, TextProbeManager_1, adjustTypeAtLoc_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -17445,7 +17463,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     UIElements_5 = __importDefault(UIElements_5);
     showVersionInfo_1 = __importDefault(showVersionInfo_1);
     runBgProbe_1 = __importDefault(runBgProbe_1);
-    cullingTaskSubmitterFactory_3 = __importDefault(cullingTaskSubmitterFactory_3);
+    cullingTaskSubmitterFactory_2 = __importDefault(cullingTaskSubmitterFactory_2);
     displayAstModal_4 = __importDefault(displayAstModal_4);
     displayTestSuiteListModal_1 = __importDefault(displayTestSuiteListModal_1);
     displayWorkerStatus_1 = __importDefault(displayWorkerStatus_1);
@@ -17494,7 +17512,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         let updateSpanHighlight = (span, stickies) => { };
         const onChangeListeners = {};
         const probeWindowStateSavers = {};
-        const spammyOperationDebouncer = (0, cullingTaskSubmitterFactory_3.default)(10);
+        const spammyOperationDebouncer = (0, cullingTaskSubmitterFactory_2.default)(10);
         const windowSaveDebouncer = spammyOperationDebouncer();
         const getCurrentWindowStates = () => {
             const states = [];
@@ -17514,7 +17532,67 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 }
             });
         };
+        const probeMarkers = {};
+        const activeMarkers = [];
+        const updateMarkerDebouncer = spammyOperationDebouncer();
+        let markText = () => ({});
+        const updateMarkers = () => {
+            updateMarkerDebouncer.submit(() => {
+                activeMarkers.forEach(m => { var _a; return (_a = m === null || m === void 0 ? void 0 : m.clear) === null || _a === void 0 ? void 0 : _a.call(m); });
+                activeMarkers.length = 0;
+                const deduplicator = new Set();
+                const pendingSources = {};
+                const pendingAdders = [];
+                const filteredAddMarker = (severity, start, end, msg, source) => {
+                    var _a;
+                    const uniqId = [severity, start, end, msg].join(' | ');
+                    pendingSources[uniqId] = (_a = pendingSources[uniqId]) !== null && _a !== void 0 ? _a : [];
+                    pendingSources[uniqId].push(source !== null && source !== void 0 ? source : '');
+                    if (deduplicator.has(uniqId)) {
+                        return;
+                    }
+                    deduplicator.add(uniqId);
+                    pendingAdders.push(() => {
+                        const sources = [...new Set(pendingSources[uniqId].filter(Boolean))].sort((a, b) => (a < b ? -1 : (a > b) ? 1 : 0));
+                        const lineStart = (start >>> 12);
+                        const colStart = start & 0xFFF;
+                        const lineEnd = (end >>> 12);
+                        const colEnd = end & 0xFFF;
+                        activeMarkers.push(markText({
+                            severity: `${severity}`.toLocaleLowerCase('en-GB'),
+                            lineStart, colStart, lineEnd, colEnd, message: msg,
+                            source: sources.length === 0 ? undefined : sources.join(', ')
+                        }));
+                    });
+                };
+                Object.values(probeMarkers).forEach(arr => (Array.isArray(arr) ? arr : arr()).forEach(({ type, start, end, msg, source }) => filteredAddMarker(type, start, end, msg, source)));
+                pendingAdders.forEach(pa => pa());
+            });
+        };
         const notifyLocalChangeListeners = (adjusters, reason) => {
+            if (adjusters) {
+                const markers = Object.values(probeMarkers);
+                const stickies = Object.values(stickyHighlights);
+                adjusters.forEach(adjuster => {
+                    markers.forEach((diag => {
+                        if (Array.isArray(diag)) {
+                            diag.forEach(diag => {
+                                const se = (0, adjustTypeAtLoc_2.adjustStartEnd)(adjuster, diag.start, diag.end + 1);
+                                diag.start = se.start;
+                                diag.end = Math.max(se.start, se.end - 1);
+                            });
+                        }
+                    }));
+                    stickies.forEach(sticky => {
+                        const adj = (0, adjustTypeAtLoc_2.adjustSpan)(adjuster, sticky.span);
+                        sticky.span.lineStart = adj.start >>> 12;
+                        sticky.span.colStart = adj.start & 0xFFF;
+                        sticky.span.lineEnd = adj.end >>> 12;
+                        sticky.span.colEnd = adj.end & 0xFFF;
+                    });
+                });
+                updateMarkers();
+            }
             Object.values(onChangeListeners).forEach(l => l(adjusters, reason));
             triggerWindowSave();
         };
@@ -17633,7 +17711,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     notifyLocalChangeListeners(adjusters);
                 };
                 let setLocalState = (value) => { };
-                let markText = () => ({});
                 const darkModeCheckbox = uiElements.darkModeCheckbox;
                 darkModeCheckbox.checked = !settings_13.default.isLightTheme();
                 const themeChangeListeners = {};
@@ -17790,42 +17867,6 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     // Throw out to editor selection screen
                     location.search = '';
                 }
-                const activeMarkers = [];
-                const probeMarkers = {};
-                const updateMarkerDebouncer = spammyOperationDebouncer();
-                const updateMarkers = () => {
-                    updateMarkerDebouncer.submit(() => {
-                        activeMarkers.forEach(m => { var _a; return (_a = m === null || m === void 0 ? void 0 : m.clear) === null || _a === void 0 ? void 0 : _a.call(m); });
-                        activeMarkers.length = 0;
-                        const deduplicator = new Set();
-                        const pendingSources = {};
-                        const pendingAdders = [];
-                        const filteredAddMarker = (severity, start, end, msg, source) => {
-                            var _a;
-                            const uniqId = [severity, start, end, msg].join(' | ');
-                            pendingSources[uniqId] = (_a = pendingSources[uniqId]) !== null && _a !== void 0 ? _a : [];
-                            pendingSources[uniqId].push(source !== null && source !== void 0 ? source : '');
-                            if (deduplicator.has(uniqId)) {
-                                return;
-                            }
-                            deduplicator.add(uniqId);
-                            pendingAdders.push(() => {
-                                const sources = [...new Set(pendingSources[uniqId].filter(Boolean))].sort((a, b) => (a < b ? -1 : (a > b) ? 1 : 0));
-                                const lineStart = (start >>> 12);
-                                const colStart = start & 0xFFF;
-                                const lineEnd = (end >>> 12);
-                                const colEnd = end & 0xFFF;
-                                activeMarkers.push(markText({
-                                    severity: `${severity}`.toLocaleLowerCase('en-GB'),
-                                    lineStart, colStart, lineEnd, colEnd, message: msg,
-                                    source: sources.length === 0 ? undefined : sources.join(', ')
-                                }));
-                            });
-                        };
-                        Object.values(probeMarkers).forEach(arr => (Array.isArray(arr) ? arr : arr()).forEach(({ type, start, end, msg, source }) => filteredAddMarker(type, start, end, msg, source)));
-                        pendingAdders.forEach(pa => pa());
-                    });
-                };
                 const setupSimpleCheckbox = (input, initial, update) => {
                     input.checked = initial;
                     input.oninput = () => { update(input.checked); notifyLocalChangeListeners(); };
@@ -17924,10 +17965,35 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 const testManager = (0, TestManager_1.createTestManager)(() => modalEnv, createJobId);
                 let jobIdGenerator = 0;
-                const createCullingTaskSubmitter = (0, cullingTaskSubmitterFactory_3.default)(changeBufferTime);
+                const createCullingTaskSubmitter = (0, cullingTaskSubmitterFactory_2.default)(changeBufferTime);
+                const workspacePathUpdaters = {};
+                const performTypedRpc = async (req) => {
+                    const entries = Object.entries(workspacePathUpdaters);
+                    if (entries.length) {
+                        // Need to submit all workspace updates first
+                        // First, synchonously delete all from pending to avoid submitting them twice
+                        for (let i = 0; i < entries.length; ++i) {
+                            delete workspacePathUpdaters[entries[i][0]];
+                        }
+                        // Second, apply the updates
+                        await Promise.all(entries.map(x => x[1].fireImmediately()));
+                    }
+                    return wsHandler.sendRpc(req);
+                };
                 const modalEnv = {
                     showWindow: showWindow_12.default,
-                    performTypedRpc: (req) => wsHandler.sendRpc(req),
+                    putWorkspaceContent: (path, contents) => {
+                        if (!workspacePathUpdaters[path]) {
+                            workspacePathUpdaters[path] = createCullingTaskSubmitter();
+                        }
+                        workspacePathUpdaters[path].submit(async () => {
+                            const res = await performTypedRpc({ type: 'PutWorkspaceContent', path, content: contents });
+                            if (!res.ok) {
+                                console.warn('Failed updating content for', path);
+                            }
+                        });
+                    },
+                    performTypedRpc,
                     createParsingRequestData: () => {
                         var _a;
                         let src;

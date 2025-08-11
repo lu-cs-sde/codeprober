@@ -6,7 +6,6 @@ import { lastKnownMousePos } from '../ui/create/attachDragToX';
 import displayAttributeModal from '../ui/popup/displayAttributeModal';
 import displayProbeModal from '../ui/popup/displayProbeModal';
 import startEndToSpan from '../ui/startEndToSpan';
-import createCullingTaskSubmitterFactory from './cullingTaskSubmitterFactory';
 import ModalEnv from './ModalEnv'
 import SourcedDiagnostic from './SourcedDiagnostic';
 import TextProbeEvaluator, { createTextProbeEvaluator, isAssignmentMatch, isBrokenNodeChain, NodeAndAttrChainMatch } from './TextProbeEvaluator';
@@ -36,7 +35,7 @@ type HoverResult = {
 }
 interface CompletionItem {
   label: string;
-  insertText?: string;
+  insertText: string;
   kind: number; // See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#completionItemKind
   sortText?: string;
   detail?: string;
@@ -121,11 +120,11 @@ const createSpanFlasher = (env: ModalEnv): SpanFlasher => {
 }
 
 const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => {
-  const refreshDispatcher = createCullingTaskSubmitterFactory(1)()
+  const refreshDispatcher = args.env.createCullingTaskSubmitter()
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
 
   const diagnostics: SourcedDiagnostic[] = [];
-  args.env.probeMarkers[queryId] = () => diagnostics;
+  args.env.probeMarkers[queryId] = diagnostics;
 
   let activeRefresh = false;
   let repeatOnDone = false;
@@ -148,7 +147,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       repeatOnDone = true;
       return;
     }
-    diagnostics.length = 0;
+    const newDiagnostics: SourcedDiagnostic[] = [];
     activeRefresh = true;
     repeatOnDone = false;
     let nextStickyIndex = 0;
@@ -171,7 +170,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
 
       // TODO rename to addsquiggly
       function addSquiggly(lineIdx: number, colStart: number, colEnd: number, msg: string) {
-        diagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
+        newDiagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
       }
       function addStickyBox(boxClass: string[], boxSpan: Span, stickyClass: string[], stickyContent: string | null, stickySpan?: Span) {
         args.env.setStickyHighlight(allocateStickyId(), {
@@ -304,6 +303,8 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
     } catch (e) {
       console.warn('Error during refresh', e);
     }
+    diagnostics.length = 0;
+    diagnostics.push(...newDiagnostics);
     if (diagnostics.length || hadDiagnosticsBefore) {
       args.env.updateMarkers();
     }
@@ -589,12 +590,10 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
             // It is a variable, add the type as detail
             detail = node.type.split('.').slice(-1)[0];
           }
-          const ret: (CompletionItem & { nodeIndex: number })= { label, kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0'), detail };
+          const ret: (CompletionItem & { nodeIndex: number })= { label, insertText: label, kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0'), detail };
           if (!duplicateTypes.has(type)) {
             if (label.length > existingText.length && label.startsWith(existingText)) {
               ret.insertText = label.slice(existingText.length);
-            } else {
-              ret.insertText = label;
             }
             return ret;
           }

@@ -20,7 +20,7 @@ import { createTestManager } from './model/test/TestManager';
 import displayTestSuiteListModal from './ui/popup/displayTestSuiteListModal';
 import ModalEnv from './model/ModalEnv';
 import displayWorkerStatus from './ui/popup/displayWorkerStatus';
-import { AsyncRpcUpdate, BackingFileUpdated, CompleteReq, CompleteRes, Diagnostic, HoverReq, HoverRes, InitInfo, ParsingRequestData, Refresh, TALStep, WorkspacePathsUpdated } from './protocol';
+import { AsyncRpcUpdate, BackingFileUpdated, CompleteReq, CompleteRes, Diagnostic, HoverReq, HoverRes, InitInfo, ParsingRequestData, PutWorkspaceContentReq, PutWorkspaceContentRes, Refresh, TALStep, WorkspacePathsUpdated } from './protocol';
 import showWindow from './ui/create/showWindow';
 import { createMutableLocator } from './model/UpdatableNodeLocator';
 import WindowState from './model/WindowState';
@@ -31,6 +31,7 @@ import installASTEditor from './ui/installASTEditor';
 import configureCheckboxWithHiddenCheckbox from './ui/configureCheckboxWithHiddenCheckbox';
 import Workspace, { initWorkspace } from './model/Workspace';
 import TextProbeManager, { setupTextProbeManager, TextProbeStyle } from './model/TextProbeManager';
+import { adjustSpan, adjustStartEnd } from './model/adjustTypeAtLoc';
 
 const uiElements = new UIElements();
 
@@ -104,7 +105,69 @@ const doMain = (wsPort: number
       });
     };
 
+    const probeMarkers: ModalEnv['probeMarkers'] = {};
+
+    const activeMarkers: TextMarker[] = [];
+    const updateMarkerDebouncer = spammyOperationDebouncer();
+    let markText: TextMarkFn = () => ({});
+    const updateMarkers = () => {
+      updateMarkerDebouncer.submit(() => {
+        activeMarkers.forEach(m => m?.clear?.());
+        activeMarkers.length = 0;
+
+        const deduplicator = new Set();
+        const pendingSources: { [uniqId: string]: string[] } = {};
+        const pendingAdders: (() => void)[] = [];
+        const filteredAddMarker = (severity: Diagnostic['type'], start: number, end: number, msg: string, source?: string) => {
+          const uniqId = [severity, start, end, msg].join(' | ');
+          pendingSources[uniqId] = pendingSources[uniqId] ?? [];
+          pendingSources[uniqId].push(source ?? '');
+          if (deduplicator.has(uniqId)) {
+            return;
+          }
+          deduplicator.add(uniqId);
+          pendingAdders.push(() => {
+            const sources = [...new Set(pendingSources[uniqId].filter(Boolean))].sort((a, b) => (a < b ? -1 : (a > b) ? 1 : 0));
+
+            const lineStart = (start >>> 12);
+            const colStart = start & 0xFFF;
+            const lineEnd = (end >>> 12);
+            const colEnd = end & 0xFFF;
+            activeMarkers.push(markText({
+              severity: `${severity}`.toLocaleLowerCase('en-GB'),
+              lineStart, colStart, lineEnd, colEnd, message: msg,
+              source: sources.length === 0 ? undefined: sources.join(', ') }));
+          })
+
+        }
+        Object.values(probeMarkers).forEach(arr => (Array.isArray(arr) ? arr : arr()).forEach(({ type, start, end, msg, source }) => filteredAddMarker(type, start, end, msg, source)));
+        pendingAdders.forEach(pa => pa());
+      });
+    };
     const notifyLocalChangeListeners = (adjusters?: LocationAdjuster[], reason?: string) => {
+      if (adjusters) {
+        const markers = Object.values(probeMarkers);
+        const stickies = Object.values(stickyHighlights);
+        adjusters.forEach(adjuster => {
+          markers.forEach((diag => {
+            if (Array.isArray(diag)) {
+              diag.forEach(diag => {
+                const se = adjustStartEnd(adjuster, diag.start, diag.end + 1);
+                diag.start = se.start;
+                diag.end = Math.max(se.start, se.end - 1);
+              })
+            }
+          }));
+          stickies.forEach(sticky => {
+            const adj = adjustSpan(adjuster, sticky.span);
+            sticky.span.lineStart = adj.start >>> 12;
+            sticky.span.colStart = adj.start & 0xFFF;
+            sticky.span.lineEnd = adj.end >>> 12;
+            sticky.span.colEnd = adj.end & 0xFFF;
+          });
+        });
+        updateMarkers();
+      }
       Object.values(onChangeListeners).forEach(l => l(adjusters, reason));
       triggerWindowSave();
     }
@@ -240,7 +303,6 @@ const doMain = (wsPort: number
       };
 
       let setLocalState = (value: string) => { };
-      let markText: TextMarkFn = () => ({});
 
       const darkModeCheckbox  = uiElements.darkModeCheckbox;
       darkModeCheckbox.checked = !settings.isLightTheme();
@@ -415,44 +477,6 @@ const doMain = (wsPort: number
         location.search = '';
       }
 
-      const activeMarkers: TextMarker[] = [];
-      const probeMarkers: ModalEnv['probeMarkers'] = {};
-      const updateMarkerDebouncer = spammyOperationDebouncer();
-      const updateMarkers = () => {
-        updateMarkerDebouncer.submit(() => {
-          activeMarkers.forEach(m => m?.clear?.());
-          activeMarkers.length = 0;
-
-          const deduplicator = new Set();
-          const pendingSources: { [uniqId: string]: string[] } = {};
-          const pendingAdders: (() => void)[] = [];
-          const filteredAddMarker = (severity: Diagnostic['type'], start: number, end: number, msg: string, source?: string) => {
-            const uniqId = [severity, start, end, msg].join(' | ');
-            pendingSources[uniqId] = pendingSources[uniqId] ?? [];
-            pendingSources[uniqId].push(source ?? '');
-            if (deduplicator.has(uniqId)) {
-              return;
-            }
-            deduplicator.add(uniqId);
-            pendingAdders.push(() => {
-              const sources = [...new Set(pendingSources[uniqId].filter(Boolean))].sort((a, b) => (a < b ? -1 : (a > b) ? 1 : 0));
-
-              const lineStart = (start >>> 12);
-              const colStart = start & 0xFFF;
-              const lineEnd = (end >>> 12);
-              const colEnd = end & 0xFFF;
-              activeMarkers.push(markText({
-                severity: `${severity}`.toLocaleLowerCase('en-GB'),
-                lineStart, colStart, lineEnd, colEnd, message: msg,
-                source: sources.length === 0 ? undefined: sources.join(', ') }));
-            })
-
-          }
-          Object.values(probeMarkers).forEach(arr => (Array.isArray(arr) ? arr : arr()).forEach(({ type, start, end, msg, source }) => filteredAddMarker(type, start, end, msg, source)));
-          pendingAdders.forEach(pa => pa());
-        });
-      };
-
       const setupSimpleCheckbox = (input: HTMLInputElement, initial: boolean, update: (checked: boolean) => void) => {
         input.checked = initial;
         input.oninput = () => { update(input.checked); notifyLocalChangeListeners(); }
@@ -569,9 +593,34 @@ const doMain = (wsPort: number
       const testManager = createTestManager(() => modalEnv, createJobId);
       let jobIdGenerator = 0;
       const createCullingTaskSubmitter = createCullingTaskSubmitterFactory(changeBufferTime);
+      const workspacePathUpdaters: { [path: string]: CullingTaskSubmitter } = {};
+      const performTypedRpc: ModalEnv['performTypedRpc'] = async (req) => {
+        const entries = Object.entries(workspacePathUpdaters);
+        if (entries.length) {
+          // Need to submit all workspace updates first
+          // First, synchonously delete all from pending to avoid submitting them twice
+          for (let i = 0; i < entries.length; ++i) {
+            delete workspacePathUpdaters[entries[i][0]];
+          }
+          // Second, apply the updates
+          await Promise.all(entries.map(x => x[1].fireImmediately()));
+        }
+        return wsHandler.sendRpc(req);
+      };
       const modalEnv: ModalEnv = {
         showWindow,
-        performTypedRpc: (req) => wsHandler.sendRpc(req),
+        putWorkspaceContent: (path, contents) => {
+          if (!workspacePathUpdaters[path]) {
+            workspacePathUpdaters[path] = createCullingTaskSubmitter();
+          }
+          workspacePathUpdaters[path].submit(async () => {
+            const res = await performTypedRpc<PutWorkspaceContentReq, PutWorkspaceContentRes>({ type: 'PutWorkspaceContent', path, content: contents });
+            if (!res.ok) {
+              console.warn('Failed updating content for', path);
+            }
+          });
+        },
+        performTypedRpc,
         createParsingRequestData: () => {
           let src: ParsingRequestData['src'];
           if (activeWorkspace && !activeWorkspace.activeFileIsTempFile()) {

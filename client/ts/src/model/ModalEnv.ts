@@ -8,6 +8,7 @@ type JobId = number;
 
 interface ModalEnv {
   showWindow: (args: ShowWindowArgs) => ShowWindowResult;
+  putWorkspaceContent: (path: string, contents: string) => void;
   performTypedRpc: <Req, Res>(req: Req) => Promise<Res>;
   createParsingRequestData: () => ParsingRequestData;
   getLocalState: () => string;
