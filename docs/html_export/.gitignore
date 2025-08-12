@@ -1,0 +1,3 @@
+public/gen
+public/**/*.html
+push-dev.sh

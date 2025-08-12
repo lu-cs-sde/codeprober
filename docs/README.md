@@ -1,9 +1,24 @@
-Documentation of APIs and configurations that are available when working with CodeProber.
+# CodeProber Documentation
 
-- [ast_api](ast_api.md) - programmatic API you can implement in your code. Contains a small number of required methods for AST traversal.
-- [environment_variables](environment_variables.md) & [system_properties](system_properties.md) - Environment variables and system properties that control how CodeProber behaves.
+This is documentation for how to use CodeProber.
+This documentation is intended to be read on the [CodeProber website](https://codeprober.org/docs/).
+However, you can also browse the `md` files on [GitHub](https://github.com/lu-cs-sde/codeprober/tree/master/docs).
 
-During development, it was unfortunately not well defined what functionality should be handled as an environment variable vs a system property.
-- Environment variables are generally settings that are common in many tools, for example controlling the port of the webserver, and performance-related limits.
-- System properties are generally more specific to CodeProber - enabling/controlling specific features in CodeProber.
-If you would like to be able to control something as an environment variable but it currently is a system property, or vice versa, pleae open an issue or pull request.
+If you are reading this on the CodeProber website, you can navigate to the different pages using the links on the left side of your screen.
+
+## Page Overview
+
+- Usage
+	- [Download and Run](usage/download_and_run.md) - How to download and run CodeProber with your compiler or program analyzer.
+	- [Features](usage/features.md) - Brief introduction into CodeProber's features and how they are used.
+	- [Troubleshooting](usage/troubleshooting.md) - Known problems and their solutions.
+
+- Configuration
+	- [System Properties](config/system_properties.md) - configuration options that can be set via Java system properties.
+	- [Environment Variables](config/environment_variables.md) - configuration options that can be set via environment variables.
+	- [AST API](config/ast_api.md) - a programmatic API you can use in your compiler or analyzer to customize the experience of using CodeProber. This contains a small number of required methods for AST traversal.
+
+- Development
+
+  - [Building](building.md) - How to build CodeProber.
+

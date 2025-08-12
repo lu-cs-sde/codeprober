@@ -1,0 +1,241 @@
+:root {
+  --color-link: #008;
+  --color-background-toc: #f4f4f4;
+  --color-background-code: #fafafa;
+  --color-background-hover: #e1e1e1;
+  --color-background-table-even: #f6f6f6;
+  --color-background-table-header: #f0f0f0;
+  --color-border-light: #ddd;
+  --color-border-medium: #aaa;
+  --color-border-dark: #777;
+  --color-text-muted: #999;
+  --color-nav-active-border: yellowgreen;
+  --color-nav-active-bg: #9acd3230;
+  --color-transparent: transparent;
+}
+
+body {
+  display: block;
+  padding: 0;
+  margin: 0;
+  height: 100vh;
+}
+#vert_layout {
+  display: flex;
+  justify-content: center;
+  flex-direction: row;
+}
+#toc_container {
+  display: flex;
+  flex-direction: row;
+  margin-right: 1rem;
+  width: fit-content;
+  position: sticky;
+  top: 0;
+  height: fit-content;
+}
+.toclike {
+  width: 16rem;
+}
+#TOPTOC {
+  background-color: var(--color-background-toc);
+  height: calc(100vh - 2rem);
+
+}
+.toclike {
+  margin: 1rem 0.25rem;
+  padding: 0.5rem 0.5rem;
+}
+.toclike ul {
+  padding-left: 0;
+  margin-top: 0;
+
+  list-style-type: none;
+}
+.toclike {
+  height: fit-content;
+}
+#TOPTOC ul ul, #TOC ul ul {
+  padding-left: 2rem;
+}
+.toclike a{
+  border-right: 2px solid var(--color-transparent);
+  margin-right: 0.25rem;
+}
+.toclike a {
+  display: block;
+}
+
+a, a:visited {
+  color: var(--color-link);
+}
+
+pre {
+  overflow-x: scroll;
+}
+.toclike a.active {
+  background-color: var(--color-nav-active-bg);
+  border-right: 2px solid var(--color-nav-active-border);
+}
+.toclike a:hover {
+  background-color: var(--color-background-hover);
+}
+#content {
+  max-width: calc(max(50vw, 64rem));
+  padding: 0 1rem;
+}
+
+tr.even {
+  background: var(--color-background-table-even);
+}
+th {
+  background-color: var(--color-background-table-header);
+}
+th, td {
+  border: 1px solid var(--color-border-medium);
+  max-width: 20%;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  position: relative;
+}
+th {
+  position: sticky;
+  top: 0;
+}
+
+td, th {
+  padding: 0.75rem 0.25rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+td {
+  min-width: 4rem;
+}
+  td[data-label="Description"]
+, td[data-label="Meaning"]
+, td[data-label="Key"]
+{
+   min-width: 16rem;
+}
+
+td[data-label="Key"] {
+  line-break: anywhere;
+}
+
+td[data-label="Image"] img {
+  max-width: 24rem;
+}
+
+body[data-filename="features.html"] .feature-wrapper {
+  border-top: 1px solid var(--color-border-light);
+  margin-top: 1rem;
+  display: grid;
+  grid-template-areas: "TITLE IMAGE"
+                       "DESCRIPTION IMAGE";
+                       grid-template-columns: 1fr auto;
+                       grid-template-rows: auto 1fr;
+}
+
+body[data-filename="features.html"] .feature-wrapper > h3 {
+  /* margin-top: 0.25rem; */
+  margin-bottom: 0;
+  grid-area: TITLE
+}
+
+body[data-filename="features.html"] img {
+  margin-left: auto;
+  grid-area: IMAGE;
+  max-width: 24rem;
+  outline: 1px solid var(--color-border-dark);
+  align-self: start;
+}
+
+body[data-filename="features.html"] .feature-description {
+  grid-area: DESCRIPTION;
+  margin-right: 0.5rem;
+}
+
+#doc_sources {
+  color: var(--color-text-muted);
+  font-style: italic;
+  text-align: center;
+  padding: 1rem 0;
+}
+#doc_sources a {
+  color: var(--color-text-muted);
+}
+
+pre, pre.sourceCode {
+  background-color: var(--color-background-code);
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+  overflow: scroll;
+}
+pre > code.sourceCode > span {
+  /* See https://github.com/jgm/pandoc/issues/7248 */
+  display: unset;
+}
+
+@media (max-width: 1400px) {
+  #TOC {
+    display: none;
+  }
+  #TOPTOC {
+    width: calc(100% - 0.5rem);
+    margin-left: 0.5rem;
+  }
+    td[data-label="Description"]
+  , td[data-label="Meaning"]
+  , td[data-label="Key"]
+  {
+    min-width: 12rem;
+  }
+}
+@media (max-width: 1080px) {
+  #vert_layout {
+    flex-direction: column;
+  }
+  #toc_container {
+    width: 100%;
+    margin-right: auto;
+    margin-left: auto;
+    position: relative;
+    top: auto;
+  }
+  #content {
+    max-width: 100%;
+    padding: 0 0.5rem 1rem;
+  }
+  #TOPTOC {
+    height: fit-content;
+    margin: 0;
+    padding: 0.5rem;
+
+  }
+  #TOPTOC ul {
+    margin-bottom: 0;
+  }
+
+  .toclike a.active {
+    top: 0;
+    position: sticky;
+    z-index: 99;
+  }
+  .table-container {
+    overflow-x: scroll;
+  }
+  table {
+    border-collapse: collapse;
+  }
+  body[data-filename="features.html"] .feature-wrapper {
+    display: block;
+  }
+  body[data-filename="features.html"] .feature-wrapper > img {
+    margin: auto;
+    display: block;
+  }
+}
