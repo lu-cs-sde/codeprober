@@ -20,5 +20,5 @@ If you are reading this on the CodeProber website, you can navigate to the diffe
 
 - Development
 
-  - [Building](building.md) - How to build CodeProber.
+  - [Building](development/building.md) - How to build CodeProber.
 

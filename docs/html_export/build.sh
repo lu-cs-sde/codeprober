@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 buildfile() {
   fname="$1"
   title="$2"
@@ -34,4 +36,9 @@ buildfile ../config/ast_api.md "AST API"
 buildfile ../config/environment_variables.md "Environment Variables"
 buildfile ../config/system_properties.md "System Properties"
 
+# Development
+buildfile ../development/building.md "Building"
+
 rsync -r  --progress ../media/ public/media
+
+echo "Done!"
