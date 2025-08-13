@@ -28,7 +28,7 @@ In the same dropdown where you create the AST view, you can also select "Pretty 
 
 ### Workspace
 ![Feature image](../media/workspace.png)
-Using the [system property](../config/system_properties|system_properties]) `-Dcpr.workspace`, you can expose a filesystem in the CodeProber UI. Any changes you make in the UI will be saved to disk, and any changes to disk will be loaded into in the UI.
+Using the [system property](../config/system_properties.md) `-Dcpr.workspace`, you can expose a filesystem in the CodeProber UI. Any changes you make in the UI will be saved to disk, and any changes to disk will be loaded into in the UI.
 
 ### Text Probe
 ![Feature image](../media/text_probe.png)
