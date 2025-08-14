@@ -13,11 +13,11 @@ java -jar ~/Downloads/codeprober.jar ~/compiler.jar
 
 Once started, you should open [http://localhost:8000](http://localhost:8000) in your browser.
 When the page is loaded, you'll find a `Help` button on the right side which can help you further.
-See [Basic Usage](features.md) for what to do once inside CodeProber.
+See [Features](features.md) for features you can use once inside CodeProber.
 
 ## AddNum Compiler
 
-If you would like to try CodeProber but you don't have an analyzer or compiler of your own, you can use the latest version of [AddNum](https://github.com/lu-cs-sde/codeprober/blob/master/addnum/AddNum.jar). This is a very small program analyzer for a language that only supports additions and numbers. Download it, and then run CodeProber with e.g:
+If you would like to try CodeProber but you don't have an analyzer or compiler of your own, you can use the latest version of [AddNum](https://github.com/lu-cs-sde/codeprober/blob/master/addnum/AddNum.jar). This is a very small example "compiler" for a language that only supports additions and numbers. Download it, and then run CodeProber with e.g:
 
 ```bash
 java -jar ~/Downloads/codeprober.jar ~/Downloads/AddNum.jar
@@ -31,7 +31,7 @@ There are two main things the tool must provide:
 1) A way for CodeProber to turn a given text file into an AST ("parsing").
 2) A way for CodeProber to traverse nodes in the AST.
 
-Any tool built using [JastAdd](https://jastadd.cs.lth.se/web/) AST traversal automatically.
+Any tool built using [JastAdd](https://jastadd.cs.lth.se/web/) supports AST traversal automatically.
 For non-JastAdd tools, please see the "Mandatory API" section in [AST API](../config/ast_api.md).
 
 There are two options for parsing.

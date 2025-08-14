@@ -139,9 +139,11 @@ if (this.theTraceReceiver != null) {
 ```
 
 If `recv` is called while CodeProber is evaluating a property, then the information there will be visible in the CodeProber UI, *if* the user has checked `Capture traces`.
+
 ## Kinds of trace events
 CodeProber will `toString` the first element in the object array to identify the kinds of trace event.
 Currently, two types of events are supported, and they match tracing events produced by JastAdd:
+
 ### COMPUTE_BEGIN
 Expected structure:
 ```
@@ -169,8 +171,9 @@ This happens if one of the AST nodes passed to a trace events aren't attached to
 You can try toggling the `flush tree first` checkbox under `Capture traces` on and off. You can also try changing the `cache strategy` values back and forth. Some combination of the two might work.
 
 If changing the settings doesn't work, then you must change which events are reported to CodeProber. Try to avoid setting the `ASTNode` arguments to nodes that get removed from the tree.
+
 ## Supporting Tracing In JastAdd
-In JastAdd, compile with the flag `--tracing=all`, and then implement `cpr_setTraceReceiver`as follows:
+In JastAdd, compile with the flag `--tracing=all`, and then implement `cpr_setTraceReceiver` as follows:
 ```
 public void Program.cpr_setTraceReceiver(final java.util.function.Consumer<Object[]> recv) {
   trace().setReceiver(new ASTState.Trace.Receiver() {

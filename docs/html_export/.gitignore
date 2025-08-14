@@ -1,3 +1,4 @@
 public/gen
 public/**/*.html
+public/**/*.png
 push-dev.sh

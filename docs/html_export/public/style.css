@@ -81,7 +81,7 @@ pre {
   background-color: var(--color-background-hover);
 }
 #content {
-  max-width: calc(max(50vw, 64rem));
+  max-width: calc(max(50vw, 48rem));
   padding: 0 1rem;
 }
 
@@ -133,29 +133,27 @@ td[data-label="Image"] img {
 body[data-filename="features.html"] .feature-wrapper {
   border-top: 1px solid var(--color-border-light);
   margin-top: 1rem;
-  display: grid;
-  grid-template-areas: "TITLE IMAGE"
-                       "DESCRIPTION IMAGE";
-                       grid-template-columns: 1fr auto;
-                       grid-template-rows: auto 1fr;
+  height: fit-content;
+  display: flow-root;
 }
 
 body[data-filename="features.html"] .feature-wrapper > h3 {
-  /* margin-top: 0.25rem; */
   margin-bottom: 0;
-  grid-area: TITLE
+  display: inline-block;
 }
 
 body[data-filename="features.html"] img {
   margin-left: auto;
-  grid-area: IMAGE;
   max-width: 24rem;
   outline: 1px solid var(--color-border-dark);
   align-self: start;
+  display: block;
+  float:right;
+  margin: 0 0 1rem 1rem;
 }
 
 body[data-filename="features.html"] .feature-description {
-  grid-area: DESCRIPTION;
+  /* grid-area: DESCRIPTION; */
   margin-right: 0.5rem;
 }
 
@@ -178,6 +176,12 @@ pre, pre.sourceCode {
 pre > code.sourceCode > span {
   /* See https://github.com/jgm/pandoc/issues/7248 */
   display: unset;
+}
+
+code:not(.sourceCode) {
+  /* This is a `backticksMessage` */
+  background-color: var(--color-background-code);
+  max-width: calc(max(32rem, 20vw));
 }
 
 @media (max-width: 1400px) {
@@ -234,8 +238,14 @@ pre > code.sourceCode > span {
   body[data-filename="features.html"] .feature-wrapper {
     display: block;
   }
+  body[data-filename="features.html"] .feature-wrapper > h3 {
+    margin-bottom: 0.5rem;;
+  }
   body[data-filename="features.html"] .feature-wrapper > img {
     margin: auto;
     display: block;
+    float: unset;
+    max-width: 80vw;
+    max-height: 32vh;
   }
 }
