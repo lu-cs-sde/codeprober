@@ -38,7 +38,10 @@ interface ExtraArgs {
 type AstListDirection = 'downwards' | 'upwards';
 const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator: UpdatableNodeLocator, listDirection: AstListDirection, extraArgs: ExtraArgs = {}) => {
   const queryId = `ast-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
-  let state: { type: 'ok', data: Node } | { type: 'err', body: RpcBodyLine[] } | null = null;
+  let state:
+      { type: 'ok', data: Node, reRenderAfterUpdate?: () => void }
+    | { type: 'err', body: RpcBodyLine[] }
+    | null = null;
   let lightTheme = env.themeIsLight();
   const stickyController = createStickyHighlightController(env);
 
@@ -127,6 +130,9 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
     },
     resizable: true,
     render: (root, { bringToFront }) => {
+      if (state?.type === 'ok' && state.reRenderAfterUpdate) {
+        return state.reRenderAfterUpdate();
+      }
       while (root.firstChild) root.firstChild.remove();
 
       if (!extraArgs.hideTitleBar) {
@@ -792,6 +798,10 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
         onResizePtr.callback = () => {
           renderFrame();
         };
+        state.reRenderAfterUpdate = () => {
+          rootNode = (state?.type === 'ok' ? state.data : rootNode);
+          renderFrame();
+        }
       }
 
       if (fetchState !== 'idle') {
@@ -850,7 +860,11 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           locator.set(result.locator);
         }
         Object.keys(mapListedToNodeCache).forEach(k => delete mapListedToNodeCache[k]);
-        state = { type: 'ok', data: mapListedToNode(layoutTree(parsed)) };
+        state = {
+          type: 'ok',
+          data: mapListedToNode(layoutTree(parsed)),
+          reRenderAfterUpdate: state?.type === 'ok' ? state.reRenderAfterUpdate : undefined,
+        };
         popup.refresh();
 
       })
