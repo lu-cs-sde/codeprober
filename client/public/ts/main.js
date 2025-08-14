@@ -9668,6 +9668,9 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
             },
             resizable: true,
             render: (root, { bringToFront }) => {
+                if ((state === null || state === void 0 ? void 0 : state.type) === 'ok' && state.reRenderAfterUpdate) {
+                    return state.reRenderAfterUpdate();
+                }
                 while (root.firstChild)
                     root.firstChild.remove();
                 if (!extraArgs.hideTitleBar) {
@@ -10297,6 +10300,10 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     onResizePtr.callback = () => {
                         renderFrame();
                     };
+                    state.reRenderAfterUpdate = () => {
+                        rootNode = ((state === null || state === void 0 ? void 0 : state.type) === 'ok' ? state.data : rootNode);
+                        renderFrame();
+                    };
                 }
                 if (fetchState !== 'idle') {
                     const spinner = (0, createLoadingSpinner_1.default)();
@@ -10352,7 +10359,11 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     locator.set(result.locator);
                 }
                 Object.keys(mapListedToNodeCache).forEach(k => delete mapListedToNodeCache[k]);
-                state = { type: 'ok', data: mapListedToNode((0, layoutTree_1.default)(parsed)) };
+                state = {
+                    type: 'ok',
+                    data: mapListedToNode((0, layoutTree_1.default)(parsed)),
+                    reRenderAfterUpdate: (state === null || state === void 0 ? void 0 : state.type) === 'ok' ? state.reRenderAfterUpdate : undefined,
+                };
                 popup.refresh();
             })
                 .catch(err => {

@@ -39,7 +39,7 @@ body {
 }
 #TOPTOC {
   background-color: var(--color-background-toc);
-  height: calc(100vh - 2rem);
+  height: calc(100vh - 3rem);
 
 }
 .toclike {
