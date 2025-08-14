@@ -11,27 +11,27 @@ CodeProber usage is described and demonstrated in the following resources:
 Listed below are a number of basic features supported in CodeProber.
 
 ### Creating Probe from Code
-![Feature image](../media/create_probe.png)
+![](../media/create_probe.png)
 
 Right click anywhere in the CodeProber editor to create a new probe.
 
 ### Creating Probe from Reference
-![Feature image](../media/create_probe_from_reference.png)
+![](../media/create_probe_from_reference.png)
 
 If the output of a probe is an AST reference, you can click it to create a new probe. This allows you to iteratively follow references across the AST.
 
 ### AST View
-![Feature image](../media/ast_view.png)
+![](../media/ast_view.png)
 
 When selecting the property name while creating a new probe, you can click the triple dots, and then "Render AST downwards". This will show the AST structure of tree of the node in question.
 
 ### Pretty Print
-![Feature image](../media/pretty_print_view.png)
+![](../media/pretty_print_view.png)
 
 In the same dropdown where you create the AST view, you can also select "Pretty Print" to access a pretty-printed representation of your AST. For this to work well you must implement the `cpr_pp*` methods described in [AST API](../config/ast_api.md).
 
 ### Search Probe
-![Feature image](../media/search_probe.png)
+![](../media/search_probe.png)
 
 When selecting property name, you can enter a string on the form `*.propName?predicate` and then press enter to create a "search probe".
 Search probes can show all nodes in a given subtree that fulfill a predicate, and then evaluate some property on them.
@@ -45,12 +45,12 @@ Both `*.propName` and `?predicate` is optional.
 Predicates can also perform subtype-based filtering using `<:`. A common use case for this is to write something like `this<:Expr` to select all expressions in a tree. The right hand side of `<:` should use either the fullly qualified type of an AST node like `pkg.name.here.Expr`, or just the simple name like `Expr`.
 
 ### Workspace
-![Feature image](../media/workspace.png)
+![](../media/workspace.png)
 
 Using the [system property](../config/system_properties.md) `-Dcpr.workspace`, you can expose a filesystem in the CodeProber UI. Any changes you make in the UI will be saved to disk, and any changes to disk will be loaded into in the UI.
 
 ### Text Probe
-![Feature image](../media/text_probe.png)
+![](../media/text_probe.png)
 
 CodeProber interprets text in the format `[[A.b.c]]` as a "text probe". Text probes are evaluated by CodeProber, and the results are rendered in a blue box the editor. If you additionally add `=d`, it will treat the probe as an assertion, and show a green or red box depending on if the assertion passed or not. For example, in the image it evaluated `AddExpr.constant` and compared it with `3`. The comparison succeeded, so the box is green.
 
@@ -61,7 +61,7 @@ This information is nice to give the end user, but may be a bit verbose to inclu
 Therefore, you can write `[[CallExpr.errors~=Expected int, got boolean]]`, which checks that the error message contains the string "Expected int, got boolean" somewhere, and ignores the rest of the message.
 
 ### Testing
-![Feature image](../media/cli_testing.png)
+![](../media/cli_testing.png)
 
 By combining a workspace and text probes with assertions, you can write persistent unit tests for your AST.
 The tests can be evaluated inside the CodeProber UI by pressing the "Run Tests" button (only visible when a workspace is active).
@@ -73,7 +73,7 @@ The exit code (`$?`) is set to 0 or 1 as expected on success/failure.
 This allows you to run your assertions for example in a CI/CD pipeline.
 
 ### Diagnostics
-![Feature image](../media/squiggly_line.png)
+![](../media/squiggly_line.png)
 
 The CodeProber text editor can display diagnostics in the form of squiggly lines and arrows.
 There are two ways to make diagnostics appear:
