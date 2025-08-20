@@ -13,7 +13,7 @@ export type CodeMap = {
 export interface ComparedItem {
 	toString(): string;
 }
-export function stringifyArray<T extends ComparedItem>(a: Array<T>, b: Array<T>): [string, string, CodeMap] {
+export function stringifyArray<T extends ComparedItem>(a: T[], b: T[]): [string, string, CodeMap] {
 	const map: CodeMap = { forward: {}, backward: {}, pointer: 1 };
 
 	const textA = a.map((item) => determineCode(map, item)).join("");
@@ -21,7 +21,7 @@ export function stringifyArray<T extends ComparedItem>(a: Array<T>, b: Array<T>)
 
 	return [textA, textB, map];
 }
-export function objectifyArray<T extends ComparedItem>(arrayA: Array<T>, arrayB: Array<T>, res: Array<ResultItem<string>>, map: CodeMap): Array<ResultItem<T>> {
+export function objectifyArray<T extends ComparedItem>(arrayA: T[], arrayB: T[], res: Array<ResultItem<string>>, map: CodeMap): Array<ResultItem<T>> {
 	const results = res.map((r) => createResultItem(map.backward[r.left], map.backward[r.right], r.state)) as Array<ResultItem<any>>;
 
 	results

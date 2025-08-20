@@ -18,6 +18,7 @@ import { NestedTestRequest } from '../../model/test/TestManager';
 import SourcedDiagnostic from '../../model/SourcedDiagnostic';
 import { createDiagnosticSource } from '../create/createMinimizedProbeModal';
 import evaluateProperty, { OngoingPropertyEvaluation } from '../../network/evaluateProperty';
+import createSquigglyCheckbox from '../create/createSquigglyCheckbox';
 import { assertUnreachable } from '../../hacks';
 import startEndToSpan from '../startEndToSpan';
 

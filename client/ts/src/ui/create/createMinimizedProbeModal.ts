@@ -9,6 +9,7 @@ import displayProbeModal, { prettyPrintProbePropertyName, searchProbePropertyNam
 import { formatAttrBaseName } from '../popup/formatAttr';
 import startEndToSpan from '../startEndToSpan';
 import registerOnHover from './registerOnHover';
+import createSquigglyCheckbox from './createSquigglyCheckbox';
 
 interface OptionalArgs {
   showDiagnostics?: boolean;

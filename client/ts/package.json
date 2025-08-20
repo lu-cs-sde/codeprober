@@ -4,9 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc --build",
-    "bw": "tsc --build --watch",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/test/**/*.js",
+    "test:watch": "tsc -p tsconfig.test.json --watch --preserveWatchOutput & node --test --watch dist-test/test/**/*.js",
+    "build": "tsc",
+    "bw": "tsc --watch",
     "serve": "ts-node ./src",
     "start": "node ./dist"
   },
@@ -15,6 +16,6 @@
   "license": "ISC",
   "devDependencies": {
     "ts-node": "^10.7.0",
-    "typescript": "^4.6.3"
+    "typescript": "^5.9.2"
   }
 }

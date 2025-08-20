@@ -2,16 +2,25 @@ import ModalEnv from './ModalEnv';
 
 const createCullingTaskSubmitterFactory: (timeout: any | number) => ModalEnv['createCullingTaskSubmitter'] = (cullTime) => {
   if (typeof cullTime !== 'number') {
-    return () => ({ submit: (cb) => cb(), cancel: () => {}, fireImmediately: async () => {}, });
+    return () => ({
+      submit: (cb) => cb(),
+      cancel: () => {},
+      fireImmediately: async () => {},
+    });
   }
   return () => {
     let localChangeDebounceTimer: any = -1;
-    let pendingTask: (() => any) | null = null;
+    let pendingTask:
+        { type: 'not-started', func: (() => any) }
+      | { type: 'running', promise: Promise<any> }
+      | null = null;
     const submit: CullingTaskSubmitter['submit'] = (cb) => {
       clearTimeout(localChangeDebounceTimer);
-      pendingTask = cb;
-      localChangeDebounceTimer = setTimeout(() => {
-        cb();
+      pendingTask = { type: 'not-started', func: cb };
+      localChangeDebounceTimer = setTimeout(async () => {
+        const promise: Promise<any> = cb() as any;
+        pendingTask = { type: 'running', promise, };
+        await promise;
         pendingTask = null;
       }, cullTime);
     };
@@ -23,11 +32,20 @@ const createCullingTaskSubmitterFactory: (timeout: any | number) => ModalEnv['cr
       const pt = pendingTask;
       pendingTask = null;
       clearTimeout(localChangeDebounceTimer);
+
       if (pt) {
-        await pt();
+        if (pt.type == 'not-started') {
+          await pt.func();
+        } else {
+          await pt.promise;
+        }
       }
     };
-    return { submit, cancel, fireImmediately, };
+    return {
+      submit,
+      cancel,
+      fireImmediately,
+    };
   }
 };
 

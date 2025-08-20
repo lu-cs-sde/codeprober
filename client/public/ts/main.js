@@ -15,13 +15,23 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -978,23 +988,23 @@ define("model/findLocatorWithNestingPath", ["require", "exports"], function (req
 define("dependencies/onp/data", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.position = exports.SES_ADD = exports.SES_COMMON = exports.SES_DELETE = void 0;
+    exports.SES_ADD = exports.SES_COMMON = exports.SES_DELETE = void 0;
+    exports.position = position;
     exports.SES_DELETE = -1;
     exports.SES_COMMON = 0;
     exports.SES_ADD = 1;
     function position(x, y, k) {
         return { x, y, k };
     }
-    exports.position = position;
 });
 define("dependencies/onp/results", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createTextResults = exports.createResultItem = void 0;
+    exports.createResultItem = createResultItem;
+    exports.createTextResults = createTextResults;
     function createResultItem(left, right, state) {
         return { left, right, state };
     }
-    exports.createResultItem = createResultItem;
     function createTextResults(results) {
         if (results.length === 0) {
             return [];
@@ -1013,12 +1023,11 @@ define("dependencies/onp/results", ["require", "exports"], function (require, ex
         });
         return shrink;
     }
-    exports.createTextResults = createTextResults;
 });
 define("dependencies/onp/onp", ["require", "exports", "dependencies/onp/data", "dependencies/onp/results"], function (require, exports, data_1, results_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.onp = void 0;
+    exports.onp = onp;
     function createInfo(a, b) {
         //switch sides
         if (a.length >= b.length) {
@@ -1045,7 +1054,6 @@ define("dependencies/onp/onp", ["require", "exports", "dependencies/onp/data", "
         const [result, lcs] = sequence(textA, textB, epc);
         return [result, ed, lcs];
     }
-    exports.onp = onp;
     function positions(textA, textB) {
         const { n, m, offset } = createInfo(textA, textB);
         const path = [];
@@ -1136,14 +1144,15 @@ define("dependencies/onp/onp", ["require", "exports", "dependencies/onp/data", "
 define("dependencies/onp/array", ["require", "exports", "dependencies/onp/results", "dependencies/onp/data"], function (require, exports, results_2, data_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.objectifyLcs = exports.objectifyArray = exports.stringifyArray = void 0;
+    exports.stringifyArray = stringifyArray;
+    exports.objectifyArray = objectifyArray;
+    exports.objectifyLcs = objectifyLcs;
     function stringifyArray(a, b) {
         const map = { forward: {}, backward: {}, pointer: 1 };
         const textA = a.map((item) => determineCode(map, item)).join("");
         const textB = b.map((item) => determineCode(map, item)).join("");
         return [textA, textB, map];
     }
-    exports.stringifyArray = stringifyArray;
     function objectifyArray(arrayA, arrayB, res, map) {
         const results = res.map((r) => (0, results_2.createResultItem)(map.backward[r.left], map.backward[r.right], r.state));
         results
@@ -1154,7 +1163,6 @@ define("dependencies/onp/array", ["require", "exports", "dependencies/onp/result
             .forEach((item, index) => setData(item, arrayB[index], 1));
         return results;
     }
-    exports.objectifyArray = objectifyArray;
     function objectifyLcs(map, res) {
         return res.filter((item) => {
             return item.state === data_2.SES_COMMON;
@@ -1162,7 +1170,6 @@ define("dependencies/onp/array", ["require", "exports", "dependencies/onp/result
             return item.right;
         });
     }
-    exports.objectifyLcs = objectifyLcs;
     function determineCode(map, item) {
         let id = item.toString();
         let code = map.forward[id];
@@ -1199,7 +1206,9 @@ define("dependencies/onp/array", ["require", "exports", "dependencies/onp/result
 define("dependencies/onp/index", ["require", "exports", "dependencies/onp/data", "dependencies/onp/results", "dependencies/onp/onp", "dependencies/onp/array"], function (require, exports, data_3, results_3, onp_1, array_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.diffArray = exports.diffText = exports.SES_ADD = exports.SES_COMMON = exports.SES_DELETE = void 0;
+    exports.SES_ADD = exports.SES_COMMON = exports.SES_DELETE = void 0;
+    exports.diffText = diffText;
+    exports.diffArray = diffArray;
     Object.defineProperty(exports, "SES_DELETE", { enumerable: true, get: function () { return data_3.SES_DELETE; } });
     Object.defineProperty(exports, "SES_COMMON", { enumerable: true, get: function () { return data_3.SES_COMMON; } });
     Object.defineProperty(exports, "SES_ADD", { enumerable: true, get: function () { return data_3.SES_ADD; } });
@@ -1211,7 +1220,6 @@ define("dependencies/onp/index", ["require", "exports", "dependencies/onp/data",
             results: (0, results_3.createTextResults)(results)
         };
     }
-    exports.diffText = diffText;
     function diffArray(arrayA, arrayB) {
         const [a, b, map] = (0, array_1.stringifyArray)(arrayA, arrayB);
         const [res, ed] = (0, onp_1.onp)(a, b);
@@ -1223,7 +1231,6 @@ define("dependencies/onp/index", ["require", "exports", "dependencies/onp/data",
             results: results
         };
     }
-    exports.diffArray = diffArray;
 });
 define("model/test/rpcBodyToAssertionLine", ["require", "exports", "hacks"], function (require, exports, hacks_1) {
     "use strict";
@@ -1590,7 +1597,7 @@ define("model/test/TestManager", ["require", "exports", "settings", "model/findL
                         property,
                         locator,
                         src,
-                        captureStdout: true,
+                        captureStdout: true, // settings.shouldCaptureStdio(),
                         captureTraces: settings_1.default.shouldCaptureTraces() || false,
                         flushBeforeTraceCollection: (settings_1.default.shouldCaptureTraces() && settings_1.default.shouldAutoflushTraces()) || false,
                         job: jobId,
@@ -2219,7 +2226,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
 define("dependencies/graphviz/graphviz", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.graphviz = void 0;
+    exports.graphviz = graphviz;
     var xhtml = "http://www.w3.org/1999/xhtml";
     var namespaces = {
         svg: "http://www.w3.org/2000/svg",
@@ -3278,8 +3285,8 @@ define("dependencies/graphviz/graphviz", ["require", "exports"], function (requi
             return;
         create(node, id, {
             name: name,
-            index: index,
-            group: group,
+            index: index, // For context during callback.
+            group: group, // For context during callback.
             on: emptyOn,
             tween: emptyTween,
             time: timing.time,
@@ -3592,7 +3599,7 @@ define("dependencies/graphviz/graphviz", ["require", "exports"], function (requi
         displayable() {
             return this.rgb().displayable();
         },
-        hex: color_formatHex,
+        hex: color_formatHex, // Deprecated! Use color.formatHex.
         formatHex: color_formatHex,
         formatHex8: color_formatHex8,
         formatHsl: color_formatHsl,
@@ -3675,7 +3682,7 @@ define("dependencies/graphviz/graphviz", ["require", "exports"], function (requi
                 && (-0.5 <= this.b && this.b < 255.5)
                 && (0 <= this.opacity && this.opacity <= 1);
         },
-        hex: rgb_formatHex,
+        hex: rgb_formatHex, // Deprecated! Use color.formatHex.
         formatHex: rgb_formatHex,
         formatHex8: rgb_formatHex8,
         formatRgb: rgb_formatRgb,
@@ -4665,7 +4672,7 @@ define("dependencies/graphviz/graphviz", ["require", "exports"], function (requi
         return ((t *= 2) <= 1 ? t * t * t : (t -= 2) * t * t + 2) / 2;
     }
     var defaultTiming = {
-        time: null,
+        time: null, // Set on use.
         delay: 0,
         duration: 250,
         ease: cubicInOut
@@ -8400,7 +8407,6 @@ define("dependencies/graphviz/graphviz", ["require", "exports"], function (requi
         var g = select(selector).graphviz(options);
         return g;
     }
-    exports.graphviz = graphviz;
     Graphviz.prototype = graphviz.prototype = {
         constructor: Graphviz,
         engine: engine,
@@ -9263,16 +9269,22 @@ define("model/cullingTaskSubmitterFactory", ["require", "exports"], function (re
     Object.defineProperty(exports, "__esModule", { value: true });
     const createCullingTaskSubmitterFactory = (cullTime) => {
         if (typeof cullTime !== 'number') {
-            return () => ({ submit: (cb) => cb(), cancel: () => { }, fireImmediately: async () => { }, });
+            return () => ({
+                submit: (cb) => cb(),
+                cancel: () => { },
+                fireImmediately: async () => { },
+            });
         }
         return () => {
             let localChangeDebounceTimer = -1;
             let pendingTask = null;
             const submit = (cb) => {
                 clearTimeout(localChangeDebounceTimer);
-                pendingTask = cb;
-                localChangeDebounceTimer = setTimeout(() => {
-                    cb();
+                pendingTask = { type: 'not-started', func: cb };
+                localChangeDebounceTimer = setTimeout(async () => {
+                    const promise = cb();
+                    pendingTask = { type: 'running', promise, };
+                    await promise;
                     pendingTask = null;
                 }, cullTime);
             };
@@ -9285,10 +9297,19 @@ define("model/cullingTaskSubmitterFactory", ["require", "exports"], function (re
                 pendingTask = null;
                 clearTimeout(localChangeDebounceTimer);
                 if (pt) {
-                    await pt();
+                    if (pt.type == 'not-started') {
+                        await pt.func();
+                    }
+                    else {
+                        await pt.promise;
+                    }
                 }
             };
-            return { submit, cancel, fireImmediately, };
+            return {
+                submit,
+                cancel,
+                fireImmediately,
+            };
         };
     };
     exports.default = createCullingTaskSubmitterFactory;
@@ -9559,7 +9580,49 @@ define("ui/create/layoutTree", ["require", "exports"], function (require, export
     }
     exports.default = layoutTree;
 });
-define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator", "ui/popup/formatAttr", "ui/create/layoutTree"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_4, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, startEndToSpan_5, UpdatableNodeLocator_4, formatAttr_2, layoutTree_1) {
+define("ui/getThemedColor", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const mkCol = (rgb) => {
+        const opaque = `#${rgb}`;
+        const dimmed = `#${rgb}40`;
+        return {
+            opaque,
+            dimmed,
+            maybeDimmed: (gd) => gd ? dimmed : opaque,
+        };
+    };
+    const mkPredimmed = (opaque, dimmed) => ({
+        opaque, dimmed, maybeDimmed: (gd) => gd ? dimmed : opaque
+    });
+    const lightColors = {
+        'window-border': mkCol('999999'),
+        'probe-result-area': mkCol('F4F4F4'),
+        'syntax-type': mkCol('267F99'),
+        'syntax-attr': mkCol('795E26'),
+        'syntax-modifier': mkCol('0000FF'),
+        'syntax-variable': mkCol('001080'),
+        'separator': mkPredimmed('#000000', '#B6B6B6'),
+        'ast-node-bg': mkCol('DDDDDD'),
+        'ast-node-bg-hover': mkCol('AAAAAA'),
+    };
+    const darkColors = {
+        'window-border': mkCol('999999'),
+        'probe-result-area': mkCol('333333'),
+        'syntax-type': mkCol('4EC9B0'),
+        'syntax-attr': mkCol('DCDCAA'),
+        'syntax-modifier': mkCol('569CD6'),
+        'syntax-variable': mkCol('9CDCFE'),
+        'separator': mkPredimmed('#FFFFFF', '#666666'),
+        'ast-node-bg': mkCol('1C1C1C'),
+        'ast-node-bg-hover': mkCol('666666'),
+    };
+    const getThemedColor = (lightTheme, type) => {
+        return (lightTheme ? lightColors : darkColors)[type];
+    };
+    exports.default = getThemedColor;
+});
+define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator", "ui/popup/formatAttr", "ui/create/layoutTree", "ui/getThemedColor"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_4, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, startEndToSpan_5, UpdatableNodeLocator_4, formatAttr_2, layoutTree_1, getThemedColor_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
@@ -9573,6 +9636,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     createStickyHighlightController_1 = __importDefault(createStickyHighlightController_1);
     startEndToSpan_5 = __importDefault(startEndToSpan_5);
     layoutTree_1 = __importDefault(layoutTree_1);
+    getThemedColor_1 = __importDefault(getThemedColor_1);
     const nodew = 256 + 128;
     const nodeh = 64;
     const nodepadx = nodew * 0.05;
@@ -9937,7 +10001,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                         let numRenders = 0;
                         undimmedNodes.length = 0;
                         ctx.resetTransform();
-                        ctx.fillStyle = getThemedColor(lightTheme, 'probe-result-area').opaque;
+                        ctx.fillStyle = (0, getThemedColor_1.default)(lightTheme, 'probe-result-area').opaque;
                         ctx.fillRect(0, 0, w, h);
                         ctx.translate(trn.x, trn.y);
                         ctx.scale(trn.scale, getScaleY());
@@ -9980,7 +10044,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 ++numRenders;
                                 if (hover && hover.x >= renderx && hover.x <= (renderx + nodew) && hover.y >= rendery && (hover.y < rendery + nodeh)) {
                                     hoveredNode.tgt = node;
-                                    ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover').maybeDimmed(dimmed);
+                                    ctx.fillStyle = (0, getThemedColor_1.default)(lightTheme, 'ast-node-bg-hover').maybeDimmed(dimmed);
                                     cv.style.cursor = 'pointer';
                                     const { start, end, external } = node.ltn.locator.result;
                                     if (start && end && !external) {
@@ -10008,7 +10072,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 }
                                 else {
                                     if (node === temporaryHighlightedNode) {
-                                        ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg-hover').maybeDimmed(dimmed);
+                                        ctx.fillStyle = (0, getThemedColor_1.default)(lightTheme, 'ast-node-bg-hover').maybeDimmed(dimmed);
                                         setTimeout(() => {
                                             if (node === temporaryHighlightedNode) {
                                                 temporaryHighlightedNode = null;
@@ -10018,11 +10082,11 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                         }, 100);
                                     }
                                     else {
-                                        ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg').maybeDimmed(dimmed);
+                                        ctx.fillStyle = (0, getThemedColor_1.default)(lightTheme, 'ast-node-bg').maybeDimmed(dimmed);
                                     }
                                 }
                                 ctx.fillRect(renderx, rendery, nodew, nodeh);
-                                ctx.strokeStyle = getThemedColor(lightTheme, (permanentHovers[node.locatorStr] && node.remoteRefs.length) ? 'syntax-attr' : 'separator').maybeDimmed(dimmed);
+                                ctx.strokeStyle = (0, getThemedColor_1.default)(lightTheme, (permanentHovers[node.locatorStr] && node.remoteRefs.length) ? 'syntax-attr' : 'separator').maybeDimmed(dimmed);
                                 if (node.ltn.locator.steps.length > 0 && node.ltn.locator.steps[node.ltn.locator.steps.length - 1].type === 'nta') {
                                     ctx.setLineDash([5, 5]);
                                     ctx.strokeRect(renderx, rendery, nodew, nodeh);
@@ -10053,14 +10117,14 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                             }
                                         }
                                         const txtx = renderx + (nodew - totalW) / 2;
-                                        ctx.fillStyle = getThemedColor(lightTheme, 'syntax-variable').maybeDimmed(dimmed);
+                                        ctx.fillStyle = (0, getThemedColor_1.default)(lightTheme, 'syntax-variable').maybeDimmed(dimmed);
                                         ctx.fillText(renderedName, txtx, txty);
-                                        ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type').maybeDimmed(dimmed);
+                                        ctx.fillStyle = (0, getThemedColor_1.default)(lightTheme, 'syntax-type').maybeDimmed(dimmed);
                                         // dark: 4EC9B0
                                         ctx.fillText(`: ${typeTail}`, txtx + nameMeasure.width, txty);
                                     }
                                     else {
-                                        ctx.fillStyle = getThemedColor(lightTheme, 'syntax-type').maybeDimmed(dimmed);
+                                        ctx.fillStyle = (0, getThemedColor_1.default)(lightTheme, 'syntax-type').maybeDimmed(dimmed);
                                         const typeTailMeasure = ctx.measureText(typeTail);
                                         if (typeTailMeasure.width > nodew && fonth > 16) {
                                             fonth = Math.max(16, fonth * 0.9 | 0);
@@ -10076,7 +10140,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                     return;
                                 }
                                 const renderChildConnection = (child, renderDimmed) => {
-                                    ctx.strokeStyle = getThemedColor(lightTheme, 'separator').maybeDimmed(renderDimmed);
+                                    ctx.strokeStyle = (0, getThemedColor_1.default)(lightTheme, 'separator').maybeDimmed(renderDimmed);
                                     ctx.lineWidth = 2;
                                     ctx.beginPath();
                                     ctx.moveTo(renderx + nodew / 2, paddedBottomY);
@@ -10104,7 +10168,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                     });
                                 }
                                 // Line from our bottom to the baseline above all children
-                                ctx.strokeStyle = getThemedColor(lightTheme, 'separator').maybeDimmed(dimmed || allDimmedChildren);
+                                ctx.strokeStyle = (0, getThemedColor_1.default)(lightTheme, 'separator').maybeDimmed(dimmed || allDimmedChildren);
                                 ctx.lineWidth = 2;
                                 ctx.beginPath();
                                 ctx.moveTo(renderx + nodew / 2, rendery + nodeh);
@@ -10120,10 +10184,10 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 const msg = `...`;
                                 const fonth = (nodeh * 0.5) | 0;
                                 ctx.font = `${fonth}px sans`;
-                                ctx.fillStyle = getThemedColor(lightTheme, 'separator').opaque;
+                                ctx.fillStyle = (0, getThemedColor_1.default)(lightTheme, 'separator').opaque;
                                 const cx = renderx + nodew / 2;
                                 const cy = rendery + nodeh + nodepady + fonth;
-                                ctx.strokeStyle = getThemedColor(lightTheme, 'separator').opaque;
+                                ctx.strokeStyle = (0, getThemedColor_1.default)(lightTheme, 'separator').opaque;
                                 ctx.beginPath();
                                 ctx.moveTo(cx, rendery + nodeh);
                                 ctx.lineTo(cx, cy - fonth);
@@ -10204,7 +10268,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                 }
                                 const fromPos = determineLineAttachPos(from, tgt);
                                 const toPos = determineLineAttachPos(tgt, from);
-                                ctx.strokeStyle = getThemedColor(lightTheme, 'syntax-attr').opaque;
+                                ctx.strokeStyle = (0, getThemedColor_1.default)(lightTheme, 'syntax-attr').opaque;
                                 ctx.lineWidth = 3;
                                 ctx.setLineDash([5, 5]);
                                 ctx.beginPath();
@@ -10253,11 +10317,11 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                                         break;
                                 }
                                 ctx.translate(-measure.width / 2, -boxh / 2);
-                                ctx.fillStyle = getThemedColor(lightTheme, 'ast-node-bg').opaque;
+                                ctx.fillStyle = (0, getThemedColor_1.default)(lightTheme, 'ast-node-bg').opaque;
                                 ctx.fillRect(-measure.width / 4, 0, measure.width * 1.5, boxh);
-                                ctx.strokeStyle = getThemedColor(lightTheme, 'separator').opaque;
+                                ctx.strokeStyle = (0, getThemedColor_1.default)(lightTheme, 'separator').opaque;
                                 ctx.strokeRect(-measure.width / 4, 0, measure.width * 1.5, boxh);
-                                ctx.fillStyle = getThemedColor(lightTheme, 'syntax-attr').opaque;
+                                ctx.fillStyle = (0, getThemedColor_1.default)(lightTheme, 'syntax-attr').opaque;
                                 const txty = (fonth - (boxh - fonth) * 0.5);
                                 ctx.fillText(trimmed, 0, txty);
                                 ctx.restore();
@@ -11243,7 +11307,7 @@ define("model/TextProbeEvaluator", ["require", "exports", "network/evaluatePrope
             }
             return {
                 type: 'error',
-                msg: `No AST node returned by "${args.attrNames[attrEvalResult.brokenIndex]}"`,
+                msg: `No AST node returned by "${args.attrNames[attrEvalResult.brokenIndex]}"`, // `Invalid attribute chain`,
                 errRange: { colStart: attrStart + 1, colEnd: attrStart + args.attrNames[attrEvalResult.brokenIndex].length },
             };
         }
@@ -12381,8 +12445,8 @@ define("settings", ["require", "exports", "model/syntaxHighlighting", "ui/UIElem
                         modalPos: item.modalPos,
                         data: {
                             type: 'probe',
-                            locator: item.locator,
-                            property: item.property,
+                            locator: item.locator, // as any to access previously typed data
+                            property: item.property, // as any to access previously typed data
                             nested: {},
                         }
                     };
@@ -13733,7 +13797,44 @@ define("ui/create/createInlineWindowManager", ["require", "exports"], function (
     };
     exports.default = createInlineWindowManager;
 });
-define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/create/registerOnHover"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_6, evaluateProperty_2, displayProbeModal_5, formatAttr_5, startEndToSpan_9, registerOnHover_5) {
+define("ui/create/createSquigglyCheckbox", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const createSquigglyCheckbox = (args) => {
+        const squigglyCheckboxWrapper = document.createElement('div');
+        squigglyCheckboxWrapper.style.flexDirection = 'column';
+        const squigglyCheckbox = document.createElement('input');
+        squigglyCheckbox.type = 'checkbox';
+        squigglyCheckbox.checked = args.initiallyChecked;
+        if (args.id)
+            squigglyCheckbox.id = args.id;
+        squigglyCheckboxWrapper.appendChild(squigglyCheckbox);
+        squigglyCheckbox.onmousedown = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        };
+        squigglyCheckbox.oninput = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            args.onInput(squigglyCheckbox.checked);
+        };
+        // Based on https://stackoverflow.com/a/27764538
+        const squigglyDemo = document.createElement('div');
+        squigglyDemo.classList.add('squigglyLineHolder');
+        const addTiny = (type) => {
+            const tiny = document.createElement('div');
+            tiny.classList.add('tinyLine');
+            tiny.classList.add(type);
+            squigglyDemo.appendChild(tiny);
+        };
+        addTiny('tinyLine1');
+        addTiny('tinyLine2');
+        squigglyCheckboxWrapper.appendChild(squigglyDemo);
+        return squigglyCheckboxWrapper;
+    };
+    exports.default = createSquigglyCheckbox;
+});
+define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/create/registerOnHover", "ui/create/createSquigglyCheckbox"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_6, evaluateProperty_2, displayProbeModal_5, formatAttr_5, startEndToSpan_9, registerOnHover_5, createSquigglyCheckbox_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.createDiagnosticSource = void 0;
@@ -13741,6 +13842,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
     displayProbeModal_5 = __importStar(displayProbeModal_5);
     startEndToSpan_9 = __importDefault(startEndToSpan_9);
     registerOnHover_5 = __importDefault(registerOnHover_5);
+    createSquigglyCheckbox_1 = __importDefault(createSquigglyCheckbox_1);
     const createMinimizedProbeModal = (env, locator, property, nestedWindows, optionalArgs = {}) => {
         var _a, _b, _c, _d, _e, _f, _g, _h;
         const queryId = `minimized-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -13952,7 +14054,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
             env.updateSpanHighlight(null);
             (0, displayProbeModal_5.default)(env, null, (0, UpdatableNodeLocator_6.createMutableLocator)(locator), property, nestedWindows, { showDiagnostics });
         };
-        const squigglyCheckboxWrapper = createSquigglyCheckbox({
+        const squigglyCheckboxWrapper = (0, createSquigglyCheckbox_1.default)({
             onInput: (checked) => {
                 showDiagnostics = checked;
                 env.probeMarkers[queryId] = checked ? localErrors : [];
@@ -13987,7 +14089,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
     exports.createDiagnosticSource = createDiagnosticSource;
     exports.default = createMinimizedProbeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_7, displayAttributeModal_7, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_7, createMinimizedProbeModal_1, evaluateProperty_3, hacks_5, startEndToSpan_10) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "ui/create/createSquigglyCheckbox", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_7, displayAttributeModal_7, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_7, createMinimizedProbeModal_1, evaluateProperty_3, createSquigglyCheckbox_2, hacks_5, startEndToSpan_10) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.prettyPrintProbePropertyName = exports.searchProbePropertyName = void 0;
@@ -14003,6 +14105,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     displayAstModal_2 = __importDefault(displayAstModal_2);
     createInlineWindowManager_1 = __importDefault(createInlineWindowManager_1);
     evaluateProperty_3 = __importDefault(evaluateProperty_3);
+    createSquigglyCheckbox_2 = __importDefault(createSquigglyCheckbox_2);
     startEndToSpan_10 = __importDefault(startEndToSpan_10);
     const searchProbePropertyName = `m:NodesWithProperty`;
     exports.searchProbePropertyName = searchProbePropertyName;
@@ -14029,7 +14132,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                 locator: locator.get(),
                 property,
                 nested: inlineWindowManager.getWindowStates(),
-                showDiagnostics: showDiagnostics && undefined,
+                showDiagnostics: showDiagnostics && undefined, // Only include if necessary to reduce serialized form size
                 stickyHighlight: stickyController.getActiveColor(),
             };
         };
@@ -14528,7 +14631,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                             expl.style.flexDirection = 'row';
                             expl.style.marginTop = '0.125rem';
                             const id = `showdiag-${Math.random()}`;
-                            const check = createSquigglyCheckbox({
+                            const check = (0, createSquigglyCheckbox_2.default)({
                                 onInput: (checked) => {
                                     showDiagnostics = checked;
                                     reinstallDiagnosticsGetter();
@@ -16709,7 +16812,7 @@ define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionP
                 registerModalEnv: (env) => {
                     (0, displayAstModal_3.default)({
                         ...env,
-                        probeWindowStateSavers: {},
+                        probeWindowStateSavers: {}, // Disable state saving here
                         showWindow: (args) => {
                             let lastCancelToken = {};
                             const render = () => {
@@ -18231,72 +18334,3 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         });
     };
 });
-const mkCol = (rgb) => {
-    const opaque = `#${rgb}`;
-    const dimmed = `#${rgb}40`;
-    return {
-        opaque,
-        dimmed,
-        maybeDimmed: (gd) => gd ? dimmed : opaque,
-    };
-};
-const mkPredimmed = (opaque, dimmed) => ({
-    opaque, dimmed, maybeDimmed: (gd) => gd ? dimmed : opaque
-});
-const lightColors = {
-    'window-border': mkCol('999999'),
-    'probe-result-area': mkCol('F4F4F4'),
-    'syntax-type': mkCol('267F99'),
-    'syntax-attr': mkCol('795E26'),
-    'syntax-modifier': mkCol('0000FF'),
-    'syntax-variable': mkCol('001080'),
-    'separator': mkPredimmed('#000000', '#B6B6B6'),
-    'ast-node-bg': mkCol('DDDDDD'),
-    'ast-node-bg-hover': mkCol('AAAAAA'),
-};
-const darkColors = {
-    'window-border': mkCol('999999'),
-    'probe-result-area': mkCol('333333'),
-    'syntax-type': mkCol('4EC9B0'),
-    'syntax-attr': mkCol('DCDCAA'),
-    'syntax-modifier': mkCol('569CD6'),
-    'syntax-variable': mkCol('9CDCFE'),
-    'separator': mkPredimmed('#FFFFFF', '#666666'),
-    'ast-node-bg': mkCol('1C1C1C'),
-    'ast-node-bg-hover': mkCol('666666'),
-};
-const getThemedColor = (lightTheme, type) => {
-    return (lightTheme ? lightColors : darkColors)[type];
-};
-const createSquigglyCheckbox = (args) => {
-    const squigglyCheckboxWrapper = document.createElement('div');
-    squigglyCheckboxWrapper.style.flexDirection = 'column';
-    const squigglyCheckbox = document.createElement('input');
-    squigglyCheckbox.type = 'checkbox';
-    squigglyCheckbox.checked = args.initiallyChecked;
-    if (args.id)
-        squigglyCheckbox.id = args.id;
-    squigglyCheckboxWrapper.appendChild(squigglyCheckbox);
-    squigglyCheckbox.onmousedown = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-    };
-    squigglyCheckbox.oninput = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        args.onInput(squigglyCheckbox.checked);
-    };
-    // Based on https://stackoverflow.com/a/27764538
-    const squigglyDemo = document.createElement('div');
-    squigglyDemo.classList.add('squigglyLineHolder');
-    const addTiny = (type) => {
-        const tiny = document.createElement('div');
-        tiny.classList.add('tinyLine');
-        tiny.classList.add(type);
-        squigglyDemo.appendChild(tiny);
-    };
-    addTiny('tinyLine1');
-    addTiny('tinyLine2');
-    squigglyCheckboxWrapper.appendChild(squigglyDemo);
-    return squigglyCheckboxWrapper;
-};

@@ -259,8 +259,10 @@ public class WorkspaceHandler {
 
 		// Increment write counter
 		final String absPath = subFile.getAbsolutePath();
-		final Integer prevWriteCounter = workspaceFileWriteCounters.get(absPath);
-		workspaceFileWriteCounters.put(absPath, (prevWriteCounter == null ? -1 : prevWriteCounter) + 1);
+		synchronized (workspaceFileWriteCounters) {
+			final Integer prevWriteCounter = workspaceFileWriteCounters.get(absPath);
+			workspaceFileWriteCounters.put(absPath, (prevWriteCounter == null ? -1 : prevWriteCounter) + 1);
+		}
 
 		return new PutWorkspaceContentRes(true);
 	}
@@ -390,7 +392,10 @@ public class WorkspaceHandler {
 
 	public static int getWorkspaceFileWriteCounter(File f) {
 		final String key = f.getAbsolutePath();
-		final Integer ret = workspaceFileWriteCounters.get(key);
+		final Integer ret;
+		synchronized (workspaceFileWriteCounters) {
+			ret = workspaceFileWriteCounters.get(key);
+		}
 		return ret == null ? -1 : ret;
 	}
 

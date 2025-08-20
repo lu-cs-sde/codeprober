@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -820,9 +821,11 @@ public class WebServer {
 
 	private static String validAuthKey;
 	static {
+		final SecureRandom secureRandom = new SecureRandom();
+		final byte[] randomBytes = new byte[16];
+		secureRandom.nextBytes(randomBytes);
 		String keyTail = Base64.getEncoder().withoutPadding()
-				.encodeToString(((Math.random() * Integer.MAX_VALUE) + "_" + (Math.random() * Integer.MAX_VALUE))
-						.getBytes(StandardCharsets.UTF_8));
+				.encodeToString(randomBytes);
 		if (keyTail.length() > 12) {
 			keyTail = keyTail.substring(0, 12);
 		}

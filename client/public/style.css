@@ -54,7 +54,7 @@
 
   /* Tab colors */
   --test-tab-active-bg: #FFF;
-  --tab-inactive-bg: #555;
+  --test-tab-inactive-bg: #555;
   --test-tab-border: #222;
 
   /* Workspace colors */
@@ -124,7 +124,7 @@ body[data-theme-light="true"] {
 
   /* Tab colors */
   --test-tab-active-bg: #999;
-  --tab-inactive-bg: white;
+  --test-tab-inactive-bg: white;
   --test-tab-border: #CCC;
 
   /* Workspace colors */
@@ -148,7 +148,6 @@ body[data-theme-light="true"] {
   height: 98vh;
   max-height: 98vh;
   grid-template-columns: 3fr 1fr;
-  /* grid-template-rows: 1.5rem 1fr; */
   grid-template-rows: auto 1fr;
 }
 body.workspace-visible #root {
@@ -405,7 +404,7 @@ body.locator-request-active  .nodeLocatorContainer:hover::after {
   position: sticky;
   top: 0;
   left: 0;
-  border-bottom: 1px solid var(--button-hover);
+  border-bottom: 1px solid #555;
   display: flex;
   flex-direction: row;
   justify-content: space-between;
@@ -823,7 +822,7 @@ body[data-theme-light="true"] .dim-button:active {
   color: black;
 }
 .tab-button-inactive {
-  background: var(--tab-inactive-bg);
+  background: var(--test-tab-inactive-bg);
   color: var(--text);
 }
 
@@ -972,7 +971,7 @@ body[data-theme-light="true"] .minimizedProbeWindowOpener:hover:not(:active) {
   width: fit-content;
   display: flex;
   flex-direction: column;
-  padding-right: 1px; */
+  padding-right: 1px;
   margin: 0 2px 1px;
   border-top: none;
   border-left: none;

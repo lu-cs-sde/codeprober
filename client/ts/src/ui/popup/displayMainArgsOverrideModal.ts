@@ -53,7 +53,7 @@ const setArgs = (raw: string, onError: (line: number, col: number, msg: string) 
     }
     buf = null;
   };
-  const getLineColFromStartToPos = (pos: Number) => {
+  const getLineColFromStartToPos = (pos: number) => {
     let line = 1;
     let col = 0;
     for (let i = 0; i < pos; ++i) {

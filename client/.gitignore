@@ -1,2 +1,3 @@
 ts/node_modules
 .vscode
+dist-test

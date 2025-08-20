@@ -1,4 +1,4 @@
-a
+#!/usr/bin/env bash
 echo "Building"
 touch DUMMY_FILE_TO_FORCE_DEV_BUILD
 ./build.sh
@@ -10,6 +10,18 @@ fi
 rm DUMMY_FILE_TO_FORCE_DEV_BUILD
 
 echo "Build success"
+
+# -------------------------
+# Test normal JUnit tests
+cd client/ts
+npm ci
+npm run test
+if [ "$?" -ne "0" ]; then
+  echo "Client unit tests failed"
+  exit 1
+fi
+cd -
+echo "Client unit tests success"
 
 # -------------------------
 # Test normal JUnit tests

@@ -36,3 +36,5 @@ const createSquigglyCheckbox = (args: {
   squigglyCheckboxWrapper.appendChild(squigglyDemo);
   return squigglyCheckboxWrapper;
 }
+
+export default createSquigglyCheckbox;

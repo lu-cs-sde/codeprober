@@ -6,7 +6,7 @@ import registerNodeSelector from "../create/registerNodeSelector";
 import registerOnHover from "../create/registerOnHover";
 import trimTypeName from "../trimTypeName";
 import displayAttributeModal from "./displayAttributeModal";
-import { graphviz as d3 } from 'dependencies/graphviz/graphviz';
+import { graphviz as d3 } from '../../dependencies/graphviz/graphviz';
 import { assertUnreachable } from '../../hacks';
 import startEndToSpan from '../startEndToSpan';
 import prepareEncodeRpcNodeContainer from './prepareEncodeRpcNodeContainer';

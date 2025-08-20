@@ -13,6 +13,7 @@ import startEndToSpan from '../startEndToSpan';
 import UpdatableNodeLocator, { createMutableLocator } from '../../model/UpdatableNodeLocator';
 import { formatAttrBaseName } from './formatAttr';
 import layoutTree, { DrawTree } from '../create/layoutTree';
+import getThemedColor from '../getThemedColor';
 
 interface Point { x: number; y: number }
 type LocatorStr = string;

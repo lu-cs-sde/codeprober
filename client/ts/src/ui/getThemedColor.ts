@@ -58,3 +58,6 @@ const darkColors: typeof lightColors = {
 const getThemedColor = (lightTheme: boolean, type: ColorType): Color => {
   return (lightTheme ? lightColors : darkColors)[type];
 }
+
+export default getThemedColor;
+

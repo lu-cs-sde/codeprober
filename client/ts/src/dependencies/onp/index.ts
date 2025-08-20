@@ -1,7 +1,7 @@
 import {SES_DELETE, SES_COMMON, SES_ADD} from "./data";
 import {ArrayResults, TextResults, ResultItem, createTextResults} from "./results";
 import {onp} from "./onp";
-import {objectifyArray, objectifyLcs, stringifyArray} from "./array";
+import {ComparedItem, objectifyArray, objectifyLcs, stringifyArray} from "./array";
 
 export {
 	SES_DELETE,
@@ -31,14 +31,14 @@ export function diffText(a: string, b: string): DiffText {
 
 //## ARRAY
 
-export interface DiffArray<T> {
+export interface DiffArray<T extends ComparedItem> {
 	distance: number;
-	lcs: Array<T>;
-	results: ArrayResults<T>;
+	lcs: T[];
+	results: ResultItem<T>[];
 }
-export function diffArray<T>(arrayA: Array<T>, arrayB: Array<T>): DiffArray<T> {
-	const [a, b, map] = stringifyArray(arrayA, arrayB);
-	const [res, ed] = onp(a, b);
+export function diffArray<T extends ComparedItem>(arrayA: T[], arrayB: T[]): DiffArray<T> {
+	const [a, b, map] = stringifyArray<T>(arrayA, arrayB);
+  const [res, ed] = onp(a, b);
 	const results = objectifyArray(arrayA, arrayB, res, map);
 	const lcs = objectifyLcs(map, results);
 
