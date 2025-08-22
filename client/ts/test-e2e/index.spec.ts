@@ -127,23 +127,18 @@ test.describe('CodeProber Integration Tests', () => {
 
       // Type our test content (this will replace the selected text)
       await page.keyboard.type(wantedContent);
-
-      console.log('✅ Successfully typed into Monaco editor');
     } catch (error) {
-      throw new Error(`Failed to interact with Monaco editor: ${error.message}`);
+      throw new Error(`Failed to interact with editor: ${error.message}`);
     }
 
     // Wait for the content to be processed
     await page.waitForTimeout(500);
 
-    // Verify content was set by checking the Monaco editor's value
     const actualContent = (await page.evaluate(() => document.querySelector('#input-wrapper')?.textContent || ''))
       .replaceAll(' ', ' ') // Normalize spaces
     ;
 
-    // console.log('📄 Editor content after interaction:', JSON.stringify(content));
-
-    // Verify our test content is present in the editor
+    // Verify that the initial text is not present in the editor
     expect(actualContent).not.toContain('Hello World!'); // Ensure we didn't leave old content
 
     return { content: actualContent };

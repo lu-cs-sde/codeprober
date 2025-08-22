@@ -13,7 +13,7 @@
     "bw": "tsc --watch",
     "serve": "ts-node ./src",
     "start": "node ./dist",
-    "postinstall": "playwright install"
+    "postinstall": "playwright install --with-deps"
   },
   "keywords": [],
   "author": "",
