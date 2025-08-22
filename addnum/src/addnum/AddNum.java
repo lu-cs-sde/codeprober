@@ -21,7 +21,15 @@ public class AddNum {
 	}
 
 	public static Object CodeProber_parse(String[] args) throws IOException {
-		return parse(args[args.length - 1]);
+		try {
+			return parse(args[args.length - 1]);
+		} catch (RuntimeException e) {
+			if (e.getMessage().equals("Failed parsing")) {
+				System.err.println("AddNum parser failed for file " + args[args.length - 1]);
+				return null;
+			}
+			throw e;
+		}
 	}
 
 	static Program parse(String sourceFile) throws IOException {

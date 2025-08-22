@@ -1,3 +1,6 @@
 ts/node_modules
 .vscode
 dist-test
+public/plugin_purejs.js
+ts/test-results
+ts/playwright-report

@@ -824,7 +824,7 @@ public class WebServer {
 		final SecureRandom secureRandom = new SecureRandom();
 		final byte[] randomBytes = new byte[16];
 		secureRandom.nextBytes(randomBytes);
-		String keyTail = Base64.getEncoder().withoutPadding()
+		String keyTail = Base64.getUrlEncoder().withoutPadding()
 				.encodeToString(randomBytes);
 		if (keyTail.length() > 12) {
 			keyTail = keyTail.substring(0, 12);

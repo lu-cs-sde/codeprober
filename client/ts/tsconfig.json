@@ -99,6 +99,8 @@
     "skipLibCheck": true                                 /* Skip type checking all .d.ts files. */
   },
   "exclude": [
-    "test/**/*"
+    "test/**/*",
+    "test-e2e/**/*",
+    "playwright.config.ts"
   ]
 }

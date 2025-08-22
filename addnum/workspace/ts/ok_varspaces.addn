@@ -1,0 +1,13 @@
+1
+ // [[Add.value=3]]
+ // [[Add.value!=3 ]] <-- trailing space is OK, becomes 'expected'
+ // [[ Add.value]] <-- leading space
+
+ // [[Add=$a]]
+ // [[ Add=$a.getParent.getNumChild ]] <-- leading space, ignore
+
+ // [[$a:=Add]]
+ // [[ $a:=Add]]  <-- leading space, ignore
++
+2
+

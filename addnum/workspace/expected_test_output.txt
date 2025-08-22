@@ -23,4 +23,5 @@
   ✅ ts/ok_listvar.addn
   ✅ ts/ok_num.addn
   ✅ ts/ok_vars.addn
+  ✅ ts/ok_varspaces.addn
 Done: 30 pass, 11 fail

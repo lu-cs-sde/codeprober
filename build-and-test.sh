@@ -20,6 +20,11 @@ if [ "$?" -ne "0" ]; then
   echo "Client unit tests failed"
   exit 1
 fi
+npm run test:e2e
+if [ "$?" -ne "0" ]; then
+  echo "Client end-to-end tests failed"
+  exit 1
+fi
 cd -
 echo "Client unit tests success"
 

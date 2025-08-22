@@ -9,3 +9,8 @@ logs
 test_log
 oneshot_res
 .vscode
+
+# Playwright artifacts
+client/ts/test-results/
+client/ts/playwright-report/
+client/ts/playwright/.cache/

@@ -478,7 +478,8 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			}
 		}
 
-		if (maybeCacheAST) {
+		if (maybeCacheAST && (cacheStrategy != AstCacheStrategy.PARTIAL
+				|| lastInfo.hasOverride0(lastInfo.ast.underlyingAstNode.getClass(), "flushTreeCache"))) {
 			final long flushStart = System.nanoTime();
 			try {
 				if (cacheStrategy == AstCacheStrategy.PARTIAL) {

@@ -3,7 +3,7 @@
     "target": "es2022",
     "lib": ["ES2022", "DOM"],
     "module": "commonjs",
-    "moduleResolution": "node", 
+    "moduleResolution": "node",
     "outDir": "./dist-test",
     "rootDir": "./",
     "esModuleInterop": true,
@@ -16,7 +16,8 @@
   },
   "include": [
     "src/**/*.ts",
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "tests/**/*.ts"
   ],
   "exclude": [
     "node_modules",
