@@ -1,7 +1,6 @@
 package addnum.ast;
 
 import java.io.PrintStream;
-import java.util.List;
 
 import addnum.ast.ASTNodeAnnotation.Attribute;
 import addnum.ast.ASTNodeAnnotation.Child;

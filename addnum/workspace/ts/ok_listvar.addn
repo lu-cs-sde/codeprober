@@ -1,0 +1,3 @@
+5 // [[Num.value=5]] [[Num.asListOfOnes.getNumChild=5]] [[$l:=Num.asListOfOnes]]
+
+// [[$l.getNumChild=5]]

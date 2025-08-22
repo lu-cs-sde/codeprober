@@ -102,16 +102,19 @@ public class TextProbeEnvironment {
 		}, new AtomicBoolean(true), (p) -> {});
 	}
 
+	private static EvaluatePropertyReq constructEvalReq(ParsingRequestData src, NodeLocator locator, Property property) {
+		return new EvaluatePropertyReq(src, locator, property, false, null, null, null, null, null, true);
+	}
+
 	public List<NodeLocator> listNodes(int line, String attrPredicate, String tailPredicate) {
 		final TALStep rootNode = new TALStep("<ROOT>", null, ((line + 1) << 12) + 1, ((line + 1) << 12) + 4095, 0);
 		final EvaluatePropertyRes result = EvaluatePropertyRes.fromJSON(performRequest( //
-				constructMessage(new EvaluatePropertyReq( //
+				constructMessage(constructEvalReq( //
 						parsingRequestData, new NodeLocator(rootNode, Collections.emptyList()), //
 						new Property("m:NodesWithProperty", Arrays.asList( //
 								PropertyArg.fromString(attrPredicate), //
 								PropertyArg.fromString(tailPredicate) //
-						)), //
-						false).toJSON())));
+						))).toJSON())));
 		if (result.response.type != Type.sync) {
 			System.err.println("Unexpected async property response, are we running concurrently?");
 			System.exit(1);
@@ -143,10 +146,9 @@ public class TextProbeEnvironment {
 
 	private List<RpcBodyLine> evaluateProp(NodeLocator locator, String prop) {
 		final EvaluatePropertyRes result = EvaluatePropertyRes.fromJSON(performRequest( //
-				constructMessage(new EvaluatePropertyReq( //
+				constructMessage(constructEvalReq( //
 						parsingRequestData, locator, //
-						new Property(prop), //
-						false).toJSON())));
+						new Property(prop)).toJSON())));
 		if (result.response.type != Type.sync) {
 			System.err.println("Unexpected async property response, are we running concurrently?");
 			System.exit(1);
@@ -169,14 +171,13 @@ public class TextProbeEnvironment {
 			final TALStep rootNode = new TALStep("<ROOT>", null, ((query.lineIdx + 1) << 12) + 1,
 					((query.lineIdx + 1) << 12) + 4095, 0);
 			final EvaluatePropertyRes result = EvaluatePropertyRes.fromJSON(performRequest( //
-					constructMessage(new EvaluatePropertyReq( //
+					constructMessage(constructEvalReq( //
 							parsingRequestData, new NodeLocator(rootNode, Collections.emptyList()), //
 							new Property("m:NodesWithProperty", Arrays.asList( //
 									PropertyArg.fromString(query.attrNames.length > 0 ? query.attrNames[0] : ""), //
 									PropertyArg.fromString(
 											String.format("this<:%s&@lineSpan~=%d", query.nodeType, query.lineIdx + 1)) //
-							)), //
-							false).toJSON())));
+							))).toJSON())));
 			if (result.response.type != Type.sync) {
 				System.err.println("Unexpected async property response, are we running concurrently?");
 				System.exit(1);

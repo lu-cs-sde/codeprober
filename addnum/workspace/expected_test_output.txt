@@ -20,6 +20,7 @@
      Cannot use variables on right-hand side
   ✅ ts/ok_add.addn
   ✅ ts/ok_large.addn
+  ✅ ts/ok_listvar.addn
   ✅ ts/ok_num.addn
   ✅ ts/ok_vars.addn
-Done: 27 pass, 11 fail
+Done: 30 pass, 11 fail
