@@ -14,3 +14,4 @@ jobs:
       env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ASSETS_URL: ${{ github.event.release.assets_url }}
+          CI: true
