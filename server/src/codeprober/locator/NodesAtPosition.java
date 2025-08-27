@@ -44,7 +44,6 @@ public class NodesAtPosition {
 			}
 		}
 		if (astNode == info.ast) {
-
 			// Root node, maybe skip ahead
 			Object next = null;
 			try {

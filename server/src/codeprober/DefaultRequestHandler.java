@@ -105,11 +105,20 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 		AstNodeApiStyle positionRepresentation = null;
 		try {
-			if (Reflect.invoke0(ast, "cpr_getStartLine") instanceof Integer) {
-				positionRepresentation = AstNodeApiStyle.CPR_SEPARATE_LINE_COLUMN;
+			if (Reflect.invoke0(ast, "cpr_getNumChild") instanceof Integer) {
+				positionRepresentation = AstNodeApiStyle.CPR_EVERYTHING;
 			}
 		} catch (RuntimeException e) {
-			// Not cpr_getStartLine..
+			// Not cpr_getNumChild..
+		}
+		if (positionRepresentation == null) {
+			try {
+				if (Reflect.invoke0(ast, "cpr_getStartLine") instanceof Integer) {
+					positionRepresentation = AstNodeApiStyle.CPR_SEPARATE_LINE_COLUMN;
+				}
+			} catch (RuntimeException e) {
+				// Not cpr_getStartLine..
+			}
 		}
 		if (positionRepresentation == null) {
 			try {

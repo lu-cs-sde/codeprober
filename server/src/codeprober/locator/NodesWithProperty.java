@@ -104,12 +104,16 @@ public class NodesWithProperty {
 		List<Object> ret = new ArrayList<>();
 		ret.add("Foo"); // Reserve first slot
 		final List<Predicate> parsedPredicates;
-		try {
-			parsedPredicates = parsePredicates(info, predicates);
-		} catch (ClassNotFoundException e) {
-			System.out.println("Failed parsing predicates, invalid subtype in " + predicates);
-			ret.set(0, "Invalid subtype predicate");
-			return ret;
+		if (predicates == null) {
+			parsedPredicates = null;
+		} else {
+			try {
+				parsedPredicates = parsePredicates(info, predicates);
+			} catch (ClassNotFoundException e) {
+				System.out.println("Failed parsing predicates, invalid subtype in " + predicates);
+				ret.set(0, "Invalid subtype predicate");
+				return ret;
+			}
 		}
 
 		int totalNumNodes = limitNumberOfNodes
@@ -198,6 +202,11 @@ public class NodesWithProperty {
 
 	private static int getTo(List<Object> out, AstInfo info, AstNode astNode, String propName,
 			List<Predicate> predicates, int remainingNodeBudget) {
+
+		final Boolean cutoff = astNode.cutoffNodeListTree(info);
+		if (cutoff != null && cutoff) {
+			return remainingNodeBudget;
+		}
 
 		// Default false for List/Opt, they are very rarely useful
 		boolean show = !astNode.isList() && !astNode.isOpt();
@@ -291,6 +300,21 @@ public class NodesWithProperty {
 				}
 			}
 		}
+    /*
+		if (astNode == info.ast) {
+			// Root node, maybe skip ahead
+			Object next = null;
+			try {
+				next = Reflect.invoke0(astNode.underlyingAstNode, "pastaVisibleNextAfterRoot");
+			} catch (InvokeProblem e) {
+				// OK, this is an optional attribute
+			}
+			if (next != null) {
+				remainingNodeBudget = getTo(out, info, new AstNode(next), propName, predicates, remainingNodeBudget);
+				return remainingNodeBudget;
+			}
+		}
+    */
 		for (AstNode child : astNode.getChildren(info)) {
 			remainingNodeBudget = getTo(out, info, child, propName, predicates, remainingNodeBudget);
 		}

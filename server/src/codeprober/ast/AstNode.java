@@ -153,6 +153,7 @@ public class AstNode {
 		if (this.rawSpan == null) {
 			switch (positionRepresentation) {
 
+			case CPR_EVERYTHING: // Fall through
 			case CPR_SEPARATE_LINE_COLUMN: {
 				this.rawSpan = new Span( //
 						((Integer) Reflect.invoke0(underlyingAstNode, "cpr_getStartLine") << 12)
@@ -345,6 +346,10 @@ public class AstNode {
 		if (children == null) {
 			int numCh;
 			switch (info.astApiStyle) {
+			case CPR_EVERYTHING:
+				numCh = (Integer) Reflect.invoke0(underlyingAstNode, "cpr_getNumChild");
+				break;
+
 			case CPR_SEPARATE_LINE_COLUMN:
 			case BEAVER_PACKED_BITS: // Fall through
 			case JASTADD_NO_POSITION: // Fall through
@@ -376,8 +381,17 @@ public class AstNode {
 					"This node has " + len + " " + (len == 1 ? "child" : "children") + ", index " + n + " is invalid");
 		}
 		if (children[n] == null) {
-			final Object rawChild = Reflect.invokeN(underlyingAstNode, "getChild", new Class<?>[] { Integer.TYPE },
-					new Object[] { n });
+			final Object rawChild;
+			switch (info.astApiStyle) {
+			case CPR_EVERYTHING:
+				rawChild = Reflect.invokeN(underlyingAstNode, "cpr_getChild", new Class<?>[] { Integer.TYPE },
+						new Object[] { n });
+				break;
+			default:
+				rawChild = Reflect.invokeN(underlyingAstNode, "getChild", new Class<?>[] { Integer.TYPE },
+						new Object[] { n });
+				break;
+			}
 			if (potentialOverride != null && potentialOverride.underlyingAstNode == rawChild) {
 				children[n] = potentialOverride;
 			} else {

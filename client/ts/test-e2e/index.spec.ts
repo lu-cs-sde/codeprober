@@ -104,19 +104,15 @@ test.describe('CodeProber Integration Tests', () => {
       // Click on the editor area
       await page.click('#input-wrapper');
 
-      // Select all existing content (Ctrl+A / Cmd+A)
-      const browserName = await page.evaluate(() => navigator.userAgent);
-
-      // Select all text
       let forceControl = false;
       if (editor === 'Monaco') {
+        const browserName = await page.evaluate(() => navigator.userAgent);
         forceControl = (process.platform === 'darwin'
-            && (browserName.includes('Firefox') || browserName.includes('Chrome'))
+          && (browserName.includes('Firefox') || browserName.includes('Chrome'))
         );
       }
-      console.log('Doing select all with forceControl=', forceControl, 'for process.platform:', process.platform, 'and browserName:', browserName);
+      // Select all text
       await page.keyboard.press(
-        // For some reason "Meta+KeyA" does not work on Firefox, we use "Control+KeyA" instead
         forceControl
           ? 'Control+KeyA'
           : 'ControlOrMeta+KeyA'

@@ -1722,6 +1722,950 @@ define("model/ModalEnv", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
 });
+define("model/SpanFlasher", ["require", "exports", "ui/create/attachDragToX"], function (require, exports, attachDragToX_3) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createSpanFlasher = void 0;
+    const createSpanFlasher = (env) => {
+        let activeFlashCleanup = () => { };
+        let activeFlashSpan = null;
+        const activeSpanReferenceHoverPos = { ...attachDragToX_3.lastKnownMousePos };
+        const flash = (spans, removeHighlightsOnMove) => {
+            // Remove invalid spans
+            spans = spans.filter(x => x.lineStart && x.lineEnd);
+            const act = activeFlashSpan;
+            if (act && JSON.stringify(act) === JSON.stringify(spans) /* bit hacky comparison, but it works */) {
+                // Already flashing this, update the hover pos reference and exit
+                Object.assign(activeSpanReferenceHoverPos, attachDragToX_3.lastKnownMousePos);
+                console.log('already flashing this');
+                return;
+            }
+            activeFlashSpan = spans;
+            const flashes = spans.map(span => ({
+                id: `flash-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`,
+                sticky: { span, classNames: [span.lineStart === span.lineEnd ? 'elp-flash' : 'elp-flash-multiline'] }
+            }));
+            flashes.forEach(flash => env.setStickyHighlight(flash.id, flash.sticky));
+            let numCleanups = 0;
+            let mouseMoveListener = null;
+            const cleanup = () => {
+                ++numCleanups;
+                flashes.forEach(flash => env.clearStickyHighlight(flash.id));
+                activeFlashSpan = null;
+                if (mouseMoveListener) {
+                    window.removeEventListener('mousemove', mouseMoveListener);
+                }
+            };
+            Object.assign(activeSpanReferenceHoverPos, attachDragToX_3.lastKnownMousePos);
+            if (removeHighlightsOnMove) {
+                mouseMoveListener = (e) => {
+                    const dx = e.x - activeSpanReferenceHoverPos.x;
+                    const dy = e.y - activeSpanReferenceHoverPos.y;
+                    if (Math.hypot(dx, dy) > 24 /* arbitrary distance */) {
+                        cleanup();
+                    }
+                };
+                window.addEventListener('mousemove', mouseMoveListener);
+            }
+            activeFlashCleanup();
+            activeFlashCleanup = cleanup;
+        };
+        const quickFlash = (spans) => {
+            flash(spans);
+            const cleaner = activeFlashCleanup;
+            setTimeout(() => {
+                if (activeFlashCleanup === cleaner) {
+                    activeFlashCleanup();
+                }
+                {
+                    // Else, we have been replaced by another highlight
+                }
+            }, 500);
+        };
+        const clear = () => {
+            activeFlashCleanup();
+        };
+        return { flash, clear, quickFlash };
+    };
+    exports.createSpanFlasher = createSpanFlasher;
+});
+define("network/evaluateProperty", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    const evaluateProperty = (env, req, onSlowResponseDetected, onStatusUpdate, cleanupSlownessInformation) => {
+        let cancelled = false;
+        let activelyLoadingJob = null;
+        const doStopJob = (jobId) => env.performTypedRpc({
+            type: 'Concurrent:StopJob',
+            job: jobId,
+        }).then(res => {
+            if (res.err) {
+                console.warn('Error when stopping job:', res.err);
+                return false;
+            }
+            return true;
+        });
+        let stopper = () => { };
+        return {
+            cancel: () => {
+                cancelled = true;
+                if (activelyLoadingJob !== null) {
+                    doStopJob(activelyLoadingJob);
+                    activelyLoadingJob = null;
+                }
+                stopper();
+            },
+            fetch: () => new Promise((resolve, reject) => {
+                var _a;
+                stopper = () => resolve('stopped');
+                let isDone = false;
+                let isConnectedToConcurrentCapableServer = false;
+                let knownStatus = 'Unknown';
+                let knownStackTrace = null;
+                let localConcurrentCleanup = () => { };
+                const initialPollDelayTimer = setTimeout(() => {
+                    if (isDone || cancelled || !isConnectedToConcurrentCapableServer) {
+                        return;
+                    }
+                    onSlowResponseDetected === null || onSlowResponseDetected === void 0 ? void 0 : onSlowResponseDetected();
+                    localConcurrentCleanup = () => { cleanupSlownessInformation === null || cleanupSlownessInformation === void 0 ? void 0 : cleanupSlownessInformation(); };
+                    const poll = () => {
+                        if (isDone || cancelled) {
+                            return;
+                        }
+                        env.performTypedRpc({
+                            type: 'Concurrent:PollWorkerStatus',
+                            job: jobId,
+                        })
+                            .then(res => {
+                            if (res.ok) {
+                                // Polled OK, async update will be delivered to job monitor below
+                                // Queue future poll.
+                                setTimeout(poll, 1000);
+                            }
+                            else {
+                                console.warn('Error when polling for job status');
+                                // Don't queue more polling, very unlikely to work anyway.
+                            }
+                        });
+                    };
+                    poll();
+                }, 5000);
+                const jobId = env.createJobId(update => {
+                    switch (update.value.type) {
+                        case 'status': {
+                            knownStatus = update.value.value;
+                            onStatusUpdate === null || onStatusUpdate === void 0 ? void 0 : onStatusUpdate(knownStatus, knownStackTrace);
+                            break;
+                        }
+                        case 'workerStackTrace': {
+                            knownStackTrace = update.value.value;
+                            onStatusUpdate === null || onStatusUpdate === void 0 ? void 0 : onStatusUpdate(knownStatus, knownStackTrace);
+                            break;
+                        }
+                        case 'workerTaskDone': {
+                            const wtd = update.value.value;
+                            switch (wtd.type) {
+                                case 'normal': {
+                                    isDone = true;
+                                    activelyLoadingJob = null;
+                                    localConcurrentCleanup();
+                                    const cast = wtd.value;
+                                    if (cast.response.type == 'job') {
+                                        throw new Error(`Unexpected 'job' result in async update`);
+                                    }
+                                    resolve(cast.response.value);
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                });
+                env.performTypedRpc({
+                    ...req,
+                    job: jobId,
+                    jobLabel: `Probe: '${`${(_a = req.locator.result.label) !== null && _a !== void 0 ? _a : req.locator.result.type}`.split('.').slice(-1)[0]}.${req.property.name}'`,
+                })
+                    .then((data) => {
+                    if (data.response.type === 'job') {
+                        // Async work queued, not done.
+                        if (cancelled) {
+                            // We were removed while this request was sent
+                            // Stop it asap
+                            doStopJob(jobId);
+                            clearTimeout(initialPollDelayTimer);
+                        }
+                        else {
+                            activelyLoadingJob = jobId;
+                        }
+                        isConnectedToConcurrentCapableServer = true;
+                    }
+                    else {
+                        // Sync work executed, done.
+                        clearTimeout(initialPollDelayTimer);
+                        isDone = true;
+                        resolve(data.response.value);
+                    }
+                });
+            }),
+        };
+    };
+    exports.default = evaluateProperty;
+});
+define("model/TextProbeEvaluator", ["require", "exports", "network/evaluateProperty"], function (require, exports, evaluateProperty_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isBrokenNodeChain = exports.isAssignmentMatch = exports.createTextProbeEvaluator = void 0;
+    evaluateProperty_1 = __importDefault(evaluateProperty_1);
+    const createGeneralTextMatcher = () => {
+        const reg = /\[\[(?:(((?!\[\[).)*))\]\](?!\])/g;
+        const exec = (line) => {
+            const match = reg.exec(line);
+            if (!match) {
+                return null;
+            }
+            const [full, contents] = match;
+            if (!contents.match(/^(\$|\w)/)) {
+                // Starting with space or somethign similar, ignore it
+                return exec(line);
+            }
+            return {
+                index: match.index,
+                full,
+                contents,
+            };
+        };
+        return { exec };
+    };
+    const isAssignmentMatch = (match) => typeof match.srcVal !== 'undefined';
+    exports.isAssignmentMatch = isAssignmentMatch;
+    const matchFullFile = (fullFile) => {
+        const lines = fullFile.split('\n').map((value, lineIdx) => ({ lineIdx, value }));
+        let ret = {
+            lines,
+            assignments: [],
+            probes: [],
+            matchesOnLine: (lineIdx) => [
+                ...ret.assignments.filter(x => x.lineIdx === lineIdx),
+                ...ret.probes.filter(x => x.lineIdx === lineIdx),
+            ]
+        };
+        for (let lineIdx = 0; lineIdx < lines.length; ++lineIdx) {
+            const line = lines[lineIdx];
+            const matcher = createGeneralTextMatcher();
+            let match;
+            while ((match = matcher.exec(line.value)) != null) {
+                const contents = match.contents;
+                const assign = matchAssignment(contents);
+                if (assign) {
+                    ret.assignments.push({ ...assign, lineIdx, index: assign.index + match.index + 2 /* 2 for "[[" */ });
+                }
+                else {
+                    const probe = matchTypedProbeRegex({ lineIdx, value: contents });
+                    if (probe) {
+                        ret.probes.push({ ...probe, lineIdx, index: probe.index + match.index + 2 /* 2 for "[[" */ });
+                    }
+                }
+            }
+        }
+        return ret;
+    };
+    const matchNodeAndAttrChain = (line, strict = false) => {
+        const reg = strict
+            ? /^(\$?\w+)(\[\d+\])?((?:\.(?:l:)?\w*)*$)/g
+            : /(\$?\w+)(\[\d+\])?((?:\.(?:l:)?\w*)*)/g;
+        const match = reg.exec(line.value);
+        if (!match) {
+            return null;
+        }
+        // if (strict && match.index > 0) {
+        //   return null;
+        // }
+        const [full, nodeType, nodeIndex, attrNames] = match;
+        return {
+            full,
+            lineIdx: line.lineIdx,
+            index: match.index,
+            nodeType,
+            nodeIndex: nodeIndex ? +nodeIndex.slice(1, -1) : undefined,
+            attrNames: attrNames ? attrNames.slice(1).split('.') : [],
+        };
+    };
+    const matchTypedProbeRegex = (line) => {
+        const nodeMatch = matchNodeAndAttrChain(line);
+        if (!nodeMatch) {
+            return null;
+        }
+        const expectMatch = nodeMatch.full.length === line.value.length
+            ? null
+            : /(!?)(~?)(?:=((.)*))?/g.exec(line.value.slice(nodeMatch.full.length));
+        if (!expectMatch) {
+            return {
+                index: nodeMatch.index,
+                full: nodeMatch.full,
+                lhs: nodeMatch,
+            };
+        }
+        const [expectFull, exclamation, tilde, expectVal] = expectMatch;
+        return {
+            index: nodeMatch.index,
+            full: line.value.slice(nodeMatch.index, nodeMatch.index + nodeMatch.full.length + expectFull.length),
+            lhs: nodeMatch,
+            rhs: {
+                exclamation: !!exclamation,
+                tilde: !!tilde,
+                expectVal: typeof expectVal === 'string' ? expectVal : undefined,
+            }
+        };
+    };
+    const matchAssignment = (line) => {
+        const reg = /(\$\w+):=(.*)/g;
+        const match = reg.exec(line);
+        if (!match) {
+            return null;
+        }
+        const [full, nodeType, srcVal] = match;
+        return {
+            index: match.index,
+            full,
+            nodeType,
+            srcVal,
+        };
+    };
+    const doEvaluateProperty = async (env, evalArgs) => {
+        var _a;
+        const rpcQueryStart = performance.now();
+        const res = await (0, evaluateProperty_1.default)(env, {
+            captureStdout: false,
+            locator: evalArgs.locator,
+            property: { name: evalArgs.prop, args: evalArgs.args },
+            src: (_a = evalArgs.parsingData) !== null && _a !== void 0 ? _a : env.createParsingRequestData(),
+            type: 'EvaluateProperty',
+            skipResultLocator: true,
+            flattenForTextProbes: true,
+        }).fetch();
+        if (res !== 'stopped') {
+            if (typeof res.totalTime === 'number'
+                && typeof res.parseTime === 'number'
+                && typeof res.createLocatorTime === 'number'
+                && typeof res.applyLocatorTime === 'number'
+                && typeof res.attrEvalTime === 'number') {
+                env.statisticsCollector.addProbeEvaluationTime({
+                    attrEvalMs: res.attrEvalTime / 1000000,
+                    fullRpcMs: Math.max(performance.now() - rpcQueryStart),
+                    serverApplyLocatorMs: res.applyLocatorTime / 1000000,
+                    serverCreateLocatorMs: res.createLocatorTime / 1000000,
+                    serverParseOnlyMs: res.parseTime / 1000000,
+                    serverSideMs: res.totalTime / 1000000,
+                });
+            }
+        }
+        return res;
+    };
+    const isBrokenNodeChain = (val) => val && (typeof val === 'object') && val.type === 'broken-node-chain';
+    exports.isBrokenNodeChain = isBrokenNodeChain;
+    const doEvaluatePropertyChain = async (env, evalArgs) => {
+        var _a;
+        const first = await doEvaluateProperty(env, { locator: evalArgs.locator, prop: evalArgs.propChain[0], parsingData: evalArgs.parsingData, });
+        if (first === 'stopped') {
+            return 'stopped';
+        }
+        let prevResult = first;
+        for (let subsequentIdx = 1; subsequentIdx < evalArgs.propChain.length; ++subsequentIdx) {
+            // Previous result must be a node locator
+            if (((_a = prevResult.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
+                return { type: 'broken-node-chain', brokenIndex: subsequentIdx - 1 };
+            }
+            const chainedLocator = prevResult.body[0].value;
+            const nextRes = await doEvaluateProperty(env, { locator: chainedLocator, prop: evalArgs.propChain[subsequentIdx], parsingData: evalArgs.parsingData });
+            if (nextRes === 'stopped') {
+                return 'stopped';
+            }
+            prevResult = nextRes;
+        }
+        return prevResult;
+    };
+    const doListNodes = async (env, listArgs) => {
+        const rootNode = { type: '<ROOT>', start: ((listArgs.lineIdx + 1) << 12) + 1, end: ((listArgs.lineIdx + 1) << 12) + 4095, depth: 0 };
+        const propResult = await doEvaluateProperty(env, {
+            locator: { result: rootNode, steps: [] },
+            prop: 'm:NodesWithProperty',
+            args: [
+                { type: 'string', value: listArgs.attrFilter },
+                { type: 'string', value: listArgs.predicate }
+            ],
+            parsingData: listArgs.parsingData,
+        });
+        if (propResult === 'stopped') {
+            return null;
+        }
+        if (!propResult.body.length || propResult.body[0].type !== 'arr') {
+            console.error('Unexpected response from search query:', propResult);
+            return null;
+        }
+        const queryResultList = propResult.body[0].value;
+        const ret = [];
+        queryResultList.forEach(line => {
+            if (line.type === 'node') {
+                ret.push(line.value);
+            }
+        });
+        return ret;
+    };
+    const doEvaluateNodeAndAttr = async (env, variables, lines, args, preqData) => {
+        var _a;
+        let matchingNodes = null;
+        if (args.nodeType.startsWith('$')) {
+            const lines = variables[args.nodeType];
+            if (lines) {
+                matchingNodes = [];
+                if (!args.attrNames.length) {
+                    return { type: 'success', output: lines };
+                }
+                lines.forEach(row => {
+                    if (row.type === 'node') {
+                        matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes.push(row.value);
+                    }
+                });
+            }
+        }
+        else {
+            matchingNodes = await doListNodes(env, {
+                attrFilter: (_a = args.attrNames[0]) !== null && _a !== void 0 ? _a : '',
+                predicate: `this<:${args.nodeType}&@lineSpan~=${args.lineIdx + 1}`,
+                lineIdx: args.lineIdx,
+                parsingData: preqData,
+            });
+        }
+        // let errMsg: string | null = null;
+        const line = lines[args.lineIdx];
+        if (!(matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes.length)) {
+            const typeStart = line.value.indexOf(args.nodeType, args.index);
+            // const firstAttrEnd = line.indexOf(match.attrNames[0], line.indexOf('.', typeStart)) + match.attrNames[0].length;
+            let firstAttrEnd;
+            if (args.attrNames.length) {
+                firstAttrEnd = line.value.indexOf(args.attrNames[0], line.value.indexOf('.', typeStart)) + args.attrNames[0].length;
+            }
+            else {
+                firstAttrEnd = typeStart + args.nodeType.length;
+            }
+            return {
+                type: 'error',
+                msg: (args.nodeType.startsWith('$') && !variables[args.nodeType]) ? `No such variable` : `No matching nodes`,
+                errRange: { colStart: typeStart + 1, colEnd: firstAttrEnd },
+            };
+        }
+        let matchedNode = null;
+        if (args.nodeIndex !== undefined) {
+            if (args.nodeIndex < 0 || args.nodeIndex >= matchingNodes.length) {
+                const typeEnd = line.value.indexOf(args.nodeType, args.index) + args.nodeType.length;
+                const idxStart = line.value.indexOf(`${args.nodeIndex}`, typeEnd);
+                return {
+                    type: 'error',
+                    msg: `Invalid index`,
+                    errRange: { colStart: idxStart + 1, colEnd: idxStart + `${args.nodeIndex}`.length },
+                };
+            }
+            matchedNode = matchingNodes[args.nodeIndex];
+        }
+        else {
+            if (matchingNodes.length === 1) {
+                // Only one node, no need for an index
+                matchedNode = matchingNodes[0];
+            }
+            else {
+                const typeStart = line.value.indexOf(args.nodeType, args.index);
+                // addErr(lineIdx, typeStart + 1, line.value.indexOf('.', typeStart), `Ambiguous, add "[idx]" to select which "${args.nodeType}" to match. 0 ≤ idx < ${matchingNodes.length}`);
+                // return { anyFailure: true, errMsg };
+                return {
+                    type: 'error',
+                    msg: `${matchingNodes.length} nodes of type "${args.nodeType}". Add [idx] to disambiguate, e.g. "${args.nodeType}[0]"`,
+                    errRange: { colStart: typeStart + 1, colEnd: line.value.indexOf('.', typeStart) },
+                };
+            }
+        }
+        if (!args.attrNames.length) {
+            return {
+                type: 'success',
+                output: [{ type: 'node', value: matchedNode }]
+            };
+        }
+        const attrEvalResult = await doEvaluatePropertyChain(env, {
+            locator: matchedNode,
+            propChain: args.attrNames,
+            parsingData: preqData,
+        });
+        if (attrEvalResult == 'stopped') {
+            // return { anyFailure: false, errMsg };
+            return {
+                type: 'error',
+                msg: `Evaluation stopped`,
+                errRange: { colStart: args.index, colEnd: args.index + args.full.length },
+            };
+        }
+        if (isBrokenNodeChain(attrEvalResult)) {
+            let attrStart = line.value.indexOf('.', args.index) + 1;
+            for (let i = 0; i < attrEvalResult.brokenIndex; ++i) {
+                attrStart = line.value.indexOf('.', attrStart) + 1;
+            }
+            return {
+                type: 'error',
+                msg: `No AST node returned by "${args.attrNames[attrEvalResult.brokenIndex]}"`, // `Invalid attribute chain`,
+                errRange: { colStart: attrStart + 1, colEnd: attrStart + args.attrNames[attrEvalResult.brokenIndex].length },
+            };
+        }
+        if (attrEvalResult.body.length === 1 && attrEvalResult.body[0].type === 'plain' && attrEvalResult.body[0].value.startsWith(`No such attribute '${args.attrNames[args.attrNames.length - 1]}' on `)) {
+            let lastAttrStart = args.index;
+            for (let i = 0; i < args.attrNames.length; ++i) {
+                lastAttrStart = line.value.indexOf('.', lastAttrStart) + 1;
+            }
+            return {
+                type: 'error',
+                msg: `No such attribute`,
+                errRange: { colStart: lastAttrStart + 1, colEnd: lastAttrStart + args.attrNames[args.attrNames.length - 1].length },
+            };
+        }
+        return {
+            type: 'success',
+            output: attrEvalResult.body,
+        };
+    };
+    const doLoadVariables = async (evaluator) => {
+        const ret = [];
+        for (let i = 0; i < evaluator.fileMatches.assignments.length; ++i) {
+            const assign = evaluator.fileMatches.assignments[i];
+            const lineIdx = assign.lineIdx;
+            if (assign.srcVal.startsWith('$')) {
+                const col = assign.index + assign.full.length - assign.srcVal.length;
+                ret.push({
+                    type: 'error',
+                    assign,
+                    lineIdx,
+                    msg: `Cannot use variables on right-hand side of assignment`,
+                    errRange: { colStart: col, colEnd: col + assign.srcVal.length },
+                });
+                continue;
+            }
+            const srcMatch = evaluator.matchNodeAndAttrChain({ lineIdx, value: assign.srcVal }, true);
+            if (!srcMatch) {
+                const col = assign.index + assign.full.length - assign.srcVal.length;
+                ret.push({
+                    type: 'error',
+                    assign,
+                    lineIdx,
+                    msg: !!assign.srcVal ? `Invalid syntax` : `Missing src val`,
+                    errRange: { colStart: col, colEnd: col + assign.srcVal.length },
+                });
+                continue;
+            }
+            srcMatch.index = assign.index + assign.full.indexOf('=') + 1;
+            const actual = await evaluator.evaluateNodeAndAttr(srcMatch);
+            if (actual.type === 'success') {
+                if (evaluator.variables[assign.nodeType]) {
+                    ret.push({
+                        type: 'error',
+                        assign,
+                        lineIdx,
+                        msg: `Duplicate definition of ${assign.nodeType}`,
+                        errRange: { colStart: assign.index + 1, colEnd: assign.index + assign.full.length },
+                    });
+                    continue;
+                }
+                evaluator.variables[assign.nodeType] = actual.output;
+            }
+            ret.push({ ...actual, assign, lineIdx, });
+        }
+        return ret;
+    };
+    const createTextProbeEvaluator = (env, parsingSource) => {
+        let parsingData;
+        let fullFile;
+        if (!parsingSource) {
+            parsingData = env.createParsingRequestData();
+            fullFile = env.getLocalState();
+        }
+        else if (typeof parsingSource === 'string') {
+            parsingData = { ...env.createParsingRequestData(), src: { type: 'text', value: parsingSource } };
+            fullFile = parsingSource;
+        }
+        else {
+            parsingData = { ...env.createParsingRequestData(), src: parsingSource.src };
+            fullFile = parsingSource.contents;
+        }
+        const variables = {};
+        const fileMatches = matchFullFile(fullFile);
+        let variableLoadPromise = null;
+        const loadVariables = async () => {
+            if (!variableLoadPromise) {
+                variableLoadPromise = doLoadVariables(ret);
+            }
+            return variableLoadPromise;
+            // return doLoadVariables(ret);
+        };
+        const evaluateNodeAndAttr = async (match) => {
+            return doEvaluateNodeAndAttr(env, variables, fileMatches.lines, match, parsingData);
+        };
+        const listNodes = async (args) => {
+            return doListNodes(env, { ...args, parsingData });
+        };
+        const evaluatePropertyChain = async (args) => {
+            return doEvaluatePropertyChain(env, { ...args, parsingData });
+        };
+        const evaluateProperty = async (args) => {
+            return doEvaluateProperty(env, { ...args, parsingData });
+        };
+        const ret = {
+            variables,
+            loadVariables,
+            parsingData,
+            fileMatches,
+            matchNodeAndAttrChain,
+            evaluateNodeAndAttr,
+            listNodes,
+            evaluatePropertyChain,
+            evaluateProperty,
+        };
+        return ret;
+    };
+    exports.createTextProbeEvaluator = createTextProbeEvaluator;
+});
+define("model/TextProbeCompleteLogic", ["require", "exports", "settings", "ui/startEndToSpan", "model/TextProbeEvaluator", "model/TextProbeManager"], function (require, exports, settings_2, startEndToSpan_2, TextProbeEvaluator_1, TextProbeManager_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createTextProbeCompleteLogic = void 0;
+    settings_2 = __importDefault(settings_2);
+    startEndToSpan_2 = __importDefault(startEndToSpan_2);
+    const createTextProbeCompleteLogic = (args) => {
+        const { flasher } = args;
+        const complete = async (evaluator, line, column) => {
+            var _a;
+            const lines = evaluator.fileMatches.lines;
+            // Make line/col 0-indexed
+            --line;
+            --column;
+            if (line < 0 || line >= lines.length) {
+                return null;
+            }
+            const completeType = async (filter = 'allow-all', existingText = '') => {
+                const matchingNodes = [];
+                const setupPromises = [];
+                if (filter !== 'forbid-types') {
+                    setupPromises.push(evaluator.listNodes({
+                        attrFilter: '',
+                        predicate: `@lineSpan~=${line + 1}`,
+                        lineIdx: line,
+                    }).then(list => list === null || list === void 0 ? void 0 : list.forEach(node => matchingNodes.push(node.result))));
+                }
+                ;
+                if (filter !== 'forbid-variables') {
+                    setupPromises.push(evaluator.loadVariables().then(() => {
+                        Object.entries(evaluator.variables).forEach(([label, val]) => {
+                            var _a;
+                            if (((_a = val[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node') {
+                                matchingNodes.push({ ...val[0].value.result, label });
+                            }
+                        });
+                    }));
+                }
+                await Promise.all(setupPromises);
+                if (!matchingNodes.length) {
+                    return null;
+                }
+                const duplicateTypes = new Set();
+                const includedTypes = new Set();
+                matchingNodes.forEach(node => {
+                    var _a;
+                    const type = (_a = node.label) !== null && _a !== void 0 ? _a : node.type;
+                    if (includedTypes.has(type)) {
+                        duplicateTypes.add(type);
+                    }
+                    includedTypes.add(type);
+                });
+                let nodeListCounter = {};
+                let lastFlash = -1;
+                window.OnCompletionItemListClosed = () => {
+                    flasher.clear();
+                };
+                window.OnCompletionItemFocused = item => {
+                    if ((item === null || item === void 0 ? void 0 : item.nodeIndex) === 'undefined') {
+                        return;
+                    }
+                    const nodeIndex = item.nodeIndex;
+                    if (lastFlash === nodeIndex) {
+                        return;
+                    }
+                    lastFlash = nodeIndex;
+                    const node = matchingNodes[nodeIndex];
+                    if (!node) {
+                        return;
+                    }
+                    flasher.flash([(0, startEndToSpan_2.default)(node.start, node.end)]);
+                };
+                return {
+                    from: { line: line + 1, column: column + 1 - existingText.length },
+                    items: matchingNodes.map((node, nodeIndex) => {
+                        var _a, _b;
+                        const type = (_a = node.label) !== null && _a !== void 0 ? _a : node.type;
+                        const label = type.split('.').slice(-1)[0];
+                        let detail = undefined;
+                        if (type.startsWith('$')) {
+                            // It is a variable, add the type as detail
+                            detail = node.type.split('.').slice(-1)[0];
+                        }
+                        const ret = { label, insertText: label, kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0'), detail };
+                        if (!duplicateTypes.has(type)) {
+                            if (label.length > existingText.length && label.startsWith(existingText)) {
+                                ret.insertText = label.slice(existingText.length);
+                            }
+                            return ret;
+                        }
+                        let idx = ((_b = nodeListCounter[type]) !== null && _b !== void 0 ? _b : -1) + 1;
+                        nodeListCounter[type] = idx;
+                        const indexed = `${label}[${idx}]`;
+                        ret.label = indexed;
+                        ret.insertText = indexed;
+                        return ret;
+                    })
+                };
+            };
+            const completeProp = async (nodeType, nodeIndex, prerequisiteAttrs, previousStepSpan, existingText) => {
+                var _a, _b;
+                let locator = undefined;
+                if (nodeType.startsWith('$')) {
+                    await evaluator.loadVariables();
+                    const varData = evaluator.variables[nodeType];
+                    if (((_a = varData === null || varData === void 0 ? void 0 : varData[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node') {
+                        locator = varData[0].value;
+                    }
+                }
+                else {
+                    const matchingNodes = await evaluator.listNodes({
+                        attrFilter: '',
+                        predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
+                        lineIdx: line,
+                    });
+                    locator = matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes[nodeIndex !== null && nodeIndex !== void 0 ? nodeIndex : 0];
+                }
+                if (!locator) {
+                    return null;
+                }
+                if (prerequisiteAttrs.length != 0) {
+                    const chainResult = await evaluator.evaluatePropertyChain({ locator, propChain: prerequisiteAttrs });
+                    if (chainResult === 'stopped' || (0, TextProbeEvaluator_1.isBrokenNodeChain)(chainResult)) {
+                        return null;
+                    }
+                    if (((_b = chainResult.body[0]) === null || _b === void 0 ? void 0 : _b.type) !== 'node') {
+                        return null;
+                    }
+                    locator = chainResult.body[0].value;
+                }
+                flasher.flash([
+                    {
+                        lineStart: line + 1, colStart: previousStepSpan[0],
+                        lineEnd: line + 1, colEnd: previousStepSpan[1],
+                    },
+                    {
+                        lineStart: locator.result.start >>> 12, colStart: locator.result.start & 0xFFF,
+                        lineEnd: locator.result.end >>> 12, colEnd: locator.result.end & 0xFFF,
+                    }
+                ]);
+                window.OnCompletionItemListClosed = () => {
+                    flasher.clear();
+                };
+                const props = await args.env.performTypedRpc({
+                    locator,
+                    src: evaluator.parsingData,
+                    type: 'ListProperties',
+                    all: settings_2.default.shouldShowAllProperties(),
+                });
+                if (!props.properties) {
+                    return null;
+                }
+                const zeroArgPropNames = new Set(props.properties.filter(prop => { var _a, _b; return ((_b = (_a = prop.args) === null || _a === void 0 ? void 0 : _a.length) !== null && _b !== void 0 ? _b : 0) === 0; }).map(prop => prop.name));
+                return {
+                    from: { line: line + 1, column: column + 1 - existingText.length },
+                    items: [...zeroArgPropNames].sort().map(label => {
+                        return { label, insertText: label, kind: 2 };
+                    })
+                };
+            };
+            const completeExpectedValue = async (nodeType, nodeIndex, attrNames, existingText) => {
+                var _a, _b;
+                let locator = undefined;
+                if (nodeType.startsWith('$')) {
+                    await evaluator.loadVariables();
+                    const varData = evaluator.variables[nodeType];
+                    if (varData && !attrNames.length) {
+                        const cmp = (0, TextProbeManager_1.evalPropertyBodyToString)(varData);
+                        return {
+                            from: { line: line + 1, column: column + 1 },
+                            items: [{ label: cmp, insertText: cmp, kind: 15 }],
+                        };
+                    }
+                    if (((_a = varData === null || varData === void 0 ? void 0 : varData[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node') {
+                        locator = varData[0].value;
+                    }
+                }
+                else {
+                    const matchingNodes = await evaluator.listNodes({
+                        attrFilter: '',
+                        predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
+                        lineIdx: line,
+                    });
+                    locator = matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes[nodeIndex !== null && nodeIndex !== void 0 ? nodeIndex : 0];
+                }
+                if (!locator) {
+                    return null;
+                }
+                if (!attrNames.length) {
+                    const cmp = (0, TextProbeManager_1.evalPropertyBodyToString)([{ type: 'node', value: locator }]);
+                    return {
+                        from: { line: line + 1, column: column + 1 },
+                        items: [{ label: cmp, insertText: cmp, kind: 15 }],
+                    };
+                }
+                const attrEvalResult = await evaluator.evaluatePropertyChain({
+                    locator,
+                    propChain: attrNames,
+                });
+                if (attrEvalResult == 'stopped' || (0, TextProbeEvaluator_1.isBrokenNodeChain)(attrEvalResult)) {
+                    return null;
+                }
+                if (((_b = attrEvalResult.body[0]) === null || _b === void 0 ? void 0 : _b.type) === 'node') {
+                    const node = attrEvalResult.body[0].value.result;
+                    if (!node.external) {
+                        flasher.flash([(0, startEndToSpan_2.default)(node.start, node.end)]);
+                        window.OnCompletionItemListClosed = () => {
+                            flasher.clear();
+                        };
+                    }
+                }
+                const cmp = (0, TextProbeManager_1.evalPropertyBodyToString)(attrEvalResult.body);
+                return {
+                    from: { line: line + 1, column: column + 1 - existingText.length },
+                    items: [{ label: cmp, insertText: cmp, kind: 15 }],
+                };
+            };
+            const filtered = evaluator.fileMatches.matchesOnLine(line);
+            for (let i = 0; i < filtered.length; ++i) {
+                const lhsMatch = filtered[i];
+                if (lhsMatch.index > column) {
+                    // Cursor is before the match
+                    continue;
+                }
+                if (lhsMatch.index + lhsMatch.full.length < column) {
+                    // Cursor is after the match
+                    continue;
+                }
+                let typeStart = lhsMatch.index;
+                let typeEnd = 0;
+                const computeTypeEnd = (m) => {
+                    if (m.nodeIndex !== undefined) {
+                        return lines[line].value.indexOf(']', typeStart) + 1;
+                    }
+                    return typeStart + m.nodeType.length;
+                };
+                let attrSearchStart = typeEnd;
+                const maybeCompleteTypeOrAttr = async (m, typeFilter = 'allow-all') => {
+                    if (column >= typeStart && column <= typeEnd) {
+                        return completeType(typeFilter, lines[line].value.slice(typeStart, column));
+                    }
+                    attrSearchStart = typeEnd;
+                    for (let attrIdx = 0; attrIdx < m.attrNames.length; ++attrIdx) {
+                        const attr = m.attrNames[attrIdx];
+                        const attrStart = attr
+                            ? lines[line].value.indexOf(attr, attrSearchStart)
+                            : lines[line].value.indexOf('.', attrSearchStart) + 1;
+                        const attrEnd = attrStart + attr.length;
+                        attrSearchStart = attrEnd;
+                        if (column >= attrStart && column <= attrEnd) {
+                            return completeProp(m.nodeType, m.nodeIndex, m.attrNames.slice(0, attrIdx), [typeStart + 1, attrStart - 1], attr.slice(0, column - attrStart));
+                        }
+                    }
+                    return null;
+                };
+                if ((0, TextProbeEvaluator_1.isAssignmentMatch)(lhsMatch)) {
+                    const expectStart = lines[line].value.indexOf(':=', lhsMatch.index) + 2;
+                    const expectEnd = lhsMatch.index + lhsMatch.full.length;
+                    if (column >= expectStart && column <= expectEnd) {
+                        // Inside src value
+                        if (!lhsMatch.srcVal) {
+                            return completeType('forbid-variables');
+                        }
+                        const srcMatch = evaluator.matchNodeAndAttrChain({ lineIdx: lhsMatch.lineIdx, value: lhsMatch.srcVal });
+                        if (!srcMatch) {
+                            // Still working on the type
+                            if (/^\w*(\[\d+\])?$/.test(lhsMatch.srcVal)) {
+                                return completeType('forbid-variables');
+                            }
+                            return null;
+                        }
+                        typeStart = expectStart;
+                        typeEnd = computeTypeEnd(srcMatch);
+                        return maybeCompleteTypeOrAttr({
+                            ...srcMatch,
+                            index: expectStart + srcMatch.index,
+                        }, 'forbid-variables');
+                    }
+                    return null;
+                }
+                // Else, probe!
+                typeEnd = computeTypeEnd(lhsMatch.lhs);
+                const lhsComplete = await maybeCompleteTypeOrAttr(lhsMatch.lhs);
+                if (lhsComplete) {
+                    return lhsComplete;
+                }
+                if (!lhsMatch.rhs) {
+                    return null;
+                }
+                const currExpectVal = (_a = lhsMatch.rhs.expectVal) !== null && _a !== void 0 ? _a : '';
+                const expectStart = lines[line].value.indexOf('=', attrSearchStart) + 1;
+                const expectEnd = expectStart + currExpectVal.length;
+                if (column >= expectStart && column <= expectEnd) {
+                    if (column > expectStart && currExpectVal.startsWith('$')) {
+                        // Actually, we should treat this as a 'normal' query
+                        const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: line, value: currExpectVal });
+                        if (!rhsMatch) {
+                            if (/^\$\w*$/.test(currExpectVal)) {
+                                return completeType('forbid-types', lines[line].value.slice(expectStart, column));
+                            }
+                            return null;
+                        }
+                        rhsMatch.index += expectStart;
+                        typeStart = expectStart;
+                        typeEnd = computeTypeEnd(rhsMatch);
+                        return maybeCompleteTypeOrAttr(rhsMatch, 'forbid-types');
+                    }
+                    else {
+                        return completeExpectedValue(lhsMatch.lhs.nodeType, lhsMatch.lhs.nodeIndex, lhsMatch.lhs.attrNames, currExpectVal.slice(0, column - expectStart));
+                    }
+                }
+            }
+            const forgivingMatcher = /\[\[(\$?\w*)\]\]/g;
+            let match;
+            while ((match = forgivingMatcher.exec(lines[line].value)) !== null) {
+                const [full, nodeType] = match;
+                if (match.index >= column) {
+                    // Cursor is before the match
+                    continue;
+                }
+                if (match.index + full.length <= column) {
+                    // Cursor is before the match
+                    continue;
+                }
+                const typeStart = match.index + 2;
+                const typeEnd = Math.max(typeStart + nodeType.length, lines[line].value.indexOf('.', typeStart));
+                if (column >= typeStart && column <= typeEnd) {
+                    return completeType('allow-all', lines[line].value.slice(typeStart, column));
+                }
+            }
+            return null;
+        };
+        return { complete, };
+    };
+    exports.createTextProbeCompleteLogic = createTextProbeCompleteLogic;
+});
 define("model/UpdatableNodeLocator", ["require", "exports", "model/adjustLocator"], function (require, exports, adjustLocator_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -1787,11 +2731,11 @@ define("ui/trimTypeName", ["require", "exports"], function (require, exports) {
     };
     exports.default = trimTypeName;
 });
-define("ui/popup/formatAttr", ["require", "exports", "settings"], function (require, exports, settings_2) {
+define("ui/popup/formatAttr", ["require", "exports", "settings"], function (require, exports, settings_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.formatAttrArgStr = exports.formatAttrArgList = exports.formatAttrType = exports.formatAttrBaseName = void 0;
-    settings_2 = __importDefault(settings_2);
+    settings_3 = __importDefault(settings_3);
     const formatAttrType = (orig) => {
         switch (orig.type) {
             case 'nodeLocator': return orig.value.type;
@@ -1804,7 +2748,7 @@ define("ui/popup/formatAttr", ["require", "exports", "settings"], function (requ
     exports.formatAttrType = formatAttrType;
     const formatAttrBaseName = (name, allowShortening = true) => {
         let prefix = name.startsWith('l:') ? name.slice(2) : name;
-        if (allowShortening && settings_2.default.shouldAutoShortenPropertyNames()) {
+        if (allowShortening && settings_3.default.shouldAutoShortenPropertyNames()) {
             const reg = /^.*?([\w\d\$_]+)$/;
             const match = prefix.match(reg);
             if (match) {
@@ -1883,14 +2827,14 @@ define("ui/popup/formatAttr", ["require", "exports", "settings"], function (requ
     exports.formatAttrArgList = formatAttrArgList;
     exports.default = formatAttr;
 });
-define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/UpdatableNodeLocator", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/startEndToSpan", "ui/trimTypeName", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, hacks_2, UpdatableNodeLocator_1, createModalTitle_1, createTextSpanIndicator_1, registerNodeSelector_1, registerOnHover_1, startEndToSpan_2, trimTypeName_1, displayAttributeModal_1, displayProbeModal_1, formatAttr_1) {
+define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/UpdatableNodeLocator", "ui/create/createModalTitle", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/startEndToSpan", "ui/trimTypeName", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr"], function (require, exports, hacks_2, UpdatableNodeLocator_1, createModalTitle_1, createTextSpanIndicator_1, registerNodeSelector_1, registerOnHover_1, startEndToSpan_3, trimTypeName_1, displayAttributeModal_1, displayProbeModal_1, formatAttr_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createModalTitle_1 = __importDefault(createModalTitle_1);
     createTextSpanIndicator_1 = __importDefault(createTextSpanIndicator_1);
     registerNodeSelector_1 = __importDefault(registerNodeSelector_1);
     registerOnHover_1 = __importDefault(registerOnHover_1);
-    startEndToSpan_2 = __importDefault(startEndToSpan_2);
+    startEndToSpan_3 = __importDefault(startEndToSpan_3);
     trimTypeName_1 = __importDefault(trimTypeName_1);
     displayAttributeModal_1 = __importDefault(displayAttributeModal_1);
     displayProbeModal_1 = __importDefault(displayProbeModal_1);
@@ -2124,7 +3068,7 @@ define("ui/popup/displayArgModal", ["require", "exports", "hacks", "model/Updata
                                 nodeWrapper.addEventListener('click', () => {
                                     (0, displayAttributeModal_1.default)(env, null, (0, UpdatableNodeLocator_1.createMutableLocator)(pickedNode));
                                 });
-                                const span = (0, startEndToSpan_2.default)(pickedNode.result.start, pickedNode.result.end);
+                                const span = (0, startEndToSpan_3.default)(pickedNode.result.start, pickedNode.result.end);
                                 nodeWrapper.appendChild((0, createTextSpanIndicator_1.default)({
                                     span,
                                 }));
@@ -8722,7 +9666,7 @@ define("ui/popup/prepareEncodeRpcNodeContainer", ["require", "exports", "model/U
     };
     exports.default = prepareEncodeRpcNodeContainer;
 });
-define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNodeLocator", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal", "dependencies/graphviz/graphviz", "hacks", "ui/startEndToSpan", "ui/popup/prepareEncodeRpcNodeContainer"], function (require, exports, UpdatableNodeLocator_3, createTextSpanIndicator_2, registerNodeSelector_2, registerOnHover_3, trimTypeName_3, displayAttributeModal_3, graphviz_1, hacks_3, startEndToSpan_3, prepareEncodeRpcNodeContainer_1) {
+define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNodeLocator", "ui/create/createTextSpanIndicator", "ui/create/registerNodeSelector", "ui/create/registerOnHover", "ui/trimTypeName", "ui/popup/displayAttributeModal", "dependencies/graphviz/graphviz", "hacks", "ui/startEndToSpan", "ui/popup/prepareEncodeRpcNodeContainer"], function (require, exports, UpdatableNodeLocator_3, createTextSpanIndicator_2, registerNodeSelector_2, registerOnHover_3, trimTypeName_3, displayAttributeModal_3, graphviz_1, hacks_3, startEndToSpan_4, prepareEncodeRpcNodeContainer_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createTextSpanIndicator_2 = __importDefault(createTextSpanIndicator_2);
@@ -8730,7 +9674,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
     registerOnHover_3 = __importDefault(registerOnHover_3);
     trimTypeName_3 = __importDefault(trimTypeName_3);
     displayAttributeModal_3 = __importDefault(displayAttributeModal_3);
-    startEndToSpan_3 = __importDefault(startEndToSpan_3);
+    startEndToSpan_4 = __importDefault(startEndToSpan_4);
     prepareEncodeRpcNodeContainer_1 = __importDefault(prepareEncodeRpcNodeContainer_1);
     const getCommonStreamArgWhitespacePrefix = (line) => {
         if (Array.isArray(line)) {
@@ -8923,7 +9867,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                     const trimmed = msg.trim();
                     if (plainHoverSpan) {
                         const node = document.createElement('span');
-                        const span = (0, startEndToSpan_3.default)(plainHoverSpan.start, plainHoverSpan.end);
+                        const span = (0, startEndToSpan_4.default)(plainHoverSpan.start, plainHoverSpan.end);
                         node.classList.add('highlightOnHover');
                         (0, registerOnHover_3.default)(node, hovering => {
                             env.updateSpanHighlight(hovering ? span : null);
@@ -9063,7 +10007,7 @@ define("ui/popup/encodeRpcBodyLines", ["require", "exports", "model/UpdatableNod
                                 e.stopPropagation();
                                 e.stopImmediatePropagation();
                             };
-                            const span = (0, startEndToSpan_3.default)(tr.node.result.start, tr.node.result.end);
+                            const span = (0, startEndToSpan_4.default)(tr.node.result.start, tr.node.result.end);
                             (0, registerOnHover_3.default)(summaryPartNode, isHovering => {
                                 env.updateSpanHighlight(isHovering ? span : null);
                             });
@@ -9314,10 +10258,10 @@ define("model/cullingTaskSubmitterFactory", ["require", "exports"], function (re
     };
     exports.default = createCullingTaskSubmitterFactory;
 });
-define("ui/create/createStickyHighlightController", ["require", "exports", "ui/startEndToSpan"], function (require, exports, startEndToSpan_4) {
+define("ui/create/createStickyHighlightController", ["require", "exports", "ui/startEndToSpan"], function (require, exports, startEndToSpan_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    startEndToSpan_4 = __importDefault(startEndToSpan_4);
+    startEndToSpan_5 = __importDefault(startEndToSpan_5);
     const createStickyHighlightController = (env, initialColorClass = '') => {
         const stickyId = `sticky-highlight-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         let activeStickyColorClass = initialColorClass;
@@ -9335,7 +10279,7 @@ define("ui/create/createStickyHighlightController", ["require", "exports", "ui/s
                     `monaco-rag-highlight-sticky`,
                     activeStickyColorClass,
                 ],
-                span: (0, startEndToSpan_4.default)(currentLocator.get().result.start, currentLocator.get().result.end),
+                span: (0, startEndToSpan_5.default)(currentLocator.get().result.start, currentLocator.get().result.end),
             });
             currentTarget.classList.add(`monaco-rag-highlight-sticky`);
             currentTarget.classList.add(activeStickyColorClass);
@@ -9622,19 +10566,19 @@ define("ui/getThemedColor", ["require", "exports"], function (require, exports) 
     };
     exports.default = getThemedColor;
 });
-define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator", "ui/popup/formatAttr", "ui/create/layoutTree", "ui/getThemedColor"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_3, displayAttributeModal_4, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, startEndToSpan_5, UpdatableNodeLocator_4, formatAttr_2, layoutTree_1, getThemedColor_1) {
+define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/create/createTextSpanIndicator", "model/cullingTaskSubmitterFactory", "ui/create/createStickyHighlightController", "ui/startEndToSpan", "model/UpdatableNodeLocator", "ui/popup/formatAttr", "ui/create/layoutTree", "ui/getThemedColor"], function (require, exports, createLoadingSpinner_1, createModalTitle_2, displayHelp_1, encodeRpcBodyLines_1, attachDragToX_4, displayAttributeModal_4, createTextSpanIndicator_3, cullingTaskSubmitterFactory_1, createStickyHighlightController_1, startEndToSpan_6, UpdatableNodeLocator_4, formatAttr_2, layoutTree_1, getThemedColor_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_1 = __importDefault(createLoadingSpinner_1);
     createModalTitle_2 = __importDefault(createModalTitle_2);
     displayHelp_1 = __importDefault(displayHelp_1);
     encodeRpcBodyLines_1 = __importDefault(encodeRpcBodyLines_1);
-    attachDragToX_3 = __importDefault(attachDragToX_3);
+    attachDragToX_4 = __importDefault(attachDragToX_4);
     displayAttributeModal_4 = __importDefault(displayAttributeModal_4);
     createTextSpanIndicator_3 = __importDefault(createTextSpanIndicator_3);
     cullingTaskSubmitterFactory_1 = __importDefault(cullingTaskSubmitterFactory_1);
     createStickyHighlightController_1 = __importDefault(createStickyHighlightController_1);
-    startEndToSpan_5 = __importDefault(startEndToSpan_5);
+    startEndToSpan_6 = __importDefault(startEndToSpan_6);
     layoutTree_1 = __importDefault(layoutTree_1);
     getThemedColor_1 = __importDefault(getThemedColor_1);
     const nodew = 256 + 128;
@@ -9745,9 +10689,9 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                             headType.innerText = `AST`;
                             container.appendChild(headType);
                             const spanIndicator = (0, createTextSpanIndicator_3.default)({
-                                span: (0, startEndToSpan_5.default)(locator.get().result.start, locator.get().result.end),
+                                span: (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end),
                                 marginLeft: true,
-                                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_5.default)(locator.get().result.start, locator.get().result.end) : null),
+                                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end) : null),
                                 onClick: stickyController.onClick,
                             });
                             stickyController.configure(spanIndicator, locator);
@@ -9922,7 +10866,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
                     const dragInfo = { x: trn.x, y: trn.y }; // , sx: 1, sy: 1 };
                     let hoverClick = 'no';
                     let holdingShift = false;
-                    (0, attachDragToX_3.default)(cv, (e) => {
+                    (0, attachDragToX_4.default)(cv, (e) => {
                         bringToFront();
                         dragInfo.x = trn.x;
                         dragInfo.y = trn.y;
@@ -10457,7 +11401,7 @@ define("ui/popup/displayAstModal", ["require", "exports", "ui/create/createLoadi
     };
     exports.default = displayAstModal;
 });
-define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan", "ui/create/installLazyHoverDialog"], function (require, exports, createLoadingSpinner_2, createModalTitle_3, displayProbeModal_2, displayArgModal_1, formatAttr_3, createTextSpanIndicator_4, displayHelp_2, settings_3, encodeRpcBodyLines_2, trimTypeName_4, displayAstModal_1, startEndToSpan_6, installLazyHoverDialog_2) {
+define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/popup/displayProbeModal", "ui/popup/displayArgModal", "ui/popup/formatAttr", "ui/create/createTextSpanIndicator", "ui/popup/displayHelp", "settings", "ui/popup/encodeRpcBodyLines", "ui/trimTypeName", "ui/popup/displayAstModal", "ui/startEndToSpan", "ui/create/installLazyHoverDialog"], function (require, exports, createLoadingSpinner_2, createModalTitle_3, displayProbeModal_2, displayArgModal_1, formatAttr_3, createTextSpanIndicator_4, displayHelp_2, settings_4, encodeRpcBodyLines_2, trimTypeName_4, displayAstModal_1, startEndToSpan_7, installLazyHoverDialog_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     createLoadingSpinner_2 = __importDefault(createLoadingSpinner_2);
@@ -10466,11 +11410,11 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     displayArgModal_1 = __importDefault(displayArgModal_1);
     createTextSpanIndicator_4 = __importDefault(createTextSpanIndicator_4);
     displayHelp_2 = __importDefault(displayHelp_2);
-    settings_3 = __importDefault(settings_3);
+    settings_4 = __importDefault(settings_4);
     encodeRpcBodyLines_2 = __importDefault(encodeRpcBodyLines_2);
     trimTypeName_4 = __importDefault(trimTypeName_4);
     displayAstModal_1 = __importDefault(displayAstModal_1);
-    startEndToSpan_6 = __importDefault(startEndToSpan_6);
+    startEndToSpan_7 = __importDefault(startEndToSpan_7);
     const displayAttributeModal = (env, modalPos, locator, optionalArgs = {}) => {
         var _a;
         const queryId = `attr-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -10508,9 +11452,9 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                         headAttr.innerText = `.?`;
                         container.appendChild(headAttr);
                         container.appendChild((0, createTextSpanIndicator_4.default)({
-                            span: (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end),
+                            span: (0, startEndToSpan_7.default)(locator.get().result.start, locator.get().result.end),
                             marginLeft: true,
-                            onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_6.default)(locator.get().result.start, locator.get().result.end) : null),
+                            onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_7.default)(locator.get().result.start, locator.get().result.end) : null),
                         }));
                     },
                     onClose: () => {
@@ -10587,7 +11531,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                         }
                         return `${prefix}${suffix}`;
                     };
-                    const groupByAspect = settings_3.default.shouldGroupPropertiesByAspect();
+                    const groupByAspect = settings_4.default.shouldGroupPropertiesByAspect();
                     if (groupByAspect && attrs) {
                         attrs = [...attrs].sort((a, b) => {
                             if (!!a.astChildName != !!b.astChildName) {
@@ -10845,7 +11789,7 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
                 locator: locator.get(),
                 src: env.createParsingRequestData(),
                 type: 'ListProperties',
-                all: settings_3.default.shouldShowAllProperties(),
+                all: settings_4.default.shouldShowAllProperties(),
             })
                 .then((result) => {
                 var _a;
@@ -10885,616 +11829,261 @@ define("ui/popup/displayAttributeModal", ["require", "exports", "ui/create/creat
     };
     exports.default = displayAttributeModal;
 });
-define("network/evaluateProperty", ["require", "exports"], function (require, exports) {
+define("model/TextProbeHoverLogic", ["require", "exports", "settings", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/startEndToSpan", "model/TextProbeEvaluator", "model/UpdatableNodeLocator"], function (require, exports, settings_5, attachDragToX_5, displayAttributeModal_5, displayProbeModal_3, startEndToSpan_8, TextProbeEvaluator_2, UpdatableNodeLocator_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    const evaluateProperty = (env, req, onSlowResponseDetected, onStatusUpdate, cleanupSlownessInformation) => {
-        let cancelled = false;
-        let activelyLoadingJob = null;
-        const doStopJob = (jobId) => env.performTypedRpc({
-            type: 'Concurrent:StopJob',
-            job: jobId,
-        }).then(res => {
-            if (res.err) {
-                console.warn('Error when stopping job:', res.err);
-                return false;
-            }
-            return true;
-        });
-        let stopper = () => { };
-        return {
-            cancel: () => {
-                cancelled = true;
-                if (activelyLoadingJob !== null) {
-                    doStopJob(activelyLoadingJob);
-                    activelyLoadingJob = null;
-                }
-                stopper();
-            },
-            fetch: () => new Promise((resolve, reject) => {
-                var _a;
-                stopper = () => resolve('stopped');
-                let isDone = false;
-                let isConnectedToConcurrentCapableServer = false;
-                let knownStatus = 'Unknown';
-                let knownStackTrace = null;
-                let localConcurrentCleanup = () => { };
-                const initialPollDelayTimer = setTimeout(() => {
-                    if (isDone || cancelled || !isConnectedToConcurrentCapableServer) {
-                        return;
-                    }
-                    onSlowResponseDetected === null || onSlowResponseDetected === void 0 ? void 0 : onSlowResponseDetected();
-                    localConcurrentCleanup = () => { cleanupSlownessInformation === null || cleanupSlownessInformation === void 0 ? void 0 : cleanupSlownessInformation(); };
-                    const poll = () => {
-                        if (isDone || cancelled) {
-                            return;
-                        }
-                        env.performTypedRpc({
-                            type: 'Concurrent:PollWorkerStatus',
-                            job: jobId,
-                        })
-                            .then(res => {
-                            if (res.ok) {
-                                // Polled OK, async update will be delivered to job monitor below
-                                // Queue future poll.
-                                setTimeout(poll, 1000);
-                            }
-                            else {
-                                console.warn('Error when polling for job status');
-                                // Don't queue more polling, very unlikely to work anyway.
-                            }
-                        });
-                    };
-                    poll();
-                }, 5000);
-                const jobId = env.createJobId(update => {
-                    switch (update.value.type) {
-                        case 'status': {
-                            knownStatus = update.value.value;
-                            onStatusUpdate === null || onStatusUpdate === void 0 ? void 0 : onStatusUpdate(knownStatus, knownStackTrace);
-                            break;
-                        }
-                        case 'workerStackTrace': {
-                            knownStackTrace = update.value.value;
-                            onStatusUpdate === null || onStatusUpdate === void 0 ? void 0 : onStatusUpdate(knownStatus, knownStackTrace);
-                            break;
-                        }
-                        case 'workerTaskDone': {
-                            const wtd = update.value.value;
-                            switch (wtd.type) {
-                                case 'normal': {
-                                    isDone = true;
-                                    activelyLoadingJob = null;
-                                    localConcurrentCleanup();
-                                    const cast = wtd.value;
-                                    if (cast.response.type == 'job') {
-                                        throw new Error(`Unexpected 'job' result in async update`);
-                                    }
-                                    resolve(cast.response.value);
-                                    break;
-                                }
-                            }
-                            break;
-                        }
-                    }
-                });
-                env.performTypedRpc({
-                    ...req,
-                    job: jobId,
-                    jobLabel: `Probe: '${`${(_a = req.locator.result.label) !== null && _a !== void 0 ? _a : req.locator.result.type}`.split('.').slice(-1)[0]}.${req.property.name}'`,
-                })
-                    .then((data) => {
-                    if (data.response.type === 'job') {
-                        // Async work queued, not done.
-                        if (cancelled) {
-                            // We were removed while this request was sent
-                            // Stop it asap
-                            doStopJob(jobId);
-                            clearTimeout(initialPollDelayTimer);
-                        }
-                        else {
-                            activelyLoadingJob = jobId;
-                        }
-                        isConnectedToConcurrentCapableServer = true;
-                    }
-                    else {
-                        // Sync work executed, done.
-                        clearTimeout(initialPollDelayTimer);
-                        isDone = true;
-                        resolve(data.response.value);
-                    }
-                });
-            }),
-        };
-    };
-    exports.default = evaluateProperty;
-});
-define("model/TextProbeEvaluator", ["require", "exports", "network/evaluateProperty"], function (require, exports, evaluateProperty_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.isBrokenNodeChain = exports.isAssignmentMatch = exports.createTextProbeEvaluator = void 0;
-    evaluateProperty_1 = __importDefault(evaluateProperty_1);
-    const createGeneralTextMatcher = () => {
-        const reg = /\[\[(?:(((?!\[\[).)*))\]\](?!\])/g;
-        const exec = (line) => {
-            const match = reg.exec(line);
-            if (!match) {
-                return null;
-            }
-            const [full, contents] = match;
-            if (!contents.match(/^(\$|\w)/)) {
-                // Starting with space or somethign similar, ignore it
-                return exec(line);
-            }
-            return {
-                index: match.index,
-                full,
-                contents,
-            };
-        };
-        return { exec };
-    };
-    const isAssignmentMatch = (match) => typeof match.srcVal !== 'undefined';
-    exports.isAssignmentMatch = isAssignmentMatch;
-    const matchFullFile = (fullFile) => {
-        const lines = fullFile.split('\n').map((value, lineIdx) => ({ lineIdx, value }));
-        let ret = {
-            lines,
-            assignments: [],
-            probes: [],
-            matchesOnLine: (lineIdx) => [
-                ...ret.assignments.filter(x => x.lineIdx === lineIdx),
-                ...ret.probes.filter(x => x.lineIdx === lineIdx),
-            ]
-        };
-        for (let lineIdx = 0; lineIdx < lines.length; ++lineIdx) {
-            const line = lines[lineIdx];
-            const matcher = createGeneralTextMatcher();
-            let match;
-            while ((match = matcher.exec(line.value)) != null) {
-                const contents = match.contents;
-                const assign = matchAssignment(contents);
-                if (assign) {
-                    ret.assignments.push({ ...assign, lineIdx, index: assign.index + match.index + 2 /* 2 for "[[" */ });
-                }
-                else {
-                    const probe = matchTypedProbeRegex({ lineIdx, value: contents });
-                    if (probe) {
-                        ret.probes.push({ ...probe, lineIdx, index: probe.index + match.index + 2 /* 2 for "[[" */ });
-                    }
-                }
-            }
-        }
-        return ret;
-    };
-    const matchNodeAndAttrChain = (line, strict = false) => {
-        const reg = strict
-            ? /^(\$?\w+)(\[\d+\])?((?:\.(?:l:)?\w*)*$)/g
-            : /(\$?\w+)(\[\d+\])?((?:\.(?:l:)?\w*)*)/g;
-        const match = reg.exec(line.value);
-        if (!match) {
-            return null;
-        }
-        // if (strict && match.index > 0) {
-        //   return null;
-        // }
-        const [full, nodeType, nodeIndex, attrNames] = match;
-        return {
-            full,
-            lineIdx: line.lineIdx,
-            index: match.index,
-            nodeType,
-            nodeIndex: nodeIndex ? +nodeIndex.slice(1, -1) : undefined,
-            attrNames: attrNames ? attrNames.slice(1).split('.') : [],
-        };
-    };
-    const matchTypedProbeRegex = (line) => {
-        const nodeMatch = matchNodeAndAttrChain(line);
-        if (!nodeMatch) {
-            return null;
-        }
-        const expectMatch = nodeMatch.full.length === line.value.length
-            ? null
-            : /(!?)(~?)(?:=((.)*))?/g.exec(line.value.slice(nodeMatch.full.length));
-        if (!expectMatch) {
-            return {
-                index: nodeMatch.index,
-                full: nodeMatch.full,
-                lhs: nodeMatch,
-            };
-        }
-        const [expectFull, exclamation, tilde, expectVal] = expectMatch;
-        return {
-            index: nodeMatch.index,
-            full: line.value.slice(nodeMatch.index, nodeMatch.index + nodeMatch.full.length + expectFull.length),
-            lhs: nodeMatch,
-            rhs: {
-                exclamation: !!exclamation,
-                tilde: !!tilde,
-                expectVal: typeof expectVal === 'string' ? expectVal : undefined,
-            }
-        };
-    };
-    const matchAssignment = (line) => {
-        const reg = /(\$\w+):=(.*)/g;
-        const match = reg.exec(line);
-        if (!match) {
-            return null;
-        }
-        const [full, nodeType, srcVal] = match;
-        return {
-            index: match.index,
-            full,
-            nodeType,
-            srcVal,
-        };
-    };
-    const doEvaluateProperty = async (env, evalArgs) => {
-        var _a;
-        const rpcQueryStart = performance.now();
-        const res = await (0, evaluateProperty_1.default)(env, {
-            captureStdout: false,
-            locator: evalArgs.locator,
-            property: { name: evalArgs.prop, args: evalArgs.args },
-            src: (_a = evalArgs.parsingData) !== null && _a !== void 0 ? _a : env.createParsingRequestData(),
-            type: 'EvaluateProperty',
-            skipResultLocator: true,
-            flattenForTextProbes: true,
-        }).fetch();
-        if (res !== 'stopped') {
-            if (typeof res.totalTime === 'number'
-                && typeof res.parseTime === 'number'
-                && typeof res.createLocatorTime === 'number'
-                && typeof res.applyLocatorTime === 'number'
-                && typeof res.attrEvalTime === 'number') {
-                env.statisticsCollector.addProbeEvaluationTime({
-                    attrEvalMs: res.attrEvalTime / 1000000,
-                    fullRpcMs: Math.max(performance.now() - rpcQueryStart),
-                    serverApplyLocatorMs: res.applyLocatorTime / 1000000,
-                    serverCreateLocatorMs: res.createLocatorTime / 1000000,
-                    serverParseOnlyMs: res.parseTime / 1000000,
-                    serverSideMs: res.totalTime / 1000000,
-                });
-            }
-        }
-        return res;
-    };
-    const isBrokenNodeChain = (val) => val && (typeof val === 'object') && val.type === 'broken-node-chain';
-    exports.isBrokenNodeChain = isBrokenNodeChain;
-    const doEvaluatePropertyChain = async (env, evalArgs) => {
-        var _a;
-        const first = await doEvaluateProperty(env, { locator: evalArgs.locator, prop: evalArgs.propChain[0], parsingData: evalArgs.parsingData, });
-        if (first === 'stopped') {
-            return 'stopped';
-        }
-        let prevResult = first;
-        for (let subsequentIdx = 1; subsequentIdx < evalArgs.propChain.length; ++subsequentIdx) {
-            // Previous result must be a node locator
-            if (((_a = prevResult.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
-                return { type: 'broken-node-chain', brokenIndex: subsequentIdx - 1 };
-            }
-            const chainedLocator = prevResult.body[0].value;
-            const nextRes = await doEvaluateProperty(env, { locator: chainedLocator, prop: evalArgs.propChain[subsequentIdx], parsingData: evalArgs.parsingData });
-            if (nextRes === 'stopped') {
-                return 'stopped';
-            }
-            prevResult = nextRes;
-        }
-        return prevResult;
-    };
-    const doListNodes = async (env, listArgs) => {
-        const rootNode = { type: '<ROOT>', start: ((listArgs.lineIdx + 1) << 12) + 1, end: ((listArgs.lineIdx + 1) << 12) + 4095, depth: 0 };
-        const propResult = await doEvaluateProperty(env, {
-            locator: { result: rootNode, steps: [] },
-            prop: 'm:NodesWithProperty',
-            args: [
-                { type: 'string', value: listArgs.attrFilter },
-                { type: 'string', value: listArgs.predicate }
-            ],
-            parsingData: listArgs.parsingData,
-        });
-        if (propResult === 'stopped') {
-            return null;
-        }
-        if (!propResult.body.length || propResult.body[0].type !== 'arr') {
-            console.error('Unexpected respose from search query:', propResult);
-            return null;
-        }
-        const queryResultList = propResult.body[0].value;
-        const ret = [];
-        queryResultList.forEach(line => {
-            if (line.type === 'node') {
-                ret.push(line.value);
-            }
-        });
-        return ret;
-    };
-    const doEvaluateNodeAndAttr = async (env, variables, lines, args, preqData) => {
-        var _a;
-        let matchingNodes = null;
-        if (args.nodeType.startsWith('$')) {
-            const lines = variables[args.nodeType];
-            if (lines) {
-                matchingNodes = [];
-                if (!args.attrNames.length) {
-                    return { type: 'success', output: lines };
-                }
-                lines.forEach(row => {
-                    if (row.type === 'node') {
-                        matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes.push(row.value);
-                    }
-                });
-            }
-        }
-        else {
-            matchingNodes = await doListNodes(env, {
-                attrFilter: (_a = args.attrNames[0]) !== null && _a !== void 0 ? _a : '',
-                predicate: `this<:${args.nodeType}&@lineSpan~=${args.lineIdx + 1}`,
-                lineIdx: args.lineIdx,
-                parsingData: preqData,
-            });
-        }
-        // let errMsg: string | null = null;
-        const line = lines[args.lineIdx];
-        if (!(matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes.length)) {
-            const typeStart = line.value.indexOf(args.nodeType, args.index);
-            // const firstAttrEnd = line.indexOf(match.attrNames[0], line.indexOf('.', typeStart)) + match.attrNames[0].length;
-            let firstAttrEnd;
-            if (args.attrNames.length) {
-                firstAttrEnd = line.value.indexOf(args.attrNames[0], line.value.indexOf('.', typeStart)) + args.attrNames[0].length;
-            }
-            else {
-                firstAttrEnd = typeStart + args.nodeType.length;
-            }
-            return {
-                type: 'error',
-                msg: (args.nodeType.startsWith('$') && !variables[args.nodeType]) ? `No such variable` : `No matching nodes`,
-                errRange: { colStart: typeStart + 1, colEnd: firstAttrEnd },
-            };
-        }
-        let matchedNode = null;
-        if (args.nodeIndex !== undefined) {
-            if (args.nodeIndex < 0 || args.nodeIndex >= matchingNodes.length) {
-                const typeEnd = line.value.indexOf(args.nodeType, args.index) + args.nodeType.length;
-                const idxStart = line.value.indexOf(`${args.nodeIndex}`, typeEnd);
-                return {
-                    type: 'error',
-                    msg: `Invalid index`,
-                    errRange: { colStart: idxStart + 1, colEnd: idxStart + `${args.nodeIndex}`.length },
-                };
-            }
-            matchedNode = matchingNodes[args.nodeIndex];
-        }
-        else {
-            if (matchingNodes.length === 1) {
-                // Only one node, no need for an index
-                matchedNode = matchingNodes[0];
-            }
-            else {
-                const typeStart = line.value.indexOf(args.nodeType, args.index);
-                // addErr(lineIdx, typeStart + 1, line.value.indexOf('.', typeStart), `Ambiguous, add "[idx]" to select which "${args.nodeType}" to match. 0 ≤ idx < ${matchingNodes.length}`);
-                // return { anyFailure: true, errMsg };
-                return {
-                    type: 'error',
-                    msg: `${matchingNodes.length} nodes of type "${args.nodeType}". Add [idx] to disambiguate, e.g. "${args.nodeType}[0]"`,
-                    errRange: { colStart: typeStart + 1, colEnd: line.value.indexOf('.', typeStart) },
-                };
-            }
-        }
-        if (!args.attrNames.length) {
-            return {
-                type: 'success',
-                output: [{ type: 'node', value: matchedNode }]
-            };
-        }
-        const attrEvalResult = await doEvaluatePropertyChain(env, {
-            locator: matchedNode,
-            propChain: args.attrNames,
-            parsingData: preqData,
-        });
-        if (attrEvalResult == 'stopped') {
-            // return { anyFailure: false, errMsg };
-            return {
-                type: 'error',
-                msg: `Evaluation stopped`,
-                errRange: { colStart: args.index, colEnd: args.index + args.full.length },
-            };
-        }
-        if (isBrokenNodeChain(attrEvalResult)) {
-            let attrStart = line.value.indexOf('.', args.index) + 1;
-            for (let i = 0; i < attrEvalResult.brokenIndex; ++i) {
-                attrStart = line.value.indexOf('.', attrStart) + 1;
-            }
-            return {
-                type: 'error',
-                msg: `No AST node returned by "${args.attrNames[attrEvalResult.brokenIndex]}"`, // `Invalid attribute chain`,
-                errRange: { colStart: attrStart + 1, colEnd: attrStart + args.attrNames[attrEvalResult.brokenIndex].length },
-            };
-        }
-        if (attrEvalResult.body.length === 1 && attrEvalResult.body[0].type === 'plain' && attrEvalResult.body[0].value.startsWith(`No such attribute '${args.attrNames[args.attrNames.length - 1]}' on `)) {
-            let lastAttrStart = args.index;
-            for (let i = 0; i < args.attrNames.length; ++i) {
-                lastAttrStart = line.value.indexOf('.', lastAttrStart) + 1;
-            }
-            return {
-                type: 'error',
-                msg: `No such attribute`,
-                errRange: { colStart: lastAttrStart + 1, colEnd: lastAttrStart + args.attrNames[args.attrNames.length - 1].length },
-            };
-        }
-        return {
-            type: 'success',
-            output: attrEvalResult.body,
-        };
-    };
-    const doLoadVariables = async (evaluator) => {
-        const ret = [];
-        for (let i = 0; i < evaluator.fileMatches.assignments.length; ++i) {
-            const assign = evaluator.fileMatches.assignments[i];
-            const lineIdx = assign.lineIdx;
-            if (assign.srcVal.startsWith('$')) {
-                const col = assign.index + assign.full.length - assign.srcVal.length;
-                ret.push({
-                    type: 'error',
-                    assign,
-                    lineIdx,
-                    msg: `Cannot use variables on right-hand side of assignment`,
-                    errRange: { colStart: col, colEnd: col + assign.srcVal.length },
-                });
-                continue;
-            }
-            const srcMatch = evaluator.matchNodeAndAttrChain({ lineIdx, value: assign.srcVal }, true);
-            if (!srcMatch) {
-                const col = assign.index + assign.full.length - assign.srcVal.length;
-                ret.push({
-                    type: 'error',
-                    assign,
-                    lineIdx,
-                    msg: !!assign.srcVal ? `Invalid syntax` : `Missing src val`,
-                    errRange: { colStart: col, colEnd: col + assign.srcVal.length },
-                });
-                continue;
-            }
-            srcMatch.index = assign.index + assign.full.indexOf('=') + 1;
-            const actual = await evaluator.evaluateNodeAndAttr(srcMatch);
-            if (actual.type === 'success') {
-                if (evaluator.variables[assign.nodeType]) {
-                    ret.push({
-                        type: 'error',
-                        assign,
-                        lineIdx,
-                        msg: `Duplicate definition of ${assign.nodeType}`,
-                        errRange: { colStart: assign.index + 1, colEnd: assign.index + assign.full.length },
-                    });
-                    continue;
-                }
-                evaluator.variables[assign.nodeType] = actual.output;
-            }
-            ret.push({ ...actual, assign, lineIdx, });
-        }
-        return ret;
-    };
-    const createTextProbeEvaluator = (env, parsingSource) => {
-        let parsingData;
-        let fullFile;
-        if (!parsingSource) {
-            parsingData = env.createParsingRequestData();
-            fullFile = env.getLocalState();
-        }
-        else if (typeof parsingSource === 'string') {
-            parsingData = { ...env.createParsingRequestData(), src: { type: 'text', value: parsingSource } };
-            fullFile = parsingSource;
-        }
-        else {
-            parsingData = { ...env.createParsingRequestData(), src: parsingSource.src };
-            fullFile = parsingSource.contents;
-        }
-        const variables = {};
-        const fileMatches = matchFullFile(fullFile);
-        let variableLoadPromise = null;
-        const loadVariables = async () => {
-            if (!variableLoadPromise) {
-                variableLoadPromise = doLoadVariables(ret);
-            }
-            return variableLoadPromise;
-            // return doLoadVariables(ret);
-        };
-        const evaluateNodeAndAttr = async (match) => {
-            return doEvaluateNodeAndAttr(env, variables, fileMatches.lines, match, parsingData);
-        };
-        const listNodes = async (args) => {
-            return doListNodes(env, { ...args, parsingData });
-        };
-        const evaluatePropertyChain = async (args) => {
-            return doEvaluatePropertyChain(env, { ...args, parsingData });
-        };
-        const evaluateProperty = async (args) => {
-            return doEvaluateProperty(env, { ...args, parsingData });
-        };
-        const ret = {
-            variables,
-            loadVariables,
-            parsingData,
-            fileMatches,
-            matchNodeAndAttrChain,
-            evaluateNodeAndAttr,
-            listNodes,
-            evaluatePropertyChain,
-            evaluateProperty,
-        };
-        return ret;
-    };
-    exports.createTextProbeEvaluator = createTextProbeEvaluator;
-});
-define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui/create/attachDragToX", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/startEndToSpan", "model/TextProbeEvaluator", "model/UpdatableNodeLocator"], function (require, exports, hacks_4, settings_4, attachDragToX_4, displayAttributeModal_5, displayProbeModal_3, startEndToSpan_7, TextProbeEvaluator_1, UpdatableNodeLocator_5) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.setupTextProbeManager = void 0;
-    settings_4 = __importDefault(settings_4);
+    exports.createProbeHoverLogic = void 0;
+    settings_5 = __importDefault(settings_5);
     displayAttributeModal_5 = __importDefault(displayAttributeModal_5);
     displayProbeModal_3 = __importDefault(displayProbeModal_3);
-    startEndToSpan_7 = __importDefault(startEndToSpan_7);
-    ;
-    const createSpanFlasher = (env) => {
-        let activeFlashCleanup = () => { };
-        let activeFlashSpan = null;
-        const activeSpanReferenceHoverPos = { ...attachDragToX_4.lastKnownMousePos };
-        const flash = (spans, removeHighlightsOnMove) => {
-            // Remove invalid spans
-            spans = spans.filter(x => x.lineStart && x.lineEnd);
-            const act = activeFlashSpan;
-            if (act && JSON.stringify(act) === JSON.stringify(spans) /* bit hacky comparison, but it works */) {
-                // Already flashing this, update the hover pos reference and exit
-                Object.assign(activeSpanReferenceHoverPos, attachDragToX_4.lastKnownMousePos);
-                return;
+    startEndToSpan_8 = __importDefault(startEndToSpan_8);
+    const createProbeHoverLogic = (args) => {
+        const { flasher } = args;
+        const resolveNode = async (evaluator, match) => {
+            var _a, _b, _c, _d;
+            if (match.nodeType.startsWith('$')) {
+                await evaluator.loadVariables();
+                const varVal = evaluator.variables[match.nodeType];
+                return ((_a = varVal === null || varVal === void 0 ? void 0 : varVal[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node' ? varVal[0].value : null;
             }
-            activeFlashSpan = spans;
-            const flashes = spans.map(span => ({
-                id: `flash-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`,
-                sticky: { span, classNames: [span.lineStart === span.lineEnd ? 'elp-flash' : 'elp-flash-multiline'] }
-            }));
-            flashes.forEach(flash => env.setStickyHighlight(flash.id, flash.sticky));
-            let numCleanups = 0;
-            let mouseMoveListener = null;
-            const cleanup = () => {
-                ++numCleanups;
-                flashes.forEach(flash => env.clearStickyHighlight(flash.id));
-                activeFlashSpan = null;
-                if (mouseMoveListener) {
-                    window.removeEventListener('mousemove', mouseMoveListener);
+            const listedNodes = await evaluator.listNodes({ attrFilter: (_b = match.attrNames[0]) !== null && _b !== void 0 ? _b : '', predicate: `this<:${match.nodeType}&@lineSpan~=${match.lineIdx + 1}`, lineIdx: match.lineIdx });
+            return (_d = listedNodes === null || listedNodes === void 0 ? void 0 : listedNodes[(_c = match.nodeIndex) !== null && _c !== void 0 ? _c : 0]) !== null && _d !== void 0 ? _d : null;
+        };
+        const doHover = async (evaluator, line, column) => {
+            var _a, _b, _c;
+            if (settings_5.default.getTextProbeStyle() === 'disabled') {
+                return null;
+            }
+            const lines = evaluator.fileMatches.lines;
+            // Make line/col 0-indexed
+            --line;
+            --column;
+            if (line < 0 || line >= lines.length) {
+                return null;
+            }
+            const filtered = evaluator.fileMatches.matchesOnLine(line);
+            for (let i = 0; i < filtered.length; ++i) {
+                const match = filtered[i];
+                const begin = match.index;
+                if (column < begin) {
+                    continue;
                 }
-            };
-            Object.assign(activeSpanReferenceHoverPos, attachDragToX_4.lastKnownMousePos);
-            if (removeHighlightsOnMove) {
-                mouseMoveListener = (e) => {
-                    const dx = e.x - activeSpanReferenceHoverPos.x;
-                    const dy = e.y - activeSpanReferenceHoverPos.y;
-                    if (Math.hypot(dx, dy) > 24 /* arbitrary distance */) {
-                        cleanup();
+                const end = begin + match.full.length;
+                if (column >= end) {
+                    continue;
+                }
+                const flashNode = (node, colStart, colEnd) => {
+                    const flashes = [];
+                    if (!node.external) {
+                        flashes.push((0, startEndToSpan_8.default)(node.start, node.end));
                     }
+                    flashes.push({
+                        lineStart: line + 1, colStart,
+                        lineEnd: line + 1, colEnd,
+                    });
+                    flasher.flash(flashes, true);
                 };
-                window.addEventListener('mousemove', mouseMoveListener);
+                const evaluateAndFlashChain = async (locator, propChain, flashStart, flashEnd) => {
+                    const res = await evaluator.evaluatePropertyChain({ locator, propChain, });
+                    if (res === 'stopped' || (0, TextProbeEvaluator_2.isBrokenNodeChain)(res) || res.body[0].type !== 'node') {
+                        return;
+                    }
+                    const node = res.body[0].value.result;
+                    flashNode(node, flashStart, flashEnd);
+                };
+                const maybeHoverAttrChain = async (locator, match, searchStart) => {
+                    let didHoverSomething = false;
+                    for (let propIdx = 0; propIdx < match.attrNames.length; ++propIdx) {
+                        const propStart = lines[line].value.indexOf('.', searchStart) + 1;
+                        const propEnd = propStart + match.attrNames[propIdx].length;
+                        searchStart = propEnd;
+                        if (column >= propStart && column < propEnd) {
+                            didHoverSomething = true;
+                            await evaluateAndFlashChain(locator, match.attrNames.slice(0, propIdx + 1), propStart + 1, propEnd);
+                            return { newSearchStart: searchStart, didHoverSomething };
+                        }
+                    }
+                    return { newSearchStart: searchStart, didHoverSomething: false };
+                };
+                const maybeHoverNodeTypeOrAttrChain = async (locator, match, searchStart) => {
+                    const typeEnd = searchStart + match.nodeType.length;
+                    if (column < typeEnd) {
+                        flashNode(locator.result, searchStart + 1, typeEnd);
+                        return { newSearchStart: searchStart, didHoverSomething: true };
+                    }
+                    const hoverRes = await maybeHoverAttrChain(locator, match, searchStart);
+                    if (hoverRes.didHoverSomething) {
+                        return { newSearchStart: searchStart, didHoverSomething: true };
+                    }
+                    return hoverRes;
+                };
+                const returnHoverInfo = (locator, match, rhsExpectVal) => {
+                    window.CPR_CMD_OPEN_TEXTPROBE_CALLBACK = async () => {
+                        var _a;
+                        if (!match.attrNames.length) {
+                            (0, displayAttributeModal_5.default)(args.env, null, (0, UpdatableNodeLocator_5.createMutableLocator)(locator));
+                            return;
+                        }
+                        const displayForNode = async (locator, m, offset) => {
+                            var _a;
+                            const nestedWindows = {};
+                            let nestTarget = nestedWindows;
+                            let nestLocator = locator;
+                            for (let chainAttrIdx = 0; chainAttrIdx < m.attrNames.length; ++chainAttrIdx) {
+                                const chainAttr = m.attrNames[chainAttrIdx];
+                                const res = await evaluator.evaluateProperty({ locator: nestLocator, prop: chainAttr });
+                                if (res === 'stopped' || (0, TextProbeEvaluator_2.isBrokenNodeChain)(res)) {
+                                    break;
+                                }
+                                if (chainAttrIdx > 0) {
+                                    let newNest = {};
+                                    nestTarget['[0]'] = [
+                                        { data: { type: 'probe', locator, property: { name: chainAttr }, nested: newNest } },
+                                    ];
+                                    nestTarget = newNest;
+                                }
+                                if (((_a = res.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
+                                    break;
+                                }
+                                nestLocator = res.body[0].value;
+                            }
+                            (0, displayProbeModal_3.default)(args.env, { x: attachDragToX_5.lastKnownMousePos.x + offset.x, y: attachDragToX_5.lastKnownMousePos.y + offset.y }, (0, UpdatableNodeLocator_5.createMutableLocator)(locator), { name: m.attrNames[0] }, nestedWindows);
+                        };
+                        await displayForNode(locator, match, { x: 0, y: 0 });
+                        if (rhsExpectVal) {
+                            // Maybe open for right side as well
+                            const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: match.lineIdx, value: rhsExpectVal });
+                            if ((_a = rhsMatch === null || rhsMatch === void 0 ? void 0 : rhsMatch.attrNames) === null || _a === void 0 ? void 0 : _a.length) {
+                                const rhsLocator = await resolveNode(evaluator, rhsMatch);
+                                if (rhsLocator) {
+                                    await displayForNode(rhsLocator, rhsMatch, { x: 64, y: 4 });
+                                }
+                            }
+                        }
+                    };
+                    return {
+                        range: { startLineNumber: line + 1, startColumn: column + 1, endLineNumber: line + 1, endColumn: column + 3 },
+                        contents: [{
+                                value: `[${match.attrNames.length ? `Open Normal Probe` : `Create Normal Probe`}](command:${window.CPR_CMD_OPEN_TEXTPROBE_ID})`, isTrusted: true
+                            }],
+                    };
+                };
+                if ((0, TextProbeEvaluator_2.isAssignmentMatch)(match)) {
+                    const typeStart = match.index;
+                    const typeEnd = match.index + match.nodeType.length;
+                    if (column >= typeStart && column < typeEnd) {
+                        // Hovering the left side of an assignment.
+                        // We should resolve the right side, and flash that
+                        const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: match.lineIdx, value: match.srcVal });
+                        if (rhsMatch) {
+                            const res = await resolveNode(evaluator, rhsMatch);
+                            if (res) {
+                                if (rhsMatch.attrNames.length) {
+                                    await evaluateAndFlashChain(res, rhsMatch.attrNames, typeStart + 1, typeEnd);
+                                }
+                                else {
+                                    flashNode(res.result, typeStart + 1, typeEnd);
+                                }
+                                return returnHoverInfo(res, rhsMatch, undefined);
+                            }
+                        }
+                        return null;
+                    }
+                    // Not left side, maybe hovering right side?
+                    const rhsStart = match.index + match.full.indexOf('=') + 1;
+                    const rhsEnd = rhsStart + match.srcVal.length;
+                    if (column < rhsStart || column >= rhsEnd) {
+                        return null;
+                    }
+                    // Hovering right side of assignment
+                    const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: match.lineIdx, value: match.srcVal });
+                    if (!rhsMatch) {
+                        return null;
+                    }
+                    const node = await resolveNode(evaluator, rhsMatch);
+                    if (!node) {
+                        return null;
+                    }
+                    if (!rhsMatch.attrNames.length) {
+                        // Right side is just a type ref, like "[[$x:=Y]]"
+                        // Flash the Y
+                        flashNode(node.result, rhsStart + 1, rhsEnd);
+                        return returnHoverInfo(node, rhsMatch, undefined);
+                    }
+                    else {
+                        const hoverRes = await maybeHoverNodeTypeOrAttrChain(node, rhsMatch, rhsStart);
+                        if (hoverRes.didHoverSomething) {
+                            return returnHoverInfo(node, rhsMatch, undefined);
+                        }
+                    }
+                    return null;
+                }
+                // Else, Probe
+                const locator = await resolveNode(evaluator, match.lhs);
+                if (!locator) {
+                    console.log('no locator');
+                    return null;
+                }
+                const typeStart = match.index;
+                let typeEnd;
+                if (match.lhs.attrNames.length) {
+                    typeEnd = lines[line].value.indexOf('.', typeStart);
+                }
+                else {
+                    typeEnd = typeStart + match.lhs.full.length;
+                }
+                if (column >= typeStart && column < typeEnd) {
+                    const retFlash = [];
+                    if (!locator.result.external) {
+                        retFlash.push((0, startEndToSpan_8.default)(locator.result.start, locator.result.end));
+                    }
+                    retFlash.push({
+                        // Type in text probe
+                        lineStart: line + 1, colStart: typeStart + 1,
+                        lineEnd: line + 1, colEnd: typeEnd,
+                    });
+                    flasher.flash(retFlash, true);
+                }
+                else {
+                    let searchStart = typeEnd;
+                    const lhsHoverRes = await maybeHoverAttrChain(locator, match.lhs, searchStart);
+                    searchStart = lhsHoverRes.newSearchStart;
+                    if (!lhsHoverRes.didHoverSomething && ((_b = (_a = match.rhs) === null || _a === void 0 ? void 0 : _a.expectVal) === null || _b === void 0 ? void 0 : _b.startsWith('$'))) {
+                        const resultStart = lines[line].value.indexOf('=', searchStart) + 1;
+                        const resultEnd = resultStart + match.rhs.expectVal.length;
+                        if (column >= resultStart && column < resultEnd) {
+                            const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: match.lineIdx, value: match.rhs.expectVal });
+                            if (rhsMatch) {
+                                const rhsLocator = await resolveNode(evaluator, rhsMatch);
+                                if (rhsLocator) {
+                                    await maybeHoverNodeTypeOrAttrChain(rhsLocator, rhsMatch, resultStart);
+                                }
+                            }
+                        }
+                    }
+                }
+                return returnHoverInfo(locator, match.lhs, (_c = match.rhs) === null || _c === void 0 ? void 0 : _c.expectVal);
             }
-            activeFlashCleanup();
-            activeFlashCleanup = cleanup;
+            return null;
         };
-        const quickFlash = (spans) => {
-            flash(spans);
-            const cleaner = activeFlashCleanup;
-            setTimeout(() => {
-                if (activeFlashCleanup === cleaner) {
-                    activeFlashCleanup();
-                }
-                {
-                    // Else, we have been replaced by another highlight
-                }
-            }, 500);
+        const hover = async (evaluator, line, column) => {
+            const res = await doHover(evaluator, line, column);
+            if (res === null) {
+                console.log('no hover data, clearing flash');
+                flasher.clear();
+            }
+            return res;
         };
-        const clear = () => {
-            activeFlashCleanup();
-        };
-        return { flash, clear, quickFlash };
+        return { hover, };
     };
+    exports.createProbeHoverLogic = createProbeHoverLogic;
+});
+define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "model/SpanFlasher", "model/TextProbeCompleteLogic", "model/TextProbeEvaluator", "model/TextProbeHoverLogic"], function (require, exports, hacks_4, settings_6, SpanFlasher_1, TextProbeCompleteLogic_1, TextProbeEvaluator_3, TextProbeHoverLogic_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.evalPropertyBodyToString = exports.setupTextProbeManager = void 0;
+    settings_6 = __importDefault(settings_6);
+    ;
     const setupTextProbeManager = (args) => {
         const refreshDispatcher = args.env.createCullingTaskSubmitter();
         const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -11506,7 +12095,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
         const doRefresh = async () => {
             var _a;
             const hadDiagnosticsBefore = diagnostics.length;
-            if (settings_4.default.getTextProbeStyle() === 'disabled') {
+            if (settings_6.default.getTextProbeStyle() === 'disabled') {
                 for (let i = 0; i < activeStickies.length; ++i) {
                     args.env.clearStickyHighlight(activeStickies[i]);
                 }
@@ -11540,7 +12129,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
             };
             const combinedResults = { numPass: 0, numFail: 0 };
             try {
-                const evaluator = (0, TextProbeEvaluator_1.createTextProbeEvaluator)(args.env);
+                const evaluator = (0, TextProbeEvaluator_3.createTextProbeEvaluator)(args.env);
                 function addSquiggly(lineIdx, colStart, colEnd, msg) {
                     newDiagnostics.push({ type: 'ERROR', start: ((lineIdx + 1) << 12) + colStart, end: ((lineIdx + 1) << 12) + colEnd, msg, source: 'Text Probe' });
                 }
@@ -11669,523 +12258,30 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
         const refresh = () => refreshDispatcher.submit(doRefresh);
         args.env.onChangeListeners[queryId] = refresh;
         refresh();
-        const flasher = createSpanFlasher(args.env);
-        const resolveNode = async (evaluator, match) => {
-            var _a, _b, _c, _d;
-            if (match.nodeType.startsWith('$')) {
-                await evaluator.loadVariables();
-                const varVal = evaluator.variables[match.nodeType];
-                return ((_a = varVal === null || varVal === void 0 ? void 0 : varVal[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node' ? varVal[0].value : null;
-            }
-            const listedNodes = await evaluator.listNodes({ attrFilter: (_b = match.attrNames[0]) !== null && _b !== void 0 ? _b : '', predicate: `this<:${match.nodeType}&@lineSpan~=${match.lineIdx + 1}`, lineIdx: match.lineIdx });
-            return (_d = listedNodes === null || listedNodes === void 0 ? void 0 : listedNodes[(_c = match.nodeIndex) !== null && _c !== void 0 ? _c : 0]) !== null && _d !== void 0 ? _d : null;
-        };
+        const flasher = (0, SpanFlasher_1.createSpanFlasher)(args.env);
+        const hoverLogic = (0, TextProbeHoverLogic_1.createProbeHoverLogic)({ env: args.env, flasher, });
         const hover = async (line, column) => {
-            const res = await doHover(line, column);
-            if (res === null) {
-                flasher.clear();
-            }
-            return res;
-        };
-        const doHover = async (line, column) => {
-            var _a;
-            if (settings_4.default.getTextProbeStyle() === 'disabled') {
+            if (settings_6.default.getTextProbeStyle() === 'disabled') {
                 return null;
             }
-            const evaluator = (0, TextProbeEvaluator_1.createTextProbeEvaluator)(args.env);
-            // const evaluator.fileMatches = matchFullFile(args.env.getLocalState());
-            const lines = evaluator.fileMatches.lines;
-            // const lines = args.env.getLocalState().split('\n');
-            // Make line/col 0-indexed
-            --line;
-            --column;
-            if (line < 0 || line >= lines.length) {
-                return null;
-            }
-            const filtered = evaluator.fileMatches.matchesOnLine(line);
-            for (let i = 0; i < filtered.length; ++i) {
-                const match = filtered[i];
-                const begin = match.index;
-                if (column < begin) {
-                    continue;
-                }
-                const end = begin + match.full.length;
-                if (column >= end) {
-                    continue;
-                }
-                if ((0, TextProbeEvaluator_1.isAssignmentMatch)(match)) {
-                    // TODO
-                }
-                else {
-                    // Probe
-                    const locator = await resolveNode(evaluator, match.lhs);
-                    if (!locator) {
-                        return null;
-                    }
-                    const typeStart = match.index;
-                    let typeEnd;
-                    if (match.lhs.attrNames.length) {
-                        typeEnd = lines[line].value.indexOf('.', typeStart);
-                    }
-                    else {
-                        typeEnd = typeStart + match.full.length;
-                    }
-                    if (column >= typeStart && column < typeEnd) {
-                        const retFlash = [];
-                        if (!locator.result.external) {
-                            retFlash.push((0, startEndToSpan_7.default)(locator.result.start, locator.result.end));
-                        }
-                        retFlash.push({
-                            // Type in text probe
-                            lineStart: line + 1, colStart: typeStart + 1,
-                            lineEnd: line + 1, colEnd: typeEnd,
-                        });
-                        flasher.flash(retFlash, true);
-                    }
-                    else {
-                        let searchStart = typeEnd;
-                        let hoveringProp = false;
-                        for (let propIdx = 0; propIdx < match.lhs.attrNames.length; ++propIdx) {
-                            const propStart = lines[line].value.indexOf('.', searchStart) + 1;
-                            const propEnd = propStart + match.lhs.attrNames[propIdx].length;
-                            searchStart = propEnd;
-                            if (column >= propStart && column < propEnd) {
-                                hoveringProp = true;
-                                evaluator.evaluatePropertyChain({ locator, propChain: match.lhs.attrNames.slice(0, propIdx + 1) })
-                                    // 'then', not 'await'. Do not want to block the hover info from appearing
-                                    .then(res => {
-                                    if (res === 'stopped' || (0, TextProbeEvaluator_1.isBrokenNodeChain)(res) || res.body[0].type !== 'node') {
-                                        return;
-                                    }
-                                    const node = res.body[0].value.result;
-                                    flasher.flash([
-                                        {
-                                            lineStart: line + 1, colStart: propStart + 1,
-                                            lineEnd: line + 1, colEnd: propEnd,
-                                        },
-                                        (0, startEndToSpan_7.default)(node.start, node.end)
-                                    ], true);
-                                });
-                                break;
-                            }
-                        }
-                        if (!hoveringProp && ((_a = match.rhs) === null || _a === void 0 ? void 0 : _a.expectVal)) {
-                            const resultStart = lines[line].value.indexOf('=', searchStart) + 1;
-                            const resultEnd = resultStart + match.rhs.expectVal.length;
-                            if (column >= resultStart && column < resultEnd) {
-                                evaluator.evaluatePropertyChain({ locator, propChain: match.lhs.attrNames })
-                                    .then(res => {
-                                    if (res === 'stopped' || (0, TextProbeEvaluator_1.isBrokenNodeChain)(res)) {
-                                        return;
-                                    }
-                                    if (res.body[0].type === 'node') {
-                                        const node = res.body[0].value.result;
-                                        const spans = [{
-                                                lineStart: line + 1, colStart: resultStart + 1,
-                                                lineEnd: line + 1, colEnd: resultEnd,
-                                            }];
-                                        if (!node.external) {
-                                            spans.push((0, startEndToSpan_7.default)(node.start, node.end));
-                                        }
-                                        flasher.flash(spans, true);
-                                    }
-                                });
-                            }
-                        }
-                    }
-                    window.CPR_CMD_OPEN_TEXTPROBE_CALLBACK = async () => {
-                        var _a, _b;
-                        if (!match.lhs.attrNames.length) {
-                            (0, displayAttributeModal_5.default)(args.env, null, (0, UpdatableNodeLocator_5.createMutableLocator)(locator));
-                            return;
-                        }
-                        const displayForNode = async (locator, m, offset) => {
-                            var _a;
-                            const nestedWindows = {};
-                            let nestTarget = nestedWindows;
-                            let nestLocator = locator;
-                            for (let chainAttrIdx = 0; chainAttrIdx < m.attrNames.length; ++chainAttrIdx) {
-                                const chainAttr = m.attrNames[chainAttrIdx];
-                                const res = await evaluator.evaluateProperty({ locator: nestLocator, prop: chainAttr });
-                                if (res === 'stopped' || (0, TextProbeEvaluator_1.isBrokenNodeChain)(res)) {
-                                    break;
-                                }
-                                if (chainAttrIdx > 0) {
-                                    let newNest = {};
-                                    nestTarget['[0]'] = [
-                                        { data: { type: 'probe', locator, property: { name: chainAttr }, nested: newNest } },
-                                    ];
-                                    nestTarget = newNest;
-                                }
-                                if (((_a = res.body[0]) === null || _a === void 0 ? void 0 : _a.type) !== 'node') {
-                                    break;
-                                }
-                                nestLocator = res.body[0].value;
-                            }
-                            (0, displayProbeModal_3.default)(args.env, { x: attachDragToX_4.lastKnownMousePos.x + offset.x, y: attachDragToX_4.lastKnownMousePos.y + offset.y }, (0, UpdatableNodeLocator_5.createMutableLocator)(locator), { name: m.attrNames[0] }, nestedWindows);
-                        };
-                        await displayForNode(locator, match.lhs, { x: 0, y: 0 });
-                        if ((_a = match.rhs) === null || _a === void 0 ? void 0 : _a.expectVal) {
-                            // Maybe open for right side as well
-                            const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: match.lineIdx, value: match.rhs.expectVal });
-                            if ((_b = rhsMatch === null || rhsMatch === void 0 ? void 0 : rhsMatch.attrNames) === null || _b === void 0 ? void 0 : _b.length) {
-                                const rhsLocator = await resolveNode(evaluator, rhsMatch);
-                                if (rhsLocator) {
-                                    await displayForNode(rhsLocator, rhsMatch, { x: 64, y: 4 });
-                                }
-                            }
-                        }
-                    };
-                    return {
-                        range: { startLineNumber: line + 1, startColumn: column + 1, endLineNumber: line + 1, endColumn: column + 3 },
-                        contents: [{
-                                value: `[${match.lhs.attrNames.length ? `Open Normal Probe` : `Create Normal Probe`}](command:${window.CPR_CMD_OPEN_TEXTPROBE_ID})`, isTrusted: true
-                            }],
-                    };
-                }
-            }
-            return null;
+            return hoverLogic.hover((0, TextProbeEvaluator_3.createTextProbeEvaluator)(args.env), line, column);
         };
+        const completeLogic = (0, TextProbeCompleteLogic_1.createTextProbeCompleteLogic)({ env: args.env, flasher, });
         const complete = async (line, column) => {
-            var _a;
-            if (settings_4.default.getTextProbeStyle() === 'disabled') {
+            if (settings_6.default.getTextProbeStyle() === 'disabled') {
                 return null;
             }
-            const evaluator = (0, TextProbeEvaluator_1.createTextProbeEvaluator)(args.env);
-            const lines = evaluator.fileMatches.lines;
-            // Make line/col 0-indexed
-            --line;
-            --column;
-            if (line < 0 || line >= lines.length) {
-                return null;
-            }
-            const completeType = async (filter = 'allow-all', existingText = '') => {
-                const matchingNodes = [];
-                const setupPromises = [];
-                if (filter !== 'forbid-types') {
-                    setupPromises.push(evaluator.listNodes({
-                        attrFilter: '',
-                        predicate: `@lineSpan~=${line + 1}`,
-                        lineIdx: line,
-                    }).then(list => list === null || list === void 0 ? void 0 : list.forEach(node => matchingNodes.push(node.result))));
-                }
-                ;
-                if (filter !== 'forbid-variables') {
-                    setupPromises.push(evaluator.loadVariables().then(() => {
-                        Object.entries(evaluator.variables).forEach(([label, val]) => {
-                            var _a;
-                            if (((_a = val[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node') {
-                                matchingNodes.push({ ...val[0].value.result, label });
-                            }
-                        });
-                    }));
-                }
-                await Promise.all(setupPromises);
-                if (!matchingNodes.length) {
-                    return null;
-                }
-                const duplicateTypes = new Set();
-                const includedTypes = new Set();
-                matchingNodes.forEach(node => {
-                    var _a;
-                    const type = (_a = node.label) !== null && _a !== void 0 ? _a : node.type;
-                    if (includedTypes.has(type)) {
-                        duplicateTypes.add(type);
-                    }
-                    includedTypes.add(type);
-                });
-                let nodeListCounter = {};
-                let lastFlash = -1;
-                window.OnCompletionItemListClosed = () => {
-                    flasher.clear();
-                };
-                window.OnCompletionItemFocused = item => {
-                    if ((item === null || item === void 0 ? void 0 : item.nodeIndex) === 'undefined') {
-                        return;
-                    }
-                    const nodeIndex = item.nodeIndex;
-                    if (lastFlash === nodeIndex) {
-                        return;
-                    }
-                    lastFlash = nodeIndex;
-                    const node = matchingNodes[nodeIndex];
-                    if (!node) {
-                        return;
-                    }
-                    flasher.flash([(0, startEndToSpan_7.default)(node.start, node.end)]);
-                };
-                return {
-                    from: { line: line + 1, column: column + 1 - existingText.length },
-                    items: matchingNodes.map((node, nodeIndex) => {
-                        var _a, _b;
-                        const type = (_a = node.label) !== null && _a !== void 0 ? _a : node.type;
-                        const label = type.split('.').slice(-1)[0];
-                        let detail = undefined;
-                        if (type.startsWith('$')) {
-                            // It is a variable, add the type as detail
-                            detail = node.type.split('.').slice(-1)[0];
-                        }
-                        const ret = { label, insertText: label, kind: 7, nodeIndex, sortText: `${matchingNodes.length - nodeIndex}`.padStart(4, '0'), detail };
-                        if (!duplicateTypes.has(type)) {
-                            if (label.length > existingText.length && label.startsWith(existingText)) {
-                                ret.insertText = label.slice(existingText.length);
-                            }
-                            return ret;
-                        }
-                        let idx = ((_b = nodeListCounter[type]) !== null && _b !== void 0 ? _b : -1) + 1;
-                        nodeListCounter[type] = idx;
-                        const indexed = `${label}[${idx}]`;
-                        ret.label = indexed;
-                        ret.insertText = indexed;
-                        return ret;
-                    })
-                };
-            };
-            const completeProp = async (nodeType, nodeIndex, prerequisiteAttrs, previousStepSpan, existingText) => {
-                var _a, _b;
-                let locator = undefined;
-                if (nodeType.startsWith('$')) {
-                    await evaluator.loadVariables();
-                    const varData = evaluator.variables[nodeType];
-                    if (((_a = varData === null || varData === void 0 ? void 0 : varData[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node') {
-                        locator = varData[0].value;
-                    }
-                }
-                else {
-                    const matchingNodes = await evaluator.listNodes({
-                        attrFilter: '',
-                        predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
-                        lineIdx: line,
-                    });
-                    locator = matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes[nodeIndex !== null && nodeIndex !== void 0 ? nodeIndex : 0];
-                }
-                if (!locator) {
-                    return null;
-                }
-                if (prerequisiteAttrs.length != 0) {
-                    const chainResult = await evaluator.evaluatePropertyChain({ locator, propChain: prerequisiteAttrs });
-                    if (chainResult === 'stopped' || (0, TextProbeEvaluator_1.isBrokenNodeChain)(chainResult)) {
-                        return null;
-                    }
-                    if (((_b = chainResult.body[0]) === null || _b === void 0 ? void 0 : _b.type) !== 'node') {
-                        return null;
-                    }
-                    locator = chainResult.body[0].value;
-                }
-                flasher.flash([
-                    {
-                        lineStart: line + 1, colStart: previousStepSpan[0],
-                        lineEnd: line + 1, colEnd: previousStepSpan[1],
-                    },
-                    {
-                        lineStart: locator.result.start >>> 12, colStart: locator.result.start & 0xFFF,
-                        lineEnd: locator.result.end >>> 12, colEnd: locator.result.end & 0xFFF,
-                    }
-                ]);
-                window.OnCompletionItemListClosed = () => {
-                    flasher.clear();
-                };
-                const props = await args.env.performTypedRpc({
-                    locator,
-                    src: evaluator.parsingData,
-                    type: 'ListProperties',
-                    all: settings_4.default.shouldShowAllProperties(),
-                });
-                if (!props.properties) {
-                    return null;
-                }
-                const zeroArgPropNames = new Set(props.properties.filter(prop => { var _a, _b; return ((_b = (_a = prop.args) === null || _a === void 0 ? void 0 : _a.length) !== null && _b !== void 0 ? _b : 0) === 0; }).map(prop => prop.name));
-                return {
-                    from: { line: line + 1, column: column + 1 - existingText.length },
-                    items: [...zeroArgPropNames].sort().map(label => {
-                        return { label, insertText: label, kind: 2 };
-                    })
-                };
-            };
-            const completeExpectedValue = async (nodeType, nodeIndex, attrNames, existingText) => {
-                var _a, _b;
-                let locator = undefined;
-                if (nodeType.startsWith('$')) {
-                    await evaluator.loadVariables();
-                    const varData = evaluator.variables[nodeType];
-                    if (varData && !attrNames.length) {
-                        const cmp = evalPropertyBodyToString(varData);
-                        return {
-                            from: { line: line + 1, column: column + 1 },
-                            items: [{ label: cmp, insertText: cmp, kind: 15 }],
-                        };
-                    }
-                    if (((_a = varData === null || varData === void 0 ? void 0 : varData[0]) === null || _a === void 0 ? void 0 : _a.type) === 'node') {
-                        locator = varData[0].value;
-                    }
-                }
-                else {
-                    const matchingNodes = await evaluator.listNodes({
-                        attrFilter: '',
-                        predicate: `this<:${nodeType}&@lineSpan~=${line + 1}`,
-                        lineIdx: line,
-                    });
-                    locator = matchingNodes === null || matchingNodes === void 0 ? void 0 : matchingNodes[nodeIndex !== null && nodeIndex !== void 0 ? nodeIndex : 0];
-                }
-                if (!locator) {
-                    return null;
-                }
-                if (!attrNames.length) {
-                    const cmp = evalPropertyBodyToString([{ type: 'node', value: locator }]);
-                    return {
-                        from: { line: line + 1, column: column + 1 },
-                        items: [{ label: cmp, insertText: cmp, kind: 15 }],
-                    };
-                }
-                const attrEvalResult = await evaluator.evaluatePropertyChain({
-                    locator,
-                    propChain: attrNames,
-                });
-                if (attrEvalResult == 'stopped' || (0, TextProbeEvaluator_1.isBrokenNodeChain)(attrEvalResult)) {
-                    return null;
-                }
-                if (((_b = attrEvalResult.body[0]) === null || _b === void 0 ? void 0 : _b.type) === 'node') {
-                    const node = attrEvalResult.body[0].value.result;
-                    if (!node.external) {
-                        flasher.flash([(0, startEndToSpan_7.default)(node.start, node.end)]);
-                        window.OnCompletionItemListClosed = () => {
-                            flasher.clear();
-                        };
-                    }
-                }
-                const cmp = evalPropertyBodyToString(attrEvalResult.body);
-                return {
-                    from: { line: line + 1, column: column + 1 - existingText.length },
-                    items: [{ label: cmp, insertText: cmp, kind: 15 }],
-                };
-            };
-            const filtered = evaluator.fileMatches.matchesOnLine(line);
-            for (let i = 0; i < filtered.length; ++i) {
-                const lhsMatch = filtered[i];
-                if (lhsMatch.index > column) {
-                    // Cursor is before the match
-                    continue;
-                }
-                if (lhsMatch.index + lhsMatch.full.length < column) {
-                    // Cursor is after the match
-                    continue;
-                }
-                let typeStart = lhsMatch.index;
-                let typeEnd = 0;
-                const computeTypeEnd = (m) => {
-                    if (m.nodeIndex !== undefined) {
-                        return lines[line].value.indexOf(']', typeStart) + 1;
-                    }
-                    return typeStart + m.nodeType.length;
-                };
-                let attrSearchStart = typeEnd;
-                const maybeCompleteTypeOrAttr = async (m, typeFilter = 'allow-all') => {
-                    if (column >= typeStart && column <= typeEnd) {
-                        return completeType(typeFilter, lines[line].value.slice(typeStart, column));
-                    }
-                    attrSearchStart = typeEnd;
-                    for (let attrIdx = 0; attrIdx < m.attrNames.length; ++attrIdx) {
-                        const attr = m.attrNames[attrIdx];
-                        const attrStart = attr
-                            ? lines[line].value.indexOf(attr, attrSearchStart)
-                            : lines[line].value.indexOf('.', attrSearchStart) + 1;
-                        const attrEnd = attrStart + attr.length;
-                        attrSearchStart = attrEnd;
-                        if (column >= attrStart && column <= attrEnd) {
-                            return completeProp(m.nodeType, m.nodeIndex, m.attrNames.slice(0, attrIdx), [typeStart + 1, attrStart - 1], attr.slice(0, column - attrStart));
-                        }
-                    }
-                    return null;
-                };
-                if ((0, TextProbeEvaluator_1.isAssignmentMatch)(lhsMatch)) {
-                    const expectStart = lines[line].value.indexOf(':=', lhsMatch.index) + 2;
-                    const expectEnd = lhsMatch.index + lhsMatch.full.length;
-                    if (column >= expectStart && column <= expectEnd) {
-                        // Inside src value
-                        if (!lhsMatch.srcVal) {
-                            return completeType('forbid-variables');
-                        }
-                        const srcMatch = evaluator.matchNodeAndAttrChain({ lineIdx: lhsMatch.lineIdx, value: lhsMatch.srcVal });
-                        if (!srcMatch) {
-                            // Still working on the type
-                            if (/^\w*(\[\d+\])?$/.test(lhsMatch.srcVal)) {
-                                return completeType('forbid-variables');
-                            }
-                            return null;
-                        }
-                        typeStart = expectStart;
-                        typeEnd = computeTypeEnd(srcMatch);
-                        return maybeCompleteTypeOrAttr({
-                            ...srcMatch,
-                            index: expectStart + srcMatch.index,
-                        }, 'forbid-variables');
-                    }
-                    return null;
-                }
-                // Else, probe!
-                typeEnd = computeTypeEnd(lhsMatch.lhs); // lines[line].value.indexOf('.', typeStart);
-                const lhsComplete = await maybeCompleteTypeOrAttr(lhsMatch.lhs);
-                if (lhsComplete) {
-                    return lhsComplete;
-                }
-                if (!lhsMatch.rhs) {
-                    return null;
-                }
-                // if (!lhsMatch.rhs.expectVal) {
-                //   return null;
-                // }
-                const currExpectVal = (_a = lhsMatch.rhs.expectVal) !== null && _a !== void 0 ? _a : '';
-                const expectStart = lines[line].value.indexOf('=', attrSearchStart) + 1;
-                const expectEnd = expectStart + currExpectVal.length;
-                if (column >= expectStart && column <= expectEnd) {
-                    if (column > expectStart && currExpectVal.startsWith('$')) {
-                        // Actually, we should treat this as a 'normal' query
-                        const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: line, value: currExpectVal });
-                        if (!rhsMatch) {
-                            if (/^\$\w*$/.test(currExpectVal)) {
-                                return completeType('forbid-types', lines[line].value.slice(expectStart, column));
-                            }
-                            return null;
-                        }
-                        rhsMatch.index += expectStart;
-                        typeStart = expectStart;
-                        typeEnd = computeTypeEnd(rhsMatch);
-                        return maybeCompleteTypeOrAttr(rhsMatch);
-                    }
-                    else {
-                        return completeExpectedValue(lhsMatch.lhs.nodeType, lhsMatch.lhs.nodeIndex, lhsMatch.lhs.attrNames, currExpectVal.slice(0, column - expectStart));
-                    }
-                }
-            }
-            const forgivingMatcher = /\[\[(\$?\w*)\]\]/g;
-            let match;
-            while ((match = forgivingMatcher.exec(lines[line].value)) !== null) {
-                const [full, nodeType] = match;
-                if (match.index >= column) {
-                    // Cursor is before the match
-                    continue;
-                }
-                if (match.index + full.length <= column) {
-                    // Cursor is before the match
-                    continue;
-                }
-                const typeStart = match.index + 2;
-                const typeEnd = Math.max(typeStart + nodeType.length, lines[line].value.indexOf('.', typeStart));
-                if (column >= typeStart && column <= typeEnd) {
-                    return completeType('allow-all', lines[line].value.slice(typeStart, column));
-                }
-            }
-            return null;
+            return completeLogic.complete((0, TextProbeEvaluator_3.createTextProbeEvaluator)(args.env), line, column);
         };
         const checkFile = async (requestSrc, knownSrc) => {
             const ret = {
                 numPass: 0,
                 numFail: 0,
             };
-            if (settings_4.default.getTextProbeStyle() === 'disabled') {
+            if (settings_6.default.getTextProbeStyle() === 'disabled') {
                 return ret;
             }
-            const evaluator = (0, TextProbeEvaluator_1.createTextProbeEvaluator)(args.env, { src: requestSrc, contents: knownSrc });
+            const evaluator = (0, TextProbeEvaluator_3.createTextProbeEvaluator)(args.env, { src: requestSrc, contents: knownSrc });
             const varLoadRes = await evaluator.loadVariables();
             varLoadRes.forEach((res) => {
                 if (res.type === 'error') {
@@ -12194,9 +12290,6 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
             });
             const postLoopWaits = [];
             for (let i = 0; i < evaluator.fileMatches.probes.length; ++i) {
-                // const reg = createTypedProbeRegex();
-                // let outerMatch: ReturnType<typeof reg['exec']>;
-                // while ((outerMatch = reg.exec(lines[lineIdx])) != null) {
                 const match = evaluator.fileMatches.probes[i];
                 const handleMatch = async () => {
                     const lhsResult = await evaluator.evaluateNodeAndAttr(match.lhs);
@@ -12306,6 +12399,7 @@ define("model/TextProbeManager", ["require", "exports", "hacks", "settings", "ui
         };
         return lineToComparisonString(body.length === 1 ? body[0] : { type: 'arr', value: body });
     };
+    exports.evalPropertyBodyToString = evalPropertyBodyToString;
 });
 define("ui/UIElements", ["require", "exports"], function (require, exports) {
     "use strict";
@@ -12482,10 +12576,10 @@ define("settings", ["require", "exports", "model/syntaxHighlighting", "ui/UIElem
     };
     exports.default = settings;
 });
-define("ui/create/createTextSpanIndicator", ["require", "exports", "settings", "ui/create/registerOnHover"], function (require, exports, settings_5, registerOnHover_4) {
+define("ui/create/createTextSpanIndicator", ["require", "exports", "settings", "ui/create/registerOnHover"], function (require, exports, settings_7, registerOnHover_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    settings_5 = __importDefault(settings_5);
+    settings_7 = __importDefault(settings_7);
     registerOnHover_4 = __importDefault(registerOnHover_4);
     const createTextSpanIndicator = (args) => {
         var _a;
@@ -12505,7 +12599,7 @@ define("ui/create/createTextSpanIndicator", ["require", "exports", "settings", "
         }
         const ext = args.external ? '↰' : '';
         const warn = span.lineStart === 0 && span.colStart === 0 && span.lineEnd === 0 && span.colEnd === 0 ? '⚠️' : '';
-        switch ((_a = args.styleOverride) !== null && _a !== void 0 ? _a : settings_5.default.getLocationStyle()) {
+        switch ((_a = args.styleOverride) !== null && _a !== void 0 ? _a : settings_7.default.getLocationStyle()) {
             case 'full-compact':
                 if (span.lineStart === span.lineEnd) {
                     indicator.innerText = `${ext}[${span.lineStart}:${span.colStart}-${span.colEnd}]${warn}`;
@@ -13523,16 +13617,16 @@ define("ui/popup/displayTestAdditionModal", ["require", "exports", "ui/create/cr
     };
     exports.default = displayTestAdditionModal;
 });
-define("ui/renderProbeModalTitleLeft", ["require", "exports", "settings", "ui/create/createTextSpanIndicator", "ui/create/installLazyHoverDialog", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, settings_6, createTextSpanIndicator_6, installLazyHoverDialog_3, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_6, displayProbeModal_4, formatAttr_4, startEndToSpan_8, trimTypeName_5) {
+define("ui/renderProbeModalTitleLeft", ["require", "exports", "settings", "ui/create/createTextSpanIndicator", "ui/create/installLazyHoverDialog", "ui/create/registerNodeSelector", "ui/popup/displayArgModal", "ui/popup/displayAttributeModal", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/trimTypeName"], function (require, exports, settings_8, createTextSpanIndicator_6, installLazyHoverDialog_3, registerNodeSelector_3, displayArgModal_2, displayAttributeModal_6, displayProbeModal_4, formatAttr_4, startEndToSpan_9, trimTypeName_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    settings_6 = __importDefault(settings_6);
+    settings_8 = __importDefault(settings_8);
     createTextSpanIndicator_6 = __importDefault(createTextSpanIndicator_6);
     registerNodeSelector_3 = __importDefault(registerNodeSelector_3);
     displayArgModal_2 = __importDefault(displayArgModal_2);
     displayAttributeModal_6 = __importDefault(displayAttributeModal_6);
     formatAttr_4 = __importStar(formatAttr_4);
-    startEndToSpan_8 = __importDefault(startEndToSpan_8);
+    startEndToSpan_9 = __importDefault(startEndToSpan_9);
     trimTypeName_5 = __importDefault(trimTypeName_5);
     const renderProbeModalTitleLeft = (env, container, close, getWindowPos, stickyController, locator, attr, nested, typeRenderingStyle) => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
@@ -13562,7 +13656,7 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "settings", "ui/cr
             headAttr.appendChild(document.createTextNode(`)`));
             maybeInstallUnshorteningPopup = true;
         }
-        if (maybeInstallUnshorteningPopup && settings_6.default.shouldAutoShortenPropertyNames()) {
+        if (maybeInstallUnshorteningPopup && settings_8.default.shouldAutoShortenPropertyNames()) {
             const short = (0, formatAttr_4.formatAttrBaseName)(attr.name, true);
             const long = (0, formatAttr_4.formatAttrBaseName)(attr.name, false);
             if (short != long) {
@@ -13623,9 +13717,9 @@ define("ui/renderProbeModalTitleLeft", ["require", "exports", "settings", "ui/cr
         }
         if (env) {
             const spanIndicator = (0, createTextSpanIndicator_6.default)({
-                span: (0, startEndToSpan_8.default)(locator.get().result.start, locator.get().result.end),
+                span: (0, startEndToSpan_9.default)(locator.get().result.start, locator.get().result.end),
                 marginLeft: true,
-                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_8.default)(locator.get().result.start, locator.get().result.end) : null),
+                onHover: on => env.updateSpanHighlight(on ? (0, startEndToSpan_9.default)(locator.get().result.start, locator.get().result.end) : null),
                 onClick: (_l = stickyController === null || stickyController === void 0 ? void 0 : stickyController.onClick) !== null && _l !== void 0 ? _l : undefined,
                 external: locator.get().result.external,
                 styleOverride: typeRenderingStyle === 'minimal-nested' ? 'lines-compact' : undefined,
@@ -13834,13 +13928,13 @@ define("ui/create/createSquigglyCheckbox", ["require", "exports"], function (req
     };
     exports.default = createSquigglyCheckbox;
 });
-define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/create/registerOnHover", "ui/create/createSquigglyCheckbox"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_6, evaluateProperty_2, displayProbeModal_5, formatAttr_5, startEndToSpan_9, registerOnHover_5, createSquigglyCheckbox_1) {
+define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adjustLocator", "model/findLocatorWithNestingPath", "model/UpdatableNodeLocator", "network/evaluateProperty", "ui/popup/displayProbeModal", "ui/popup/formatAttr", "ui/startEndToSpan", "ui/create/registerOnHover", "ui/create/createSquigglyCheckbox"], function (require, exports, adjustLocator_2, findLocatorWithNestingPath_2, UpdatableNodeLocator_6, evaluateProperty_2, displayProbeModal_5, formatAttr_5, startEndToSpan_10, registerOnHover_5, createSquigglyCheckbox_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.createDiagnosticSource = void 0;
     evaluateProperty_2 = __importDefault(evaluateProperty_2);
     displayProbeModal_5 = __importStar(displayProbeModal_5);
-    startEndToSpan_9 = __importDefault(startEndToSpan_9);
+    startEndToSpan_10 = __importDefault(startEndToSpan_10);
     registerOnHover_5 = __importDefault(registerOnHover_5);
     createSquigglyCheckbox_1 = __importDefault(createSquigglyCheckbox_1);
     const createMinimizedProbeModal = (env, locator, property, nestedWindows, optionalArgs = {}) => {
@@ -14037,7 +14131,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
             });
         };
         env.triggerWindowSave();
-        (0, registerOnHover_5.default)(clickableUi, (on) => env.updateSpanHighlight((on && !locator.result.external) ? (0, startEndToSpan_9.default)(locator.result.start, locator.result.end) : null));
+        (0, registerOnHover_5.default)(clickableUi, (on) => env.updateSpanHighlight((on && !locator.result.external) ? (0, startEndToSpan_10.default)(locator.result.start, locator.result.end) : null));
         clickableUi.classList.add('auto-click-on-workspace-switch');
         clickableUi.customWorkspaceSwitchHandler = () => {
             if (ui.parentElement) {
@@ -14089,7 +14183,7 @@ define("ui/create/createMinimizedProbeModal", ["require", "exports", "model/adju
     exports.createDiagnosticSource = createDiagnosticSource;
     exports.default = createMinimizedProbeModal;
 });
-define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "ui/create/createSquigglyCheckbox", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_7, displayAttributeModal_7, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_7, createMinimizedProbeModal_1, evaluateProperty_3, createSquigglyCheckbox_2, hacks_5, startEndToSpan_10) {
+define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "model/adjustLocator", "ui/popup/displayHelp", "ui/popup/encodeRpcBodyLines", "ui/create/createStickyHighlightController", "ui/popup/displayTestAdditionModal", "ui/renderProbeModalTitleLeft", "settings", "ui/popup/displayAttributeModal", "ui/popup/displayAstModal", "ui/create/createInlineWindowManager", "model/UpdatableNodeLocator", "ui/create/createMinimizedProbeModal", "network/evaluateProperty", "ui/create/createSquigglyCheckbox", "hacks", "ui/startEndToSpan"], function (require, exports, createLoadingSpinner_4, createModalTitle_6, adjustLocator_3, displayHelp_3, encodeRpcBodyLines_3, createStickyHighlightController_2, displayTestAdditionModal_1, renderProbeModalTitleLeft_1, settings_9, displayAttributeModal_7, displayAstModal_2, createInlineWindowManager_1, UpdatableNodeLocator_7, createMinimizedProbeModal_1, evaluateProperty_3, createSquigglyCheckbox_2, hacks_5, startEndToSpan_11) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.prettyPrintProbePropertyName = exports.searchProbePropertyName = void 0;
@@ -14100,13 +14194,13 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
     createStickyHighlightController_2 = __importDefault(createStickyHighlightController_2);
     displayTestAdditionModal_1 = __importDefault(displayTestAdditionModal_1);
     renderProbeModalTitleLeft_1 = __importDefault(renderProbeModalTitleLeft_1);
-    settings_7 = __importDefault(settings_7);
+    settings_9 = __importDefault(settings_9);
     displayAttributeModal_7 = __importDefault(displayAttributeModal_7);
     displayAstModal_2 = __importDefault(displayAstModal_2);
     createInlineWindowManager_1 = __importDefault(createInlineWindowManager_1);
     evaluateProperty_3 = __importDefault(evaluateProperty_3);
     createSquigglyCheckbox_2 = __importDefault(createSquigglyCheckbox_2);
-    startEndToSpan_10 = __importDefault(startEndToSpan_10);
+    startEndToSpan_11 = __importDefault(startEndToSpan_11);
     const searchProbePropertyName = `m:NodesWithProperty`;
     exports.searchProbePropertyName = searchProbePropertyName;
     const prettyPrintProbePropertyName = `m:PrettyPrint`;
@@ -14275,7 +14369,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         invoke: () => {
                             const buildNodeLine = (node) => {
                                 var _a;
-                                const span = (0, startEndToSpan_10.default)(node.result.start, node.result.end);
+                                const span = (0, startEndToSpan_11.default)(node.result.start, node.result.end);
                                 return `[${span.lineStart}:${span.colStart}-${span.lineEnd}:${span.colEnd}] ${(_a = node.result.label) !== null && _a !== void 0 ? _a : node.result.type.split('.').slice(-1)[0]}`;
                             };
                             const buildLine = (line) => {
@@ -14364,7 +14458,7 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         }
                     },
                     ...[
-                        settings_7.default.shouldEnableTesting() && (env === env.getGlobalModalEnv()) && {
+                        settings_9.default.shouldEnableTesting() && (env === env.getGlobalModalEnv()) && {
                             title: 'Save as test',
                             invoke: () => {
                                 const nestedReq = getNestedTestRequests([], getWindowStateData());
@@ -14441,9 +14535,9 @@ define("ui/popup/displayProbeModal", ["require", "exports", "ui/create/createLoa
                         property,
                         locator: locator.get(),
                         src: env.createParsingRequestData(),
-                        captureStdout: settings_7.default.shouldCaptureStdio(),
-                        captureTraces: settings_7.default.shouldCaptureTraces() || undefined,
-                        flushBeforeTraceCollection: (settings_7.default.shouldCaptureTraces() && settings_7.default.shouldAutoflushTraces()) || undefined,
+                        captureStdout: settings_9.default.shouldCaptureStdio(),
+                        captureTraces: settings_9.default.shouldCaptureTraces() || undefined,
+                        flushBeforeTraceCollection: (settings_9.default.shouldCaptureTraces() && settings_9.default.shouldAutoflushTraces()) || undefined,
                         jobLabel: `Probe: '${`${(_a = locator.get().result.label) !== null && _a !== void 0 ? _a : locator.get().result.type}`.split('.').slice(-1)[0]}.${property.name}'`,
                         skipResultLocator: env !== env.getGlobalModalEnv(),
                     }, () => {
@@ -15165,14 +15259,14 @@ define("ui/popup/displayStatistics", ["require", "exports", "ui/create/createMod
     };
     exports.default = displayStatistics;
 });
-define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_8, createModalTitle_9, showWindow_6) {
+define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings", "ui/create/createModalTitle", "ui/create/showWindow"], function (require, exports, settings_10, createModalTitle_9, showWindow_6) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    settings_8 = __importDefault(settings_8);
+    settings_10 = __importDefault(settings_10);
     createModalTitle_9 = __importDefault(createModalTitle_9);
     showWindow_6 = __importDefault(showWindow_6);
     const getArgs = () => {
-        const re = settings_8.default.getMainArgsOverride();
+        const re = settings_10.default.getMainArgsOverride();
         if (!re) {
             return re;
         }
@@ -15315,7 +15409,7 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
         parseOuter();
         commit();
         // console.log('done parsing @', parsePos)
-        settings_8.default.setMainArgsOverride(args);
+        settings_10.default.setMainArgsOverride(args);
     };
     const displayMainArgsOverrideModal = (onClose, onChange) => {
         const windowInstance = (0, showWindow_6.default)({
@@ -15359,7 +15453,7 @@ define("ui/popup/displayMainArgsOverrideModal", ["require", "exports", "settings
                     };
                     // liveView.appendChild(document.createTextNode('tool.main(\n'));
                     addTn('yourtool.main(new String[]{');
-                    [...((_a = settings_8.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : []), '/path/to/file.tmp'].forEach((part, partIdx) => {
+                    [...((_a = settings_10.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : []), '/path/to/file.tmp'].forEach((part, partIdx) => {
                         if (partIdx > 0) {
                             liveView.appendChild(document.createTextNode(', '));
                         }
@@ -15548,10 +15642,10 @@ define("ui/showVersionInfo", ["require", "exports", "model/repositoryUrl"], func
     };
     exports.default = showVersionInfo;
 });
-define("model/runBgProbe", ["require", "exports", "settings"], function (require, exports, settings_9) {
+define("model/runBgProbe", ["require", "exports", "settings"], function (require, exports, settings_11) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    settings_9 = __importDefault(settings_9);
+    settings_11 = __importDefault(settings_11);
     const runInvisibleProbe = (env, locator, property) => {
         const id = `invisible-probe-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
         const localErrors = [];
@@ -15572,7 +15666,7 @@ define("model/runBgProbe", ["require", "exports", "settings"], function (require
                 property,
                 locator,
                 src: env.createParsingRequestData(),
-                captureStdout: settings_9.default.shouldCaptureStdio(),
+                captureStdout: settings_11.default.shouldCaptureStdio(),
                 // No need to capture tracing information in background probes
             })
                 .then((rawResp) => {
@@ -15607,10 +15701,10 @@ define("model/runBgProbe", ["require", "exports", "settings"], function (require
     };
     exports.default = runInvisibleProbe;
 });
-define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_9, settings_10, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_2, displayHelp_4, displayProbeModal_6, encodeRpcBodyLines_5) {
+define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBodyToAssertionLine", "model/UpdatableNodeLocator", "settings", "ui/create/createInlineWindowManager", "ui/create/createLoadingSpinner", "ui/create/createModalTitle", "ui/create/showWindow", "ui/renderProbeModalTitleLeft", "ui/UIElements", "ui/popup/displayHelp", "ui/popup/displayProbeModal", "ui/popup/encodeRpcBodyLines"], function (require, exports, rpcBodyToAssertionLine_2, UpdatableNodeLocator_9, settings_12, createInlineWindowManager_2, createLoadingSpinner_6, createModalTitle_10, showWindow_7, renderProbeModalTitleLeft_2, UIElements_2, displayHelp_4, displayProbeModal_6, encodeRpcBodyLines_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    settings_10 = __importDefault(settings_10);
+    settings_12 = __importDefault(settings_12);
     createInlineWindowManager_2 = __importDefault(createInlineWindowManager_2);
     createLoadingSpinner_6 = __importDefault(createLoadingSpinner_6);
     createModalTitle_10 = __importDefault(createModalTitle_10);
@@ -15678,13 +15772,13 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                                 title: 'Load state into editor',
                                 invoke: () => {
                                     var _a;
-                                    settings_10.default.setAstCacheStrategy(tc.src.cache);
-                                    settings_10.default.setMainArgsOverride((_a = tc.src.mainArgs) !== null && _a !== void 0 ? _a : null);
-                                    settings_10.default.setPositionRecoveryStrategy(tc.src.posRecovery);
-                                    if (tc.src.tmpSuffix && tc.src.tmpSuffix !== settings_10.default.getCurrentFileSuffix()) {
-                                        settings_10.default.setCustomFileSuffix(tc.src.tmpSuffix);
+                                    settings_12.default.setAstCacheStrategy(tc.src.cache);
+                                    settings_12.default.setMainArgsOverride((_a = tc.src.mainArgs) !== null && _a !== void 0 ? _a : null);
+                                    settings_12.default.setPositionRecoveryStrategy(tc.src.posRecovery);
+                                    if (tc.src.tmpSuffix && tc.src.tmpSuffix !== settings_12.default.getCurrentFileSuffix()) {
+                                        settings_12.default.setCustomFileSuffix(tc.src.tmpSuffix);
                                     }
-                                    settings_10.default.setEditorContents(tc.src.src.value);
+                                    settings_12.default.setEditorContents(tc.src.src.value);
                                     saveSelfAsProbe = true;
                                     env.triggerWindowSave();
                                     window.location.reload();
@@ -15765,9 +15859,9 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                     // const someLocatorErr = testReport.overall === 'error' || typeof testReport === 'object' && [
                     //   testReport.sourceLocators, testReport.attrArgLocators, testReport.outputLocators
                     // ].some(loc => loc !== 'pass');
-                    const captureStdioSetting = settings_10.default.shouldCaptureStdio();
+                    const captureStdioSetting = settings_12.default.shouldCaptureStdio();
                     localRefreshListeners.push(() => {
-                        if (settings_10.default.shouldCaptureStdio() !== captureStdioSetting) {
+                        if (settings_12.default.shouldCaptureStdio() !== captureStdioSetting) {
                             queryWindow.refresh();
                         }
                     });
@@ -15810,7 +15904,7 @@ define("ui/popup/displayTestDiffModal", ["require", "exports", "model/test/rpcBo
                             var _a;
                             const sourceBtn = (_a = infos.find(i => i.type === 'source')) === null || _a === void 0 ? void 0 : _a.btn;
                             if (sourceBtn) {
-                                if (testCase.src.src.value === settings_10.default.getEditorContents()) {
+                                if (testCase.src.src.value === settings_12.default.getEditorContents()) {
                                     sourceBtn.innerText = `Source Code ✅`;
                                 }
                                 else {
@@ -16776,11 +16870,11 @@ define("model/getEditorDefinitionPlace", ["require", "exports"], function (requi
     const getEditorDefinitionPlace = () => window;
     exports.default = getEditorDefinitionPlace;
 });
-define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionPlace", "model/UpdatableNodeLocator", "settings", "ui/popup/displayAstModal", "ui/UIElements"], function (require, exports, getEditorDefinitionPlace_1, UpdatableNodeLocator_10, settings_11, displayAstModal_3, UIElements_3) {
+define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionPlace", "model/UpdatableNodeLocator", "settings", "ui/popup/displayAstModal", "ui/UIElements"], function (require, exports, getEditorDefinitionPlace_1, UpdatableNodeLocator_10, settings_13, displayAstModal_3, UIElements_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     getEditorDefinitionPlace_1 = __importDefault(getEditorDefinitionPlace_1);
-    settings_11 = __importDefault(settings_11);
+    settings_13 = __importDefault(settings_13);
     displayAstModal_3 = __importDefault(displayAstModal_3);
     UIElements_3 = __importDefault(UIElements_3);
     const installASTEditor = () => {
@@ -16789,7 +16883,7 @@ define("ui/installASTEditor", ["require", "exports", "model/getEditorDefinitionP
             style: [],
             predicate: () => true,
         }), (value, onChange, initialSyntaxHighlight) => {
-            settings_11.default.setProbeWindowStates([]);
+            settings_13.default.setProbeWindowStates([]);
             // TODO load monaco so that main args override editor works
             const inw = document.getElementById('input-wrapper');
             inw.classList.add('input-AST');
@@ -16929,11 +17023,11 @@ define("model/ThreadPoolExecutor", ["require", "exports"], function (require, ex
     };
     exports.createThreadPoolExecutor = createThreadPoolExecutor;
 });
-define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create/createModalTitle", "ui/create/showWindow", "ui/UIElements", "model/ThreadPoolExecutor"], function (require, exports, hacks_6, settings_12, createModalTitle_14, showWindow_11, UIElements_4, ThreadPoolExecutor_1) {
+define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create/createModalTitle", "ui/create/showWindow", "ui/UIElements", "model/ThreadPoolExecutor"], function (require, exports, hacks_6, settings_14, createModalTitle_14, showWindow_11, UIElements_4, ThreadPoolExecutor_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.initWorkspace = void 0;
-    settings_12 = __importDefault(settings_12);
+    settings_14 = __importDefault(settings_14);
     createModalTitle_14 = __importStar(createModalTitle_14);
     showWindow_11 = __importDefault(showWindow_11);
     UIElements_4 = __importDefault(UIElements_4);
@@ -17023,7 +17117,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
             numPass = 0;
             testWindow.refresh();
         };
-        let shouldAutoRerun = settings_12.default.shouldRerunWorkspaceTestsOnChange();
+        let shouldAutoRerun = settings_14.default.shouldRerunWorkspaceTestsOnChange();
         const testWindow = (0, showWindow_11.default)({
             rootStyle: `
       width: 32rem;
@@ -17070,7 +17164,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
                     if (info.cancelToken.cancelled) {
                         return;
                     }
-                    if (settings_12.default.getTextProbeStyle() === 'disabled') {
+                    if (settings_14.default.getTextProbeStyle() === 'disabled') {
                         const errLbl = document.createElement('div');
                         errLbl.innerText = `Text probes are disabled, enable them in the settings panel and rerun.`;
                         errLbl.classList.add('captured-stderr');
@@ -17097,7 +17191,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
                     bodyWrapper.appendChild(label);
                     autoRerun.onchange = () => {
                         shouldAutoRerun = autoRerun.checked;
-                        settings_12.default.setShouldRerunWorkspaceTestsOnChange(shouldAutoRerun);
+                        settings_14.default.setShouldRerunWorkspaceTestsOnChange(shouldAutoRerun);
                     };
                 });
             },
@@ -17247,7 +17341,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
             var _a, _b;
             switch (kind) {
                 case 'unsaved':
-                    setActive(path, (_a = workspace.cachedFiles[path]) !== null && _a !== void 0 ? _a : { contents: (_b = settings_12.default.getEditorContents()) !== null && _b !== void 0 ? _b : '', windows: settings_12.default.getProbeWindowStates() });
+                    setActive(path, (_a = workspace.cachedFiles[path]) !== null && _a !== void 0 ? _a : { contents: (_b = settings_14.default.getEditorContents()) !== null && _b !== void 0 ? _b : '', windows: settings_14.default.getProbeWindowStates() });
                     break;
                 case 'file':
                     getFileContents(workspace, path)
@@ -17492,7 +17586,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
             }
         };
         {
-            const fromSettings = settings_12.default.getActiveWorkspacePath();
+            const fromSettings = settings_14.default.getActiveWorkspacePath();
             if (fromSettings !== null && fromSettings !== unsavedFileKey) {
                 if ((await getFileContents(workspace, fromSettings)) !== null) {
                     activeFile = fromSettings;
@@ -17507,7 +17601,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
         uiElements.workspaceTestRunner.onclick = () => displayTestModal(args, workspace, testModalExtras);
         workspace.cachedFiles[unsavedFileKey] = {
             contents: args.initialLocalContent,
-            windows: settings_12.default.getProbeWindowStates(),
+            windows: settings_14.default.getProbeWindowStates(),
         };
         const performSetup = async () => {
             const initialListingRes = await args.env.performTypedRpc({ type: 'ListWorkspaceDirectory', });
@@ -17544,7 +17638,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
                 args.setLocalWindows(data.windows);
                 setActiveStyling(path);
                 args.onActiveFileChanged();
-                settings_12.default.setActiveWorkspacePath(path);
+                settings_14.default.setActiveWorkspacePath(path);
                 testModalExtras.shouldIgnoreChangeCallbacks = false;
             };
             workspaceList.appendChild(createRow(workspace, 'unsaved', 'Temp file (browser only)', unsavedFileKey, setActiveFile, workspace.env.performTypedRpc));
@@ -17559,7 +17653,7 @@ define("model/Workspace", ["require", "exports", "hacks", "settings", "ui/create
     };
     exports.initWorkspace = initWorkspace;
 });
-define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox", "model/Workspace", "model/TextProbeManager", "model/adjustTypeAtLoc"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_7, displayRagModal_1, displayHelp_5, displayAttributeModal_9, settings_13, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_5, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_12, UpdatableNodeLocator_11, hacks_7, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1, Workspace_1, TextProbeManager_1, adjustTypeAtLoc_2) {
+define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/displayProbeModal", "ui/popup/displayRagModal", "ui/popup/displayHelp", "ui/popup/displayAttributeModal", "settings", "model/StatisticsCollectorImpl", "ui/popup/displayStatistics", "ui/popup/displayMainArgsOverrideModal", "model/syntaxHighlighting", "createWebsocketHandler", "ui/configureCheckboxWithHiddenButton", "ui/UIElements", "ui/showVersionInfo", "model/runBgProbe", "model/cullingTaskSubmitterFactory", "ui/popup/displayAstModal", "model/test/TestManager", "ui/popup/displayTestSuiteListModal", "ui/popup/displayWorkerStatus", "ui/create/showWindow", "model/UpdatableNodeLocator", "hacks", "ui/create/createMinimizedProbeModal", "model/getEditorDefinitionPlace", "ui/installASTEditor", "ui/configureCheckboxWithHiddenCheckbox", "model/Workspace", "model/TextProbeManager", "model/adjustTypeAtLoc"], function (require, exports, addConnectionCloseNotice_1, displayProbeModal_7, displayRagModal_1, displayHelp_5, displayAttributeModal_9, settings_15, StatisticsCollectorImpl_1, displayStatistics_1, displayMainArgsOverrideModal_1, syntaxHighlighting_2, createWebsocketHandler_1, configureCheckboxWithHiddenButton_1, UIElements_5, showVersionInfo_1, runBgProbe_1, cullingTaskSubmitterFactory_2, displayAstModal_4, TestManager_1, displayTestSuiteListModal_1, displayWorkerStatus_1, showWindow_12, UpdatableNodeLocator_11, hacks_7, createMinimizedProbeModal_2, getEditorDefinitionPlace_2, installASTEditor_1, configureCheckboxWithHiddenCheckbox_1, Workspace_1, TextProbeManager_2, adjustTypeAtLoc_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     addConnectionCloseNotice_1 = __importDefault(addConnectionCloseNotice_1);
@@ -17567,7 +17661,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     displayRagModal_1 = __importDefault(displayRagModal_1);
     displayHelp_5 = __importDefault(displayHelp_5);
     displayAttributeModal_9 = __importDefault(displayAttributeModal_9);
-    settings_13 = __importDefault(settings_13);
+    settings_15 = __importDefault(settings_15);
     StatisticsCollectorImpl_1 = __importDefault(StatisticsCollectorImpl_1);
     displayStatistics_1 = __importDefault(displayStatistics_1);
     displayMainArgsOverrideModal_1 = __importDefault(displayMainArgsOverrideModal_1);
@@ -17587,15 +17681,15 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
     configureCheckboxWithHiddenCheckbox_1 = __importDefault(configureCheckboxWithHiddenCheckbox_1);
     const uiElements = new UIElements_5.default();
     window.clearUserSettings = () => {
-        settings_13.default.set({});
+        settings_15.default.set({});
         location.reload();
     };
     const doMain = (wsPort) => {
         (0, installASTEditor_1.default)();
-        if (settings_13.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
+        if (settings_15.default.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
             document.body.classList.add('hide-settings');
         }
-        if (!settings_13.default.shouldEnableTesting()) {
+        if (!settings_15.default.shouldEnableTesting()) {
             uiElements.showTests.style.display = 'none';
         }
         document.onmousemove = e => {
@@ -17619,7 +17713,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
         //       alert("Printing is disabled on this page.");
         //   }
         // });
-        let getLocalState = () => { var _a; return (_a = settings_13.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
+        let getLocalState = () => { var _a; return (_a = settings_15.default.getEditorContents()) !== null && _a !== void 0 ? _a : ''; };
         let basicHighlight = null;
         const stickyHighlights = {};
         let updateSpanHighlight = (span, stickies) => { };
@@ -17638,7 +17732,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
             windowSaveDebouncer.submit(() => {
                 const states = getCurrentWindowStates();
                 if (!activeWorkspace || activeWorkspace.activeFileIsTempFile()) {
-                    settings_13.default.setProbeWindowStates(states);
+                    settings_15.default.setProbeWindowStates(states);
                 }
                 if (activeWorkspace) {
                     activeWorkspace.onActiveWindowsChange(states);
@@ -17714,7 +17808,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 location.search = "editor=" + editorType;
                 return;
             }
-            document.body.setAttribute('data-theme-light', `${settings_13.default.isLightTheme()}`);
+            document.body.setAttribute('data-theme-light', `${settings_15.default.isLightTheme()}`);
             const wsHandler = (() => {
                 if (wsPort == 'ws-over-http') {
                     return (0, createWebsocketHandler_1.createWebsocketOverHttpHandler)(addConnectionCloseNotice_1.default);
@@ -17795,7 +17889,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 rootElem.style.display = "grid";
                 let shouldTryInitializingWorkspace = false;
                 if (backingFile) {
-                    settings_13.default.setEditorContents(backingFile.value);
+                    settings_15.default.setEditorContents(backingFile.value);
                     const inputLabel = document.querySelector('#input-header > span');
                     if (!inputLabel) {
                         console.warn('Could not find input header');
@@ -17816,7 +17910,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 let preventSavingChangesToSettings = false;
                 const onChange = (newValue, adjusters) => {
                     if (!preventSavingChangesToSettings && (!activeWorkspace || activeWorkspace.activeFileIsTempFile())) {
-                        settings_13.default.setEditorContents(newValue);
+                        settings_15.default.setEditorContents(newValue);
                     }
                     if (activeWorkspace) {
                         activeWorkspace.onActiveFileChange(newValue);
@@ -17825,11 +17919,11 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 };
                 let setLocalState = (value) => { };
                 const darkModeCheckbox = uiElements.darkModeCheckbox;
-                darkModeCheckbox.checked = !settings_13.default.isLightTheme();
+                darkModeCheckbox.checked = !settings_15.default.isLightTheme();
                 const themeChangeListeners = {};
                 darkModeCheckbox.oninput = (e) => {
                     let lightTheme = !darkModeCheckbox.checked;
-                    settings_13.default.setLightTheme(lightTheme);
+                    settings_15.default.setLightTheme(lightTheme);
                     document.body.setAttribute('data-theme-light', `${lightTheme}`);
                     Object.values(themeChangeListeners).forEach(cb => cb(lightTheme));
                 };
@@ -17853,7 +17947,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                 const loadSavedWindows = () => {
                     setTimeout(() => {
                         try {
-                            let windowStates = settings_13.default.getProbeWindowStates();
+                            let windowStates = settings_15.default.getProbeWindowStates();
                             windowStates.forEach(state => loadWindowState(modalEnv, state));
                         }
                         catch (e) {
@@ -17882,7 +17976,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                                 }
                             }
                         }
-                        const res = init((_b = settings_13.default.getEditorContents()) !== null && _b !== void 0 ? _b : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_13.default.getSyntaxHighlighting());
+                        const res = init((_b = settings_15.default.getEditorContents()) !== null && _b !== void 0 ? _b : `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings_15.default.getSyntaxHighlighting());
                         setLocalState = res.setLocalState || setLocalState;
                         getLocalState = res.getLocalState || getLocalState;
                         updateSpanHighlight = res.updateSpanHighlight || updateSpanHighlight;
@@ -17892,7 +17986,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                         }
                         if (res.themeToggler) {
                             themeChangeListeners['main-editor'] = (light) => res.themeToggler(light);
-                            res.themeToggler(settings_13.default.isLightTheme());
+                            res.themeToggler(settings_15.default.isLightTheme());
                             // defineThemeToggler(res.themeToggler);
                         }
                         syntaxHighlightingToggler = res.syntaxHighlightingToggler;
@@ -17902,7 +17996,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                                 (0, runBgProbe_1.default)(modalEnv, { result: { start: 0, end: 0, type: '<ROOT>', depth: 0 }, steps: [] }, { name: kv.slice(needle.length), });
                             }
                         });
-                        activeTextProbeManager = (0, TextProbeManager_1.setupTextProbeManager)({
+                        activeTextProbeManager = (0, TextProbeManager_2.setupTextProbeManager)({
                             env: modalEnv,
                             onFinishedCheckingActiveFile: (res) => {
                                 if (activeWorkspace) {
@@ -17939,7 +18033,7 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             preventSavingChangesToSettings = true;
                             (0, Workspace_1.initWorkspace)({
                                 env: modalEnv,
-                                initialLocalContent: (_c = settings_13.default.getEditorContents()) !== null && _c !== void 0 ? _c : '',
+                                initialLocalContent: (_c = settings_15.default.getEditorContents()) !== null && _c !== void 0 ? _c : '',
                                 setLocalContent: contents => setLocalState(contents),
                                 onActiveFileChanged,
                                 getCurrentWindows: getCurrentWindowStates,
@@ -17984,27 +18078,27 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     input.checked = initial;
                     input.oninput = () => { update(input.checked); notifyLocalChangeListeners(); };
                 };
-                setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_13.default.shouldCaptureStdio(), cb => settings_13.default.setShouldCaptureStdio(cb));
-                setupSimpleCheckbox(uiElements.captureTracesCheckbox, settings_13.default.shouldCaptureTraces(), cb => settings_13.default.setShouldCaptureTraces(cb));
-                setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_13.default.shouldDuplicateProbeOnAttrClick(), cb => settings_13.default.setShouldDuplicateProbeOnAttrClick(cb));
-                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_13.default.shouldShowAllProperties(), cb => settings_13.default.setShouldShowAllProperties(cb));
-                setupSimpleCheckbox(uiElements.groupPropertiesByAspectCheckbox, settings_13.default.shouldGroupPropertiesByAspect(), cb => settings_13.default.setShouldGroupPropertiesByAspect(cb));
-                setupSimpleCheckbox(uiElements.autoShortenPropertyNamesCheckbox, settings_13.default.shouldAutoShortenPropertyNames(), cb => settings_13.default.setShouldAutoShortenPropertyNames(cb));
+                setupSimpleCheckbox(uiElements.captureStdoutCheckbox, settings_15.default.shouldCaptureStdio(), cb => settings_15.default.setShouldCaptureStdio(cb));
+                setupSimpleCheckbox(uiElements.captureTracesCheckbox, settings_15.default.shouldCaptureTraces(), cb => settings_15.default.setShouldCaptureTraces(cb));
+                setupSimpleCheckbox(uiElements.duplicateProbeCheckbox, settings_15.default.shouldDuplicateProbeOnAttrClick(), cb => settings_15.default.setShouldDuplicateProbeOnAttrClick(cb));
+                setupSimpleCheckbox(uiElements.showAllPropertiesCheckbox, settings_15.default.shouldShowAllProperties(), cb => settings_15.default.setShouldShowAllProperties(cb));
+                setupSimpleCheckbox(uiElements.groupPropertiesByAspectCheckbox, settings_15.default.shouldGroupPropertiesByAspect(), cb => settings_15.default.setShouldGroupPropertiesByAspect(cb));
+                setupSimpleCheckbox(uiElements.autoShortenPropertyNamesCheckbox, settings_15.default.shouldAutoShortenPropertyNames(), cb => settings_15.default.setShouldAutoShortenPropertyNames(cb));
                 const setupSimpleSelector = (input, initial, update) => {
                     input.value = initial;
                     input.oninput = () => { update(input.value); notifyLocalChangeListeners(); };
                 };
-                setupSimpleSelector(uiElements.astCacheStrategySelector, settings_13.default.getAstCacheStrategy(), cb => settings_13.default.setAstCacheStrategy(cb));
-                setupSimpleSelector(uiElements.positionRecoverySelector, settings_13.default.getPositionRecoveryStrategy(), cb => settings_13.default.setPositionRecoveryStrategy(cb));
-                setupSimpleSelector(uiElements.locationStyleSelector, `${settings_13.default.getLocationStyle()}`, cb => settings_13.default.setLocationStyle(cb));
-                setupSimpleSelector(uiElements.textprobeStyleSelector, `${settings_13.default.getTextProbeStyle()}`, cb => settings_13.default.setTextProbeStyle(cb));
+                setupSimpleSelector(uiElements.astCacheStrategySelector, settings_15.default.getAstCacheStrategy(), cb => settings_15.default.setAstCacheStrategy(cb));
+                setupSimpleSelector(uiElements.positionRecoverySelector, settings_15.default.getPositionRecoveryStrategy(), cb => settings_15.default.setPositionRecoveryStrategy(cb));
+                setupSimpleSelector(uiElements.locationStyleSelector, `${settings_15.default.getLocationStyle()}`, cb => settings_15.default.setLocationStyle(cb));
+                setupSimpleSelector(uiElements.textprobeStyleSelector, `${settings_15.default.getTextProbeStyle()}`, cb => settings_15.default.setTextProbeStyle(cb));
                 uiElements.settingsHider.onclick = () => {
                     document.body.classList.add('hide-settings');
-                    settings_13.default.setShouldHideSettingsPanel(true);
+                    settings_15.default.setShouldHideSettingsPanel(true);
                 };
                 uiElements.settingsRevealer.onclick = () => {
                     document.body.classList.remove('hide-settings');
-                    settings_13.default.setShouldHideSettingsPanel(false);
+                    settings_15.default.setShouldHideSettingsPanel(false);
                 };
                 const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;
                 syntaxHighlightingSelector.innerHTML = '';
@@ -18014,54 +18108,54 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                     option.innerText = alias;
                     syntaxHighlightingSelector.appendChild(option);
                 });
-                setupSimpleSelector(syntaxHighlightingSelector, settings_13.default.getSyntaxHighlighting(), cb => {
-                    settings_13.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
-                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_13.default.getSyntaxHighlighting());
+                setupSimpleSelector(syntaxHighlightingSelector, settings_15.default.getSyntaxHighlighting(), cb => {
+                    settings_15.default.setSyntaxHighlighting(syntaxHighlightingSelector.value);
+                    syntaxHighlightingToggler === null || syntaxHighlightingToggler === void 0 ? void 0 : syntaxHighlightingToggler(settings_15.default.getSyntaxHighlighting());
                 });
                 const overrideCfg = (0, configureCheckboxWithHiddenButton_1.default)(uiElements.shouldOverrideMainArgsCheckbox, uiElements.configureMainArgsOverrideButton, (checked) => {
-                    settings_13.default.setMainArgsOverride(checked ? [] : null);
+                    settings_15.default.setMainArgsOverride(checked ? [] : null);
                     overrideCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }, onClose => (0, displayMainArgsOverrideModal_1.default)(onClose, () => {
                     overrideCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }), () => {
-                    const overrides = settings_13.default.getMainArgsOverride();
+                    const overrides = settings_15.default.getMainArgsOverride();
                     return overrides === null ? null : `Edit (${overrides.length})`;
                 });
                 const suffixCfg = (0, configureCheckboxWithHiddenButton_1.default)(uiElements.shouldCustomizeFileSuffixCheckbox, uiElements.configureCustomFileSuffixButton, (checked) => {
-                    settings_13.default.setCustomFileSuffix(checked ? settings_13.default.getCurrentFileSuffix() : null);
+                    settings_15.default.setCustomFileSuffix(checked ? settings_15.default.getCurrentFileSuffix() : null);
                     suffixCfg.refreshButton();
                     notifyLocalChangeListeners();
                 }, onClose => {
-                    const newVal = prompt('Enter new suffix', settings_13.default.getCurrentFileSuffix());
+                    const newVal = prompt('Enter new suffix', settings_15.default.getCurrentFileSuffix());
                     if (newVal !== null) {
-                        settings_13.default.setCustomFileSuffix(newVal);
+                        settings_15.default.setCustomFileSuffix(newVal);
                         suffixCfg.refreshButton();
                         notifyLocalChangeListeners();
                     }
                     onClose();
                     return { forceClose: () => { }, };
                 }, () => {
-                    const overrides = settings_13.default.getCustomFileSuffix();
-                    return overrides === null ? null : `Edit (${settings_13.default.getCurrentFileSuffix()})`;
+                    const overrides = settings_15.default.getCustomFileSuffix();
+                    return overrides === null ? null : `Edit (${settings_15.default.getCurrentFileSuffix()})`;
                 });
                 (0, configureCheckboxWithHiddenCheckbox_1.default)(
                 // Outer
                 {
                     checkbox: uiElements.captureTracesCheckbox,
-                    initiallyChecked: settings_13.default.shouldCaptureTraces(),
+                    initiallyChecked: settings_15.default.shouldCaptureTraces(),
                     onChange: (checked) => {
-                        settings_13.default.setShouldCaptureTraces(checked);
+                        settings_15.default.setShouldCaptureTraces(checked);
                         notifyLocalChangeListeners();
                     },
                 }, 
                 // Hidden
                 {
                     checkbox: uiElements.autoflushTracesCheckbox,
-                    initiallyChecked: settings_13.default.shouldAutoflushTraces(),
+                    initiallyChecked: settings_15.default.shouldAutoflushTraces(),
                     onChange: (checked) => {
-                        settings_13.default.setShouldAutoflushTraces(checked);
+                        settings_15.default.setShouldAutoflushTraces(checked);
                         notifyLocalChangeListeners();
                     },
                     container: uiElements.autoflushTracesContainer,
@@ -18136,13 +18230,13 @@ define("main", ["require", "exports", "ui/addConnectionCloseNotice", "ui/popup/d
                             posRecovery: uiElements.positionRecoverySelector.value,
                             cache: uiElements.astCacheStrategySelector.value,
                             src,
-                            stdout: settings_13.default.shouldCaptureStdio(),
-                            mainArgs: (_a = settings_13.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : undefined,
-                            tmpSuffix: settings_13.default.getCurrentFileSuffix(),
+                            stdout: settings_15.default.shouldCaptureStdio(),
+                            mainArgs: (_a = settings_15.default.getMainArgsOverride()) !== null && _a !== void 0 ? _a : undefined,
+                            tmpSuffix: settings_15.default.getCurrentFileSuffix(),
                         };
                     },
                     probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
-                    themeIsLight: () => settings_13.default.isLightTheme(),
+                    themeIsLight: () => settings_15.default.isLightTheme(),
                     getLocalState: () => getLocalState(),
                     setLocalState: (newVal) => setLocalState(newVal),
                     captureStdout: () => uiElements.captureStdoutCheckbox.checked,

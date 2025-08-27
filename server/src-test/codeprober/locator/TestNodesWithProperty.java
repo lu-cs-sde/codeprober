@@ -119,4 +119,14 @@ public class TestNodesWithProperty {
 		assertEquals(2, result.size());
 		assertEquals("Found 1 node", result.get(0));
 	}
+
+	@Test
+	public void testPropertySearchWithoutExplicitPredicate() {
+		final AstInfo info = TestData.getInfo(new AstNode(TestData.getSimple()));
+		// Using foobarAttr as an attribute adds an implicit predicate: we only want
+		// nodes that implement this attribute.
+		final List<Object> result = NodesWithProperty.get(info, info.ast, "foobarAttr", null, 32);
+		assertEquals(3, result.size());
+		assertEquals("Found 2 nodes", result.get(0));
+	}
 }

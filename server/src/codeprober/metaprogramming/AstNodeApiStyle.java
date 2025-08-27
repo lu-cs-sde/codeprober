@@ -3,6 +3,15 @@ package codeprober.metaprogramming;
 public enum AstNodeApiStyle {
 
 	/**
+	 * Like {@link #CPR_SEPARATE_LINE_COLUMN}, but also includes the "cpr_" prefix
+	 * for getChild and getNumChild. With this you can present a different AST
+	 * hierarchy than is "actually" persent in your AST. Note that this can likely
+	 * create node locator construction problems, unless done correctly. Therefore
+	 * this style of API is undocumented and not recommended.
+	 */
+	CPR_EVERYTHING,
+
+	/**
 	 * cpr_getStartLine(), cpr_getStartColumn(), cpr_getEndLine(),
 	 * cpr_getEndColumn(), getNumChild(), getChild(int), getParent()
 	 * <p>
@@ -14,7 +23,6 @@ public enum AstNodeApiStyle {
 	 * different standard, and can then use the cpr_ prefix to support both
 	 * conventions simultaneously.
 	 */
-
 	CPR_SEPARATE_LINE_COLUMN,
 
 	/**
@@ -38,8 +46,7 @@ public enum AstNodeApiStyle {
 	PMD_SEPARATE_LINE_COLUMN,
 
 	/**
-	 * No line/column functions.
-	 * getNumChild(), getChild(int), getParent()
+	 * No line/column functions. getNumChild(), getChild(int), getParent()
 	 */
 	JASTADD_NO_POSITION,
 }

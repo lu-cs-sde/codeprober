@@ -249,7 +249,7 @@ const doListNodes = async (env: ModalEnv, listArgs: {
   }
 
   if (!propResult.body.length || propResult.body[0].type !== 'arr') {
-    console.error('Unexpected respose from search query:', propResult);
+    console.error('Unexpected response from search query:', propResult);
     return null;
   }
   const queryResultList = propResult.body[0].value;

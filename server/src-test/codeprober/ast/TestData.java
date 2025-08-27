@@ -187,12 +187,18 @@ public class TestData {
 		public Foo(int start, int end) {
 			super(start, end);
 		}
+
+		@Attribute
+		public String foobarAttr() { return "Only in Foo and Bar"; }
 	}
 
 	public static class Bar extends Node {
 		public Bar(int start, int end) {
 			super(start, end);
 		}
+
+		@Attribute
+		public String foobarAttr() { return "Yep, only in Foo and Bar"; }
 	}
 
 	public static class Baz extends Node {
