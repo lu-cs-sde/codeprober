@@ -1,7 +1,4 @@
-
-(  
-    1 + 2          // [[$x:=Add[2].lhs]] [[Add[2]=$a.lhs]] [[Add[1].value=10]] // [[Program.rootNode=Add]] [[$a:=Program.rootNode.lhs]] [[Program.rootNode=$a]] [[$p.rootNode.asNum=$a.asNum]] [[$p:=Program]]
+(
+    1 + 2          // [[Add[1].value=10]]
     + (3 + ((4)))  // [[Add[1].value=10]] [[Num[0].value=3]]  [[Num[1].value=4]]
 ) + (5)            // [[Add.value=15]]    [[Add[0].value=15]] [[Program.prettyPrint=(((1 + 2) + (3 + 4)) + 5)]]
-
-// [[$p=$p]]
