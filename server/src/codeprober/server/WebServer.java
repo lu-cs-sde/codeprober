@@ -745,7 +745,7 @@ public class WebServer {
 		for (String part : searchParts) {
 			if (part.startsWith("auth=")) {
 				final String authVal = part.substring("auth=".length());
-				if (Pattern.compile("[a-zA-Z0-9-]+").matcher(authVal).matches()) {
+				if (Pattern.compile("[a-zA-Z0-9-_+]+").matcher(authVal).matches()) {
 					final String newSearch;
 					if (search.contains(part + "&")) {
 						newSearch = "?" + search.replace(part + "&", "");
