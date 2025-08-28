@@ -4,3 +4,4 @@ dist-test
 public/plugin_purejs.js
 ts/test-results
 ts/playwright-report
+public/ts/main.js
