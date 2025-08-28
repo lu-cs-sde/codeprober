@@ -269,7 +269,6 @@ const createProbeHoverLogic = (args: CreateProbeHoverLogicArgs): TextProbeHoverL
   const hover: TextProbeHoverLogic['hover'] = async (evaluator, line, column) => {
     const res = await doHover(evaluator, line, column);
     if (res === null) {
-      console.log('no hover data, clearing flash');
       flasher.clear();
     }
     return res;

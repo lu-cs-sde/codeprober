@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <title>CodeProber</title>
   <meta charset="UTF-8">
@@ -7,41 +8,46 @@
   <link rel="icon" href="favicon.png" type="image/png" sizes="64x64" />
 
   <link rel="stylesheet" href="style.css" />
+  <script src="InteractiveDemo.js"></script>
 </head>
 
 <body>
   <div id="body-spacer">
-
     <header>
       <h1>CodeProber</h1>
       <p>
         CodeProber is a live exploration tool for program analysis results.
-        It has been specifically integrated with <a href="https://jastadd.cs.lth.se" target="_blank">JastAdd</a>, but can be used with other tools/metacompilers as well.
+        It has been specifically integrated with <a href="https://jastadd.cs.lth.se" target="_blank">JastAdd</a>, but
+        can be used with other tools/metacompilers as well.
       </p>
     </header>
-
-
     <section>
       <h2>
         Code
       </h2>
-      CodeProber is open source, and available on Github at <a href="https://github.com/lu-cs-sde/codeprober">https://github.com/lu-cs-sde/codeprober/</a>.
+      CodeProber is open source, and available on Github at <a
+        href="https://github.com/lu-cs-sde/codeprober">https://github.com/lu-cs-sde/codeprober/</a>.
     </section>
-
     <section>
       <h2>
         Documentation
       </h2>
       Documentation for how to work use CodeProber is available at <a href="docs/">docs/</a>.
     </section>
-
     <section>
       <h2>
-        Demo
+        Interactive Demo
       </h2>
+      <iframe id="cpr-demo"
+        src="cpr/index.html?editor=CodeMirror&preventAutoInit=true&fullscreen=true&settings=%7B%22lightTheme%22%3Atrue%2C%22editorContents%22%3A%22(1%20%2B%202)%20%2F%2F%20%5B%5BAdd.value%3D3%5D%5D%20%5B%5BAdd.rhs.isPrime%3Dtrue%5D%5D%5Cn%5Cn%5Cn%2F%2F%20This%20editor%20window%20is%20editable%5Cn%2F%2F%20Try%20changing%20%5C%221%20%2B%202%5C%22%20to%20e.g%20%5C%223%20%2B%204%5C%22%5Cn%2F%2F%20and%20notice%20how%20things%20change.%5Cn%5Cn%2F%2F%20Read%20the%20docs%20for%20a%20description%20of%5Cn%2F%2F%20the%20features%20at%20display%20here%2C%20and%5Cn%2F%2F%20how%20to%20download%20and%20run%20the%20full%5Cn%2F%2F%20version%20of%20CodeProber%20on%20your%20machine.%22%2C%22probeWindowStates%22%3A%5B%7B%22modalPos%22%3A%7B%22x%22%3A513%2C%22y%22%3A138%7D%2C%22data%22%3A%7B%22type%22%3A%22ast%22%2C%22locator%22%3A%7B%22result%22%3A%7B%22type%22%3A%22Add%22%2C%22start%22%3A45098%2C%22end%22%3A45100%2C%22depth%22%3A0%7D%2C%22steps%22%3A%5B%5D%7D%2C%22direction%22%3A%22downwards%22%2C%22transform%22%3A%7B%22x%22%3A188.09494844489944%2C%22y%22%3A342.0304450233415%2C%22scale%22%3A1.9690349575326889%2C%22width%22%3A410%2C%22height%22%3A212%7D%2C%22filterText%22%3A%22%22%7D%7D%2C%7B%22modalPos%22%3A%7B%22x%22%3A538%2C%22y%22%3A56%7D%2C%22data%22%3A%7B%22type%22%3A%22probe%22%2C%22locator%22%3A%7B%22result%22%3A%7B%22type%22%3A%22Add%22%2C%22start%22%3A4098%2C%22end%22%3A4102%2C%22depth%22%3A0%7D%2C%22steps%22%3A%5B%5D%7D%2C%22property%22%3A%7B%22name%22%3A%22value%22%7D%2C%22nested%22%3A%7B%7D%7D%7D%5D%7D"
+        onload="initDemoIframe()"></iframe>
       <p>
-        CodeProber was displayed at The Ninth Workshop on Live Programming, at ACM SIGPLAN SPLASH, Cascais, Portugal, 2023.
-        The video is available on YouTube at: <a href="https://www.youtube.com/watch?v=_ZTv_Li1f_g" target="_blank">https://www.youtube.com/watch?v=_ZTv_Li1f_g</a>.
+        You can interact with a simplified version of CodeProber above.
+        CodeProber was also displayed at The Ninth Workshop on Live Programming, at ACM SIGPLAN SPLASH, Cascais,
+        Portugal,
+        2023.
+        The video is available on YouTube at: <a href="https://www.youtube.com/watch?v=_ZTv_Li1f_g"
+          target="_blank">https://www.youtube.com/watch?v=_ZTv_Li1f_g</a>.
       </p>
     </section>
     <section>
@@ -50,23 +56,35 @@
       </h2>
       <p>
         CodeProber is introduced, evaluated or described in the following publications:
-        <ul>
-          <li><a href="https://lucris.lub.lu.se/ws/portalfiles/portal/197484552/licentiate_thesis_property_probes.pdf">Alaküla, Anton Risberg. "Property Probes: Live Exploration of Source Code Analysis." (2024)</a></li>
-          <li><a href="https://www.sciencedirect.com/science/article/pii/S0164121224000232">Alaküla, Anton Risberg, et al. "Property probes: Live exploration of program analysis results." Journal of Systems and Software 211 (2024): 111980.</a></li>
-          <li><a href="https://dl.acm.org/doi/abs/10.1145/3567512.3567525">Risberg Alaküla, Anton, et al. "Property Probes: Source Code Based Exploration of Program Analysis Results." Proceedings of the 15th ACM SIGPLAN International Conference on Software Language Engineering. 2022.</a></li>
-        </ul>
+      <ul>
+        <li><a
+            href="https://lucris.lub.lu.se/ws/portalfiles/portal/197484552/licentiate_thesis_property_probes.pdf">Alaküla,
+            Anton Risberg. "Property Probes: Live Exploration of Source Code Analysis." (2024)</a></li>
+        <li><a href="https://www.sciencedirect.com/science/article/pii/S0164121224000232">Alaküla, Anton Risberg, et
+            al. "Property probes: Live exploration of program analysis results." Journal of Systems and Software 211
+            (2024): 111980.</a></li>
+        <li><a href="https://dl.acm.org/doi/abs/10.1145/3567512.3567525">Risberg Alaküla, Anton, et al. "Property
+            Probes: Source Code Based Exploration of Program Analysis Results." Proceedings of the 15th ACM SIGPLAN
+            International Conference on Software Language Engineering. 2022.</a></li>
+      </ul>
       </p>
       <p>
         Some examples of publications which reference, build upon or in other ways make use of CodeProber are:
-        <ul>
-          <li><a href="https://portal.research.lu.se/en/publications/towards-declarative-specification-of-static-analysis-for-programm">Riouak, Idriss. "Towards Declarative Specification of Static Analysis for Programming Tools." (2024).</a></li>
-          <li><a href="https://fileadmin.cs.lth.se/cs/Education/edan70/CompilerProjects/2023/Reports/hardt-hemberg.pdf">Hardt, Johannes, and Dag Hemberg. "JastAdd Bridge: Interfacing reference attribute grammars with editor tooling." (2024).</a></li>
-          <li><a href="https://fileadmin.cs.lth.se/cs/Education/edan70/CompilerProjects/2023/Reports/lundager-bergqvist.pdf">Lundager, Mark, and Andreas Berqvist. "Finding and Resolving Common Code Style Errors in Java." (2024).</a></li>
+      <ul>
+        <li><a
+            href="https://portal.research.lu.se/en/publications/towards-declarative-specification-of-static-analysis-for-programm">Riouak,
+            Idriss. "Towards Declarative Specification of Static Analysis for Programming Tools." (2024).</a></li>
+        <li><a
+            href="https://fileadmin.cs.lth.se/cs/Education/edan70/CompilerProjects/2023/Reports/hardt-hemberg.pdf">Hardt,
+            Johannes, and Dag Hemberg. "JastAdd Bridge: Interfacing reference attribute grammars with editor tooling."
+            (2024).</a></li>
+        <li><a
+            href="https://fileadmin.cs.lth.se/cs/Education/edan70/CompilerProjects/2023/Reports/lundager-bergqvist.pdf">Lundager,
+            Mark, and Andreas Berqvist. "Finding and Resolving Common Code Style Errors in Java." (2024).</a></li>
 
-        </ul>
+      </ul>
       </p>
     </section>
   </div>
 </body>
-
 </html>

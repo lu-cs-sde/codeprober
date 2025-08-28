@@ -33,7 +33,13 @@ else
 fi
 
 
-aws s3 sync $WETNESS --delete --exclude="docs/*" --exclude=".DS_Store" $SRC_WEBSITE_DIR s3://$S3_BUCKET_NAME
+# Exclude cpr/vs/* to not publish the monaco files (fairly large and unused, so it would be a waste)
+aws s3 sync $WETNESS --delete \
+  --exclude="docs/*" \
+  --exclude=".DS_Store" \
+  --exclude="cpr/vs/*" \
+  $SRC_WEBSITE_DIR s3://$S3_BUCKET_NAME
+
 echo "S3 sync done"
 
 if [ "$WET_RUN" = "yes" ]; then

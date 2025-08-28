@@ -827,8 +827,13 @@ const doMain = (wsPort: number
   }
 }
 
+let hasPreventedAutoInit = false;
 window.initCodeProber = () => {
   (async () => {
+    if (!hasPreventedAutoInit && location.search.split(/[?&]/).find(ent => ent === 'preventAutoInit=true')) {
+      hasPreventedAutoInit = true;
+      return;
+    }
     if ((window as any).CPR_REQUEST_HANDLER) {
       // In-browser request handler available, us that instead.
       return doMain({ type: 'local-request-handler', handler: (window as any).CPR_REQUEST_HANDLER as LocalRequestHandler })

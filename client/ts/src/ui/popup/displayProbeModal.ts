@@ -173,13 +173,13 @@ const displayProbeModal = (
                     );
                 },
               },
-              {
+              ...(document.body.classList.contains('fullscreen') ? [] : [{
                 title: 'Minimize window',
                 invoke: () => {
                   env.minimize(getWindowStateData());
                   cleanup();
                 }
-              }
+              }]),
             ]
             : [{
               title: 'Detatch window',

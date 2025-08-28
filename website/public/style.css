@@ -14,3 +14,9 @@ body {
 #body-spacer {
   padding: 1rem;
 }
+
+#cpr-demo {
+  width: 100%;
+  min-height: 24rem;
+  border: none;
+}
