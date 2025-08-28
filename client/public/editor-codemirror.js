@@ -30,7 +30,10 @@ function syntaxHighlightEffect() {
       this.params = params;
     }
 
-    eq(other) { return other.checked == this.checked }
+    eq(other) {
+      return other.params.content == this.params.content
+        && JSON.stringify(other.params.contentClassNames ?? []) == JSON.stringify(this.params.contentClassNames ?? []);
+    }
 
     toDOM() {
       let wrap = document.createElement("span")
