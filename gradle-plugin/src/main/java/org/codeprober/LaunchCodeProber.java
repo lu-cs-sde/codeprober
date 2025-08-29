@@ -39,7 +39,6 @@ import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.JavaExec;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.TaskAction;
-import org.gradle.configurationcache.problems.PropertyTrace.Gradle;
 import org.gradle.internal.impldep.com.fasterxml.jackson.databind.ser.std.StdKeySerializers.Default;
 import org.gradle.internal.impldep.org.apache.ivy.util.PropertiesFile;
 import org.gradle.process.CommandLineArgumentProvider;
@@ -76,7 +75,7 @@ public abstract class LaunchCodeProber extends JavaExec {
       return cprJar;
     }
     // Else, need to download
-    final CprDownloader dl = getDownloader();
+    final CprDownloader dl = createDownloader();
     final File cprFile = dl.getCprDownloadLocation();
     if (!cprFile.exists()) {
       try {
@@ -101,11 +100,9 @@ public abstract class LaunchCodeProber extends JavaExec {
     return cprFile;
   }
 
-  private CprDownloader getDownloader() {
+  protected CprDownloader createDownloader() {
     return new CprDownloader(getProject().getProjectDir(), getOverriddenCprVersion(), getOverriddenRepoApiUrl(), getOverriddenCprUpdateCheck());
   }
-
-
 
   @Optional @Input
   public String cprVersion;
@@ -239,6 +236,11 @@ public abstract class LaunchCodeProber extends JavaExec {
     final Object val = getProject().getProperties().get("jvmArgs");
     if (val != null) {
       jvmArgs.addAll(parseArgsList("" + val));
+    } else {
+      // Else add any jvmArgs specified in build.gradle
+      for (String pre : super.getJvmArgs()) {
+        jvmArgs.add(pre);
+      }
     }
     File workspace = getOverriddenWorkspace();
     if (workspace != null) {
@@ -298,7 +300,7 @@ public abstract class LaunchCodeProber extends JavaExec {
         }
         // Match!
         lookForPort = false;
-        String url = new String(bytes, needle.length(), bytes.length - needle.length() /* Use default encoding on purpose */);
+        String url = new String(bytes, needle.length(), bytes.length - needle.length() /* Use default encoding on purpose */).trim();
         System.out.println("CodeProber is running.. Press Ctrl+C to stop it.");
         if (getOverriddenOpenBrowser()) {
           // final String url = line.substring("CPRGRADLE_URL=".length()).trim();

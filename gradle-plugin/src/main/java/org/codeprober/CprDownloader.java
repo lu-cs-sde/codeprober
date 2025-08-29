@@ -64,7 +64,7 @@ public class CprDownloader {
     return new File(getCprDownloadLocation().getAbsolutePath() + ".props");
   }
 
-  private String getMaskedVersion() {
+  protected String getMaskedVersion() {
     return cprVersion != null ? cprVersion : "latest";
   }
 

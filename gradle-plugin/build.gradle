@@ -7,10 +7,10 @@ plugins {
 }
 
 group = 'org.codeprober'
-version = '0.0.3'
+version = '0.0.4'
 
-// Ensure the plugin runs with Java 7.
-sourceCompatibility = targetCompatibility = '1.7'
+// Ensure the plugin runs with Java 8.
+sourceCompatibility = targetCompatibility = '1.8'
 
 repositories {
   mavenCentral()
@@ -36,11 +36,6 @@ java {
   withSourcesJar()
 }
 jar {
-  // doFirst {
-
-  // }
-  destinationDirectory = projectDir
-  // archiveFileName = 'plugin.jar'
       duplicatesStrategy = DuplicatesStrategy.EXCLUDE
       from {
         configurations.extraLibs.collect { it.isDirectory() ? it : zipTree(it) }
@@ -111,7 +106,6 @@ publishing {
     }
   }
 }
-
 signing {
   // Skip signing if there is no key configured:
   required { project.hasProperty('signing.keyId') }
@@ -139,5 +133,14 @@ gradlePlugin {
 javadoc {
   if(JavaVersion.current().isJava9Compatible()) {
     options.addBooleanOption('html5', true)
+  }
+}
+
+// Fix task dependency issue that appeared when upgrading from gradle 7.2 to 8.14.3
+// There are probably cleaner solutions that involves rewriting the big publishing
+// block above, maybe do that in future updates.
+afterEvaluate {
+  tasks.named("generateMetadataFileForPluginMavenPublication") {
+    dependsOn "publishPluginJar", "publishPluginJavaDocsJar"
   }
 }
