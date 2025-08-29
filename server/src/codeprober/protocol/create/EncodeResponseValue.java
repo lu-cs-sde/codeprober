@@ -271,9 +271,6 @@ public class EncodeResponseValue {
 						defaultToStringOverride.accept(value, out);
 						return;
 					}
-//				if (value.getClass().isEnum()) {
-//					out.put(value.toString());
-//				}
 					out.add(RpcBodyLine.fromPlain(
 							"No toString() or cpr_getOutput() implementation in " + value.getClass().getName()));
 				}
@@ -283,6 +280,10 @@ public class EncodeResponseValue {
 			}
 		}
 		for (String line : String.valueOf(value).split("\n")) {
+			if (line.endsWith("\r")) {
+				// Windows... remove it to normalize string encoding across platforms
+				line = line.substring(0, line.length() - 1);
+			}
 			out.add(RpcBodyLine.fromPlain(line));
 		}
 	}

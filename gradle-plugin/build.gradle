@@ -143,4 +143,10 @@ afterEvaluate {
   tasks.named("generateMetadataFileForPluginMavenPublication") {
     dependsOn "publishPluginJar", "publishPluginJavaDocsJar"
   }
+  tasks.named("publishMavenJavaPublicationToMavenLocal") {
+    dependsOn "publishPluginJar", "publishPluginJavaDocsJar"
+  }
+  tasks.named("generateMetadataFileForMavenJavaPublication") {
+    dependsOn "publishPluginJar", "publishPluginJavaDocsJar"
+  }
 }

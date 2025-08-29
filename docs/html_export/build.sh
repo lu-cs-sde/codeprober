@@ -22,7 +22,8 @@ buildfile() {
     --metadata title="$title" \
     -V basedir="$cssdir" -M document-css=false \
     --lua-filter=links-to-html.lua \
-    --template=pandoc_template.html
+    --template=pandoc_template.html \
+    --columns=1000
 }
 buildfile ../README.md "Docs"
 
@@ -30,6 +31,7 @@ buildfile ../README.md "Docs"
 buildfile ../usage/download_and_run.md "Download & Run"
 buildfile ../usage/features.md "Features"
 buildfile ../usage/troubleshooting.md "Troubleshooting"
+buildfile ../usage/gradle_plugin.md "Gradle Plugin"
 
 # Config
 buildfile ../config/ast_api.md "AST API"

@@ -408,7 +408,7 @@ body.locator-request-active  .nodeLocatorContainer:hover::after {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
-  overflow: scroll;
+  overflow: auto;
   min-height: 1rem;
 }
 

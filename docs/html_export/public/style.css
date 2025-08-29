@@ -130,6 +130,13 @@ td[data-label="Image"] img {
   max-width: 24rem;
 }
 
+body[data-filename="gradle_plugin.html"] table {
+  width: 100%;
+}
+body[data-filename="gradle_plugin.html"] td[data-label="Description"] {
+  max-width: 32rem;
+}
+
 body[data-filename="features.html"] .feature-wrapper {
   border-top: 1px solid var(--color-border-light);
   margin-top: 1rem;
@@ -171,7 +178,7 @@ pre, pre.sourceCode {
   background-color: var(--color-background-code);
   border-radius: 0.5rem;
   padding: 0.25rem;
-  overflow: scroll;
+  overflow: auto;
 }
 pre > code.sourceCode > span {
   /* See https://github.com/jgm/pandoc/issues/7248 */
