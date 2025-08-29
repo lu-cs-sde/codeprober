@@ -38,7 +38,6 @@ public class GenKl {
 
 		StringBuilder fullFile = new StringBuilder();
 		fullFile.append("#include @json/[JsonValue, JsonObject]\n");
-		fullFile.append("#include @json/JsonObject/JsonObjectBuilder\n");
 		final ArrayList<Entry<String, StringBuilder>> entries = new ArrayList<>(gt.target.entrySet());
 		entries.sort((a, b) -> a.getKey().compareTo(b.getKey()));
 		for (Entry<String, StringBuilder> ent : entries) {

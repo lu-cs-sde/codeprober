@@ -98,6 +98,7 @@ interface InitInfo {
   workerProcessCount?: number;
   disableVersionCheckerByDefault?: boolean;
   backingFile?: BackingFile;
+  autoReloadOnDisconnect?: boolean;
 }
 interface ListNodesReq {
   type: "ListNodes";

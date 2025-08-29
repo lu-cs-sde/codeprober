@@ -179,9 +179,29 @@ const doMain = (wsPort: number
       }
       document.body.setAttribute('data-theme-light', `${settings.isLightTheme()}`);
 
+    let shouldTryReloadOnDisconnect = false;
+    const onConnectionClose = (didReceiveAtLeastOneMessage: boolean) => {
+      addConnectionCloseNotice(didReceiveAtLeastOneMessage);
+      if (didReceiveAtLeastOneMessage && shouldTryReloadOnDisconnect) {
+        (async () => {
+          console.log('Going to try reconnecting..');
+          for (let i = 0; i < 5; ++i) {
+            // Give server a very short time to restart
+            await new Promise(res => setTimeout(res, 100));
+
+            const res = await fetch('index.html');
+            if (res.status === 200) {
+              location.reload();
+              return;
+            }
+          }
+          console.log('Checked if server performed a quick restart, but is still offline after 500ms. Staying disconnected');
+        })().catch(console.warn);
+      }
+    }
     const wsHandler = ((): WebsocketHandler => {
       if (wsPort == 'ws-over-http') {
-        return createWebsocketOverHttpHandler(addConnectionCloseNotice);
+        return createWebsocketOverHttpHandler(onConnectionClose);
       }
       if (typeof wsPort == 'object') {
         switch (wsPort.type){
@@ -190,7 +210,7 @@ const doMain = (wsPort: number
             if (location.hostname.includes(needle) && !location.port) {
               return createWebsocketHandler(
                 new WebSocket(`wss://${location.hostname.replace(needle, `-${wsPort.to}.`)}`),
-                addConnectionCloseNotice
+                onConnectionClose
               );
             } else {
               // Else, we are running Codespaces locally from a 'native' (non-web) editor.
@@ -200,13 +220,13 @@ const doMain = (wsPort: number
             break;
           }
           case 'local-request-handler': {
-            return createLocalRequestHandler(wsPort.handler, addConnectionCloseNotice);
+            return createLocalRequestHandler(wsPort.handler, onConnectionClose);
           }
         }
       }
       return createWebsocketHandler(
         new WebSocket(`ws://${location.hostname}:${wsPort}`),
-        addConnectionCloseNotice
+        onConnectionClose
       );
     })();
     const installWsNotificationHandler = <T extends { type: string }>(s: T['type'], callback: (t: T) => void) => {
@@ -265,7 +285,7 @@ const doMain = (wsPort: number
     const rootElem = document.getElementById('root') as HTMLElement;
     const initHandler = (info: InitInfo) => {
       const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile } = info;
-      console.log('onInit, buffer:', changeBufferTime, 'workerProcessCount:', workerProcessCount);
+      shouldTryReloadOnDisconnect = info.autoReloadOnDisconnect ?? false;
 
       if ((workerProcessCount ?? 1) <= 1) {
         uiElements.displayWorkerStatusButton.style.display = 'none';

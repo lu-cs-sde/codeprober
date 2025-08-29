@@ -80,7 +80,7 @@ const createProbeHoverLogic = (args: CreateProbeHoverLogicArgs): TextProbeHoverL
       };
       const evaluateAndFlashChain = async (locator: NodeLocator, propChain: string[], flashStart: number, flashEnd: number) => {
         const res = await evaluator.evaluatePropertyChain({ locator, propChain, });
-        if (res === 'stopped' || isBrokenNodeChain(res) || res.body[0].type !== 'node') {
+        if (res === 'stopped' || isBrokenNodeChain(res) || res.body[0]?.type !== 'node') {
           return;
         }
         const node = res.body[0].value.result;

@@ -1,4 +1,4 @@
-const showConnectionCloseNotice = (didReceiveAtLeastOneMessage: boolean) => {
+const addConnectionCloseNotice = (didReceiveAtLeastOneMessage: boolean) => {
   const ch = document.createElement('div');
   const msg = didReceiveAtLeastOneMessage
     ? 'Lost connection to server, reload to reconnect'
@@ -23,4 +23,4 @@ const showConnectionCloseNotice = (didReceiveAtLeastOneMessage: boolean) => {
   document.body.appendChild(ch);
 };
 
-export default showConnectionCloseNotice;
+export default addConnectionCloseNotice;

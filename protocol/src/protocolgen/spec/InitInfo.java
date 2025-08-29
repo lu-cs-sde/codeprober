@@ -15,4 +15,5 @@ public class InitInfo extends Streamable{
 	public final Object workerProcessCount = opt(Integer.class);
 	public final Object disableVersionCheckerByDefault = opt(Boolean.class);
 	public final Object backingFile = opt(BackingFile.class);
+	public final Object autoReloadOnDisconnect = opt(Boolean.class);
 }
