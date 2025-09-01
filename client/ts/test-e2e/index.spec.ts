@@ -50,7 +50,7 @@ test.describe('CodeProber Integration Tests', () => {
         await page.click('#workspace-test-runner');
         await page.waitForLoadState('networkidle');
 
-        await page.waitForTimeout(500); // Run tests
+        await page.waitForTimeout(1000); // Run tests
 
         const runResult = await page.locator(`div:has(+ .workspace-test-failure-log)`).textContent();
         const [_, numPass, numFail] = runResult!.match(/^.*?(\d+) pass, (\d+) fail/)!;

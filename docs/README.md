@@ -12,6 +12,7 @@ If you are reading this on the CodeProber website, you can navigate to the diffe
 	- [Download and Run](usage/download_and_run.md) - How to download and run CodeProber with your compiler or program analyzer.
 	- [Features](usage/features.md) - Brief introduction into CodeProber's features and how they are used.
 	- [Troubleshooting](usage/troubleshooting.md) - Known problems and their solutions.
+	- [Gradle Plugin](usage/gradle_plugin.md) - Instructions for using the CodeProber Gradle plugin.
 
 - Configuration
 	- [System Properties](config/system_properties.md) - configuration options that can be set via Java system properties.

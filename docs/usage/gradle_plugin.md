@@ -62,7 +62,7 @@ The plugin contains a number of parameters, all of which are optional.
 All parameters can be set with project properties on the command-line, like `-Pfoo=bar`, or in the `build.gradle` file.
 For example, the customized `launchCodeProber` block in `Basic Usage` above is equivalent to the following bash command (assuming `jar.archiveFile`==`compiler.jar`):
 ```bash
-./gradlew jar launchCodeProber -PtoolJar=compiler.jar -Pport=8000 -PcprArgs="--concurrent=4"
+./gradlew jar launchCodeProber -PtoolJar=compiler.jar -Pport=8000 -Pworkspace="myworkspace"
 ```
 
 The `String[]` args are space-separated when set in the command-line.
