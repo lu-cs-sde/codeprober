@@ -284,7 +284,7 @@ const doMain = (wsPort: number
     };
     const rootElem = document.getElementById('root') as HTMLElement;
     const initHandler = (info: InitInfo) => {
-      const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile } = info;
+      const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile, supportsWorkspaceMetadata } = info;
       shouldTryReloadOnDisconnect = info.autoReloadOnDisconnect ?? false;
 
       if ((workerProcessCount ?? 1) <= 1) {
@@ -463,6 +463,7 @@ const doMain = (wsPort: number
               },
               textProbeManager: activeTextProbeManager,
               notifySomeWorkspacePathChanged: () => notifyLocalChangeListeners(undefined, 'workspace_path_updated'),
+              serverSupportsWorkspaceMetadata: supportsWorkspaceMetadata ?? true,
             })
               .then((ws) => {
                 if (ws) {
@@ -476,6 +477,12 @@ const doMain = (wsPort: number
                   if (ws.activeFileIsTempFile()) {
                     loadSavedWindows();
                   }
+                  // Initialize Monaco editor
+                  // const editor = monaco.editor.create(document.getElementById('container'), {
+                  //   value: '',
+                  //   language: 'javascript',
+                  //   theme: 'vs-dark'
+                  // });
                 } else {
                   loadSavedWindows();
                 }

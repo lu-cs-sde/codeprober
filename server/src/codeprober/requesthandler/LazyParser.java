@@ -38,12 +38,16 @@ public interface LazyParser {
 	}
 
 	public static String extractText(ParsingSource src) {
+		return extractText(src, WorkspaceHandler.getDefault());
+	}
+
+	public static String extractText(ParsingSource src, WorkspaceHandler wsHandler) {
 		switch (src.type) {
 		case text: {
 			return src.asText();
 		}
 		case workspacePath: {
-			final GetWorkspaceFileRes res = WorkspaceHandler.getDefault()
+			final GetWorkspaceFileRes res = wsHandler
 					.handleGetWorkspaceFile(new GetWorkspaceFileReq(src.asWorkspacePath()));
 			if (res.content == null) {
 				System.err.println("Tried parsing non-existing workspace path '" + src.asWorkspacePath() + "'");

@@ -24,7 +24,7 @@ public class HoverRes implements codeprober.util.JsonUtil.ToJsonable {
   }
   public JSONObject toJSON() {
     JSONObject _ret = new JSONObject();
-    _ret.put("lines", new org.json.JSONArray(lines));
+    if (lines != null) _ret.put("lines", new org.json.JSONArray(lines));
     return _ret;
   }
   public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {

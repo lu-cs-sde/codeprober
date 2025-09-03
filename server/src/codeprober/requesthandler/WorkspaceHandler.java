@@ -4,8 +4,11 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -16,6 +19,8 @@ import java.util.regex.Pattern;
 
 import org.json.JSONObject;
 
+import codeprober.protocol.data.FindWorkspaceFilesReq;
+import codeprober.protocol.data.FindWorkspaceFilesRes;
 import codeprober.protocol.data.GetWorkspaceFileReq;
 import codeprober.protocol.data.GetWorkspaceFileRes;
 import codeprober.protocol.data.ListWorkspaceDirectoryReq;
@@ -29,18 +34,28 @@ import codeprober.protocol.data.RenameWorkspacePathRes;
 import codeprober.protocol.data.UnlinkWorkspacePathReq;
 import codeprober.protocol.data.UnlinkWorkspacePathRes;
 import codeprober.protocol.data.WorkspaceEntry;
+import codeprober.requesthandler.FuzzyMatcher.ScoredMatch;
 
 public class WorkspaceHandler {
 
 	public static final String METADATA_DIR_NAME = ".cpr";
 	private static boolean debugApiFailureReasons = false;
 
-	private static Pattern getWorkspaceFilePattern() {
+	private static Pattern preCompiledWorkspaceFilePattern;
+
+	public static Pattern getWorkspaceFilePattern() {
 		final String custom = System.getProperty("cpr.workspaceFilePattern");
 		if (custom == null) {
 			return null;
 		}
-		return Pattern.compile(custom);
+		if (preCompiledWorkspaceFilePattern == null) {
+			preCompiledWorkspaceFilePattern = Pattern.compile(custom);
+		}
+		return preCompiledWorkspaceFilePattern;
+	}
+
+	public static boolean supportsStoringWorkspaceMetadata() {
+		return "true".equals(System.getProperty("cpr.storeWorkspaceMetadata", "true"));
 	}
 
 	private File workspaceRoot;
@@ -191,10 +206,13 @@ public class WorkspaceHandler {
 			final byte[] textBytes = Files.readAllBytes(subFile.toPath());
 			JSONObject metadata = null;
 
-			final File metadataFile = getMetadataFileForRealFile(subFile);
-			if (metadataFile.exists()) {
-				final byte[] metadataBytes = Files.readAllBytes(metadataFile.toPath());
-				metadata = new JSONObject(new String(metadataBytes, 0, metadataBytes.length, StandardCharsets.UTF_8));
+			if (supportsStoringWorkspaceMetadata()) {
+				final File metadataFile = getMetadataFileForRealFile(subFile);
+				if (metadataFile.exists()) {
+					final byte[] metadataBytes = Files.readAllBytes(metadataFile.toPath());
+					metadata = new JSONObject(
+							new String(metadataBytes, 0, metadataBytes.length, StandardCharsets.UTF_8));
+				}
 			}
 			return new GetWorkspaceFileRes(new String(textBytes, 0, textBytes.length, StandardCharsets.UTF_8),
 					metadata);
@@ -399,4 +417,48 @@ public class WorkspaceHandler {
 		return ret == null ? -1 : ret;
 	}
 
+	public FindWorkspaceFilesRes handleFindWorkspaceFiles(FindWorkspaceFilesReq req) {
+		if (workspaceRoot == null) {
+			return new FindWorkspaceFilesRes();
+		}
+
+		final List<ScoredMatch> matches = new ArrayList<>();
+
+		final int limitMatches = Integer.parseInt(System.getProperty("cpr.workspaceFindFileLimit", "500"));
+		final Path wsrootPath = workspaceRoot.toPath();
+		final Pattern pattern = getWorkspaceFilePattern();
+		final String query = req.query;
+		try {
+			Files.walkFileTree(wsrootPath, new SimpleFileVisitor<Path>() {
+
+				@Override
+				public FileVisitResult visitFile(Path paramT, BasicFileAttributes paramBasicFileAttributes)
+						throws IOException {
+					final String relPath = wsrootPath.relativize(paramT).toString();
+					if (pattern == null || pattern.matcher(relPath).matches()) {
+						final Integer score = FuzzyMatcher.score(query, relPath);
+						if (score != null) {
+							matches.add(new ScoredMatch(relPath, score));
+							if (matches.size() >= limitMatches) {
+								return FileVisitResult.TERMINATE;
+							}
+						}
+					}
+					return super.visitFile(paramT, paramBasicFileAttributes);
+				}
+			});
+		} catch (IOException e) {
+			System.err.println("Error when walking workspace files");
+			e.printStackTrace();
+			return new FindWorkspaceFilesRes();
+		}
+		matches.sort((a, b) -> Integer.compare(b.score, a.score));
+
+		// Return sorted paths
+		List<String> sortedPaths = new ArrayList<>();
+		for (ScoredMatch match : matches) {
+			sortedPaths.add(match.path);
+		}
+		return new FindWorkspaceFilesRes(sortedPaths, matches.size() >= limitMatches);
+	}
 }

@@ -8,6 +8,7 @@ import TextProbeManager, { TextProbeCheckResults } from './TextProbeManager';
 import ModalEnv from './ModalEnv';
 import WindowState from './WindowState';
 import ThreadPoolExecutor, { createThreadPoolExecutor } from './ThreadPoolExecutor';
+import displayFuzzyWorkspaceFileFinder, { createDisplayFuzzyFinderShortcutListener } from '../ui/popup/displayFuzzyWorkspaceFileFinder';
 
 const uiElements = new UIElements();
 const unsavedFileKey = '%😄'; // Hopefully not colliding with anything
@@ -21,10 +22,13 @@ interface WorkspaceInitArgs {
   setLocalWindows: (states: WindowState[]) => void;
   textProbeManager: TextProbeManager;
   notifySomeWorkspacePathChanged: () => void;
+  serverSupportsWorkspaceMetadata: boolean;
 }
 
 interface VisibleRow {
   updateTestStatus: (status: TextProbeCheckResults) => void;
+  click: () => void;
+  getKind: () => RowKind,
 }
 
 type CachedFileEntry = { contents: string; windows: WindowState[] };
@@ -48,13 +52,18 @@ interface Workspace {
   reload: (reason?: ReloadReason) => void;
   onActiveFileChecked: (results: TextProbeCheckResults) => void;
   onServerNotifyPathsChanged: (paths: string[]) => void;
+  setActiveWorkspacePath: (path: string) => void;
+}
+
+interface WorkspaceInstance extends Workspace {
+  clientSideMetadataCache: { [path: string]: WindowState[] }
 }
 
 interface WorkspaceFileMetadata {
   windowStates: WindowState[];
 }
 
-const displayTestModal = (args: WorkspaceInitArgs, workspace: Workspace, extras: { shouldIgnoreChangeCallbacks: boolean }) => {
+const displayTestModal = (args: WorkspaceInitArgs, workspace: WorkspaceInstance, extras: { shouldIgnoreChangeCallbacks: boolean }) => {
   const testBtn = uiElements.workspaceTestRunner;
   let numPass = 0;
   let numFail = 0;
@@ -246,7 +255,7 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: Workspace, extras:
   }
 }
 
-async function getFileContents(workspace: Workspace, path: string): Promise<CachedFileEntry | null> {
+async function getFileContents(workspace: WorkspaceInstance, path: string): Promise<CachedFileEntry | null> {
   if (path === unsavedFileKey) {
     console.warn('Tried loading temp file contents from server?');
     return null;
@@ -272,6 +281,8 @@ async function getFileContents(workspace: Workspace, path: string): Promise<Cach
       console.warn('Failed parsing metadata', e);
       console.warn('Metadata: ', fresh.metadata);
     }
+  } else if (workspace.clientSideMetadataCache[path]) {
+    workspace.cachedFiles[path].windows = workspace.clientSideMetadataCache[path];
   }
   return workspace.cachedFiles[path];
 }
@@ -294,7 +305,7 @@ async function getDirContents(workspace: Workspace, path: string): Promise<Cache
 
 type RowKind = 'unsaved' | 'file' | 'dir-open' | 'dir-closed';
 const createRow = (
-  workspace: Workspace,
+  workspace: WorkspaceInstance,
   kind: RowKind,
   label: string,
   path: string,
@@ -387,9 +398,6 @@ const createRow = (
   if (workspace.knownTestResults[path]) {
     updateTestStatus(workspace.knownTestResults[path]);
   }
-  workspace.visibleRows[path] = {
-    updateTestStatus,
-  };
   const click = () => {
     switch (kind) {
       case 'unsaved':
@@ -453,6 +461,11 @@ const createRow = (
         assertUnreachable(kind);
     }
   };
+  workspace.visibleRows[path] = {
+    updateTestStatus,
+    click,
+    getKind: () => kind,
+  };
   lbl.onclick = click;
   if ((kind === 'dir-closed' && workspace.preOpenedFiles[path])
       || (kind === 'file' && path === workspace.getActiveFile())) {
@@ -461,7 +474,7 @@ const createRow = (
   return row;
 }
 
-const createAddFileButton = (workspace: Workspace, basePath: string, tgtContainer: HTMLElement, setActive: (path: string, contents: CachedFileEntry) => void) => {
+const createAddFileButton = (workspace: WorkspaceInstance, basePath: string, tgtContainer: HTMLElement, setActive: (path: string, contents: CachedFileEntry) => void) => {
   const row = document.createElement('div');
   row.classList.add('workspace-row');
   row.classList.add(`workspace-addfile`);
@@ -480,7 +493,7 @@ const createAddFileButton = (workspace: Workspace, basePath: string, tgtContaine
     if (name) {
       const subPath = `${basePath}${name}`;
 
-      // First, chec if the file exists
+      // First, check if the file exists
       (async () => {
         let fileAlreadyExists = !!(await getFileContents(workspace, subPath));
         if (fileAlreadyExists) {
@@ -514,7 +527,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
   const workspaceList = uiElements.workspaceListWrapper;
   let setActiveFile = (path: string, data: CachedFileEntry) => {}
   const mostRecentPutFileRequestContents: { [path: string]: string } = {};
-  const workspace: Workspace = {
+  const workspace: WorkspaceInstance = {
     env: args.env,
     cachedFiles: {},
     cachedDirs: {},
@@ -546,17 +559,23 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
         workspace.cachedFiles[activeFile].windows = states;
       }
       if (activeFile !== unsavedFileKey) {
-        const payload: WorkspaceFileMetadata | undefined = states.length === 0 ? undefined : {
-          windowStates: states,
-        };
-        const path = activeFile;
-        args.env.performTypedRpc<PutWorkspaceMetadataReq, PutWorkspaceMetadataRes>({ type: 'PutWorkspaceMetadata', path, metadata: payload })
-          .then((res) => {
-            if (!res.ok) {
-              console.warn('Failed updating metadata for', path);
-            }
-          })
-          .catch(console.error);
+        if (!args.serverSupportsWorkspaceMetadata) {
+          // Store client side
+          workspace.clientSideMetadataCache[activeFile] = states;
+        } else {
+          // Store server side
+          const payload: WorkspaceFileMetadata | undefined = states.length === 0 ? undefined : {
+            windowStates: states,
+          };
+          const path = activeFile;
+          args.env.performTypedRpc<PutWorkspaceMetadataReq, PutWorkspaceMetadataRes>({ type: 'PutWorkspaceMetadata', path, metadata: payload })
+            .then((res) => {
+              if (!res.ok) {
+                console.warn('Failed updating metadata for', path);
+              }
+            })
+            .catch(console.error);
+        }
       }
     },
     reload: (reason) => {
@@ -647,8 +666,37 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
         // Manually notify of a change, for example to get tests to re-run
         args.notifySomeWorkspacePathChanged();
       }
-    }
+    },
+    setActiveWorkspacePath: (path) => {
+      if (workspace.visibleRows[path]) {
+        workspace.visibleRows[path].click();
+        return;
+      }
+
+      // Else, path not currently visible. Need to mark all dirs in the path as pre-opened, and then
+      // click the top unopened dir. Unopened sub-dirs will then automatically open afterwards.
+      const parts = path.split('/');
+      parts.forEach((segment, idx) => {
+        const subPath = parts.slice(0, idx + 1).join('/');
+        if (idx < parts.length - 1) {
+          workspace.preOpenedFiles[subPath] = true;
+          if (workspace.visibleRows[subPath]?.getKind() === 'dir-closed') {
+            workspace.visibleRows[subPath].click();
+          }
+        }
+      });
+      getFileContents(workspace, path)
+        .then((data) => {
+          if (data) {
+            setActiveFile(path, data);
+          }
+        }).catch(err => {
+          console.warn('Failed getting contents for path', path, ':', err)
+        });
+    },
+    clientSideMetadataCache: {}
   };
+
 
   {
     const fromSettings = settings.getActiveWorkspacePath();
@@ -664,6 +712,12 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
   }
   const testModalExtras = { shouldIgnoreChangeCallbacks: false };
   uiElements.workspaceTestRunner.onclick = () => displayTestModal(args, workspace, testModalExtras);
+  uiElements.workspaceFindFile.onclick = () => displayFuzzyWorkspaceFileFinder(args.env, workspace, true);
+  document.addEventListener(
+    'keydown',
+    createDisplayFuzzyFinderShortcutListener(() => displayFuzzyWorkspaceFileFinder(args.env, workspace, false)),
+    true,
+  );
 
   workspace.cachedFiles[unsavedFileKey] = {
     contents: args.initialLocalContent,

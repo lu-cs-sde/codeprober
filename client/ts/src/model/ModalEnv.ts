@@ -27,7 +27,7 @@ interface ModalEnv {
   duplicateOnAttr: () => boolean;
   statisticsCollector: ProbeStatisticsCollector;
   currentlyLoadingModals: Set<string>;
-  createCullingTaskSubmitter: () => CullingTaskSubmitter;
+  createCullingTaskSubmitter: (minDelay?: number) => CullingTaskSubmitter;
   testManager: TestManager;
   createJobId: (updateHandler: (data: AsyncRpcUpdate) => void) => JobId;
   getGlobalModalEnv: () => ModalEnv;

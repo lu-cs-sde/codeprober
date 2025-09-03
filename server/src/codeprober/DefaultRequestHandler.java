@@ -31,6 +31,8 @@ import codeprober.protocol.data.CompleteReq;
 import codeprober.protocol.data.CompleteRes;
 import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
+import codeprober.protocol.data.FindWorkspaceFilesReq;
+import codeprober.protocol.data.FindWorkspaceFilesRes;
 import codeprober.protocol.data.GetTestSuiteReq;
 import codeprober.protocol.data.GetTestSuiteRes;
 import codeprober.protocol.data.GetWorkspaceFileReq;
@@ -81,6 +83,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 	private final UnderlyingTool underlyingTool;
 	private final String[] defaultForwardArgs;
 	private final SessionLogger logger;
+	private final WorkspaceHandler workspaceHandler;
 
 	private AstInfo lastInfo = null;
 	private ParsingSource lastParsedInput = null;
@@ -89,15 +92,26 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 	private KnownFileData lastParsedWorkspaceInput;
 
+
 	public DefaultRequestHandler(UnderlyingTool underlyingTool) {
 		this(underlyingTool, null, null);
 	}
 
+	public DefaultRequestHandler(UnderlyingTool underlyingTool, WorkspaceHandler workspaceHandler) {
+		this(underlyingTool, null, null, workspaceHandler);
+	}
+
 	public DefaultRequestHandler(UnderlyingTool underlyingTool, String[] forwardArgs, SessionLogger logger) {
+		this(underlyingTool, forwardArgs, logger, null);
+	}
+
+	public DefaultRequestHandler(UnderlyingTool underlyingTool, String[] forwardArgs, SessionLogger logger,
+			WorkspaceHandler workspaceHandler) {
 		this.underlyingTool = underlyingTool;
 		this.defaultForwardArgs = forwardArgs != null ? forwardArgs : new String[0];
 		this.lastForwardArgs = this.defaultForwardArgs;
 		this.logger = logger;
+		this.workspaceHandler = workspaceHandler != null ? workspaceHandler : WorkspaceHandler.getDefault();
 	}
 
 	private AstInfo parsedAstToInfo(Object ast, PositionRecoveryStrategy posRecovery) {
@@ -315,38 +329,42 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 				@Override
 				protected GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {
-					return WorkspaceHandler.getDefault().handleGetWorkspaceFile(req);
-				};
+					return workspaceHandler.handleGetWorkspaceFile(req);
+				}
 
 				@Override
 				protected ListWorkspaceDirectoryRes handleListWorkspaceDirectory(ListWorkspaceDirectoryReq req) {
-					return WorkspaceHandler.getDefault().handleListWorkspaceDirectory(req);
-				};
+					return workspaceHandler.handleListWorkspaceDirectory(req);
+				}
 
 				@Override
 				protected PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
-					final PutWorkspaceContentRes ret = WorkspaceHandler.getDefault().handlePutWorkspaceContent(req);
+					final PutWorkspaceContentRes ret = workspaceHandler.handlePutWorkspaceContent(req);
 					if (ret.ok) {
 						request.onDidUpdateWorkspacePath.accept(req.path);
 					}
 					return ret;
-				};
+				}
+
+				@Override
+				protected FindWorkspaceFilesRes handleFindWorkspaceFiles(FindWorkspaceFilesReq req) {
+					return workspaceHandler.handleFindWorkspaceFiles(req);
+				}
 
 				@Override
 				protected PutWorkspaceMetadataRes handlePutWorkspaceMetadata(PutWorkspaceMetadataReq req) {
-					return WorkspaceHandler.getDefault().handlePutWorkspaceMetadata(req);
-				};
+					return workspaceHandler.handlePutWorkspaceMetadata(req);
+				}
 
 				@Override
 				protected RenameWorkspacePathRes handleRenameWorkspacePath(RenameWorkspacePathReq req) {
-					return WorkspaceHandler.getDefault().handleRenameWorkspacePath(req);
-				};
+					return workspaceHandler.handleRenameWorkspacePath(req);
+				}
 
 				@Override
 				protected UnlinkWorkspacePathRes handleUnlinkWorkspacePath(UnlinkWorkspacePathReq req) {
-					return WorkspaceHandler.getDefault().handleUnlinkWorkspacePath(req);
-
-				};
+					return workspaceHandler.handleUnlinkWorkspacePath(req);
+				}
 			}.handle(request.data);
 			if (addLog.getAndSet(false)) {
 				final String type = request.data.optString("type");
@@ -387,7 +405,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			if (!p1Path.equals(p2Path)) {
 				return false;
 			}
-			final File wsFile = WorkspaceHandler.getDefault().getWorkspaceFile(p1Path);
+			final File wsFile = workspaceHandler.getWorkspaceFile(p1Path);
 			if (wsFile == null) {
 				// Both point to the same (nonexisting) file -> equal
 				return true;
@@ -439,7 +457,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				return createTmpFile.apply(inputSource.asText(), tmpFileSuffix);
 			}
 			case workspacePath: {
-				final File ret = WorkspaceHandler.getDefault().getWorkspaceFile(inputSource.asWorkspacePath());
+				final File ret = workspaceHandler.getWorkspaceFile(inputSource.asWorkspacePath());
 				if (ret != null) {
 					lastParsedWorkspaceInput = statFile(ret);
 				}
@@ -452,7 +470,6 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			}
 		};
 		if (maybeCacheAST && !parsingSourceIsEqualToLast(inputSource)) {
-			System.out.println("Can cache AST, but input is different..");
 			maybeCacheAST = false;
 			// Something changed, must replace the AST,
 			// UNLESS flushTreeCacheAndReplaceLastFile is present.
@@ -462,7 +479,6 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 						.getMethod("flushTreeCacheAndReplaceLastFile", String.class);
 			} catch (NoSuchMethodException | SecurityException e) {
 				// OK, it is an optional method after all
-				System.out.println("No flusher available");
 			}
 			if (optimizedFlusher != null) {
 				try {

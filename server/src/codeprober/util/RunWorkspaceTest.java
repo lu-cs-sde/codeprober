@@ -15,11 +15,11 @@ import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
 import codeprober.protocol.data.GetTestSuiteReq;
 import codeprober.protocol.data.GetTestSuiteRes;
-import codeprober.protocol.data.GetWorkspaceFileReq;
 import codeprober.protocol.data.ListWorkspaceDirectoryReq;
 import codeprober.protocol.data.ListWorkspaceDirectoryRes;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.ParsingRequestData;
+import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.Property;
 import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.PropertyEvaluationResult.Type;
@@ -89,14 +89,8 @@ public class RunWorkspaceTest {
 				final int startNumPass = numPass;
 				final int startNumFail = numFail;
 				final String fullPath = parentPath + e.asFile();
-				final String fileContents = workspaceHandler
-						.handleGetWorkspaceFile(new GetWorkspaceFileReq(fullPath)).content;
-//				System.out.println("Looking at file " + fullPath);
-				if (fileContents == null) {
-					System.err.println("Invalid file in workspace: " + fullPath);
-					break;
-				}
-				final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, fileContents, interceptor);
+				final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, workspaceHandler,
+						ParsingSource.fromWorkspacePath(fullPath), interceptor);
 				env.loadVariables();
 				numFail += env.errMsgs.size();
 
@@ -133,7 +127,8 @@ public class RunWorkspaceTest {
 
 	private static ClientRequest constructMessage(JSONObject query) {
 		return new ClientRequest(query, obj -> {
-		}, new AtomicBoolean(true), (p) -> {});
+		}, new AtomicBoolean(true), (p) -> {
+		});
 	}
 
 	public static List<NodeLocator> listNodes(JsonRequestHandler requestHandler, ParsingRequestData prd, int line,

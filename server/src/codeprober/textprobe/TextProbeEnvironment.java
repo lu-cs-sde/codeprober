@@ -28,6 +28,8 @@ import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.PropertyEvaluationResult.Type;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.TALStep;
+import codeprober.requesthandler.LazyParser;
+import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.rpc.JsonRequestHandler;
 
 public class TextProbeEnvironment {
@@ -46,12 +48,15 @@ public class TextProbeEnvironment {
 
 	private final StdIoInterceptor interceptor;
 
-	public TextProbeEnvironment(JsonRequestHandler requestHandler, String srcFileContents,
-			StdIoInterceptor interceptor) {
+	public TextProbeEnvironment(JsonRequestHandler requestHandler, WorkspaceHandler wsHandler,
+			ParsingSource srcContents, StdIoInterceptor interceptor) {
 		this.requestHandler = requestHandler;
-		this.parsingRequestData = new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD,
-				AstCacheStrategy.PARTIAL, ParsingSource.fromText(srcFileContents + "\n"), null, ".tmp");
-		this.parsedFile = ParsedTextProbes.fromFileContents(srcFileContents);
+		final String posRecoveryOverride = System.getProperty("cpr.posRecoveryStrategy");
+		this.parsingRequestData = new ParsingRequestData(
+				posRecoveryOverride != null ? PositionRecoveryStrategy.valueOf(posRecoveryOverride)
+						: PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD,
+				AstCacheStrategy.PARTIAL, srcContents, null, ".tmp");
+		this.parsedFile = ParsedTextProbes.fromFileContents(LazyParser.extractText(srcContents, wsHandler));
 		this.interceptor = interceptor;
 	}
 
@@ -99,10 +104,12 @@ public class TextProbeEnvironment {
 
 	private static ClientRequest constructMessage(JSONObject query) {
 		return new ClientRequest(query, obj -> {
-		}, new AtomicBoolean(true), (p) -> {});
+		}, new AtomicBoolean(true), (p) -> {
+		});
 	}
 
-	private static EvaluatePropertyReq constructEvalReq(ParsingRequestData src, NodeLocator locator, Property property) {
+	private static EvaluatePropertyReq constructEvalReq(ParsingRequestData src, NodeLocator locator,
+			Property property) {
 		return new EvaluatePropertyReq(src, locator, property, false, null, null, null, null, null, true);
 	}
 

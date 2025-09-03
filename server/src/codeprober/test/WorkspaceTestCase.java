@@ -10,9 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import codeprober.DefaultRequestHandler;
-import codeprober.protocol.data.GetWorkspaceFileReq;
 import codeprober.protocol.data.ListWorkspaceDirectoryReq;
 import codeprober.protocol.data.ListWorkspaceDirectoryRes;
+import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.WorkspaceEntry;
 import codeprober.requesthandler.WorkspaceHandler;
@@ -40,7 +40,8 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 
 	// name() is used by JUnit to label the test case
 	public String name() {
-		return srcFilePath + ":" + (assertion == null ? "Variable load checking" : ((assertion.lineIdx + 1) + " -> " + assertion.full));
+		return srcFilePath + ":"
+				+ (assertion == null ? "Variable load checking" : ((assertion.lineIdx + 1) + " -> " + assertion.full));
 	}
 
 	@Override
@@ -117,20 +118,17 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 				listAllWorkspaceFiles(requestHandler, workspaceHandler, fullPath, out);
 			} else {
 				final String fullPath = (prefix != null ? (prefix + "/") : "") + entry.asFile();
-				final String contents = workspaceHandler
-						.handleGetWorkspaceFile(new GetWorkspaceFileReq(fullPath)).content;
-				if (contents != null) {
-					final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, contents, null);
+				final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, workspaceHandler,
+						ParsingSource.fromWorkspacePath(fullPath), null);
 
-					if (env.parsedFile.assertions.isEmpty() && env.parsedFile.assignments.isEmpty()) {
-						continue;
-					}
-					if (env.parsedFile.assertions.isEmpty()) {
-						out.add(new WorkspaceTestCase(env, fullPath, null));
-					} else {
-						for (TextAssertionMatch tam : env.parsedFile.assertions) {
-							out.add(new WorkspaceTestCase(env, fullPath, tam));
-						}
+				if (env.parsedFile.assertions.isEmpty() && env.parsedFile.assignments.isEmpty()) {
+					continue;
+				}
+				if (env.parsedFile.assertions.isEmpty()) {
+					out.add(new WorkspaceTestCase(env, fullPath, null));
+				} else {
+					for (TextAssertionMatch tam : env.parsedFile.assertions) {
+						out.add(new WorkspaceTestCase(env, fullPath, tam));
 					}
 				}
 			}
@@ -138,8 +136,8 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 	}
 
 	public static List<WorkspaceTestCase> listTextProbesInWorkspace(UnderlyingTool tool, File dir) throws IOException {
-		final JsonRequestHandler requestHandler = new DefaultRequestHandler(tool);
 		final WorkspaceHandler wsh = new WorkspaceHandler(dir);
+		final JsonRequestHandler requestHandler = new DefaultRequestHandler(tool, wsh);
 		final List<WorkspaceTestCase> ret = new ArrayList<>();
 		listAllWorkspaceFiles(requestHandler, wsh, null, ret);
 		return ret;

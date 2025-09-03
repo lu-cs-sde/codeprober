@@ -184,6 +184,15 @@ public class CodeProber {
 			break;
 		}
 		if (parsedArgs.runTest) {
+			if (parsedArgs.jarPath == null) {
+				System.err.println("Cannot run tests, a tool (often 'compiler.jar') is not specified.");
+				System.exit(1);
+			}
+			if (!new File(parsedArgs.jarPath).isFile()) {
+				System.err.printf("Cannot run tests, jar path '%s' is not a file%n", parsedArgs.jarPath);
+				System.exit(1);
+			}
+
 			File workspace = WorkspaceHandler.getWorkspaceRoot(false);
 			if (workspace != null) {
 				// Test files in workspace

@@ -207,13 +207,14 @@ body.hide-settings #workspace-wrapper { grid-area: w2 }
   flex-direction: row;
   justify-content: space-between;
 }
+#workspace-find-file,
 #workspace-test-runner {
   cursor: pointer;
   border-radius: 0.25rem;
   margin-top: 0.125rem;
   margin-bottom: 0.125rem;
   margin-right: 0.25rem;
-  width: 5rem;
+  width: fit-content;
 }
 
 .workspace-test-failure-log {
@@ -1222,5 +1223,36 @@ body[data-theme-light="true"] .codemirror_context_menu > div.row:hover {
 }
 .codemirror_action_link {
   color: var(--action-link);
+  cursor: pointer;
+}
+
+.fuzzyFileFinder {
+  min-width: 32rem;
+  width: 20vw;
+  min-height: 8rem;
+  position: absolute;
+  top: 4rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.fuzzyFileFinder > input {
+  width: calc(100% - 2rem);
+  margin: 0.75rem auto;
+  display: block;
+  min-height: 1.5rem;
+
+}
+.fuzzyFileFinder .resultArea {
+  border-top: 1px dashed #555;
+  padding: 0 1rem 1rem;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.fuzzyFileFinder .resultArea .fileMatch:only-of-type {
+  border: 1px solid cyan;
+}
+.fuzzyFileFinder .resultArea .fileMatch:hover {
+  background-color: var(--hover-highlight);
   cursor: pointer;
 }

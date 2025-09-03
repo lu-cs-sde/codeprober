@@ -27,6 +27,7 @@ import codeprober.protocol.data.AsyncRpcUpdate;
 import codeprober.protocol.data.BackingFile;
 import codeprober.protocol.data.InitInfo;
 import codeprober.protocol.data.protocolgen_spec_InitInfo_1;
+import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.util.ParsedArgs;
 import codeprober.util.SessionLogger;
 import codeprober.util.VersionInfo;
@@ -142,8 +143,9 @@ public class WebSocketServer {
 				bufferTime > 0 ? bufferTime : null, //
 				args.workerProcessCount, //
 				disableVersionCheckerByDefault ? true : null, //
-				backingFile == null ? null : new BackingFile(backingFile.getPath(), backingFileContents) //
-		);
+				backingFile == null ? null : new BackingFile(backingFile.getPath(), backingFileContents), //
+				null, //
+				WorkspaceHandler.supportsStoringWorkspaceMetadata());
 	}
 
 	static void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,

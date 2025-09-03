@@ -65,6 +65,9 @@ public abstract class RequestAdapter {
       case "UnlinkWorkspacePath": {
         return handleUnlinkWorkspacePath(UnlinkWorkspacePathReq.fromJSON(request)).toJSON();
       }
+      case "FindWorkspaceFiles": {
+        return handleFindWorkspaceFiles(FindWorkspaceFilesReq.fromJSON(request)).toJSON();
+      }
       case "ide:hover": {
         return handleHover(HoverReq.fromJSON(request)).toJSON();
       }
@@ -160,6 +163,10 @@ public abstract class RequestAdapter {
 
   protected UnlinkWorkspacePathRes handleUnlinkWorkspacePath(UnlinkWorkspacePathReq req) {
     throw new JSONException("Request UnlinkWorkspacePath is not implemented");
+  }
+
+  protected FindWorkspaceFilesRes handleFindWorkspaceFiles(FindWorkspaceFilesReq req) {
+    throw new JSONException("Request FindWorkspaceFiles is not implemented");
   }
 
   protected HoverRes handleHover(HoverReq req) {

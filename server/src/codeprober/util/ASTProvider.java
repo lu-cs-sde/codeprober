@@ -127,7 +127,7 @@ public class ASTProvider {
 		return lastJar != null && lastJar.jarPath.equals(jarPath) && lastJar.jarLastModified == jarLastMod;
 	}
 
-	public static boolean printDebugInfo = true;
+	public static boolean printDebugInfo = false;
 
 	/**
 	 * Runs the target compiler.

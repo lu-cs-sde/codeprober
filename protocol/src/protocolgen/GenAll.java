@@ -7,6 +7,7 @@ import protocolgen.spec.AsyncRpcUpdate;
 import protocolgen.spec.BackingFileUpdated;
 import protocolgen.spec.Complete;
 import protocolgen.spec.EvaluateProperty;
+import protocolgen.spec.FindWorkspaceFiles;
 import protocolgen.spec.GetTestSuite;
 import protocolgen.spec.GetWorkerStatus;
 import protocolgen.spec.GetWorkspaceFile;
@@ -64,6 +65,7 @@ public class GenAll {
 		rpcs.add(PutWorkspaceMetadata.class);
 		rpcs.add(RenameWorkspacePath.class);
 		rpcs.add(UnlinkWorkspacePath.class);
+		rpcs.add(FindWorkspaceFiles.class);
 
 		// Client->Server, 'LSP'
 		rpcs.add(Hover.class);

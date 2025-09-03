@@ -52,6 +52,14 @@ interface EvaluatePropertyRes {
 interface FNStep {
   property: Property;
 }
+interface FindWorkspaceFilesReq {
+  type: "FindWorkspaceFiles";
+  query: string;
+}
+interface FindWorkspaceFilesRes {
+  matches?: string[];
+  truncatedSearch?: boolean;
+}
 interface GetTestSuiteReq {
   type: "Test:GetTestSuite";
   suite: string;
@@ -99,6 +107,7 @@ interface InitInfo {
   disableVersionCheckerByDefault?: boolean;
   backingFile?: BackingFile;
   autoReloadOnDisconnect?: boolean;
+  supportsWorkspaceMetadata?: boolean;
 }
 interface ListNodesReq {
   type: "ListNodes";
@@ -416,6 +425,8 @@ export {
  , EvaluatePropertyReq
  , EvaluatePropertyRes
  , FNStep
+ , FindWorkspaceFilesReq
+ , FindWorkspaceFilesRes
  , GetTestSuiteReq
  , GetTestSuiteRes
  , GetWorkerStatusReq

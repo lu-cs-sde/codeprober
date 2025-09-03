@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.server.ServerToClientEvent;
@@ -26,12 +27,22 @@ public class WorkspaceDirectoryMonitor extends DirectoryMonitor {
 	protected void onChangeDetected(Path filePath) {
 		final Path rootPath = workspaceRoot.toPath();
 		if (filePath.startsWith(rootPath)) {
-			final File parent= filePath.toFile().getParentFile();
+			final File filePathFile = filePath.toFile();
+			final File parent= filePathFile.getParentFile();
 			if (parent != null && parent.getName().equals(WorkspaceHandler.METADATA_DIR_NAME)) {
 				// Metadata file update, ignore it
 				return;
 			}
 			final String relpath = rootPath.relativize(filePath).toString();
+
+			final Pattern pattern = WorkspaceHandler.getWorkspaceFilePattern();
+			if (filePathFile.isFile() && pattern != null) {
+				if (!pattern.matcher(relpath).matches()) {
+					// A change in a file we don't care about, ignore.
+					return;
+				}
+			}
+
 			synchronized (changedWorkspacePaths) {
 				changedWorkspacePaths.add(relpath.replace(File.separatorChar, '/'));
 			}

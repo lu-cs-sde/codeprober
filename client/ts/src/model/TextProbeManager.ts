@@ -1,13 +1,12 @@
 import { assertUnreachable } from '../hacks';
 
-import { ListPropertiesReq, ListPropertiesRes, NodeLocator, ParsingSource, RpcBodyLine, TALStep } from '../protocol';
+import { NodeLocator, ParsingSource, RpcBodyLine } from '../protocol';
 import settings from '../settings';
-import startEndToSpan from '../ui/startEndToSpan';
 import ModalEnv from './ModalEnv'
 import SourcedDiagnostic from './SourcedDiagnostic';
 import { createSpanFlasher } from './SpanFlasher';
-import { CompletionItem, CompletionResponse, createTextProbeCompleteLogic } from './TextProbeCompleteLogic';
-import { createTextProbeEvaluator, isAssignmentMatch, isBrokenNodeChain, NodeAndAttrChainMatch } from './TextProbeEvaluator';
+import { CompletionResponse, createTextProbeCompleteLogic } from './TextProbeCompleteLogic';
+import { createTextProbeEvaluator } from './TextProbeEvaluator';
 import { createProbeHoverLogic, HoverResult } from './TextProbeHoverLogic';
 
 interface TextProbeManagerArgs {

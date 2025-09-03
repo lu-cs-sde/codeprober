@@ -10,7 +10,6 @@ import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.junit.After;
 import org.junit.Test;
 
 import codeprober.ast.TestData;
@@ -155,8 +154,14 @@ public class TestDefaultRequestHandler {
 
 	@Test
 	public void testPutWorkspaceCallback() {
+		final WorkspaceHandler wsHandler = new WorkspaceHandler() {
+			int requestCount = 0;
+			public PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
+				return new PutWorkspaceContentRes(requestCount++ == 1);
+			};
+		};
 		final DefaultRequestHandler handler = new DefaultRequestHandler(
-				args -> new ParseResult(new TestData.WithTwoLineVariants(null, 456)));
+				args -> new ParseResult(new TestData.WithTwoLineVariants(null, 456)), wsHandler);
 
 		final int[] callbackCount = new int[1];
 		final ClientRequest request = new ClientRequest(new PutWorkspaceContentReq("foo/bar", "baz").toJSON(),
@@ -166,23 +171,12 @@ public class TestDefaultRequestHandler {
 					++callbackCount[0];
 				});
 
-		// Do it with unchanged workspace handler. It has no workspace directory
-		// configured, so request will fail.
+		// First time the request will fail, no callback
 		handler.handleRequest(request);
 		assertEquals(0, callbackCount[0]);
 
-
-		WorkspaceHandler.setDefaultWorkspaceHandlerForTesting(new WorkspaceHandler() {
-			public PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
-				return new PutWorkspaceContentRes(true);
-			};
-		});
+		// Second time it should succeed
 		handler.handleRequest(request);
 		assertEquals(1, callbackCount[0]);
-	}
-
-	@After
-	public void restore() {
-		WorkspaceHandler.setDefaultWorkspaceHandlerForTesting(new WorkspaceHandler());
 	}
 }

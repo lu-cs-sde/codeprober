@@ -48,6 +48,7 @@ class UIElements {
 
   get workspaceHeaderLabel() { return document.getElementById('workspace-header') as HTMLElement; }
   get workspaceListWrapper() { return document.getElementById('workspace-wrapper') as HTMLElement; }
+  get workspaceFindFile() { return document.getElementById('workspace-find-file') as HTMLButtonElement; }
   get workspaceTestRunner() { return document.getElementById('workspace-test-runner') as HTMLButtonElement; }
 
   get generalHelpButton() { return document.getElementById('display-help') as HTMLButtonElement; }

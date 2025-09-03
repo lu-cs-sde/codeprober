@@ -713,7 +713,8 @@ public class GenJava {
 				break;
 			}
 			case OPTIONAL_LIST_OF_PRIMITIVES: {
-				println.accept(prefix + "new org.json.JSONArray(" + field + "));");
+				String arrVal = "new org.json.JSONArray(" + field + ")";
+				println.accept("    if (" + field + " != null) _ret.put(\"" + field + "\", " + arrVal + ");");
 				break;
 			}
 			default: {

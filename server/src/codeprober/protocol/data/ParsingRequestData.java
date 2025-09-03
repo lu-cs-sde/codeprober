@@ -40,7 +40,7 @@ public class ParsingRequestData implements codeprober.util.JsonUtil.ToJsonable {
     _ret.put("posRecovery", posRecovery.name());
     _ret.put("cache", cache.name());
     _ret.put("src", src.toJSON());
-    _ret.put("mainArgs", new org.json.JSONArray(mainArgs));
+    if (mainArgs != null) _ret.put("mainArgs", new org.json.JSONArray(mainArgs));
     _ret.put("tmpSuffix", tmpSuffix);
     return _ret;
   }
