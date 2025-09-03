@@ -262,6 +262,10 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 
 	}
 
+	private static boolean isAssertionEnabled() {
+		return ConcurrentCoordinator.class.desiredAssertionStatus();
+	}
+
 	private class Worker {
 		public ActiveJob job;
 		public final Process process;
@@ -276,6 +280,9 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 		public Worker(String jarPath, String[] args) throws IOException {
 			final List<String> cmd = new ArrayList<>();
 			cmd.add("java");
+			if (isAssertionEnabled()) {
+				cmd.add("-enableassertions");
+			}
 			for (Entry<Object, Object> props : System.getProperties().entrySet()) {
 				final String key = String.valueOf(props.getKey());
 				if (key.startsWith("cpr.")) {

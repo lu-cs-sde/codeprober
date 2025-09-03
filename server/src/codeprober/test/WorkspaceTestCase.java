@@ -119,7 +119,7 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 			} else {
 				final String fullPath = (prefix != null ? (prefix + "/") : "") + entry.asFile();
 				final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, workspaceHandler,
-						ParsingSource.fromWorkspacePath(fullPath), null);
+						ParsingSource.fromWorkspacePath(fullPath), null, false);
 
 				if (env.parsedFile.assertions.isEmpty() && env.parsedFile.assignments.isEmpty()) {
 					continue;

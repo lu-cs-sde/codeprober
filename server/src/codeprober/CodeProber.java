@@ -196,13 +196,13 @@ public class CodeProber {
 			File workspace = WorkspaceHandler.getWorkspaceRoot(false);
 			if (workspace != null) {
 				// Test files in workspace
-				System.exit(RunWorkspaceTest
-						.run(userFacingHandler) == codeprober.util.RunWorkspaceTest.MergedResult.ALL_PASS ? 0 : 1);
+				final codeprober.util.RunWorkspaceTest.MergedResult res = RunWorkspaceTest.run(userFacingHandler, //
+						parsedArgs.workerProcessCount == null ? 0 : parsedArgs.workerProcessCount);
+				System.exit(res == codeprober.util.RunWorkspaceTest.MergedResult.ALL_PASS ? 0 : 1);
 			} else {
 				// Run (legacy) tests inside the cpr.testDir
 				final MergedResult res = RunAllTests.run(new TestClient(userFacingHandler),
 						parsedArgs.concurrencyMode != ConcurrencyMode.DISABLED);
-//			userFacingHandler.shutdown();
 				System.exit(res == MergedResult.ALL_PASS ? 0 : 1);
 			}
 

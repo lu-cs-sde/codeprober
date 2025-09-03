@@ -9,15 +9,16 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import org.json.JSONObject;
-
+import codeprober.CodeProber;
 import codeprober.metaprogramming.StdIoInterceptor;
 import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.ClientRequest;
 import codeprober.protocol.PositionRecoveryStrategy;
+import codeprober.protocol.data.AsyncRpcUpdateValue;
 import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
 import codeprober.protocol.data.NodeLocator;
@@ -28,6 +29,7 @@ import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.PropertyEvaluationResult.Type;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.TALStep;
+import codeprober.protocol.data.WorkerTaskDone;
 import codeprober.requesthandler.LazyParser;
 import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.rpc.JsonRequestHandler;
@@ -47,9 +49,10 @@ public class TextProbeEnvironment {
 	public final List<String> errMsgs = new ArrayList<>();
 
 	private final StdIoInterceptor interceptor;
+	private final boolean runConcurrent;
 
 	public TextProbeEnvironment(JsonRequestHandler requestHandler, WorkspaceHandler wsHandler,
-			ParsingSource srcContents, StdIoInterceptor interceptor) {
+			ParsingSource srcContents, StdIoInterceptor interceptor, boolean runConcurrent) {
 		this.requestHandler = requestHandler;
 		final String posRecoveryOverride = System.getProperty("cpr.posRecoveryStrategy");
 		this.parsingRequestData = new ParsingRequestData(
@@ -58,6 +61,7 @@ public class TextProbeEnvironment {
 				AstCacheStrategy.PARTIAL, srcContents, null, ".tmp");
 		this.parsedFile = ParsedTextProbes.fromFileContents(LazyParser.extractText(srcContents, wsHandler));
 		this.interceptor = interceptor;
+		this.runConcurrent = runConcurrent;
 	}
 
 	public void loadVariables() {
@@ -102,26 +106,14 @@ public class TextProbeEnvironment {
 		return varLoadStatus;
 	}
 
-	private static ClientRequest constructMessage(JSONObject query) {
-		return new ClientRequest(query, obj -> {
-		}, new AtomicBoolean(true), (p) -> {
-		});
-	}
-
-	private static EvaluatePropertyReq constructEvalReq(ParsingRequestData src, NodeLocator locator,
-			Property property) {
-		return new EvaluatePropertyReq(src, locator, property, false, null, null, null, null, null, true);
-	}
-
 	public List<NodeLocator> listNodes(int line, String attrPredicate, String tailPredicate) {
 		final TALStep rootNode = new TALStep("<ROOT>", null, ((line + 1) << 12) + 1, ((line + 1) << 12) + 4095, 0);
-		final EvaluatePropertyRes result = EvaluatePropertyRes.fromJSON(performRequest( //
-				constructMessage(constructEvalReq( //
-						parsingRequestData, new NodeLocator(rootNode, Collections.emptyList()), //
-						new Property("m:NodesWithProperty", Arrays.asList( //
-								PropertyArg.fromString(attrPredicate), //
-								PropertyArg.fromString(tailPredicate) //
-						))).toJSON())));
+		final EvaluatePropertyRes result = performEvalReq(parsingRequestData,
+				new NodeLocator(rootNode, Collections.emptyList()), //
+				new Property("m:NodesWithProperty", Arrays.asList( //
+						PropertyArg.fromString(attrPredicate), //
+						PropertyArg.fromString(tailPredicate) //
+				)));
 		if (result.response.type != Type.sync) {
 			System.err.println("Unexpected async property response, are we running concurrently?");
 			System.exit(1);
@@ -138,24 +130,81 @@ public class TextProbeEnvironment {
 				.collect(Collectors.toList());
 	}
 
-	private JSONObject performRequest(ClientRequest req) {
+//	private static final AtomicLong jobIdGenerator = new AtomicLong(1L);
+
+	private EvaluatePropertyRes performEvalReq(ParsingRequestData src, NodeLocator locator, Property property) {
+
+		if (!runConcurrent) {
+			final EvaluatePropertyReq req = new EvaluatePropertyReq(src, locator, property, false, null, null, null, null,
+					null, true);
+			final ClientRequest clientReq = new ClientRequest(req.toJSON(), obj -> {
+			}, new AtomicBoolean(true), (p) -> {
+			});
+			if (interceptor != null) {
+				interceptor.install();
+			}
+			try {
+				return EvaluatePropertyRes.fromJSON(requestHandler.handleRequest(clientReq));
+			} finally {
+				if (interceptor != null) {
+					interceptor.restore();
+				}
+			}
+		}
+		final CountDownLatch cdl = new CountDownLatch(1);
+		final EvaluatePropertyRes[] resPtr = new EvaluatePropertyRes[1];
 		if (interceptor != null) {
 			interceptor.install();
 		}
 		try {
-			return requestHandler.handleRequest(req);
+			final EvaluatePropertyReq req = new EvaluatePropertyReq(src, locator, property, false, (long)(Math.random() * 100000.0), null, null, null,
+					null, true);
+
+			final ClientRequest clientReq = new ClientRequest(req.toJSON(), obj -> {
+				if (obj.value.type == AsyncRpcUpdateValue.Type.workerTaskDone) {
+					final WorkerTaskDone tdone = obj.value.asWorkerTaskDone();
+					switch (tdone.type) {
+					case normal:
+						resPtr[0] = EvaluatePropertyRes.fromJSON(tdone.asNormal());
+						break;
+					case unexpectedError:
+						System.err.println("Failed request: " + tdone.asUnexpectedError());
+						break;
+					}
+					cdl.countDown();
+				}
+			}, new AtomicBoolean(true), (p) -> {
+
+			});
+			final EvaluatePropertyRes initialRes = EvaluatePropertyRes.fromJSON(requestHandler.handleRequest(clientReq));
+			switch (initialRes.response.type) {
+			case sync:
+				System.out.println("Weird: got got sync response in concurrent environment");
+				return initialRes;
+			case job:
+				break;
+			}
+			try {
+				cdl.await();
+			} catch (InterruptedException e) {
+				System.err.println("Interrupted while waiting for concurrent request to finish");
+				e.printStackTrace();
+			}
+
+		} catch (Throwable t) {
+			CodeProber.flog(t + "");
+			System.err.println("t: " + t);
 		} finally {
 			if (interceptor != null) {
 				interceptor.restore();
 			}
 		}
+		return resPtr[0];
+
 	}
 
 	private List<RpcBodyLine> evaluateProp(NodeLocator locator, String prop) {
-		final EvaluatePropertyRes result = EvaluatePropertyRes.fromJSON(performRequest( //
-				constructMessage(constructEvalReq( //
-						parsingRequestData, locator, //
-						new Property(prop)).toJSON())));
+		final EvaluatePropertyRes result = performEvalReq(parsingRequestData, locator, new Property(prop));
 		if (result.response.type != Type.sync) {
 			System.err.println("Unexpected async property response, are we running concurrently?");
 			System.exit(1);
@@ -177,14 +226,13 @@ public class TextProbeEnvironment {
 		} else {
 			final TALStep rootNode = new TALStep("<ROOT>", null, ((query.lineIdx + 1) << 12) + 1,
 					((query.lineIdx + 1) << 12) + 4095, 0);
-			final EvaluatePropertyRes result = EvaluatePropertyRes.fromJSON(performRequest( //
-					constructMessage(constructEvalReq( //
-							parsingRequestData, new NodeLocator(rootNode, Collections.emptyList()), //
-							new Property("m:NodesWithProperty", Arrays.asList( //
-									PropertyArg.fromString(query.attrNames.length > 0 ? query.attrNames[0] : ""), //
-									PropertyArg.fromString(
-											String.format("this<:%s&@lineSpan~=%d", query.nodeType, query.lineIdx + 1)) //
-							))).toJSON())));
+			final EvaluatePropertyRes result = performEvalReq(parsingRequestData,
+					new NodeLocator(rootNode, Collections.emptyList()), //
+					new Property("m:NodesWithProperty", Arrays.asList( //
+							PropertyArg.fromString(query.attrNames.length > 0 ? query.attrNames[0] : ""), //
+							PropertyArg.fromString(
+									String.format("this<:%s&@lineSpan~=%d", query.nodeType, query.lineIdx + 1)) //
+					)));
 			if (result.response.type != Type.sync) {
 				System.err.println("Unexpected async property response, are we running concurrently?");
 				System.exit(1);
