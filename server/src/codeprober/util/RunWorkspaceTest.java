@@ -6,8 +6,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 import codeprober.metaprogramming.StdIoInterceptor;
+import codeprober.metaprogramming.StreamInterceptor.OtherThreadDataHandling;
 import codeprober.protocol.data.ListWorkspaceDirectoryReq;
 import codeprober.protocol.data.ListWorkspaceDirectoryRes;
 import codeprober.protocol.data.ParsingSource;
@@ -27,13 +29,13 @@ public class RunWorkspaceTest {
 	private JsonRequestHandler requestHandler;
 	final AtomicInteger numPass = new AtomicInteger();
 	final AtomicInteger numFail = new AtomicInteger();
-	StdIoInterceptor interceptor;
-	final WorkspaceHandler workspaceHandler = new WorkspaceHandler();
+	final WorkspaceHandler workspaceHandler;
 
 	private static boolean verbose = "true".equals(System.getProperty("cpr.verbose"));
 	private final ExecutorService concurrentExecutor;
 
-	private RunWorkspaceTest(JsonRequestHandler requestHandler, int numWorkerProcesses) {
+	private RunWorkspaceTest(JsonRequestHandler requestHandler, int numWorkerProcesses,
+			WorkspaceHandler workspaceHandler) {
 		this.requestHandler = requestHandler;
 		if (numWorkerProcesses >= 1) {
 			// Each thread sends messages sequentially. Therefore, if #threads==#workers,
@@ -43,39 +45,54 @@ public class RunWorkspaceTest {
 		} else {
 			this.concurrentExecutor = null;
 		}
-
-		final PrintStream out = System.out;
-		final PrintStream err = System.err;
-		interceptor = new StdIoInterceptor(false) {
-			@Override
-			public void onLine(boolean stdout, String line) {
-				if (verbose) {
-					(stdout ? out : err).println(line);
-				}
-			}
-		};
+		this.workspaceHandler = workspaceHandler;
 	}
 
 	public static MergedResult run(JsonRequestHandler requestHandler, int numConcurrentThreads) {
+		return run(requestHandler, numConcurrentThreads, WorkspaceHandler.getDefault());
+	}
+
+	public static MergedResult run(JsonRequestHandler requestHandler, int numConcurrentThreads,
+			WorkspaceHandler handler) {
 		// Use the API (WorkspaceHandler) to mimic Codeprober client behavior as close
 		// as possible
-		final RunWorkspaceTest rwt = new RunWorkspaceTest(requestHandler, numConcurrentThreads);
-		rwt.runDirectory(null);
-		if (rwt.concurrentExecutor != null) {
-			try {
-				rwt.concurrentExecutor.shutdown();
-				rwt.concurrentExecutor.awaitTermination(/* Illidan be like */ 10_000L * 365L, TimeUnit.DAYS);
-			} catch (InterruptedException e) {
-				System.err.println("Interrupted while waiting for concurrent tests to finish");
-				e.printStackTrace();
-				return MergedResult.SOME_FAIL;
+		final RunWorkspaceTest rwt = new RunWorkspaceTest(requestHandler, numConcurrentThreads, handler);
+
+		final PrintStream out = System.out;
+		final Consumer<String> println = line -> out.println(line);
+		StdIoInterceptor interceptor = null;
+		if (!verbose) {
+			// Prevent messages during test runs
+			interceptor = new StdIoInterceptor(false, OtherThreadDataHandling.MERGE) {
+				@Override
+				public void onLine(boolean stdout, String line) {
+					// Noop
+				}
+			};
+			interceptor.install();
+		}
+		try {
+			rwt.runDirectory(null, println);
+			if (rwt.concurrentExecutor != null) {
+				try {
+					rwt.concurrentExecutor.shutdown();
+					rwt.concurrentExecutor.awaitTermination(/* Illidan be like */ 10_000L * 365L, TimeUnit.DAYS);
+				} catch (InterruptedException e) {
+					System.err.println("Interrupted while waiting for concurrent tests to finish");
+					e.printStackTrace();
+					return MergedResult.SOME_FAIL;
+				}
+			}
+		} finally {
+			if (interceptor != null) {
+				interceptor.restore();
 			}
 		}
 		System.out.println("Done: " + rwt.numPass + " pass, " + rwt.numFail + " fail");
 		return (rwt.numFail.get() > 0) ? MergedResult.SOME_FAIL : MergedResult.ALL_PASS;
 	}
 
-	private void runDirectory(String workspacePath) {
+	private void runDirectory(String workspacePath, Consumer<String> println) {
 		final ListWorkspaceDirectoryRes res = workspaceHandler
 				.handleListWorkspaceDirectory(new ListWorkspaceDirectoryReq(workspacePath));
 		if (res.entries == null) {
@@ -87,7 +104,7 @@ public class RunWorkspaceTest {
 		for (WorkspaceEntry e : res.entries) {
 			switch (e.type) {
 			case directory: {
-				runDirectory(parentPath + e.asDirectory());
+				runDirectory(parentPath + e.asDirectory(), println);
 				break;
 			}
 			case file: {
@@ -97,7 +114,7 @@ public class RunWorkspaceTest {
 
 				final Runnable runFile = () -> {
 					final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, workspaceHandler,
-							ParsingSource.fromWorkspacePath(fullPath), interceptor, concurrentExecutor != null);
+							ParsingSource.fromWorkspacePath(fullPath), null, concurrentExecutor != null);
 					env.loadVariables();
 					localNumFail[0] += env.errMsgs.size();
 
@@ -116,20 +133,20 @@ public class RunWorkspaceTest {
 					numFail.addAndGet(localNumFail[0]);
 					numPass.addAndGet(localNumPass[0]);
 
-					synchronized (System.out) {
-						if (localNumPass[0] == 0 && localNumFail[0] == 0) {
-							// No tests, don't output anything
-							if (verbose) {
-								System.out.println("Nothing in file " + fullPath + "..");
-							}
-						} else if (localNumFail[0] == 0) {
-							System.out.println("  ✅ " + fullPath);
-						} else {
-							System.out.println("  ❌ " + fullPath);
-							for (String errMsg : env.errMsgs) {
-								System.out.println("     " + errMsg);
-							}
+					if (localNumPass[0] == 0 && localNumFail[0] == 0) {
+						// No tests, don't output anything
+						if (verbose) {
+							println.accept("Nothing in file " + fullPath + "..");
 						}
+					} else if (localNumFail[0] == 0) {
+						println.accept("  ✅ " + fullPath);
+					} else {
+						final StringBuilder msg = new StringBuilder();
+						msg.append("  ❌ " + fullPath);
+						for (String errMsg : env.errMsgs) {
+							msg.append("\n     " + errMsg);
+						}
+						println.accept(msg.toString());
 					}
 				};
 				if (concurrentExecutor == null) {

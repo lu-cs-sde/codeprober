@@ -13,7 +13,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import codeprober.CodeProber;
 import codeprober.metaprogramming.StdIoInterceptor;
 import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.ClientRequest;
@@ -190,10 +189,6 @@ public class TextProbeEnvironment {
 				System.err.println("Interrupted while waiting for concurrent request to finish");
 				e.printStackTrace();
 			}
-
-		} catch (Throwable t) {
-			CodeProber.flog(t + "");
-			System.err.println("t: " + t);
 		} finally {
 			if (interceptor != null) {
 				interceptor.restore();
