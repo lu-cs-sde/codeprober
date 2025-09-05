@@ -26,6 +26,8 @@ public class ParsedTextProbes {
 					final TextAssertionMatch tp = TextProbeParser.matchTextAssertion(containerContents, lineIdx);
 					if (tp != null) {
 						ret.assertions.add(tp);
+					} else {
+						System.out.println("container < " + containerContents +" > is not a textProbe");
 					}
 				}
 			}

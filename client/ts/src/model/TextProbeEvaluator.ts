@@ -87,9 +87,6 @@ const matchNodeAndAttrChain = (line: Line, strict = false): NodeAndAttrChainMatc
   if (!match) {
     return null;
   }
-  // if (strict && match.index > 0) {
-  //   return null;
-  // }
   const [full, nodeType, nodeIndex, attrNames] = match;
   return {
     full,
@@ -118,15 +115,17 @@ const matchTypedProbeRegex = (line: Line): ProbeMatch | null => {
   if (!nodeMatch) {
     return null;
   }
-  const expectMatch = nodeMatch.full.length === line.value.length
-    ? null
-    : /(!?)(~?)(?:=((.)*))?/g.exec(line.value.slice(nodeMatch.full.length));
-  if (!expectMatch) {
+  if (nodeMatch.full.length === line.value.length) {
+    // Probe, no assertion
     return {
       index: nodeMatch.index,
       full: nodeMatch.full,
       lhs: nodeMatch,
     };
+  }
+  const expectMatch = /^(!?)(~?)(?:=((.)*))?$/g.exec(line.value.slice(nodeMatch.full.length));
+  if (!expectMatch) {
+    return null;
   }
   const [expectFull, exclamation, tilde, expectVal] = expectMatch;
   return {

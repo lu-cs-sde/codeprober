@@ -1,0 +1,18 @@
+1
+
+		// ok
+		//  [[Add=Add]]
+		
+		// too many leading '['
+		// [[[Add]] 
+		
+		// too many trailing ']'
+		// [[Add]=Add]]
+		
+		// too many trailing ']]'
+		// [[Add=[[Add]]]]] 
+
+		// ok
+		// [[Other=[[Add=Add]]
+
++2

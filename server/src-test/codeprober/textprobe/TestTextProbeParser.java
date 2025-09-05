@@ -2,6 +2,7 @@ package codeprober.textprobe;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
 
@@ -9,7 +10,6 @@ public class TestTextProbeParser {
 
 	private ParsedTextProbes doParse(String src) {
 		return ParsedTextProbes.fromFileContents(src);
-
 	}
 
 	@Test
@@ -80,5 +80,39 @@ public class TestTextProbeParser {
 		assertFalse(tam.tilde);
 		assertFalse(tam.exclamation);
 		assertEquals("z", tam.expectVal);
+	}
+
+	@Test
+	public void testNestedBracketsBothOpenAndClose() {
+		// Regression test of special case with nested "[[" and "]]"
+		// Here, the expected value was "[[2]]". However, that inner "[[" caused the
+		// outer text probe to be ignored.
+		final ParsedTextProbes ptp = doParse("[[A.b=[[2]]]]");
+		assertEquals(0, ptp.assertions.size());
+		assertEquals(0, ptp.assignments.size());
+	}
+
+	@Test
+	public void testNestedBracketsOnlyOpen() {
+		// Same as testNestedBracketsBothOpenAndClose, but no duplicated "]]".
+		// This makes the outer "A.b" part get ignored
+		final ParsedTextProbes ptp = doParse("[[A.b=[[2]]");
+		assertEquals(1, ptp.assertions.size());
+		assertEquals(0, ptp.assignments.size());
+
+		final TextAssertionMatch tam = ptp.assertions.get(0);
+		assertEquals("2", tam.nodeType);
+		assertNull(tam.expectVal);
+	}
+
+	@Test
+	public void testMissingAssertion() {
+		final ParsedTextProbes ptp = doParse("[[Foo]]");
+		assertEquals(1, ptp.assertions.size());
+		assertEquals(0, ptp.assignments.size());
+
+		final TextAssertionMatch tam = ptp.assertions.get(0);
+		assertEquals("Foo", tam.nodeType);
+		assertNull(tam.expectVal);
 	}
 }

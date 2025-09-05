@@ -444,7 +444,7 @@ const doMain = (wsPort: number
                 return;
               }
               if (activeWorkspace.activeFileIsTempFile()) {
-                getLocIndicator().innerText = `(Temp files)`;
+                getLocIndicator().innerText = `(Temp file)`;
               } else {
                 getLocIndicator().innerText = `(${activeWorkspace.getActiveFile()})`;
               }

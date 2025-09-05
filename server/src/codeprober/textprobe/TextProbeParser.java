@@ -24,7 +24,7 @@ public class TextProbeParser {
 	}
 
 	public static Pattern getProbeContainerMatcher() {
-		return Pattern.compile("\\[\\[(?:(((?!\\[\\[).)+))\\]\\](?!\\])");
+		return Pattern.compile("\\[\\[(?:(((?!\\[\\[).)*))\\]\\](?!\\])");
 	}
 
 	public static int CONTAINER_GROUP_CONTENT = 1;
@@ -64,6 +64,16 @@ public class TextProbeParser {
 	public static TextAssertionMatch matchTextAssertion(String src, int lineIdx) {
 		final Matcher matcher = getTextAssertionPattern().matcher(src);
 		if (!matcher.matches()) {
+			final Matcher justQuery = Pattern.compile(textQueryPattern).matcher(src);
+			if (justQuery.matches()) {
+				final String nodeType = justQuery.group(PROBE_PATTERN_GROUP_NODETYPE);
+				final String nodeIndex = justQuery.group(PROBE_PATTERN_GROUP_NODEINDEX);
+				final String rawAttrNames = justQuery.group(PROBE_PATTERN_GROUP_ATTRNAMES);
+				final String[] attrNames = rawAttrNames.isEmpty() ? new String[0] : rawAttrNames.substring(1).split("\\.");
+				return new TextAssertionMatch(justQuery.group(0), lineIdx, nodeType,
+						nodeIndex == null ? null : Integer.parseInt(nodeIndex.substring(1, nodeIndex.length() - 1)), attrNames,
+						false, false, null);
+			}
 			return null;
 		}
 

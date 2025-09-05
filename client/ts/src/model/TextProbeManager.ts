@@ -279,6 +279,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         const expectVal = rhs?.expectVal;
         if (!rhs || typeof expectVal !== 'string') {
           // Just a probe, no assertion, no need to check further
+          ret.numPass++;
           return;
         }
 

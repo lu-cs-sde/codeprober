@@ -18,6 +18,9 @@ public class TextAssertionMatch extends TextQueryMatch {
 
 	@Override
 	public String toString() {
+		if (expectVal == null) {
+			return super.toString();
+		}
 		return Arrays.asList( //
 				super.toString(), exclamation ? "!" : "", //
 				tilde ? "~" : "", "=" + expectVal //

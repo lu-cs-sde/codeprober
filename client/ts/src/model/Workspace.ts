@@ -118,6 +118,11 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: WorkspaceInstance,
 
               failureLog.appendChild(logEntry);
               failureLog.style.display = 'flex';
+
+              if (res.numFail) {
+                logEntry.classList.add('clickHighlightOnHover');
+                logEntry.onclick = () => workspace.setActiveWorkspacePath(fullPath);
+              }
             }
             workspace.knownTestResults[fullPath] = res;
             statusLbl.innerText = `Running.. ${numPass} pass, ${numFail} fail`;

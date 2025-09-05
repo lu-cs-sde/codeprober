@@ -286,6 +286,10 @@ public class TextProbeEnvironment {
 	}
 
 	public boolean evaluateComparison(TextAssertionMatch tam, List<RpcBodyLine> lhsBody) {
+		if (tam.expectVal == null) {
+			// No assertion, automatic pass
+			return true;
+		}
 		if (tam.expectVal.startsWith("$")) {
 			// High resolution comparison
 			final TextQueryMatch rhsMatch = TextProbeParser.matchTextQuery(tam.expectVal, tam.lineIdx);
