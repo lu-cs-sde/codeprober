@@ -1,6 +1,25 @@
-import { NodeLocator, ParsingRequestData, ParsingSource, PropertyArg, RpcBodyLine, SynchronousEvaluationResult, TALStep } from '../protocol';
+import { NodeLocator, ParsingRequestData, ParsingSource, PropertyArg, RpcBodyLine, TALStep } from '../protocol';
 import ModalEnv from './ModalEnv';
 import reallyDoEvaluateProperty from '../network/evaluateProperty';
+
+const extractPreviousNodeForAttributeChain = (prevBody: RpcBodyLine[]): NodeLocator | 'no-such-node' | 'ambiguous-multiple-array-entries' => {
+  const head = prevBody[0];
+  if (head.type == 'node') {
+    return head.value;
+  }
+  if (head.type == 'arr') {
+    const arr = head.value;
+    const arrNodes = arr.filter(x => x.type === 'node');
+    if (arrNodes.length === 1) {
+      return arrNodes[0].value;
+    }
+    if (arrNodes.length > 1) {
+      // Ambiguous, fail
+      return 'ambiguous-multiple-array-entries';
+    }
+  }
+  return 'no-such-node';
+};
 
 type GeneralTextMatch = {
   index: number;
@@ -166,7 +185,7 @@ const doEvaluateProperty = async (env: ModalEnv, evalArgs: {
   prop: string;
   args?: PropertyArg[];
   parsingData?: ParsingRequestData;
-}): Promise<SynchronousEvaluationResult | 'stopped'> => {
+}): Promise<RpcBodyLine[] | 'stopped'> => {
   const rpcQueryStart = performance.now();
   const res = await reallyDoEvaluateProperty(env, {
     captureStdout: false,
@@ -193,18 +212,21 @@ const doEvaluateProperty = async (env: ModalEnv, evalArgs: {
       });
     }
   }
-  return res;
+  if (res === 'stopped') {
+    return res;
+  }
+  return res.body;
 }
 
 
-type BrokenNodeChain = { type: 'broken-node-chain', brokenIndex: number };
+type BrokenNodeChain = { type: 'broken-node-chain', brokenIndex: number, detail: 'no-such-node' | 'ambiguous-multiple-nodes', };
 const isBrokenNodeChain = (val: any): val is BrokenNodeChain => val && (typeof val === 'object') && (val as BrokenNodeChain).type === 'broken-node-chain';
 
 const doEvaluatePropertyChain = async (env: ModalEnv, evalArgs: {
   locator: NodeLocator;
   propChain: string[];
   parsingData?: ParsingRequestData;
-}): Promise<SynchronousEvaluationResult | 'stopped' | BrokenNodeChain> => {
+}): Promise<RpcBodyLine[] | 'stopped' | BrokenNodeChain> => {
   const first = await doEvaluateProperty(env, { locator: evalArgs.locator, prop: evalArgs.propChain[0], parsingData: evalArgs.parsingData, });
   if (first === 'stopped') {
     return 'stopped';
@@ -212,10 +234,13 @@ const doEvaluatePropertyChain = async (env: ModalEnv, evalArgs: {
   let prevResult = first;
   for (let subsequentIdx = 1; subsequentIdx < evalArgs.propChain.length; ++subsequentIdx) {
     // Previous result must be a node locator
-    if (prevResult.body[0]?.type !== 'node') {
-      return { type: 'broken-node-chain', brokenIndex: subsequentIdx - 1 };
+    const chainedLocator = extractPreviousNodeForAttributeChain(prevResult);
+    if (chainedLocator === 'no-such-node') {
+      return { type: 'broken-node-chain', brokenIndex: subsequentIdx - 1, detail: 'no-such-node' };
     }
-    const chainedLocator = prevResult.body[0].value;
+    if (chainedLocator === 'ambiguous-multiple-array-entries') {
+      return { type: 'broken-node-chain', brokenIndex: subsequentIdx - 1, detail: 'ambiguous-multiple-nodes' };
+    }
 
     const nextRes = await doEvaluateProperty(env, { locator: chainedLocator, prop: evalArgs.propChain[subsequentIdx], parsingData: evalArgs.parsingData });
     if (nextRes === 'stopped') {
@@ -247,11 +272,11 @@ const doListNodes = async (env: ModalEnv, listArgs: {
     return null;
   }
 
-  if (!propResult.body.length || propResult.body[0].type !== 'arr') {
+  if (!propResult.length || propResult[0].type !== 'arr') {
     console.error('Unexpected response from search query:', propResult);
     return null;
   }
-  const queryResultList = propResult.body[0].value;
+  const queryResultList = propResult[0].value;
   const ret: NodeLocator[] = [];
   queryResultList.forEach(line => {
     if (line.type === 'node') {
@@ -364,13 +389,17 @@ const doEvaluateNodeAndAttr = async (
     for (let i = 0; i < attrEvalResult.brokenIndex; ++i) {
       attrStart = line.value.indexOf('.', attrStart) + 1;
     }
+    const msg = attrEvalResult.detail === 'no-such-node'
+      ? `No AST node returned by "${args.attrNames[attrEvalResult.brokenIndex]}`
+      : `Multiple AST nodes returned by "${args.attrNames[attrEvalResult.brokenIndex]}`
+      ;
     return {
       type: 'error',
-      msg: `No AST node returned by "${args.attrNames[attrEvalResult.brokenIndex]}"`, // `Invalid attribute chain`,
+      msg,
       errRange: { colStart: attrStart + 1, colEnd: attrStart + args.attrNames[attrEvalResult.brokenIndex].length },
     }
   }
-  if (attrEvalResult.body.length === 1 && attrEvalResult.body[0].type === 'plain' && attrEvalResult.body[0].value.startsWith(`No such attribute '${args.attrNames[args.attrNames.length - 1]}' on `)) {
+  if (attrEvalResult.length === 1 && attrEvalResult[0].type === 'plain' && attrEvalResult[0].value.startsWith(`No such attribute '${args.attrNames[args.attrNames.length - 1]}' on `)) {
     let lastAttrStart = args.index;
     for (let i = 0; i < args.attrNames.length; ++i) {
       lastAttrStart = line.value.indexOf('.', lastAttrStart) + 1;
@@ -383,7 +412,7 @@ const doEvaluateNodeAndAttr = async (
   }
   return {
     type: 'success',
-    output: attrEvalResult.body,
+    output: attrEvalResult,
   };
 };
 
@@ -455,12 +484,12 @@ interface TextProbeEvaluator {
   evaluatePropertyChain: (args: {
     locator: NodeLocator;
     propChain: string[];
-  }) => Promise<SynchronousEvaluationResult | 'stopped' | BrokenNodeChain>;
+  }) => Promise<RpcBodyLine[] | 'stopped' | BrokenNodeChain>;
   evaluateProperty: (args: {
     locator: NodeLocator;
     prop: string;
     args?: PropertyArg[];
-  }) => Promise<SynchronousEvaluationResult | 'stopped'>;
+  }) => Promise<RpcBodyLine[] | 'stopped'>;
 }
 
 const createTextProbeEvaluator = (env: ModalEnv, parsingSource?: string | { src: ParsingSource, contents: string }): TextProbeEvaluator => {
@@ -514,5 +543,5 @@ const createTextProbeEvaluator = (env: ModalEnv, parsingSource?: string | { src:
   return ret;
 }
 
-export { createTextProbeEvaluator, isAssignmentMatch, isBrokenNodeChain, NodeAndAttrChainMatch };
+export { createTextProbeEvaluator, isAssignmentMatch, isBrokenNodeChain, NodeAndAttrChainMatch, extractPreviousNodeForAttributeChain, ProbeMatch };
 export default TextProbeEvaluator;

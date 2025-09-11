@@ -134,8 +134,8 @@ public class TextProbeEnvironment {
 	private EvaluatePropertyRes performEvalReq(ParsingRequestData src, NodeLocator locator, Property property) {
 
 		if (!runConcurrent) {
-			final EvaluatePropertyReq req = new EvaluatePropertyReq(src, locator, property, false, null, null, null, null,
-					null, true);
+			final EvaluatePropertyReq req = new EvaluatePropertyReq(src, locator, property, false, null, null, null,
+					null, null, true);
 			final ClientRequest clientReq = new ClientRequest(req.toJSON(), obj -> {
 			}, new AtomicBoolean(true), (p) -> {
 			});
@@ -156,8 +156,8 @@ public class TextProbeEnvironment {
 			interceptor.install();
 		}
 		try {
-			final EvaluatePropertyReq req = new EvaluatePropertyReq(src, locator, property, false, (long)(Math.random() * 100000.0), null, null, null,
-					null, true);
+			final EvaluatePropertyReq req = new EvaluatePropertyReq(src, locator, property, false,
+					(long) (Math.random() * 100000.0), null, null, null, null, true);
 
 			final ClientRequest clientReq = new ClientRequest(req.toJSON(), obj -> {
 				if (obj.value.type == AsyncRpcUpdateValue.Type.workerTaskDone) {
@@ -175,7 +175,8 @@ public class TextProbeEnvironment {
 			}, new AtomicBoolean(true), (p) -> {
 
 			});
-			final EvaluatePropertyRes initialRes = EvaluatePropertyRes.fromJSON(requestHandler.handleRequest(clientReq));
+			final EvaluatePropertyRes initialRes = EvaluatePropertyRes
+					.fromJSON(requestHandler.handleRequest(clientReq));
 			switch (initialRes.response.type) {
 			case sync:
 				System.out.println("Weird: got got sync response in concurrent environment");
@@ -270,9 +271,32 @@ public class TextProbeEnvironment {
 		for (int attrIdx = 0; attrIdx < query.attrNames.length; ++attrIdx) {
 
 			if (attrIdx > 0) {
-				if (lastResult.size() >= 1 && lastResult.get(0).type == RpcBodyLine.Type.node) {
-					locator = lastResult.get(0).asNode();
-				} else {
+				locator = null;
+				if (lastResult.size() > 0) {
+					final RpcBodyLine lastRes = lastResult.get(0);
+					switch (lastRes.type) {
+					case node:
+						locator = lastRes.asNode();
+						break;
+					case arr:
+						final List<NodeLocator> arrLocators = lastRes.asArr().stream() //
+								.filter(x -> x.isNode()) //
+								.map(x -> x.asNode()) //
+								.collect(Collectors.toList());
+						if (arrLocators.size() > 1) {
+							errMsgs.add("Multiple AST nodes returned by " + query.attrNames[attrIdx - 1]);
+							return null;
+						}
+						if (arrLocators.size() == 1) {
+							locator = arrLocators.get(0);
+						}
+						break;
+					default:
+						break;
+
+					}
+				}
+				if (locator == null) {
 					errMsgs.add("Invalid attribute chain");
 					return null;
 				}
@@ -290,6 +314,7 @@ public class TextProbeEnvironment {
 			// No assertion, automatic pass
 			return true;
 		}
+		List<RpcBodyLine> rhsBody;
 		if (tam.expectVal.startsWith("$")) {
 			// High resolution comparison
 			final TextQueryMatch rhsMatch = TextProbeParser.matchTextQuery(tam.expectVal, tam.lineIdx);
@@ -302,31 +327,66 @@ public class TextProbeEnvironment {
 				return false;
 			}
 
-			final List<RpcBodyLine> rhsBody = evaluateQuery(rhsMatch);
+			rhsBody = evaluateQuery(rhsMatch);
 			if (rhsBody == null) {
 				return false;
 			}
-			final byte[] lhs = preparePropertyBodyForHighIshPrecisionComparison(lhsBody);
-			final byte[] rhs = preparePropertyBodyForHighIshPrecisionComparison(rhsBody);
-			if (!Arrays.equals(lhs, rhs)) {
-				errMsgs.add("Failed assertion");
-				return false;
-			}
-			return true;
+		} else {
+			rhsBody = Arrays.asList(RpcBodyLine.fromPlain(tam.expectVal));
 		}
 
-		final String lhs = flattenBody(lhsBody);
-		final String rhs = tam.expectVal;
-		final boolean rawComparison = tam.tilde ? lhs.contains(rhs) : lhs.equals(rhs);
+		if (lhsBody.size() == 0 || rhsBody.size() == 0) {
+			errMsgs.add("Failed evaluation");
+			return false;
+		}
+
+		final String lhs, rhs;
+		final boolean rawComparison;
+		if (tam.tilde) {
+			// Either a contains-in-array checking, or string.contains checking
+			if (lhsBody.get(0).isArr() && rhsBody.get(0).isNode()) {
+				final byte[] rhsArr = preparePropertyBodyForHighIshPrecisionComparison(rhsBody.subList(0, 1));
+
+				rawComparison = lhsBody.get(0).asArr().stream().anyMatch(
+						x -> Arrays.equals(preparePropertyBodyForHighIshPrecisionComparison(Arrays.asList(x)), rhsArr));
+			} else {
+				rawComparison = flattenBody(lhsBody).contains(flattenBody(rhsBody));
+			}
+			final boolean adjustedComparison = tam.exclamation ? !rawComparison : rawComparison;
+			if (adjustedComparison) {
+				return true;
+			}
+			errMsgs.add("-        Expected: " + flattenBody(lhsBody));
+			errMsgs.add("   " + (tam.exclamation ? "NOT t" : "   T") + "o contain: " + flattenBody(rhsBody));
+			return false;
+		}
+
+		// Non-contains checking. Either precise node locator comparison, or less
+		// precise toString-comparison
+		String notTheSame = "";
+		if (lhsBody.get(0).isNode() && rhsBody.get(0).isNode()) {
+			rawComparison = Arrays.equals(preparePropertyBodyForHighIshPrecisionComparison(lhsBody.subList(0, 1)),
+					preparePropertyBodyForHighIshPrecisionComparison(rhsBody.subList(0, 1)));
+			if (!rawComparison && !tam.exclamation) {
+				// Default "expected/actual" prints can be very confusing if the ast types are
+				// the same
+				if (lhsBody.get(0).asNode().result.type.equals(rhsBody.get(0).asNode().result.type)) {
+					notTheSame = " (same type, not the same node)";
+				}
+			}
+		} else {
+			rawComparison = flattenBody(lhsBody).equals(flattenBody(rhsBody));
+		}
+		lhs = flattenBody(lhsBody);
+		rhs = flattenBody(rhsBody);
 		final boolean adjustedComparison = tam.exclamation ? !rawComparison : rawComparison;
 		if (adjustedComparison) {
 			return true;
 		} else {
-			errMsgs.add("- Expected: " + (tam.exclamation ? "NOT " : "") + rhs);
-			errMsgs.add("    Actual: " + (tam.exclamation ? "    " : "") + lhs);
+			errMsgs.add("-    " + (tam.exclamation ? "Expected NOT: " : "    Expected: ") + rhs);
+			errMsgs.add("           Actual: " + lhs + notTheSame);
 			return false;
 		}
-
 	}
 
 	public static byte[] preparePropertyBodyForHighIshPrecisionComparison(List<RpcBodyLine> lines) {

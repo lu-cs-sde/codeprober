@@ -148,7 +148,7 @@ const displayProbeModal = (
       const checkProbeDataComptable = (pd: WindowStateDataProbe): boolean => {
         if (pd.property.args?.length) { return false; }
         if (pd.locator.steps.some(step => step.type === 'nta' && step.value.property.args?.length)) { return false; }
-        return Object.entries(pd.nested).every(([id, ent]) => id === '[0]' && ent.length === 1 && checkNestCompatible(ent[0].data));
+        return Object.entries(pd.nested).every(([id, ent]) => (id === '[0]' || id === '[0,0]')  && ent.length === 1 && checkNestCompatible(ent[0].data));
       }
       if (locator.get().steps?.[0]?.type === 'nta') {
         // Very first step is nta, not compatible
@@ -253,6 +253,7 @@ const displayProbeModal = (
         },
         ...(!isTextProbeCompatible() ? [] : [{
           title: 'Copy as text probe',
+          shouldBeDisplayed: () => isTextProbeCompatible(),
           invoke: () => {
             let res = [];
             const resType = locator.get().result.label ?? locator.get().result.type;
@@ -261,7 +262,7 @@ const displayProbeModal = (
 
             let nest: NestedWindows = inlineWindowManager.getWindowStates();
             while (true) {
-              let firstNest = nest['[0]']?.[0]?.data;
+              let firstNest = (nest['[0]'] ?? nest['[0,0]'])?.[0]?.data;
               if (firstNest?.type === 'probe') {
                 nest = firstNest.nested;
                 res.push(`.${firstNest.property.name}`);

@@ -153,10 +153,10 @@ const createTextProbeCompleteLogic = (args: CreateTextProbeCompleteLogicArgs): T
         if (chainResult === 'stopped' || isBrokenNodeChain(chainResult)) {
           return null;
         }
-        if (chainResult.body[0]?.type !== 'node') {
+        if (chainResult[0]?.type !== 'node') {
           return null;
         }
-        locator = chainResult.body[0].value;
+        locator = chainResult[0].value;
       }
       flasher.flash([
         {
@@ -234,8 +234,8 @@ const createTextProbeCompleteLogic = (args: CreateTextProbeCompleteLogicArgs): T
       if (attrEvalResult == 'stopped' || isBrokenNodeChain(attrEvalResult)) {
         return null;
       }
-      if (attrEvalResult.body[0]?.type === 'node') {
-        const node = attrEvalResult.body[0].value.result;
+      if (attrEvalResult[0]?.type === 'node') {
+        const node = attrEvalResult[0].value.result;
         if (!node.external) {
           flasher.flash([startEndToSpan(node.start, node.end)]);
           window.OnCompletionItemListClosed = () => {
@@ -243,7 +243,7 @@ const createTextProbeCompleteLogic = (args: CreateTextProbeCompleteLogicArgs): T
           }
         }
       }
-      const cmp = evalPropertyBodyToString(attrEvalResult.body)
+      const cmp = evalPropertyBodyToString(attrEvalResult)
       return {
         from: { line: line + 1, column: column + 1 - existingText.length },
         items: [{ label: cmp, insertText: cmp, kind: 15 }],

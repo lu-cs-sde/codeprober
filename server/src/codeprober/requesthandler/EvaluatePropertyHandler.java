@@ -343,6 +343,27 @@ public class EvaluatePropertyHandler {
 									EncodeResponseValue.shouldExpandListNodes = shouldExpandListNodes;
 									EncodeResponseValue.encodeTyped(parsed.info, body, diagnostics, value,
 											new HashSet<>());
+
+//									for (RpcBodyLine line : body) {
+//										System.out.println(body.size());
+////										System.out.println("> " + line.type);
+//									}
+//									System.out.println("-..-");
+//									for (RpcBodyLine line : body) {
+//										System.out.println("> " + line.toJSON());
+//									}
+//									System.out.println("--");
+//									if (!shouldExpandListNodes && maybeInlineArrays) {
+//										// Inline arrays
+//										for (int i = 0; i < body.size(); ++i) {
+//											final RpcBodyLine row = body.get(i);
+//											if (row.isArr()) {
+//												body.remove(i);
+//												body.addAll(i, row.asArr());
+//												i += row.asArr().size() - 1;
+//											}
+//										}
+//									}
 								} finally {
 									EncodeResponseValue.shouldExpandListNodes = true;
 								}

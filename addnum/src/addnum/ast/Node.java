@@ -3,6 +3,7 @@ package addnum.ast;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 
@@ -26,6 +27,10 @@ public abstract class Node implements Iterable<Node> {
 
 	public int getEnd() {
 		return end;
+	}
+
+	public Collection<Node> getChildren() {
+		return children;
 	}
 
 	public abstract void prettyPrint(PrintStream out);

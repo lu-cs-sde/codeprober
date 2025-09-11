@@ -1,0 +1,18 @@
+1  // [[$one:=Num]] [[$p:=Program]] [[$rn:=Program.rootNode]]
++2 // [[$three:=Add[1]]] 
++4 // [[$four:=Num]] [[$seven:=Add]]
+
+// Accessing something directly on an array is an error if the array has zero or >1 entries
+// [[$one.getChildren.value=123]]
+// [[$rn.getChildren.value=123]]
+
+// String-interpolation doesn't work in the middle of a RHS
+// [[$rn.getChildren=[$three, $four]]]
+
+// `=` and `!=` does precise comparisons on nodes
+// [[$rn.rhs=$one]]
+// [[$rn.rhs!=$four]]
+
+// Contains-checking with strings on RHS, where RHS starts with $
+//   [[$rn.value=$three.value]]
+//   [[$rn.asNum.asAdd.prettyPrint=$seven.value]]

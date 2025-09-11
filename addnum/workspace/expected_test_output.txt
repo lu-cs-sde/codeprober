@@ -5,6 +5,19 @@
   ❌ ts/err_badindex.addn
      Invalid index
      Invalid index
+  ❌ ts/err_containscases.addn
+     Invalid attribute chain
+     Multiple AST nodes returned by getChildren
+     -        Expected: [$three, $four]
+                Actual: [Add, Num]
+     -        Expected: Num
+                Actual: Num (same type, not the same node)
+     -    Expected NOT: Num
+                Actual: Num
+     -        Expected: 3
+                Actual: 7
+     -        Expected: 7
+                Actual: (0 + 7)
   ❌ ts/err_empty.addn
      No matching nodes
   ❌ ts/err_nosuchnode.addn
@@ -21,10 +34,11 @@
   ❌ ts/err_varvar.addn
      Cannot use variables on right-hand side
   ✅ ts/ok_add.addn
+  ✅ ts/ok_containscases.addn
   ✅ ts/ok_large.addn
   ✅ ts/ok_listvar.addn
   ✅ ts/ok_nestedbrackets.addn
   ✅ ts/ok_num.addn
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
-Done: 33 pass, 13 fail
+Done: 56 pass, 20 fail

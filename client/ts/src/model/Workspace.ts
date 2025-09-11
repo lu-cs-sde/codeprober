@@ -150,7 +150,6 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: WorkspaceInstance,
     testWindow.remove();
     delete args.env.onChangeListeners[queryId];
   };
-  console.log('displayTestModal')
   let currentlyRunning = false;
   let currentTestRunMonitor = { shouldStop: false };
   const rerun = () => {

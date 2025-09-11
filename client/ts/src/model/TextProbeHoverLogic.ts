@@ -6,7 +6,7 @@ import displayProbeModal from '../ui/popup/displayProbeModal';
 import startEndToSpan from '../ui/startEndToSpan';
 import ModalEnv from './ModalEnv';
 import SpanFlasher from './SpanFlasher';
-import TextProbeEvaluator, { isAssignmentMatch, isBrokenNodeChain, NodeAndAttrChainMatch } from './TextProbeEvaluator';
+import TextProbeEvaluator, { extractPreviousNodeForAttributeChain, isAssignmentMatch, isBrokenNodeChain, NodeAndAttrChainMatch } from './TextProbeEvaluator';
 import { createMutableLocator } from './UpdatableNodeLocator';
 import { NestedWindows } from './WindowState';
 
@@ -80,10 +80,10 @@ const createProbeHoverLogic = (args: CreateProbeHoverLogicArgs): TextProbeHoverL
       };
       const evaluateAndFlashChain = async (locator: NodeLocator, propChain: string[], flashStart: number, flashEnd: number) => {
         const res = await evaluator.evaluatePropertyChain({ locator, propChain, });
-        if (res === 'stopped' || isBrokenNodeChain(res) || res.body[0]?.type !== 'node') {
+        if (res === 'stopped' || isBrokenNodeChain(res) || res[0]?.type !== 'node') {
           return;
         }
-        const node = res.body[0].value.result;
+        const node = res[0].value.result;
         flashNode(node, flashStart, flashEnd);
       }
       const maybeHoverAttrChain = async (locator: NodeLocator, match: NodeAndAttrChainMatch, searchStart: number): Promise<{ newSearchStart: number, didHoverSomething: boolean }> => {
@@ -123,6 +123,7 @@ const createProbeHoverLogic = (args: CreateProbeHoverLogicArgs): TextProbeHoverL
             const nestedWindows: NestedWindows = {};
             let nestTarget = nestedWindows;
             let nestLocator = locator;
+            let prevStepWasArr = false;
             for (let chainAttrIdx = 0; chainAttrIdx < m.attrNames.length; ++chainAttrIdx) {
               const chainAttr = m.attrNames[chainAttrIdx];
               const res = await evaluator.evaluateProperty({ locator: nestLocator, prop: chainAttr });
@@ -131,15 +132,17 @@ const createProbeHoverLogic = (args: CreateProbeHoverLogicArgs): TextProbeHoverL
               }
               if (chainAttrIdx > 0) {
                 let newNest: NestedWindows = {};
-                nestTarget['[0]'] = [
+                nestTarget[prevStepWasArr ? '[0,0]' : '[0]'] = [
                   { data: { type: 'probe', locator, property: { name: chainAttr }, nested: newNest } },
                 ];
                 nestTarget = newNest;
               }
-              if (res.body[0]?.type !== 'node') {
+              const next = extractPreviousNodeForAttributeChain(res);
+              if (next === 'no-such-node' || next === 'ambiguous-multiple-array-entries') {
                 break;
               }
-              nestLocator = res.body[0].value;
+              nestLocator = next;
+              prevStepWasArr = res[0]?.type == 'arr';
             }
             displayProbeModal(args.env,
               { x: lastKnownMousePos.x + offset.x, y: lastKnownMousePos.y + offset.y },

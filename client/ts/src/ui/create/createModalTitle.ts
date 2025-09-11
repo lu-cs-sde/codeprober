@@ -3,6 +3,7 @@ import showWindow from "./showWindow";
 interface ExtraAction {
   title: string;
   invoke: () => void;
+  shouldBeDisplayed?: () => boolean;
 }
 type CreateModalTitleArgs = {
   renderLeft: (container: HTMLElement) => void;
@@ -39,6 +40,9 @@ const createOverflowButton = (
         container.appendChild(hidden);
 
         extraActions.forEach((action) => {
+          if (action.shouldBeDisplayed && !action.shouldBeDisplayed()) {
+            return;
+          }
           const row = document.createElement('div')
           row.classList.add('context-menu-row');
           row.onclick = () => {

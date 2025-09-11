@@ -149,7 +149,7 @@ public class WorkspaceHandler {
 			return null;
 		}
 
-		final File workspaceRootFile = new File(workspaceRootCfg);
+		final File workspaceRootFile = new File(workspaceRootCfg).getAbsoluteFile();
 		if (workspaceRootFile.isFile()) {
 			System.err.println("ERROR: specified 'cpr.workspace' path '" + workspaceRootCfg + "' is a file");
 			if (exitOnBadConfig) {
@@ -157,7 +157,7 @@ public class WorkspaceHandler {
 			}
 		}
 		if (!workspaceRootFile.exists()) {
-			if (!workspaceRootFile.getParentFile().exists()) {
+			if (workspaceRootFile.getParentFile() == null || !workspaceRootFile.getParentFile().exists()) {
 				// If both the parent and child path are missing, there is a decent chance of
 				// misconfiguration. Print an error and exit/return.
 				System.err.println("ERROR: neither the 'cpr.workspace' path '" + workspaceRootCfg
@@ -168,7 +168,7 @@ public class WorkspaceHandler {
 				return null;
 			}
 			// Else, only the child path does not exist. Create it
-			System.out.println("'cpr.workspace' path " + workspaceRootCfg + " is missing. Creating an empty direcyory");
+			System.out.println("'cpr.workspace' path '" + workspaceRootCfg + "' is missing. Creating an empty direcyory");
 			workspaceRootFile.mkdir();
 		}
 		return workspaceRootFile;

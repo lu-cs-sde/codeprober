@@ -27,6 +27,44 @@ interface TextProbeManager {
 
 type TextProbeStyle = 'angle-brackets' | 'disabled';
 
+const doCompareLhsAndRhs = (
+  lhsEval: RpcBodyLine[],
+  rhsEval: RpcBodyLine[],
+  tilde: boolean,
+): { actual?: string, comparisonSuccess: boolean } => {
+  let actual: string | undefined = undefined;
+  let comparisonSuccess: boolean;
+  if (tilde) {
+    // Either a contains-in-array checking, or string.contains checking
+    if (lhsEval[0].type === 'arr' && rhsEval[0].type === 'node') {
+      // Array contains
+      const needle = JSON.stringify(rhsEval[0]);
+      comparisonSuccess = lhsEval[0].value.some(row => JSON.stringify(row) === needle);
+    } else {
+      // String contains
+      const lhsStr = evalPropertyBodyToString(lhsEval);
+      const rhsStr = evalPropertyBodyToString(rhsEval);
+      comparisonSuccess = lhsStr.includes(rhsStr);
+      actual = lhsStr;
+    }
+  } else {
+    // Non-contains checking. Either precise node locator comparison, or less precise toString-comparison
+    if (lhsEval[0].type === 'node' && rhsEval[0].type === 'node') {
+      // Node locator comparison
+      const lhsStr = JSON.stringify(lhsEval[0].value);
+      const rhsStr = JSON.stringify(rhsEval[0].value);
+      comparisonSuccess = lhsStr == rhsStr;
+    } else {
+      // (Less-precise) String comparison
+      const lhsStr = evalPropertyBodyToString(lhsEval);
+      const rhsStr = evalPropertyBodyToString(rhsEval);
+      actual = lhsStr;
+      comparisonSuccess = lhsStr === rhsStr;
+    }
+  }
+  return { actual, comparisonSuccess };
+};
+
 const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => {
   const refreshDispatcher = args.env.createCullingTaskSubmitter()
   const queryId = `query-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -120,13 +158,13 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       for (let i = 0; i < evaluator.fileMatches.probes.length; ++i) {
         const match = evaluator.fileMatches.probes[i];
         const lineIdx = match.lineIdx;
-        const lhsEval = await evaluator.evaluateNodeAndAttr(match.lhs);
+        const lhsEvalResult = await evaluator.evaluateNodeAndAttr(match.lhs);
         const span: Span = { lineStart: lineIdx + 1, colStart: match.index - 1, lineEnd: lineIdx + 1, colEnd: match.index + match.full.length + 2 };
-        if (lhsEval.type === 'error') {
-          addSquiggly(lineIdx, lhsEval.errRange.colStart, lhsEval.errRange.colEnd, lhsEval.msg);
+        if (lhsEvalResult.type === 'error') {
+          addSquiggly(lineIdx, lhsEvalResult.errRange.colStart, lhsEvalResult.errRange.colEnd, lhsEvalResult.msg);
           addStickyBox(
             ['elp-result-fail'], span,
-            ['elp-actual-result-err'], lhsEval.msg,
+            ['elp-actual-result-err'], lhsEvalResult.msg,
           );
           combinedResults.numFail++;
           continue;
@@ -135,13 +173,13 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         if (typeof match.rhs?.expectVal === 'undefined') {
           addStickyBox(
             ['elp-result-probe'], span,
-            [`elp-actual-result-probe`], `Result: ${evalPropertyBodyToString(lhsEval.output)}`,
+            [`elp-actual-result-probe`], `Result: ${evalPropertyBodyToString(lhsEvalResult.output)}`,
           );
           continue;
         }
-        // Else, an assertion!
+        const lhsEval = lhsEvalResult.output;
+        let rhsEval: RpcBodyLine[];
         if (match.rhs.expectVal.startsWith('$')) {
-          // Do not flatten to string, make full-precision comparison
           const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx, value: match.rhs.expectVal }, true);
           if (!rhsMatch) {
             const errMsg = `Invalid syntax`;
@@ -154,58 +192,40 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
             continue;
           }
           rhsMatch.index = match.index + match.full.indexOf('$', 2);
-          const rhsEval = await evaluator.evaluateNodeAndAttr(rhsMatch);
-          if (rhsEval.type === 'error') {
-            addSquiggly(lineIdx, rhsEval.errRange.colStart, rhsEval.errRange.colEnd, rhsEval.msg);
+          const rhsEvalRes = await evaluator.evaluateNodeAndAttr(rhsMatch);
+          if (rhsEvalRes.type === 'error') {
+            addSquiggly(lineIdx, rhsEvalRes.errRange.colStart, rhsEvalRes.errRange.colEnd, rhsEvalRes.msg);
             addStickyBox(
               ['elp-result-fail'], span,
-              ['elp-actual-result-err'], rhsEval.msg,
+              ['elp-actual-result-err'], rhsEvalRes.msg,
             );
             combinedResults.numFail++;
             continue;
           }
-          // Else, success!
-          // Ugly stringify comparison, should work but is not the most efficient
-          const lhsFiltered = filterPropertyBodyForHighIshPrecisionComparison(lhsEval.output);
-          const rhsFiltered = filterPropertyBodyForHighIshPrecisionComparison(rhsEval.output);
-          const rawComparisonSuccess = JSON.stringify(lhsFiltered) === JSON.stringify(rhsFiltered);
-          const adjustedComparisonSuccsess = match.rhs.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
-          if (adjustedComparisonSuccsess) {
-            combinedResults.numPass++;
-            args.env.setStickyHighlight(allocateStickyId(), {
-              classNames: ['elp-result-success'], span,
-            });
-            continue;
-          }
+          rhsEval = rhsEvalRes.output;
+        } else {
+          // rhs is plain string
+          rhsEval = [{ type: 'plain', value: match.rhs.expectVal }];
+        }
 
-          const errMsg = `Assertion failed.`;
-          addSquiggly(lineIdx, span.colStart + 2, span.colEnd - 2, errMsg);
+        const { actual, comparisonSuccess } = doCompareLhsAndRhs(lhsEval, rhsEval, match.rhs.tilde);
+        const adjustedComparisonSuccsess = match.rhs.exclamation ? !comparisonSuccess : comparisonSuccess;
+        if (adjustedComparisonSuccsess) {
+          combinedResults.numPass++;
+          args.env.setStickyHighlight(allocateStickyId(), {
+            classNames: ['elp-result-success'], span,
+          });
+        } else {
+          const errMsg = actual ? `Actual: ${actual}` : `Assertion failed`;
+          addSquiggly(lineIdx, match.index + match.full.indexOf(match.rhs.expectVal), span.colEnd - 1, errMsg);
           addStickyBox(
             ['elp-result-fail'], span,
             ['elp-actual-result-err'], errMsg,
           );
           combinedResults.numFail++;
-        } else {
-          // Flatten to string and make string comparison
-          const cmp = evalPropertyBodyToString(lhsEval.output);
-          const rawComparisonSuccess = match.rhs.tilde ? cmp.includes(match.rhs.expectVal) : cmp === match.rhs.expectVal;
-          const adjustedComparisonSuccsess = match.rhs.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
-          if (adjustedComparisonSuccsess) {
-            combinedResults.numPass++;
-            args.env.setStickyHighlight(allocateStickyId(), {
-              classNames: ['elp-result-success'], span,
-            });
-          } else {
-            const errMsg = `Actual: ${cmp}`;
-            addSquiggly(lineIdx, match.index + match.full.indexOf(match.rhs.expectVal), span.colEnd - 1, errMsg);
-            addStickyBox(
-              ['elp-result-fail'], span,
-              ['elp-actual-result-err'], errMsg,
-            );
-            combinedResults.numFail++;
 
-          }
         }
+        // }
       }
     } catch (e) {
       console.warn('Error during refresh', e);
@@ -275,6 +295,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
           ret.numFail++;
           return;
         }
+
         const rhs = match.rhs;
         const expectVal = rhs?.expectVal;
         if (!rhs || typeof expectVal !== 'string') {
@@ -282,7 +303,8 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
           ret.numPass++;
           return;
         }
-
+        const lhsEval = lhsResult.output;
+        let rhsEval: RpcBodyLine[];
         if (expectVal?.startsWith('$')) {
           const rhsMatch = evaluator.matchNodeAndAttrChain({ lineIdx: match.lineIdx, value: expectVal }, true);
           if (!rhsMatch) {
@@ -294,32 +316,24 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
             ret.numFail++;
             return;
           }
-          const lhsFiltered = filterPropertyBodyForHighIshPrecisionComparison(lhsResult.output);
-          const rhsFiltered = filterPropertyBodyForHighIshPrecisionComparison(rhsResult.output);
-          const rawComparisonSuccess = JSON.stringify(lhsFiltered) === JSON.stringify(rhsFiltered);
-          const adjustedComparisonSuccsess = rhs.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
-          if (adjustedComparisonSuccsess) {
-            ret.numPass++;
-          } else {
-            ret.numFail++;
-          }
+          rhsEval = rhsResult.output;
         } else {
-          const cmp = evalPropertyBodyToString(lhsResult.output);
-          const rawComparisonSuccess = rhs.tilde ? cmp.includes(expectVal) : (cmp === expectVal);
-          const adjustedComparisonSuccsess = rhs.exclamation ? !rawComparisonSuccess : rawComparisonSuccess;
-          if (adjustedComparisonSuccsess) {
-            ret.numPass++;
-          } else {
-            ret.numFail++;
-          }
+          rhsEval = [{ type: 'plain', value: expectVal }];
+        };
+
+        const { comparisonSuccess, actual } = doCompareLhsAndRhs(lhsEval, rhsEval, rhs.tilde);
+        const adjustedComparisonSuccsess = rhs.exclamation ? !comparisonSuccess : comparisonSuccess;
+        if (adjustedComparisonSuccsess) {
+          ret.numPass++;
+        } else {
+          ret.numFail++;
         }
-      };
+      }
       if (args.env.workerProcessCount !== undefined) {
         postLoopWaits.push(handleMatch());
       } else {
         await handleMatch();
       }
-      // }
     }
     await Promise.all(postLoopWaits);
 

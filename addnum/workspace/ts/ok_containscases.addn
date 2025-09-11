@@ -1,0 +1,43 @@
+1  // [[$one:=Num]] [[$p:=Program]] [[$rn:=Program.rootNode]]
++2 // [[$three:=Add[1]]] 
++4 // [[$four:=Num]] [[$seven:=Add]]
+
+// [[$rn.value=7]]
+
+// Accessing something directly on an array is fine IF the array has a single entry
+// [[$p.getChildren=Add]]
+// [[$p.getChildren.value=7]]
+
+// Lists with multiple children
+// Imprecise, string-based comparison
+//   [[$rn.getChildren=[Add, Num]]]
+//   [[$rn.lhs.getChildren=[Num, Num]]]
+// Imprecise string-contains-based comparison
+//   [[$rn.getChildren~=Add]]
+//   [[$rn.getChildren~=Num]]
+// Precise contains-based comparison
+//   [[$rn.getChildren!=$one]]
+//   [[$rn.getChildren~=$three]]
+//   [[$rn.getChildren~=$four]]
+//   [[$p.rootNode.getChildren~=$rn.rhs]]
+//   [[$p.rootNode.getChildren~=$rn.lhs]]
+//   [[$p.rootNode.getChildren!~=$rn.lhs.lhs]]
+
+// Note that string-interpolation doesn't work in the middle of a RHS
+//   [[$rn.getChildren!=[$three, $four]]]
+
+// rhs is a Num node
+// [[$rn.rhs=Num]]
+// `=` and `!=` can check exactly _which_ Num node
+// [[$rn.rhs!=$one]]
+// [[$rn.rhs=$four]]
+
+// `~=` and `!~=` does string-based comparisons
+// [[$rn.rhs~=$one]]
+// [[$rn.rhs!~=$three]]
+// [[$rn.rhs~=$four]]
+
+// Contains-checking with strings on RHS, where RHS starts with $
+//   [[$rn.value~=$seven.value]]
+//   [[$rn.value!~=$three.value]]
+//   [[$rn.asNum.asAdd.prettyPrint~=$seven.value]]
