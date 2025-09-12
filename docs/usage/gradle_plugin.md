@@ -93,7 +93,7 @@ task runCodeProberTests(type: org.codeprober.LaunchCodeProber) {
 
 You may also want a task that opens CodeProber with the contents of a specific file in the file system, like this:
 ```gradle
-task openCodeProberWithMyTestFile(type: org.LaunchCodeProber) {
+task openCodeProberWithMyTestFile(type: org.codeprober.LaunchCodeProber) {
   dependsOn 'jar'
   toolJar = file(jar.archiveFile)
   jvmArgs = ['-Dcpr.backing_file=tests/my_test_file.in']

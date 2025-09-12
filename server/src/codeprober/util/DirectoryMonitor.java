@@ -64,23 +64,33 @@ public abstract class DirectoryMonitor extends Thread {
 		});
 	}
 
-	private void pollForChanges() throws IOException {
+	private void pollForChanges()  {
 		final AtomicBoolean didChange = new AtomicBoolean();
 
-		Files.walkFileTree(srcDir.toPath(), new SimpleFileVisitor<Path>() {
+		try {
+			Files.walkFileTree(srcDir.toPath(), new SimpleFileVisitor<Path>() {
 
-			@Override
-			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-				long lm = file.toFile().lastModified();
-				Long prev = lastModifieds.get(file);
-				if (prev == null || prev != lm) {
-					lastModifieds.put(file, lm);
-					onChangeDetected(file);
-					didChange.set(true);
+				@Override
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+					long lm = file.toFile().lastModified();
+					Long prev = lastModifieds.get(file);
+					if (prev == null || prev != lm) {
+						lastModifieds.put(file, lm);
+						onChangeDetected(file);
+						didChange.set(true);
+					}
+					return FileVisitResult.CONTINUE;
 				}
-				return FileVisitResult.CONTINUE;
-			}
-		});
+
+				@Override
+				public FileVisitResult visitFileFailed(Path file, IOException exc) {
+					return FileVisitResult.CONTINUE;
+				}
+			});
+		} catch (IOException e) {
+			System.err.println("IO Error when walking directory " + srcDir);
+			e.printStackTrace();
+		}
 		if (didChange.get()) {
 			try {
 				onChange();

@@ -321,7 +321,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
           rhsEval = [{ type: 'plain', value: expectVal }];
         };
 
-        const { comparisonSuccess, actual } = doCompareLhsAndRhs(lhsEval, rhsEval, rhs.tilde);
+        const { comparisonSuccess } = doCompareLhsAndRhs(lhsEval, rhsEval, rhs.tilde);
         const adjustedComparisonSuccsess = rhs.exclamation ? !comparisonSuccess : comparisonSuccess;
         if (adjustedComparisonSuccsess) {
           ret.numPass++;
