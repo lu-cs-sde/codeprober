@@ -282,6 +282,59 @@ public class EvaluatePropertyHandler {
 							}
 							break;
 						}
+						case "m:AttrChain": {
+							// A list of 1 or more attribute names to be evaluated in sequence
+							Object chainVal = match.node.underlyingAstNode;
+							if (req.property.args != null) {
+								chainVal = ListPropertiesHandler.evaluateAttrChain(chainVal,
+										req.property.args.stream().map(arg -> {
+											if (!arg.isString()) {
+												throw new IllegalArgumentException(
+														"All arguments to m:AttrChain must be strings, got "
+																+ arg.type);
+											}
+											return arg.asString();
+										}).collect(Collectors.toList()), body);
+
+								if (chainVal == ListPropertiesHandler.ATTR_CHAIN_FAILED) {
+									if (!req.captureStdout && shouldExpandListNodes) {
+										body.add(RpcBodyLine.fromPlain(
+												"Attribute evaluation chain failed, click 'Capture stdout' to see full error."));
+									}
+									return;
+								}
+//
+//								for (int i = 0; i < req.property.args.size(); ++i) {
+//									final PropertyArg arg = req.property.args.get(i);
+//									if (!arg.isString()) {
+//										throw new IllegalArgumentException(
+//												"All arguments to m:AttrChain must be strings, got " + arg.type);
+//									}
+//									final String step = arg.asString();
+//									try {
+//										if (step.startsWith("l:")) {
+//											chainVal = Reflect.invokeN(chainVal, "cpr_lInvoke",
+//													new Class[] { String.class },
+//													new Object[] { step.substring("l:".length()) });
+//										} else {
+//											chainVal = Reflect.invoke0(chainVal, step);
+//										}
+//									} catch (InvokeProblem ip) {
+//										final Throwable cause = ip.getCause();
+//										if (cause instanceof NoSuchMethodException) {
+//											System.out.println("m:AttrChain failed on step " + step + " w/ chainVal: "
+//													+ chainVal.getClass());
+//											body.add(RpcBodyLine.fromPlain(String.format("No such attribute '%s' on %s",
+//													step, chainVal.getClass().getName())));
+//											return;
+//										}
+//										throw ip;
+//									}
+//								}
+							}
+							value = chainVal;
+							break;
+						}
 						default: {
 							value = "Invalid meta-attribute '" + queryAttrName + "'";
 							break;
@@ -405,6 +458,7 @@ public class EvaluatePropertyHandler {
 							body.add(RpcBodyLine.fromPlain("Click 'Capture stdout' to see full error."));
 						}
 					}
+					traceBuilder.stop();
 				}
 			};
 

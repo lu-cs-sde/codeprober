@@ -1,13 +1,15 @@
+import { assertUnreachable } from './hacks';
 import { getAppropriateFileSuffix } from "./model/syntaxHighlighting";
 import { TextProbeStyle } from './model/TextProbeManager';
 import WindowState from './model/WindowState';
 import { TextSpanStyle } from "./ui/create/createTextSpanIndicator";
 import UIElements from './ui/UIElements';
 
+type Theme = 'auto' | 'light' | 'dark';
 
 interface Settings {
   editorContents?: string;
-  lightTheme?: boolean;
+  theme?: Theme;
   captureStdio?: boolean;
   captureTraces?: boolean;
   autoflushTraces?: boolean;
@@ -97,8 +99,35 @@ const settings = {
   getEditorContents: () => settings.get().editorContents,
   setEditorContents: (editorContents: string) => settings.set({ ...settings.get(), editorContents }),
 
-  isLightTheme: () => settings.get().lightTheme ?? false,
-  setLightTheme: (lightTheme: boolean) => settings.set({ ...settings.get(), lightTheme }),
+  getTheme: () => settings.get().theme ?? 'auto',
+  setTheme: (theme: Theme) => settings.set({ ...settings.get(), theme }),
+  isLightTheme: (): boolean => {
+    let ret = settings.get().theme;
+    if (ret === undefined) {
+      const oldValue = (settings.get() as any).lightTheme as boolean | undefined;
+      if (oldValue !== undefined) {
+        // The user set light/dark theme using the old checkbox, port settings value to new value
+        ret = oldValue ? 'light' : 'dark';
+      }
+    }
+
+    const theme = ret ?? 'auto';
+    switch (theme) {
+      case 'auto': {
+        if (window.matchMedia) {
+          return !window.matchMedia('(prefers-color-scheme: dark)').matches;
+        }
+        // Default to dark mode
+        return false;
+      }
+      case 'dark': return false;
+      case 'light': return true;
+      default:
+        assertUnreachable(theme);
+        return false;
+    }
+  },
+  // setTheme: (lightTheme: boolean) => settings.set({ ...settings.get(), lightTheme }),
 
   shouldDuplicateProbeOnAttrClick: () => settings.get().duplicateProbeOnAttrClick ?? true,
   setShouldDuplicateProbeOnAttrClick: (duplicateProbeOnAttrClick: boolean) => settings.set({ ...settings.get(), duplicateProbeOnAttrClick }),

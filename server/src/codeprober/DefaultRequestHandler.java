@@ -33,6 +33,8 @@ import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
 import codeprober.protocol.data.FindWorkspaceFilesReq;
 import codeprober.protocol.data.FindWorkspaceFilesRes;
+import codeprober.protocol.data.GetDecorationsReq;
+import codeprober.protocol.data.GetDecorationsRes;
 import codeprober.protocol.data.GetTestSuiteReq;
 import codeprober.protocol.data.GetTestSuiteRes;
 import codeprober.protocol.data.GetWorkspaceFileReq;
@@ -63,6 +65,7 @@ import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.UnlinkWorkspacePathReq;
 import codeprober.protocol.data.UnlinkWorkspacePathRes;
 import codeprober.requesthandler.CompleteHandler;
+import codeprober.requesthandler.DecorationsHandler;
 import codeprober.requesthandler.EvaluatePropertyHandler;
 import codeprober.requesthandler.HoverHandler;
 import codeprober.requesthandler.LazyParser;
@@ -91,7 +94,6 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 	private Long lastToolVersionId;
 
 	private KnownFileData lastParsedWorkspaceInput;
-
 
 	public DefaultRequestHandler(UnderlyingTool underlyingTool) {
 		this(underlyingTool, null, null);
@@ -326,6 +328,11 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 				protected CompleteRes handleComplete(CompleteReq req) {
 					return CompleteHandler.apply(req, lp);
 				}
+
+				@Override
+				protected GetDecorationsRes handleGetDecorations(GetDecorationsReq req) {
+					return DecorationsHandler.apply(req, DefaultRequestHandler.this, workspaceHandler, lp);
+				};
 
 				@Override
 				protected GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {

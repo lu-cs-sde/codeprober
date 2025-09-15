@@ -2,6 +2,7 @@ import { assertUnreachable } from '../hacks';
 
 import { NodeLocator, ParsingSource, RpcBodyLine } from '../protocol';
 import settings from '../settings';
+import evalPropertyBodyToString from './evalPropertyBodyToString';
 import ModalEnv from './ModalEnv'
 import SourcedDiagnostic from './SourcedDiagnostic';
 import { createSpanFlasher } from './SpanFlasher';
@@ -173,7 +174,8 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         if (typeof match.rhs?.expectVal === 'undefined') {
           addStickyBox(
             ['elp-result-probe'], span,
-            [`elp-actual-result-probe`], `Result: ${evalPropertyBodyToString(lhsEvalResult.output)}`,
+            [`elp-actual-result-probe`], `Result: ${evalPropertyBodyToString
+              (lhsEvalResult.output)}`,
           );
           continue;
         }
@@ -343,53 +345,5 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
   return { hover, complete, checkFile }
 }
 
-const filterPropertyBodyForHighIshPrecisionComparison = (body: RpcBodyLine[]): RpcBodyLine[] => body.filter(
-  x => !(x.type === 'plain' && !x.value.trim())
-);
-const evalPropertyBodyToString = (body: RpcBodyLine[]): string => {
-  const nodeToString = (node: NodeLocator): string => {
-    const ret = node.result.label ?? node.result.type;
-    return ret.slice(ret.lastIndexOf('.') + 1);
-  }
-  const lineToComparisonString = (line: RpcBodyLine): string => {
-    switch (line.type) {
-      case 'plain':
-      case 'stdout':
-      case 'stderr':
-      case 'streamArg':
-      case 'dotGraph':
-      case 'html':
-        return line.value;
-      case 'arr':
-        let mapped = [];
-        for (let idx = 0; idx < line.value.length; ++idx) {
-          if (line.value[idx].type === 'node' && line.value[idx + 1]?.type === 'plain' && line.value[idx + 1].value === '\n') {
-            const justNode = lineToComparisonString(line.value[idx]);
-            if (line.value.length === 2) {
-              return justNode;
-            }
-            mapped.push(justNode);
-            ++idx;
-          } else {
-            mapped.push(lineToComparisonString(line.value[idx]));
-          }
-        }
-        return `[${mapped.join(', ')}]`;
-      case 'node':
-        return nodeToString(line.value);
-      case 'highlightMsg':
-        return line.value.msg;
-      case 'tracing':
-        return lineToComparisonString(line.value.result);
-      case 'nodeContainer':
-        return `${nodeToString(line.value.node)}${line.value.body ? `[${lineToComparisonString(line.value.body)}]` : ''}`;
-      default:
-        assertUnreachable(line);
-        return '';
-    }
-  }
-  return lineToComparisonString(body.length === 1 ? body[0] : { type: 'arr', value: body });
-}
-
-export { setupTextProbeManager, TextProbeCheckResults, TextProbeStyle, evalPropertyBodyToString };
+export { setupTextProbeManager, TextProbeCheckResults, TextProbeStyle };
 export default TextProbeManager;

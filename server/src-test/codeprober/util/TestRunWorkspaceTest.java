@@ -5,10 +5,11 @@ import static org.junit.Assert.fail;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 import org.json.JSONObject;
 import org.junit.Test;
@@ -26,6 +27,7 @@ import codeprober.protocol.data.GetWorkspaceFileReq;
 import codeprober.protocol.data.GetWorkspaceFileRes;
 import codeprober.protocol.data.ListWorkspaceDirectoryReq;
 import codeprober.protocol.data.ListWorkspaceDirectoryRes;
+import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.PropertyEvaluationResult;
 import codeprober.protocol.data.RequestAdapter;
 import codeprober.protocol.data.RpcBodyLine;
@@ -75,7 +77,7 @@ public class TestRunWorkspaceTest {
 		};
 	}
 
-	private MergedResult run(Function<String, RpcBodyLine> evalQuery, WorkspaceFile... files) {
+	private MergedResult run(BiFunction<String, List<PropertyArg>, RpcBodyLine> evalQuery, WorkspaceFile... files) {
 		final WorkspaceHandler wsHandler = createWorkspaceHandler(files);
 		return RunWorkspaceTest.run(new JsonRequestHandler() {
 
@@ -90,7 +92,8 @@ public class TestRunWorkspaceTest {
 					protected EvaluatePropertyRes handleEvaluateProperty(EvaluatePropertyReq req) {
 						return new EvaluatePropertyRes(
 								PropertyEvaluationResult.fromSync(new SynchronousEvaluationResult(
-										Arrays.asList(evalQuery.apply(req.property.name)), 0, 0, 0, 0, 0, 0, 0)));
+										Arrays.asList(evalQuery.apply(req.property.name, req.property.args)), 0, 0, 0,
+										0, 0, 0, 0)));
 					}
 
 				}.handle(request.data);
@@ -108,22 +111,27 @@ public class TestRunWorkspaceTest {
 		assertEquals(MergedResult.ALL_PASS, run(null, new WorkspaceFile("foo.txt", "bar")));
 	}
 
-	private Function<String, RpcBodyLine> getSimpleQueryFunc() {
+	private BiFunction<String, List<PropertyArg>, RpcBodyLine> getSimpleQueryFunc() {
 		final AstNode ast = new AstNode(TestData.getSimple());
 		final AstInfo info = TestData.getInfo(ast);
 		final RpcBodyLine pointer = RpcBodyLine.fromNode(CreateLocator.fromNode(info, ast));
-		return query -> {
-			switch (query) {
-			case "m:NodesWithProperty":
-				return RpcBodyLine.fromArr(Arrays.asList(pointer));
-			case "ptr":
-				return pointer;
-			case "x":
-				return RpcBodyLine.fromPlain("a");
-			case "y":
-				return RpcBodyLine.fromPlain("b");
-			default:
-				return RpcBodyLine.fromPlain("???");
+		return new BiFunction<String, List<PropertyArg>, RpcBodyLine>() {
+			@Override
+			public RpcBodyLine apply(String query, List<PropertyArg> args) {
+				switch (query) {
+				case "m:NodesWithProperty":
+					return RpcBodyLine.fromArr(Arrays.asList(pointer));
+				case "ptr":
+					return pointer;
+				case "x":
+					return RpcBodyLine.fromPlain("a");
+				case "y":
+					return RpcBodyLine.fromPlain("b");
+				case "m:AttrChain":
+					return apply(args.get(args.size() - 1).asString(), Collections.emptyList());
+				default:
+					return RpcBodyLine.fromPlain("??? query=" + query);
+				}
 			}
 		};
 	}
@@ -172,7 +180,7 @@ public class TestRunWorkspaceTest {
 				new WorkspaceFile("fooC.txt", "bar " + lastFileContents));
 
 		final List<Runnable> pendingResponses = new CopyOnWriteArrayList<>();
-		final Function<String, RpcBodyLine> evalQuery = getSimpleQueryFunc();
+		final BiFunction<String, List<PropertyArg>, RpcBodyLine> evalQuery = getSimpleQueryFunc();
 
 		final AtomicBoolean running = new AtomicBoolean(true);
 		new Thread(() -> {
@@ -182,10 +190,15 @@ public class TestRunWorkspaceTest {
 			} catch (InterruptedException e) {
 				fail(e.toString());
 			}
-			while (running.get()) {
-				if (!pendingResponses.isEmpty()) {
-					pendingResponses.remove((int) (Math.random() * pendingResponses.size())).run();
+			try {
+				while (running.get()) {
+					if (!pendingResponses.isEmpty()) {
+						pendingResponses.remove((int) (Math.random() * pendingResponses.size())).run();
+					}
 				}
+			} catch (RuntimeException e) {
+				System.out.println("ERR: " + e);
+				System.exit(1);
 			}
 		}).start();
 		final MergedResult result = RunWorkspaceTest.run(new JsonRequestHandler() {
@@ -205,7 +218,8 @@ public class TestRunWorkspaceTest {
 
 						final Runnable respond = () -> {
 							SynchronousEvaluationResult res = new SynchronousEvaluationResult(
-									Arrays.asList(evalQuery.apply(req.property.name)), 0, 0, 0, 0, 0, 0, 0);
+									Arrays.asList(evalQuery.apply(req.property.name, req.property.args)), 0, 0, 0, 0, 0,
+									0, 0);
 							request.sendAsyncResponse(new AsyncRpcUpdate(req.job, true,
 									AsyncRpcUpdateValue.fromWorkerTaskDone(WorkerTaskDone
 											.fromNormal(new EvaluatePropertyRes(PropertyEvaluationResult.fromSync(res))

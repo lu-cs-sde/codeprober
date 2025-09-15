@@ -2,6 +2,7 @@ package codeprober.metaprogramming;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 
 public class Reflect {
 
@@ -30,7 +31,10 @@ public class Reflect {
 
 	public static Object invoke0(Object astNode, String mth) {
 		try {
-			final Method m = astNode.getClass().getMethod(mth);
+			final Method m = findMostAccessibleMethod(astNode, mth); // astNode.getClass().getMethod(mth);
+			if (m == null) {
+				throw new NoSuchMethodException(mth);
+			}
 			m.setAccessible(true);
 			final Object val = m.invoke(astNode);
 			return m.getReturnType() == Void.TYPE ? VOID_RETURN_VALUE : val;
@@ -38,5 +42,112 @@ public class Reflect {
 				| SecurityException e) {
 			throw new InvokeProblem(e);
 		}
+	}
+
+	public static Method findMostAccessibleMethod(Object obj, String methodName, Class<?>... paramTypes) {
+		if (obj == null)
+			return null;
+
+		Class<?> clazz = obj.getClass();
+		Method candidate = null;
+
+		try {
+			// First, try to get the method from the actual class
+			candidate = clazz.getMethod(methodName, paramTypes);
+
+			// If the declaring class is not public, look for a better option
+			if (!Modifier.isPublic(candidate.getDeclaringClass().getModifiers())) {
+				Method better = findInInterfaces(clazz, methodName, paramTypes);
+				if (better != null) {
+					candidate = better;
+				} else {
+					// Check superclasses for a public declaration
+					better = findInSuperclasses(clazz.getSuperclass(), methodName, paramTypes);
+					if (better != null && Modifier.isPublic(better.getDeclaringClass().getModifiers())) {
+						candidate = better;
+					}
+				}
+			}
+		} catch (NoSuchMethodException e) {
+			// Method not found via getMethod, try getDeclaredMethod and search hierarchy
+			candidate = findMethodInHierarchy(clazz, methodName, paramTypes);
+		}
+
+		return candidate;
+	}
+
+	private static Method findInInterfaces(Class<?> clazz, String methodName, Class<?>... paramTypes) {
+		// Check all interfaces (including inherited ones)
+		for (Class<?> iface : clazz.getInterfaces()) {
+			try {
+				Method method = iface.getMethod(methodName, paramTypes);
+				if (Modifier.isPublic(method.getDeclaringClass().getModifiers())) {
+					return method;
+				}
+			} catch (NoSuchMethodException ignored) {
+				// Continue searching
+			}
+
+			// Recursively check parent interfaces
+			Method found = findInInterfaces(iface, methodName, paramTypes);
+			if (found != null)
+				return found;
+		}
+
+		// Also check superclass interfaces
+		Class<?> superclass = clazz.getSuperclass();
+		if (superclass != null) {
+			return findInInterfaces(superclass, methodName, paramTypes);
+		}
+
+		return null;
+	}
+
+	private static Method findInSuperclasses(Class<?> clazz, String methodName, Class<?>... paramTypes) {
+		while (clazz != null) {
+			try {
+				Method method = clazz.getMethod(methodName, paramTypes);
+				if (Modifier.isPublic(method.getDeclaringClass().getModifiers())) {
+					return method;
+				}
+			} catch (NoSuchMethodException ignored) {
+				// Continue searching
+			}
+			clazz = clazz.getSuperclass();
+		}
+		return null;
+	}
+
+	private static Method findMethodInHierarchy(Class<?> clazz, String methodName, Class<?>... paramTypes) {
+		// This handles cases where the method might not be public
+		Method result = null;
+
+		while (clazz != null) {
+			try {
+				Method m = clazz.getDeclaredMethod(methodName, paramTypes);
+				if (result == null || Modifier.isPublic(m.getModifiers())) {
+					result = m;
+					if (Modifier.isPublic(m.getModifiers())
+							&& Modifier.isPublic(m.getDeclaringClass().getModifiers())) {
+						// Found a public method in a public class, this is ideal
+						return result;
+					}
+				}
+			} catch (NoSuchMethodException ignored) {
+			}
+
+			// Check interfaces at this level
+			Method ifaceMethod = findInInterfaces(clazz, methodName, paramTypes);
+			if (ifaceMethod != null) {
+				return ifaceMethod;
+			}
+
+			clazz = clazz.getSuperclass();
+		}
+
+		if (result != null) {
+			result.setAccessible(true); // May still need this for non-public methods
+		}
+		return result;
 	}
 }

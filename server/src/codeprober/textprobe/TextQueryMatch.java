@@ -6,13 +6,15 @@ import java.util.stream.Collectors;
 public class TextQueryMatch {
 	public final String full;
 	public final int lineIdx;
+	public final int columnIdx;
 	public final String nodeType;
 	public final Integer nodeIndex;
 	public final String[] attrNames;
 
-	public TextQueryMatch(String full, int lineIdx, String nodeType, Integer nodeIndex, String[] attrNames) {
+	public TextQueryMatch(String full, int lineIdx, int columnIdx, String nodeType, Integer nodeIndex, String[] attrNames) {
 		this.full = full;
 		this.lineIdx = lineIdx;
+		this.columnIdx = columnIdx;
 		this.nodeType = nodeType;
 		this.nodeIndex = nodeIndex;
 		this.attrNames = attrNames;

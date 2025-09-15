@@ -1,13 +1,18 @@
   ❌ ts/err_ambiguous.addn
      2 nodes of type "Num". Add [idx] to disambiguate, e.g. "Num[0]"
   ❌ ts/err_badattrchain.addn
-     Invalid attribute chain
+     -        Expected: 2
+                Actual: No such attribute 'asNum' on addnum.ast.Num
   ❌ ts/err_badindex.addn
      Invalid index
      Invalid index
   ❌ ts/err_containscases.addn
-     Invalid attribute chain
-     Multiple AST nodes returned by getChildren
+     -        Expected: 123
+                Actual: No such attribute 'value' on java.util.ArrayList
+     -        Expected: 123
+                Actual: No such attribute 'value' on java.util.ArrayList
+     -        Expected: 123
+                Actual: No such attribute 'value' on java.util.ArrayList
      -        Expected: [$three, $four]
                 Actual: [Add, Num]
      -        Expected: Num
@@ -31,6 +36,9 @@
   ❌ ts/err_syntaxabuse.addn
      Invalid syntax
      Invalid syntax
+     Invalid syntax
+     -        Expected:  a
+                Actual: Add
   ❌ ts/err_varvar.addn
      Cannot use variables on right-hand side
   ✅ ts/ok_add.addn
@@ -41,4 +49,4 @@
   ✅ ts/ok_num.addn
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
-Done: 56 pass, 20 fail
+Done: 56 pass, 23 fail

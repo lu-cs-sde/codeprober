@@ -12,7 +12,7 @@ public class TextProbeParser {
 	public static int VAR_PATTERN_GROUP_VARNAME = 1;
 	public static int VAR_PATTERN_GROUP_SRCVAL = 2;
 
-	public static VarAssignMatch matchVarAssign(String src, int lineIdx) {
+	public static VarAssignMatch matchVarAssign(String src, int lineIdx, int colIdx) {
 		final Matcher matcher = getVarAssignPattern().matcher(src);
 		if (!matcher.matches()) {
 			return null;
@@ -20,7 +20,7 @@ public class TextProbeParser {
 
 		final String nodeType = matcher.group(VAR_PATTERN_GROUP_VARNAME);
 		final String srcVal = matcher.group(VAR_PATTERN_GROUP_SRCVAL);
-		return new VarAssignMatch(matcher.group(0), lineIdx, nodeType, srcVal);
+		return new VarAssignMatch(matcher.group(0), lineIdx, colIdx, nodeType, srcVal);
 	}
 
 	public static Pattern getProbeContainerMatcher() {
@@ -39,7 +39,7 @@ public class TextProbeParser {
 		return Pattern.compile(textQueryPattern + "(!?)(~?)(?:=(.*))");
 	}
 
-	public static TextQueryMatch matchTextQuery(String src, int lineIdx) {
+	public static TextQueryMatch matchTextQuery(String src, int lineIdx, int colIdx) {
 		final Matcher matcher = getTextQueryPattern().matcher(src);
 		if (!matcher.matches()) {
 			return null;
@@ -50,7 +50,7 @@ public class TextProbeParser {
 		final String rawAttrNames = matcher.group(PROBE_PATTERN_GROUP_ATTRNAMES);
 
 		final String[] attrNames = rawAttrNames.isEmpty() ? new String[0] : rawAttrNames.substring(1).split("\\.");
-		return new TextQueryMatch(matcher.group(0), lineIdx, nodeType,
+		return new TextQueryMatch(matcher.group(0), lineIdx,  colIdx, nodeType,
 				nodeIndex == null ? null : Integer.parseInt(nodeIndex.substring(1, nodeIndex.length() - 1)), attrNames);
 	}
 
@@ -61,7 +61,7 @@ public class TextProbeParser {
 	public static int PROBE_PATTERN_GROUP_TILDE = 5;
 	public static int PROBE_PATTERN_GROUP_EXPECTVAL = 6;
 
-	public static TextAssertionMatch matchTextAssertion(String src, int lineIdx) {
+	public static TextAssertionMatch matchTextAssertion(String src, int lineIdx, int colIdx) {
 		final Matcher matcher = getTextAssertionPattern().matcher(src);
 		if (!matcher.matches()) {
 			final Matcher justQuery = Pattern.compile(textQueryPattern).matcher(src);
@@ -70,7 +70,7 @@ public class TextProbeParser {
 				final String nodeIndex = justQuery.group(PROBE_PATTERN_GROUP_NODEINDEX);
 				final String rawAttrNames = justQuery.group(PROBE_PATTERN_GROUP_ATTRNAMES);
 				final String[] attrNames = rawAttrNames.isEmpty() ? new String[0] : rawAttrNames.substring(1).split("\\.");
-				return new TextAssertionMatch(justQuery.group(0), lineIdx, nodeType,
+				return new TextAssertionMatch(justQuery.group(0), lineIdx, colIdx, nodeType,
 						nodeIndex == null ? null : Integer.parseInt(nodeIndex.substring(1, nodeIndex.length() - 1)), attrNames,
 						false, false, null);
 			}
@@ -85,7 +85,7 @@ public class TextProbeParser {
 		final String expectVal = matcher.group(PROBE_PATTERN_GROUP_EXPECTVAL);
 
 		final String[] attrNames = rawAttrNames.isEmpty() ? new String[0] : rawAttrNames.substring(1).split("\\.");
-		return new TextAssertionMatch(matcher.group(0), lineIdx, nodeType,
+		return new TextAssertionMatch(matcher.group(0), lineIdx, colIdx, nodeType,
 				nodeIndex == null ? null : Integer.parseInt(nodeIndex.substring(1, nodeIndex.length() - 1)), attrNames,
 				exclamation, tilde, expectVal);
 	}

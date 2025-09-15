@@ -53,7 +53,7 @@ class UIElements {
 
   get generalHelpButton() { return document.getElementById('display-help') as HTMLButtonElement; }
   get saveAsUrlButton() { return document.getElementById('saveAsUrl') as HTMLButtonElement; }
-  get darkModeCheckbox() { return document.getElementById('control-dark-mode') as HTMLInputElement; }
+  get themeDropdown() { return document.getElementById('control-theme') as HTMLSelectElement; }
   get displayStatisticsButton() { return document.getElementById('display-statistics') as HTMLButtonElement; }
   get displayWorkerStatusButton() { return document.getElementById('display-worker-status') as HTMLButtonElement; }
   get versionInfo() { return document.getElementById('version') as HTMLDivElement; }

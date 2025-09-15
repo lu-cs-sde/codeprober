@@ -25,8 +25,10 @@ import codeprober.protocol.data.ParsingRequestData;
 import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.Property;
 import codeprober.protocol.data.PropertyArg;
+import codeprober.protocol.data.PropertyEvaluationResult;
 import codeprober.protocol.data.PropertyEvaluationResult.Type;
 import codeprober.protocol.data.RpcBodyLine;
+import codeprober.protocol.data.SynchronousEvaluationResult;
 import codeprober.protocol.data.TALStep;
 import codeprober.protocol.data.WorkerTaskDone;
 import codeprober.requesthandler.LazyParser;
@@ -49,6 +51,8 @@ public class TextProbeEnvironment {
 
 	private final StdIoInterceptor interceptor;
 	private final boolean runConcurrent;
+
+	public boolean printExpectedValuesInComparisonFailures = true;
 
 	public TextProbeEnvironment(JsonRequestHandler requestHandler, WorkspaceHandler wsHandler,
 			ParsingSource srcContents, StdIoInterceptor interceptor, boolean runConcurrent) {
@@ -107,17 +111,13 @@ public class TextProbeEnvironment {
 
 	public List<NodeLocator> listNodes(int line, String attrPredicate, String tailPredicate) {
 		final TALStep rootNode = new TALStep("<ROOT>", null, ((line + 1) << 12) + 1, ((line + 1) << 12) + 4095, 0);
-		final EvaluatePropertyRes result = performEvalReq(parsingRequestData,
+		final SynchronousEvaluationResult result = performEvalReq(parsingRequestData,
 				new NodeLocator(rootNode, Collections.emptyList()), //
 				new Property("m:NodesWithProperty", Arrays.asList( //
 						PropertyArg.fromString(attrPredicate), //
 						PropertyArg.fromString(tailPredicate) //
 				)));
-		if (result.response.type != Type.sync) {
-			System.err.println("Unexpected async property response, are we running concurrently?");
-			System.exit(1);
-		}
-		final List<RpcBodyLine> body = result.response.asSync().body;
+		final List<RpcBodyLine> body = result.body;
 		if (body.size() == 0 || body.get(0).type != RpcBodyLine.Type.arr) {
 			System.out.println("Unexpected respose from search query: "
 					+ body.stream().map(x -> x.toJSON().toString()).collect(Collectors.joining("; ")));
@@ -129,9 +129,7 @@ public class TextProbeEnvironment {
 				.collect(Collectors.toList());
 	}
 
-//	private static final AtomicLong jobIdGenerator = new AtomicLong(1L);
-
-	private EvaluatePropertyRes performEvalReq(ParsingRequestData src, NodeLocator locator, Property property) {
+	private SynchronousEvaluationResult performEvalReq(ParsingRequestData src, NodeLocator locator, Property property) {
 
 		if (!runConcurrent) {
 			final EvaluatePropertyReq req = new EvaluatePropertyReq(src, locator, property, false, null, null, null,
@@ -143,7 +141,13 @@ public class TextProbeEnvironment {
 				interceptor.install();
 			}
 			try {
-				return EvaluatePropertyRes.fromJSON(requestHandler.handleRequest(clientReq));
+				final PropertyEvaluationResult resp = EvaluatePropertyRes
+						.fromJSON(requestHandler.handleRequest(clientReq)).response;
+				if (resp.type == Type.job) {
+					System.err.println("Unexpected async property response, to synchronous request");
+					System.exit(1);
+				}
+				return resp.asSync();
 			} finally {
 				if (interceptor != null) {
 					interceptor.restore();
@@ -151,7 +155,7 @@ public class TextProbeEnvironment {
 			}
 		}
 		final CountDownLatch cdl = new CountDownLatch(1);
-		final EvaluatePropertyRes[] resPtr = new EvaluatePropertyRes[1];
+		final SynchronousEvaluationResult[] resPtr = new SynchronousEvaluationResult[1];
 		if (interceptor != null) {
 			interceptor.install();
 		}
@@ -164,7 +168,12 @@ public class TextProbeEnvironment {
 					final WorkerTaskDone tdone = obj.value.asWorkerTaskDone();
 					switch (tdone.type) {
 					case normal:
-						resPtr[0] = EvaluatePropertyRes.fromJSON(tdone.asNormal());
+						final PropertyEvaluationResult resp = EvaluatePropertyRes.fromJSON(tdone.asNormal()).response;
+						if (resp.type == Type.job) {
+							System.err.println("Got async result in 'workerTaskDone' callback");
+						} else {
+							resPtr[0] = resp.asSync();
+						}
 						break;
 					case unexpectedError:
 						System.err.println("Failed request: " + tdone.asUnexpectedError());
@@ -180,7 +189,7 @@ public class TextProbeEnvironment {
 			switch (initialRes.response.type) {
 			case sync:
 				System.out.println("Weird: got got sync response in concurrent environment");
-				return initialRes;
+				return initialRes.response.asSync();
 			case job:
 				break;
 			}
@@ -196,16 +205,6 @@ public class TextProbeEnvironment {
 			}
 		}
 		return resPtr[0];
-
-	}
-
-	private List<RpcBodyLine> evaluateProp(NodeLocator locator, String prop) {
-		final EvaluatePropertyRes result = performEvalReq(parsingRequestData, locator, new Property(prop));
-		if (result.response.type != Type.sync) {
-			System.err.println("Unexpected async property response, are we running concurrently?");
-			System.exit(1);
-		}
-		return result.response.asSync().body;
 	}
 
 	public List<RpcBodyLine> evaluateQuery(TextQueryMatch query) {
@@ -222,18 +221,14 @@ public class TextProbeEnvironment {
 		} else {
 			final TALStep rootNode = new TALStep("<ROOT>", null, ((query.lineIdx + 1) << 12) + 1,
 					((query.lineIdx + 1) << 12) + 4095, 0);
-			final EvaluatePropertyRes result = performEvalReq(parsingRequestData,
+			final SynchronousEvaluationResult result = performEvalReq(parsingRequestData,
 					new NodeLocator(rootNode, Collections.emptyList()), //
 					new Property("m:NodesWithProperty", Arrays.asList( //
 							PropertyArg.fromString(query.attrNames.length > 0 ? query.attrNames[0] : ""), //
 							PropertyArg.fromString(
 									String.format("this<:%s&@lineSpan~=%d", query.nodeType, query.lineIdx + 1)) //
 					)));
-			if (result.response.type != Type.sync) {
-				System.err.println("Unexpected async property response, are we running concurrently?");
-				System.exit(1);
-			}
-			body = result.response.asSync().body;
+			body = result.body;
 			if (body.size() == 0 || body.get(0).type != RpcBodyLine.Type.arr) {
 				errMsgs.add("No matching nodes");
 				return null;
@@ -267,46 +262,11 @@ public class TextProbeEnvironment {
 		if (query.attrNames.length == 0) {
 			return Arrays.asList(RpcBodyLine.fromNode(locator));
 		}
-		List<RpcBodyLine> lastResult = null;
-		for (int attrIdx = 0; attrIdx < query.attrNames.length; ++attrIdx) {
-
-			if (attrIdx > 0) {
-				locator = null;
-				if (lastResult.size() > 0) {
-					final RpcBodyLine lastRes = lastResult.get(0);
-					switch (lastRes.type) {
-					case node:
-						locator = lastRes.asNode();
-						break;
-					case arr:
-						final List<NodeLocator> arrLocators = lastRes.asArr().stream() //
-								.filter(x -> x.isNode()) //
-								.map(x -> x.asNode()) //
-								.collect(Collectors.toList());
-						if (arrLocators.size() > 1) {
-							errMsgs.add("Multiple AST nodes returned by " + query.attrNames[attrIdx - 1]);
-							return null;
-						}
-						if (arrLocators.size() == 1) {
-							locator = arrLocators.get(0);
-						}
-						break;
-					default:
-						break;
-
-					}
-				}
-				if (locator == null) {
-					errMsgs.add("Invalid attribute chain");
-					return null;
-				}
-			}
-
-			lastResult = evaluateProp(locator, query.attrNames[attrIdx]);
-		}
-
-		return lastResult;
-
+		final SynchronousEvaluationResult resp = performEvalReq(parsingRequestData, locator, new Property( //
+				"m:AttrChain", //
+				Arrays.asList(query.attrNames).stream().map(x -> PropertyArg.fromString(x)).collect(Collectors.toList()) //
+		));
+		return resp.body;
 	}
 
 	public boolean evaluateComparison(TextAssertionMatch tam, List<RpcBodyLine> lhsBody) {
@@ -317,7 +277,7 @@ public class TextProbeEnvironment {
 		List<RpcBodyLine> rhsBody;
 		if (tam.expectVal.startsWith("$")) {
 			// High resolution comparison
-			final TextQueryMatch rhsMatch = TextProbeParser.matchTextQuery(tam.expectVal, tam.lineIdx);
+			final TextQueryMatch rhsMatch = TextProbeParser.matchTextQuery(tam.expectVal, tam.lineIdx, tam.columnIdx);
 			if (rhsMatch == null) {
 				errMsgs.add("Invalid syntax");
 				return false;
@@ -356,7 +316,9 @@ public class TextProbeEnvironment {
 			if (adjustedComparison) {
 				return true;
 			}
-			errMsgs.add("-        Expected: " + flattenBody(lhsBody));
+			if (printExpectedValuesInComparisonFailures) {
+				errMsgs.add("-        Expected: " + flattenBody(lhsBody));
+			}
 			errMsgs.add("   " + (tam.exclamation ? "NOT t" : "   T") + "o contain: " + flattenBody(rhsBody));
 			return false;
 		}
@@ -383,7 +345,9 @@ public class TextProbeEnvironment {
 		if (adjustedComparison) {
 			return true;
 		} else {
-			errMsgs.add("-    " + (tam.exclamation ? "Expected NOT: " : "    Expected: ") + rhs);
+			if (printExpectedValuesInComparisonFailures) {
+				errMsgs.add("-    " + (tam.exclamation ? "Expected NOT: " : "    Expected: ") + rhs);
+			}
 			errMsgs.add("           Actual: " + lhs + notTheSame);
 			return false;
 		}

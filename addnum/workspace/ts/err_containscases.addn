@@ -2,7 +2,8 @@
 +2 // [[$three:=Add[1]]] 
 +4 // [[$four:=Num]] [[$seven:=Add]]
 
-// Accessing something directly on an array is an error if the array has zero or >1 entries
+// Accessing something directly on an array is an error
+// [[$three.getChildren.value=123]]
 // [[$one.getChildren.value=123]]
 // [[$rn.getChildren.value=123]]
 

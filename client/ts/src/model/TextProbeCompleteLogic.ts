@@ -1,10 +1,10 @@
 import { ListPropertiesReq, ListPropertiesRes, NodeLocator, TALStep } from '../protocol';
 import settings from '../settings';
 import startEndToSpan from '../ui/startEndToSpan';
+import evalPropertyBodyToString from './evalPropertyBodyToString';
 import ModalEnv from './ModalEnv';
 import SpanFlasher from './SpanFlasher';
-import TextProbeEvaluator, { createTextProbeEvaluator, isAssignmentMatch, isBrokenNodeChain, NodeAndAttrChainMatch } from './TextProbeEvaluator';
-import { evalPropertyBodyToString } from './TextProbeManager';
+import TextProbeEvaluator, { isAssignmentMatch, isBrokenNodeChain, NodeAndAttrChainMatch } from './TextProbeEvaluator';
 
 interface CompletionItem {
   label: string;
@@ -148,16 +148,16 @@ const createTextProbeCompleteLogic = (args: CreateTextProbeCompleteLogicArgs): T
       if (!locator) {
         return null;
       }
-      if (prerequisiteAttrs.length != 0) {
-        const chainResult = await evaluator.evaluatePropertyChain({ locator, propChain: prerequisiteAttrs });
-        if (chainResult === 'stopped' || isBrokenNodeChain(chainResult)) {
-          return null;
-        }
-        if (chainResult[0]?.type !== 'node') {
-          return null;
-        }
-        locator = chainResult[0].value;
-      }
+      // if (prerequisiteAttrs.length != 0) {
+      //   const chainResult = await evaluator.evaluatePropertyChain({ locator, propChain: prerequisiteAttrs });
+      //   if (chainResult === 'stopped' || isBrokenNodeChain(chainResult)) {
+      //     return null;
+      //   }
+      //   if (chainResult[0]?.type !== 'node') {
+      //     return null;
+      //   }
+      //   locator = chainResult[0].value;
+      // }
       flasher.flash([
         {
           lineStart: line + 1, colStart: previousStepSpan[0],
@@ -171,12 +171,12 @@ const createTextProbeCompleteLogic = (args: CreateTextProbeCompleteLogicArgs): T
       window.OnCompletionItemListClosed = () => {
         flasher.clear();
       };
-
       const props = await args.env.performTypedRpc<ListPropertiesReq, ListPropertiesRes>({
         locator,
         src: evaluator.parsingData,
         type: 'ListProperties',
         all: settings.shouldShowAllProperties(),
+        attrChain: prerequisiteAttrs
       });
       if (!props.properties) {
         return null;

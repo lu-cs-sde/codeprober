@@ -10,6 +10,7 @@ public class ListProperties extends Rpc {
 			public final Object all = Boolean.class;
 			public final Object locator = NodeLocator.class;
 			public final Object src = ParsingRequestData.class;
+			public final Object attrChain = opt(arr(String.class));
 		};
 	}
 

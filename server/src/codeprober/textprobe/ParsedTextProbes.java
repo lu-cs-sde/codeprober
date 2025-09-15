@@ -18,12 +18,13 @@ public class ParsedTextProbes {
 			final Matcher containerMatcher = TextProbeParser.getProbeContainerMatcher().matcher(line);
 			while (containerMatcher.find()) {
 				final String containerContents = containerMatcher.group(TextProbeParser.CONTAINER_GROUP_CONTENT);
+				final int colIdx = containerMatcher.start() + 2; // +2 for '[['
 
-				final VarAssignMatch varMatch = TextProbeParser.matchVarAssign(containerContents, lineIdx);
+				final VarAssignMatch varMatch = TextProbeParser.matchVarAssign(containerContents, lineIdx, colIdx);
 				if (varMatch != null) {
 					ret.assignments.add(varMatch);
 				} else {
-					final TextAssertionMatch tp = TextProbeParser.matchTextAssertion(containerContents, lineIdx);
+					final TextAssertionMatch tp = TextProbeParser.matchTextAssertion(containerContents, lineIdx, colIdx);
 					if (tp != null) {
 						ret.assertions.add(tp);
 					} else {

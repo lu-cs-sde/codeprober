@@ -138,7 +138,7 @@ const createProbeHoverLogic = (args: CreateProbeHoverLogicArgs): TextProbeHoverL
                 nestTarget = newNest;
               }
               const next = extractPreviousNodeForAttributeChain(res);
-              if (next === 'no-such-node' || next === 'ambiguous-multiple-array-entries') {
+              if (next === 'no-such-node') {
                 break;
               }
               nestLocator = next;

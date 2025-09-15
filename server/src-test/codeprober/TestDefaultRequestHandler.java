@@ -77,10 +77,14 @@ public class TestDefaultRequestHandler {
 		}
 	}
 
+	public static ParsingRequestData createParsingRequestData(String text) {
+		return new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD, AstCacheStrategy.FULL,
+				ParsingSource.fromText(text), null, ".tmp");
+	}
+
 	private EvaluatePropertyReq constructEvalRequest(String text, String attrName) {
 		return new EvaluatePropertyReq( //
-				new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD, AstCacheStrategy.FULL,
-						ParsingSource.fromText(text), null, ".tmp"), //
+				createParsingRequestData(text), //
 				new NodeLocator(new TALStep("", "", 0, 0, 0, false), Collections.emptyList()),
 				new Property(attrName, Collections.emptyList(), null), false, null, null, null, null);
 	}
@@ -156,6 +160,7 @@ public class TestDefaultRequestHandler {
 	public void testPutWorkspaceCallback() {
 		final WorkspaceHandler wsHandler = new WorkspaceHandler() {
 			int requestCount = 0;
+
 			public PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
 				return new PutWorkspaceContentRes(requestCount++ == 1);
 			};

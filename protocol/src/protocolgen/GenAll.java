@@ -8,6 +8,7 @@ import protocolgen.spec.BackingFileUpdated;
 import protocolgen.spec.Complete;
 import protocolgen.spec.EvaluateProperty;
 import protocolgen.spec.FindWorkspaceFiles;
+import protocolgen.spec.GetDecorations;
 import protocolgen.spec.GetTestSuite;
 import protocolgen.spec.GetWorkerStatus;
 import protocolgen.spec.GetWorkspaceFile;
@@ -70,6 +71,7 @@ public class GenAll {
 		// Client->Server, 'LSP'
 		rpcs.add(Hover.class);
 		rpcs.add(Complete.class);
+		rpcs.add(GetDecorations.class);
 
 		// Client->Server, wsput
 		rpcs.add(WsPutInit.class);

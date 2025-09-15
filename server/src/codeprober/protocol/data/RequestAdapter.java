@@ -74,6 +74,9 @@ public abstract class RequestAdapter {
       case "ide:complete": {
         return handleComplete(CompleteReq.fromJSON(request)).toJSON();
       }
+      case "ide:decorations": {
+        return handleGetDecorations(GetDecorationsReq.fromJSON(request)).toJSON();
+      }
       case "wsput:init": {
         return handleWsPutInit(WsPutInitReq.fromJSON(request)).toJSON();
       }
@@ -175,6 +178,10 @@ public abstract class RequestAdapter {
 
   protected CompleteRes handleComplete(CompleteReq req) {
     throw new JSONException("Request Complete is not implemented");
+  }
+
+  protected GetDecorationsRes handleGetDecorations(GetDecorationsReq req) {
+    throw new JSONException("Request GetDecorations is not implemented");
   }
 
   protected WsPutInitRes handleWsPutInit(WsPutInitReq req) {

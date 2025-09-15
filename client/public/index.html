@@ -122,9 +122,13 @@
       <!-- Settings top part -->
       <div>
         <div>
-          <input type='checkbox' id='control-dark-mode' checked></input>
-          <label for='control-dark-mode'>Dark mode</label>
-        </div>
+          <select id="control-theme" name="theme">
+            <option value="auto" selected>Auto</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+          <label for="control-theme">Theme</label>
+      </div>
         <div>
           <input type='checkbox' id='control-capture-stdout'></input>
           <label for='control-capture-stdout'>Capture stdout</label>

@@ -23,17 +23,26 @@ const setupTestModalEnv = (setupArgs: TestModalEnvArgs): ModalEnv => {
       body: lines,
       totalTime: 0, parseTime: 0, createLocatorTime: 0, applyLocatorTime: 0, attrEvalTime: 0, listNodesTime: 0, listPropertiesTime: 0,
     });
+    const encodeValue = (val: any): SynchronousEvaluationResult => {
+      if (!val) {
+        return wrapLines([{ type: 'plain', value: 'null' }])
+      }
+      if (val?.type && val?.start && val?.end) {
+        // Just assume it is a node
+        return wrapLines([{ type: 'node', value: nodeToLocator(val as Node)}]);
+      }
+      console.log('unknown prop result value:', val);
+      throw new Error('Unknown response value');
+    }
     switch (name) {
       case 'm:NodesWithProperty': {
         // Search probe
         let founds = [...setupArgs.nodes];
         if (args?.length) {
-          // console.log('filtering', founds, 'w/', args);
           const attrFilter = args[0];
           if (attrFilter?.type === 'string' && attrFilter?.value) {
             founds = founds.filter(x => !!x.props[attrFilter.value]);
           }
-          // console.log('after attrFilter', founds);
           const predicates = args[1];
           if (predicates?.type === 'string' && predicates?.value) {
             founds = founds.filter(x => predicates.value.split('&').every(part => {
@@ -48,9 +57,22 @@ const setupTestModalEnv = (setupArgs: TestModalEnvArgs): ModalEnv => {
               return false;
             }))
           }
-          // console.log('after predicates', founds);
         }
         return wrapLines([{ type: 'arr', value: founds.map<RpcBodyLine>(node => ({ type: 'node', value: nodeToLocator(node) })), }]);
+      }
+      case 'm:AttrChain': {
+        const tgtNode = setupArgs.nodes.find(node => (node.start === req.locator.result.start) && (node.end === req.locator.result.end));
+        if (!tgtNode) {
+          throw new Error('Bad locator in request');
+        }
+        let lastVal = tgtNode;
+        args?.forEach((step) => {
+          if (step.type !== 'string') {
+            throw new Error('Bad step');
+          }
+          lastVal = lastVal.props[step.value]?.()
+        })
+        return encodeValue(lastVal);
       }
       default: {
         // Some normal property
@@ -59,15 +81,7 @@ const setupTestModalEnv = (setupArgs: TestModalEnvArgs): ModalEnv => {
           throw new Error('Bad locator in request');
         }
         const val = tgtNode.props[name]?.();
-        if (!val) {
-          return wrapLines([{ type: 'plain', value: 'null' }])
-        }
-        if (val?.type && val?.start && val?.end) {
-          // Just assume it is a node
-          return wrapLines([{ type: 'node', value: nodeToLocator(val as Node)}]);
-        }
-        console.log('unknown prop result value:', val);
-        throw new Error('Unknown response value');
+        return encodeValue(val);
       }
     }
   }

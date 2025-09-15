@@ -1,7 +1,9 @@
 1
  // [[Add=$a ]] <-- trailing space in query, not OK
  // [[$a:=Add]]
- // [[$a:=a ]] <-- Space becomes part of query
+ // [[$a:=a ]] <-- also trailing space in query
+ // [[$a:= a]] <-- leading space in query
+ // [[$a= a]] <-- Space becomes part of query, is OK (although the comparison fails)
 +
 2
 

@@ -2,21 +2,10 @@ import { NodeLocator, ParsingRequestData, ParsingSource, PropertyArg, RpcBodyLin
 import ModalEnv from './ModalEnv';
 import reallyDoEvaluateProperty from '../network/evaluateProperty';
 
-const extractPreviousNodeForAttributeChain = (prevBody: RpcBodyLine[]): NodeLocator | 'no-such-node' | 'ambiguous-multiple-array-entries' => {
+const extractPreviousNodeForAttributeChain = (prevBody: RpcBodyLine[]): NodeLocator | 'no-such-node' => {
   const head = prevBody[0];
   if (head.type == 'node') {
     return head.value;
-  }
-  if (head.type == 'arr') {
-    const arr = head.value;
-    const arrNodes = arr.filter(x => x.type === 'node');
-    if (arrNodes.length === 1) {
-      return arrNodes[0].value;
-    }
-    if (arrNodes.length > 1) {
-      // Ambiguous, fail
-      return 'ambiguous-multiple-array-entries';
-    }
   }
   return 'no-such-node';
 };
@@ -219,7 +208,7 @@ const doEvaluateProperty = async (env: ModalEnv, evalArgs: {
 }
 
 
-type BrokenNodeChain = { type: 'broken-node-chain', brokenIndex: number, detail: 'no-such-node' | 'ambiguous-multiple-nodes', };
+type BrokenNodeChain = { type: 'broken-node-chain', brokenIndex: number, detail: 'no-such-node', };
 const isBrokenNodeChain = (val: any): val is BrokenNodeChain => val && (typeof val === 'object') && (val as BrokenNodeChain).type === 'broken-node-chain';
 
 const doEvaluatePropertyChain = async (env: ModalEnv, evalArgs: {
@@ -227,6 +216,14 @@ const doEvaluatePropertyChain = async (env: ModalEnv, evalArgs: {
   propChain: string[];
   parsingData?: ParsingRequestData;
 }): Promise<RpcBodyLine[] | 'stopped' | BrokenNodeChain> => {
+  if (2 < 5) {
+    return doEvaluateProperty(env, {
+      locator: evalArgs.locator,
+      prop: 'm:AttrChain',
+      parsingData: evalArgs.parsingData,
+      args: evalArgs.propChain.map(x => ({ type: 'string', value: x })),
+    });
+  }
   const first = await doEvaluateProperty(env, { locator: evalArgs.locator, prop: evalArgs.propChain[0], parsingData: evalArgs.parsingData, });
   if (first === 'stopped') {
     return 'stopped';
@@ -237,9 +234,6 @@ const doEvaluatePropertyChain = async (env: ModalEnv, evalArgs: {
     const chainedLocator = extractPreviousNodeForAttributeChain(prevResult);
     if (chainedLocator === 'no-such-node') {
       return { type: 'broken-node-chain', brokenIndex: subsequentIdx - 1, detail: 'no-such-node' };
-    }
-    if (chainedLocator === 'ambiguous-multiple-array-entries') {
-      return { type: 'broken-node-chain', brokenIndex: subsequentIdx - 1, detail: 'ambiguous-multiple-nodes' };
     }
 
     const nextRes = await doEvaluateProperty(env, { locator: chainedLocator, prop: evalArgs.propChain[subsequentIdx], parsingData: evalArgs.parsingData });

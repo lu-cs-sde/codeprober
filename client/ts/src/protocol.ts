@@ -27,6 +27,12 @@ interface CompleteReq {
 interface CompleteRes {
   lines?: string[];
 }
+interface Decoration {
+  start: number;
+  end: number;
+  type: string;
+  message?: string;
+}
 interface Diagnostic {
   type: ('ERROR'| 'WARNING'| 'INFO'| 'HINT'| 'LINE_PP'| 'LINE_AA'| 'LINE_AP'| 'LINE_PA');
   start: number;
@@ -59,6 +65,13 @@ interface FindWorkspaceFilesReq {
 interface FindWorkspaceFilesRes {
   matches?: string[];
   truncatedSearch?: boolean;
+}
+interface GetDecorationsReq {
+  type: "ide:decorations";
+  src: ParsingRequestData;
+}
+interface GetDecorationsRes {
+  lines?: Decoration[];
 }
 interface GetTestSuiteReq {
   type: "Test:GetTestSuite";
@@ -124,6 +137,7 @@ interface ListPropertiesReq {
   all: boolean;
   locator: NodeLocator;
   src: ParsingRequestData;
+  attrChain?: string[];
 }
 interface ListPropertiesRes {
   body: RpcBodyLine[];
@@ -421,12 +435,15 @@ export {
  , BackingFileUpdated
  , CompleteReq
  , CompleteRes
+ , Decoration
  , Diagnostic
  , EvaluatePropertyReq
  , EvaluatePropertyRes
  , FNStep
  , FindWorkspaceFilesReq
  , FindWorkspaceFilesRes
+ , GetDecorationsReq
+ , GetDecorationsRes
  , GetTestSuiteReq
  , GetTestSuiteRes
  , GetWorkerStatusReq

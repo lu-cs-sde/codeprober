@@ -324,14 +324,15 @@ const doMain = (wsPort: number
 
       let setLocalState = (value: string) => { };
 
-      const darkModeCheckbox  = uiElements.darkModeCheckbox;
-      darkModeCheckbox.checked = !settings.isLightTheme();
+      const themeSelector  = uiElements.themeDropdown;
+      themeSelector.value = settings.getTheme();
       const themeChangeListeners: { [id: string]: (lightTheme: boolean) => void } = {};
-      darkModeCheckbox.oninput = (e) => {
-        let lightTheme = !darkModeCheckbox.checked;
-        settings.setLightTheme(lightTheme);
-        document.body.setAttribute('data-theme-light', `${lightTheme}`);
-        Object.values(themeChangeListeners).forEach(cb => cb(lightTheme));
+      themeSelector.onchange = () => {
+        let themeVal = themeSelector.value;
+        settings.setTheme(themeVal as 'auto' | 'dark' | 'light');
+        const isLightTheme = settings.isLightTheme();
+        document.body.setAttribute('data-theme-light', `${isLightTheme}`);
+        Object.values(themeChangeListeners).forEach(cb => cb(isLightTheme));
       }
 
       let syntaxHighlightingToggler: ((langId: SyntaxHighlightingLanguageId) => void) | undefined;

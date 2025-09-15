@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "tsc -p tsconfig.test.json && node --test dist-test/test/**/*.js",
-    "test:watch": "tsc -p tsconfig.test.json --watch --preserveWatchOutput & node --test --watch dist-test/test/**/*.js",
+    "test:watch": "tsc -p tsconfig.test.json --watch --preserveWatchOutput & node --test --test-only --watch dist-test/test/**/*.js",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",

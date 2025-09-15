@@ -4,9 +4,9 @@
 
 // [[$rn.value=7]]
 
-// Accessing something directly on an array is fine IF the array has a single entry
-// [[$p.getChildren=Add]]
-// [[$p.getChildren.value=7]]
+// Accessing methods on an array is fine
+// [[$rn.getChildren.size=2]]
+// [[$rn.getChildren.iterator.next.prettyPrint=(1 + 2)]]
 
 // Lists with multiple children
 // Imprecise, string-based comparison
