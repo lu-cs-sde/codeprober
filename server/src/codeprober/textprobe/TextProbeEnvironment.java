@@ -262,11 +262,25 @@ public class TextProbeEnvironment {
 		if (query.attrNames.length == 0) {
 			return Arrays.asList(RpcBodyLine.fromNode(locator));
 		}
-		final SynchronousEvaluationResult resp = performEvalReq(parsingRequestData, locator, new Property( //
+		final List<RpcBodyLine> resp = performEvalReq(parsingRequestData, locator, new Property( //
 				"m:AttrChain", //
 				Arrays.asList(query.attrNames).stream().map(x -> PropertyArg.fromString(x)).collect(Collectors.toList()) //
-		));
-		return resp.body;
+		)).body;
+		if (resp.size() == 1) {
+			final RpcBodyLine line = resp.get(0);
+			if (line.isPlain()) {
+				final String msg = line.asPlain();
+				if (msg.startsWith("No such attribute '")) {
+					errMsgs.add(msg);
+					return null;
+				}
+				if (msg.startsWith("Failed evaluating '")) {
+					errMsgs.add(msg);
+					return null;
+				}
+			}
+		}
+		return resp;
 	}
 
 	public boolean evaluateComparison(TextAssertionMatch tam, List<RpcBodyLine> lhsBody) {

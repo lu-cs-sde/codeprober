@@ -1,18 +1,14 @@
   ❌ ts/err_ambiguous.addn
      2 nodes of type "Num". Add [idx] to disambiguate, e.g. "Num[0]"
   ❌ ts/err_badattrchain.addn
-     -        Expected: 2
-                Actual: No such attribute 'asNum' on addnum.ast.Num
+     No such attribute 'asNum' on addnum.ast.Num
   ❌ ts/err_badindex.addn
      Invalid index
      Invalid index
   ❌ ts/err_containscases.addn
-     -        Expected: 123
-                Actual: No such attribute 'value' on java.util.ArrayList
-     -        Expected: 123
-                Actual: No such attribute 'value' on java.util.ArrayList
-     -        Expected: 123
-                Actual: No such attribute 'value' on java.util.ArrayList
+     No such attribute 'value' on java.util.ArrayList
+     No such attribute 'value' on java.util.ArrayList
+     No such attribute 'value' on java.util.ArrayList
      -        Expected: [$three, $four]
                 Actual: [Add, Num]
      -        Expected: Num
@@ -31,6 +27,11 @@
      No such variable
   ❌ ts/err_nosuchvar.addn
      No such variable
+  ❌ ts/err_nullaccess.addn
+     No such attribute 'foo' on null
+     No matching nodes
+     No such attribute 'foo' on addnum.ast.Num
+     No such attribute 'foo' on addnum.ast.Num
   ❌ ts/err_redefvar.addn
      Duplicate definition of $x
   ❌ ts/err_syntaxabuse.addn
@@ -39,6 +40,11 @@
      Invalid syntax
      -        Expected:  a
                 Actual: Add
+  ❌ ts/err_throw.addn
+     Failed evaluating 'throwSomething' on addnum.ast.Add
+     Failed evaluating 'throwSomething' on addnum.ast.Add
+     Failed evaluating 'throwSomething' on addnum.ast.Add
+     Failed evaluating 'throwSomething' on addnum.ast.Add
   ❌ ts/err_varvar.addn
      Cannot use variables on right-hand side
   ✅ ts/ok_add.addn
@@ -49,4 +55,4 @@
   ✅ ts/ok_num.addn
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
-Done: 56 pass, 23 fail
+Done: 56 pass, 31 fail

@@ -81,11 +81,11 @@ public class ListPropertiesHandler {
 			} catch (InvokeProblem ip) {
 				final Throwable cause = ip.getCause();
 				if (cause instanceof NoSuchMethodException) {
-					errBody.add(RpcBodyLine.fromPlain(
-							String.format("No such attribute '%s' on %s", step, chainVal.getClass().getName())));
+					errBody.add(RpcBodyLine.fromPlain(String.format("No such attribute '%s' on %s", step,
+							(chainVal == null ? "null" : chainVal.getClass().getName()))));
 				} else {
-					errBody.add(RpcBodyLine.fromPlain(
-							String.format("Failed evaluating '%s' on %s", step, chainVal.getClass().getName())));
+					errBody.add(RpcBodyLine.fromPlain(String.format("Failed evaluating '%s' on %s", step,
+							(chainVal == null ? "null" : chainVal.getClass().getName()))));
 
 					System.err.println("Exception thrown while evaluating attribute chain:");
 					ip.printStackTrace();

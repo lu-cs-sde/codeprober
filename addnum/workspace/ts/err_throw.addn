@@ -1,0 +1,7 @@
+1
+  // [[Program.rootNode.throwSomething]]
+  // [[Add.throwSomething]]
+  // [[Program.rootNode.throwSomething=abc]]
+  // [[Add.throwSomething=abc]]
+
++2

@@ -393,16 +393,44 @@ const doEvaluateNodeAndAttr = async (
       errRange: { colStart: attrStart + 1, colEnd: attrStart + args.attrNames[attrEvalResult.brokenIndex].length },
     }
   }
-  if (attrEvalResult.length === 1 && attrEvalResult[0].type === 'plain' && attrEvalResult[0].value.startsWith(`No such attribute '${args.attrNames[args.attrNames.length - 1]}' on `)) {
-    let lastAttrStart = args.index;
-    for (let i = 0; i < args.attrNames.length; ++i) {
-      lastAttrStart = line.value.indexOf('.', lastAttrStart) + 1;
+  if (attrEvalResult.length === 1 && attrEvalResult[0].type === 'plain') {
+    const errMsg = attrEvalResult[0].value;
+    if (errMsg.startsWith(`No such attribute '`)) {
+      let faultyAttrIdx = args.attrNames.length - 1;
+      for (let i = 1; i < args.attrNames.length; ++i) {
+        if (errMsg.startsWith(`No such attribute '${args.attrNames[i]}' on`)) {
+          faultyAttrIdx = i;
+          break;
+        }
+      }
+      let lastAttrStart = args.index;
+      for (let i = 0; i <= faultyAttrIdx; ++i) {
+        lastAttrStart = line.value.indexOf('.', lastAttrStart) + 1;
+      }
+      return {
+        type: 'error',
+        msg: `No such attribute`,
+        errRange: { colStart: lastAttrStart + 1, colEnd: lastAttrStart + args.attrNames[args.attrNames.length - 1].length },
+      };
     }
-    return {
-      type: 'error',
-      msg: `No such attribute`,
-      errRange: { colStart: lastAttrStart + 1, colEnd: lastAttrStart + args.attrNames[args.attrNames.length - 1].length },
-    };
+    if (errMsg.startsWith(`Failed evaluating '`)) {
+      let faultyAttrIdx = args.attrNames.length - 1;
+      for (let i = 1; i < args.attrNames.length; ++i) {
+        if (errMsg.startsWith(`Failed evaluating '${args.attrNames[i]}' on`)) {
+          faultyAttrIdx = i;
+          break;
+        }
+      }
+      let lastAttrStart = args.index;
+      for (let i = 0; i <= faultyAttrIdx; ++i) {
+        lastAttrStart = line.value.indexOf('.', lastAttrStart) + 1;
+      }
+      return {
+        type: 'error',
+        msg: `Failed evaluation`,
+        errRange: { colStart: lastAttrStart + 1, colEnd: lastAttrStart + args.attrNames[args.attrNames.length - 1].length },
+      };
+    }
   }
   return {
     type: 'success',

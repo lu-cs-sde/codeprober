@@ -39,6 +39,16 @@ public class Add extends Node {
 		return asNum_value;
 	}
 
+	@Attribute
+	public Object nullPrimitive() {
+		return null;
+	}
+
+	@Attribute
+	public Object throwSomething() {
+		throw new RuntimeException("Intentional Failure");
+	}
+
 	@Override
 	public void prettyPrint(PrintStream out) {
 		out.append("(");
