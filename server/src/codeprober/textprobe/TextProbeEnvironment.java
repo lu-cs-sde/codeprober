@@ -318,8 +318,10 @@ public class TextProbeEnvironment {
 			}
 			if (printExpectedValuesInComparisonFailures) {
 				errMsgs.add("-        Expected: " + flattenBody(lhsBody));
+				errMsgs.add("   " + (tam.exclamation ? "NOT t" : "   T") + "o contain: " + flattenBody(rhsBody));
+			} else {
+				errMsgs.add("Actual:" + flattenBody(rhsBody));
 			}
-			errMsgs.add("   " + (tam.exclamation ? "NOT t" : "   T") + "o contain: " + flattenBody(rhsBody));
 			return false;
 		}
 

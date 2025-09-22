@@ -45,8 +45,9 @@ public class Reflect {
 	}
 
 	public static Method findMostAccessibleMethod(Object obj, String methodName, Class<?>... paramTypes) {
-		if (obj == null)
+		if (obj == null) {
 			return null;
+		}
 
 		Class<?> clazz = obj.getClass();
 		Method candidate = null;

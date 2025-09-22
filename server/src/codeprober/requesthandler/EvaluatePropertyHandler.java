@@ -303,34 +303,6 @@ public class EvaluatePropertyHandler {
 									}
 									return;
 								}
-//
-//								for (int i = 0; i < req.property.args.size(); ++i) {
-//									final PropertyArg arg = req.property.args.get(i);
-//									if (!arg.isString()) {
-//										throw new IllegalArgumentException(
-//												"All arguments to m:AttrChain must be strings, got " + arg.type);
-//									}
-//									final String step = arg.asString();
-//									try {
-//										if (step.startsWith("l:")) {
-//											chainVal = Reflect.invokeN(chainVal, "cpr_lInvoke",
-//													new Class[] { String.class },
-//													new Object[] { step.substring("l:".length()) });
-//										} else {
-//											chainVal = Reflect.invoke0(chainVal, step);
-//										}
-//									} catch (InvokeProblem ip) {
-//										final Throwable cause = ip.getCause();
-//										if (cause instanceof NoSuchMethodException) {
-//											System.out.println("m:AttrChain failed on step " + step + " w/ chainVal: "
-//													+ chainVal.getClass());
-//											body.add(RpcBodyLine.fromPlain(String.format("No such attribute '%s' on %s",
-//													step, chainVal.getClass().getName())));
-//											return;
-//										}
-//										throw ip;
-//									}
-//								}
 							}
 							value = chainVal;
 							break;

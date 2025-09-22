@@ -35,7 +35,7 @@ public class ListPropertiesHandler {
 		final List<RpcBodyLine> body = new ArrayList<>();
 		body.addAll(parsed.captures);
 		Object chainVal = evaluateAttrChain(match.node.underlyingAstNode, req.attrChain, body);
-		if (chainVal == ATTR_CHAIN_FAILED) {
+		if (chainVal == ATTR_CHAIN_FAILED || chainVal == null) {
 			return new ListPropertiesRes(body);
 		}
 		if (parsed.info.baseAstClazz.isInstance(chainVal)) {
