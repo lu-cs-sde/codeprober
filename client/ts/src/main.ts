@@ -20,7 +20,7 @@ import { createTestManager } from './model/test/TestManager';
 import displayTestSuiteListModal from './ui/popup/displayTestSuiteListModal';
 import ModalEnv from './model/ModalEnv';
 import displayWorkerStatus from './ui/popup/displayWorkerStatus';
-import { AsyncRpcUpdate, BackingFileUpdated, CompleteReq, CompleteRes, Diagnostic, HoverReq, HoverRes, InitInfo, ParsingRequestData, PutWorkspaceContentReq, PutWorkspaceContentRes, Refresh, TALStep, WorkspacePathsUpdated } from './protocol';
+import { AsyncRpcUpdate, BackingFileUpdated, CompleteReq, CompleteRes, Diagnostic, HoverReq, HoverRes, InitInfo, ParsingRequestData, PutWorkspaceContentReq, PutWorkspaceContentRes, PutWorkspaceMetadataReq, PutWorkspaceMetadataRes, Refresh, TALStep, WorkspacePathsUpdated } from './protocol';
 import showWindow from './ui/create/showWindow';
 import { createMutableLocator } from './model/UpdatableNodeLocator';
 import WindowState from './model/WindowState';
@@ -100,7 +100,7 @@ const doMain = (wsPort: number
           settings.setProbeWindowStates(states);
         }
         if (activeWorkspace) {
-          activeWorkspace.onActiveWindowsChange(states);
+          activeWorkspace.onActiveFileChange(getLocalState(), states);
         }
       });
     };
@@ -284,7 +284,8 @@ const doMain = (wsPort: number
     };
     const rootElem = document.getElementById('root') as HTMLElement;
     const initHandler = (info: InitInfo) => {
-      const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile, supportsWorkspaceMetadata } = info;
+      const { version: { clean, hash, buildTimeSeconds }, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile } = info;
+      const supportsWorkspaceMetadata = info.supportsWorkspaceMetadata ?? true;
       shouldTryReloadOnDisconnect = info.autoReloadOnDisconnect ?? false;
 
       if ((workerProcessCount ?? 1) <= 1) {
@@ -317,7 +318,7 @@ const doMain = (wsPort: number
           settings.setEditorContents(newValue);
         }
         if (activeWorkspace) {
-          activeWorkspace.onActiveFileChange(newValue);
+          activeWorkspace.onActiveFileChange(newValue, getCurrentWindowStates());
         }
         notifyLocalChangeListeners(adjusters);
       };
@@ -456,6 +457,7 @@ const doMain = (wsPort: number
             initWorkspace({
               env: modalEnv,
               initialLocalContent: settings.getEditorContents() ?? '',
+              getLocalContent: () => getLocalState(),
               setLocalContent: contents => setLocalState(contents),
               onActiveFileChanged,
               getCurrentWindows: getCurrentWindowStates,
@@ -464,7 +466,7 @@ const doMain = (wsPort: number
               },
               textProbeManager: activeTextProbeManager,
               notifySomeWorkspacePathChanged: () => notifyLocalChangeListeners(undefined, 'workspace_path_updated'),
-              serverSupportsWorkspaceMetadata: supportsWorkspaceMetadata ?? true,
+              serverSupportsWorkspaceMetadata: supportsWorkspaceMetadata,
             })
               .then((ws) => {
                 if (ws) {
@@ -646,20 +648,39 @@ const doMain = (wsPort: number
         }
         return wsHandler.sendRpc(req);
       };
+      const lastWorkspaceMetadata: { [path: string]: string } = {};
       const modalEnv: ModalEnv = {
         showWindow,
-        putWorkspaceContent: (path, contents) => {
+        putWorkspaceContent: (path, contents, windows) => {
           if (!workspacePathUpdaters[path]) {
-            workspacePathUpdaters[path] = createCullingTaskSubmitter();
+            workspacePathUpdaters[path] = createCullingTaskSubmitter(500);
           }
           workspacePathUpdaters[path].submit(async () => {
             // Note: we use sendRpc rather than performTypedRpc here. This is to avoid getting stuck in a deadlock
             // where performTypedRpc is waiting for all workspace updates to finish, while the workspace updates
             // are waiting on performTypedRpc, etc.
-            const req: PutWorkspaceContentReq = { type: 'PutWorkspaceContent', path, content: contents };
+            const req: PutWorkspaceContentReq = {
+              type: 'PutWorkspaceContent',
+              path,
+              content: contents,
+            };
             const res: PutWorkspaceContentRes = await wsHandler.sendRpc(req);
             if (!res.ok) {
               console.warn('Failed updating content for', path);
+            }
+
+            const newWindows = JSON.stringify(windows);
+            if (newWindows !== lastWorkspaceMetadata[path] && supportsWorkspaceMetadata) {
+              lastWorkspaceMetadata[path] = newWindows;
+              const metaReq: PutWorkspaceMetadataReq = {
+                type: 'PutWorkspaceMetadata',
+                path,
+                metadata: { windowStates: windows },
+              };
+              const metaRes: PutWorkspaceContentRes = await wsHandler.sendRpc(metaReq);
+              if (!metaRes.ok) {
+                console.warn('Failed updating workspace metadata for', path);
+              }
             }
           });
         },

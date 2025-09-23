@@ -3,22 +3,22 @@ package protocolgen.spec;
 import org.json.JSONObject;
 
 @SuppressWarnings("unused")
-public class GetWorkspaceFile extends Rpc {
+public class PutWorkspaceFile extends Rpc {
 
 	@Override
 	public Streamable getRequestType() {
 		return new Streamable() {
-			public final Object type = "GetWorkspaceFile";
+			public final Object type = "PutWorkspaceFile";
 			public final Object path = String.class;
-			public final Object loadMeta = opt(Boolean.class);
+			public final Object content = String.class;
+			public final Object metadata = opt(JSONObject.class);
 		};
 	}
 
 	@Override
 	public Streamable getResponseType() {
 		return new Streamable() {
-			public final Object content = opt(String.class);
-			public final Object metadata = opt(JSONObject.class);
+			public final Object ok = Boolean.class;
 		};
 	}
 

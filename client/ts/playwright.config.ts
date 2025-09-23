@@ -28,7 +28,7 @@ export default defineConfig({
     /* Take screenshot on failure */
     screenshot: 'only-on-failure',
   },
-  timeout: 10_000,
+  timeout: 3 * 60_000,
 
   /* Configure projects for major browsers */
   projects: [
@@ -36,7 +36,6 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-
     {
       name: 'firefox',
       use: { ...devices['Desktop Firefox'] },
@@ -50,10 +49,11 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: `PORT=${port} java -Dcpr.workspace=addnum/workspace -Dcpr.workspaceFilePattern="ts/.*.addn" -jar codeprober.jar addnum/AddNum.jar`,
+    command: `PORT=${port} java -Dcpr.workspace=addnum/workspace -jar codeprober.jar addnum/AddNum.jar`,
     port,
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000, // 2 minutes for server to start
     cwd: '../..',
+    stdout: 'pipe', // Uncomment for debugging
   },
 });

@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { mkdirSync, statSync, writeFileSync, rmSync } from 'node:fs';
 
 test.describe('CodeProber Integration Tests', () => {
   test('should load index.html and receive a response', async ({ page }) => {
@@ -59,6 +60,73 @@ test.describe('CodeProber Integration Tests', () => {
         const expectedStatusLine = fetched.split('\n').find((x: string) => x.startsWith('Done: '));
 
         expect(`Done: ${numPass} pass, ${numFail} fail`).toBe(expectedStatusLine);
+      });
+      test('reacts to workspace changes', async ({ page, request }) => {
+        const wsEntryName = `dynamic_entry_${(Math.random() * Number.MAX_SAFE_INTEGER)|0}`;
+        // Listen for all console logs
+        page.on('console', msg => console.log('[C]', msg.text()));
+
+        await fillPageContent({ page, wantedContent: '(1+2)', editor });
+
+        // For updates that require file syncing, set a generous timeout.
+        // This is mainly needed for OSX, where the WatchService is slow.
+        const fileSyncTimeout = 30_000;
+
+        await expect(page.getByText(wsEntryName)).toBeHidden();
+
+        const basePath = `../../addnum/workspace/`;
+        try {
+          mkdirSync(`${basePath}${wsEntryName}`);
+          await expect(page.getByText(wsEntryName)).toBeVisible({ timeout: fileSyncTimeout });
+
+          await page.getByText(wsEntryName).click();
+
+          const locateNewFile = () => page.getByText('NewFileName');
+          const locateContents = () => page.getByText('NewFileContents');
+          const newFilePath = `${basePath}${wsEntryName}/NewFileName`;
+
+          // No file exists, nor its contents
+          await expect(locateNewFile()).toBeHidden();
+          await expect(locateContents()).toBeHidden();
+
+          // After file syncing, the file is visible. Contents still invisible until clicked
+          console.log('== Creating NewFile')
+          writeFileSync(newFilePath, 'NewFileContents');
+          const mstat1 = statSync(newFilePath).mtime;
+          await expect(locateNewFile()).toBeVisible({ timeout: fileSyncTimeout });
+          await expect(locateContents()).toBeHidden();
+
+          // Click -> contents visible
+          console.log('== Clicking row')
+          await locateNewFile().click();
+          await expect(locateContents()).toBeVisible({ timeout: 1000 });
+
+          // The client should not re-write the same content to the file upon loading it.
+          // We can detect this by comparing mtime's before and after the client loaded the file.
+          const mstat2 = statSync(newFilePath).mtime;
+          expect(mstat2).toEqual(mstat1);
+
+          // Change underlying file -> update visible in UI
+          console.log('== Changing path to different contents')
+          writeFileSync(newFilePath, 'ChangedFileContents_v1');
+          writeFileSync(newFilePath +"_v2", 'ChangedFileContents_v2');
+          await expect(page.getByText('ChangedFileContents_v1')).toBeVisible({ timeout: fileSyncTimeout });
+          await expect(locateContents()).toBeHidden();
+
+          // If we remove the file, it should default back to the temp file, which we previously initialized with "(1+2)"
+          rmSync(newFilePath);
+          await expect(page.getByText('(1+2)')).toBeVisible({ timeout: fileSyncTimeout });
+
+          await page.getByText('NewFileName_v2').click();
+          await expect(page.getByText('ChangedFileContents_v2')).toBeVisible({ timeout: 1000 });
+
+          // Similarly, if we remove the parent of the active file, it should also go back to the temp file.
+          rmSync(`${basePath}${wsEntryName}`, { recursive: true, force: true });
+          await expect(page.getByText('(1+2)')).toBeVisible({ timeout: fileSyncTimeout });
+
+        } finally {
+          rmSync(`${basePath}${wsEntryName}`, { recursive: true, force: true });
+        }
       });
 
       test('create a probe', async ({ page,  }) => {

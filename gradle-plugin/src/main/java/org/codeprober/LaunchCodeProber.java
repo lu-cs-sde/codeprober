@@ -286,7 +286,7 @@ public abstract class LaunchCodeProber extends JavaExec {
           baos.write(b);
           return;
         }
-        // Else, looking for port and wrote a newline
+        // Else, looking for port and write a newline
         final byte[] bytes = baos.toByteArray();
         baos.reset();
         final String needle = "CPRGRADLE_URL=";

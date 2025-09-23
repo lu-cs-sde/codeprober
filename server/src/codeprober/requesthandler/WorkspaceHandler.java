@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import codeprober.protocol.data.FindWorkspaceFilesReq;
@@ -206,7 +207,7 @@ public class WorkspaceHandler {
 			final byte[] textBytes = Files.readAllBytes(subFile.toPath());
 			JSONObject metadata = null;
 
-			if (supportsStoringWorkspaceMetadata()) {
+			if (supportsStoringWorkspaceMetadata() && req.loadMeta != null && req.loadMeta) {
 				final File metadataFile = getMetadataFileForRealFile(subFile);
 				if (metadataFile.exists()) {
 					final byte[] metadataBytes = Files.readAllBytes(metadataFile.toPath());
@@ -214,9 +215,8 @@ public class WorkspaceHandler {
 							new String(metadataBytes, 0, metadataBytes.length, StandardCharsets.UTF_8));
 				}
 			}
-			return new GetWorkspaceFileRes(new String(textBytes, 0, textBytes.length, StandardCharsets.UTF_8),
-					metadata);
-		} catch (IOException e) {
+			return new GetWorkspaceFileRes(new String(textBytes, 0, textBytes.length, StandardCharsets.UTF_8), metadata);
+		} catch (IOException | JSONException e) {
 			System.out.println("Error when reading workspace file and/or its accompanying metadata entry");
 			return new GetWorkspaceFileRes();
 		}

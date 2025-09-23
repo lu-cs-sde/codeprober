@@ -5,6 +5,17 @@ import assert from 'node:assert';
 import cullingTaskSubmitterFactory from '../../src/model/cullingTaskSubmitterFactory';
 
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+const createDummyTaskWithState = () => {
+  const ret = {
+    state: 'idle',
+    getTask: () => async () => {
+      ret.state = 'running';
+      await sleep(20);
+      ret.state = 'done';
+    },
+  };
+  return ret;
+}
 
 describe('cullingTaskSubmitterFactory', () => {
   it('should only execute the last submitted function', async () => {
@@ -24,25 +35,16 @@ describe('cullingTaskSubmitterFactory', () => {
     it(`should wait for the last func to finish, when sleepFirst:${sleepFirst}`, async () => {
       const sub = cullingTaskSubmitterFactory(1)();
 
-      let state: 'idle' | 'running' | 'done' = 'idle';
-      sub.submit(() => {
-        return new Promise((res) => {
-          state = 'running';
-          setTimeout(() => {
-            state = 'done';
-            res('');
-          }, 20);
-        });
-      });
+      const first = createDummyTaskWithState();
+      sub.submit(first.getTask());
 
-      assert.strictEqual(state, 'idle');
+      assert.strictEqual(first.state, 'idle');
       if (sleepFirst) {
         await sleep(10);
-        assert.strictEqual(state, 'running');
+        assert.strictEqual(first.state, 'running');
       }
       await sub.fireImmediately();
-      assert.strictEqual(state, 'done');
+      assert.strictEqual(first.state, 'done');
     });
   });
-
 });

@@ -1,5 +1,5 @@
 import { assertUnreachable } from '../hacks';
-import { GetWorkspaceFileReq, GetWorkspaceFileRes, ListWorkspaceDirectoryReq, ListWorkspaceDirectoryRes, PutWorkspaceContentReq, PutWorkspaceContentRes, PutWorkspaceMetadataReq, PutWorkspaceMetadataRes, RenameWorkspacePathReq, RenameWorkspacePathRes, UnlinkWorkspacePathReq, UnlinkWorkspacePathRes, WorkspaceEntry } from '../protocol';
+import { GetWorkspaceFileReq, GetWorkspaceFileRes, ListWorkspaceDirectoryReq, ListWorkspaceDirectoryRes, PutWorkspaceContentReq, PutWorkspaceContentRes, RenameWorkspacePathReq, RenameWorkspacePathRes, UnlinkWorkspacePathReq, UnlinkWorkspacePathRes, WorkspaceEntry } from '../protocol';
 import settings from '../settings';
 import createModalTitle, { createOverflowButton } from '../ui/create/createModalTitle';
 import showWindow from '../ui/create/showWindow';
@@ -9,6 +9,8 @@ import ModalEnv from './ModalEnv';
 import WindowState from './WindowState';
 import ThreadPoolExecutor, { createThreadPoolExecutor } from './ThreadPoolExecutor';
 import displayFuzzyWorkspaceFileFinder, { createDisplayFuzzyFinderShortcutListener } from '../ui/popup/displayFuzzyWorkspaceFileFinder';
+import FileTreeManager, { Directory, DirectoryListEntry, setupFileTreeManager, TextFile } from './FileTreeManager';
+import deepEqual from './util/deepEqual';
 
 const uiElements = new UIElements();
 const unsavedFileKey = '%😄'; // Hopefully not colliding with anything
@@ -16,6 +18,7 @@ const unsavedFileKey = '%😄'; // Hopefully not colliding with anything
 interface WorkspaceInitArgs {
   env: ModalEnv;
   initialLocalContent: string;
+  getLocalContent: () => string;
   setLocalContent: (contents: string) => void;
   onActiveFileChanged: () => void;
   getCurrentWindows: () => WindowState[];
@@ -28,28 +31,22 @@ interface WorkspaceInitArgs {
 interface VisibleRow {
   updateTestStatus: (status: TextProbeCheckResults) => void;
   click: () => void;
-  getKind: () => RowKind,
+  clickIfClosedDir: () => void;
 }
 
 type CachedFileEntry = { contents: string; windows: WindowState[] };
-type CachedDirEntry = { files: WorkspaceEntry[] };
+type WorkspaceDirectory = Directory<CachedFileEntry>
+type WorkspaceTextFile = TextFile<CachedFileEntry>
+
 type CachedEntries<T> = { [path: string]: T };
-type ReloadReason =
-    { type: 'rename', src: string, dst: string }
-  | { type: 'unlink', path: string }
-  ;
 interface Workspace {
   env: ModalEnv;
-  cachedFiles: CachedEntries<CachedFileEntry>;
-  cachedDirs: CachedEntries<CachedDirEntry>;
   visibleRows: CachedEntries<VisibleRow>;
   knownTestResults: CachedEntries<TextProbeCheckResults>;
   preOpenedFiles: { [path: string]: boolean };
   getActiveFile: () => string;
   activeFileIsTempFile: () => boolean;
-  onActiveFileChange: (contents: string) => void;
-  onActiveWindowsChange: (states: WindowState[]) => void;
-  reload: (reason?: ReloadReason) => void;
+  onActiveFileChange: (contents: string, states: WindowState[]) => void;
   onActiveFileChecked: (results: TextProbeCheckResults) => void;
   onServerNotifyPathsChanged: (paths: string[]) => void;
   setActiveWorkspacePath: (path: string) => void;
@@ -57,6 +54,8 @@ interface Workspace {
 
 interface WorkspaceInstance extends Workspace {
   clientSideMetadataCache: { [path: string]: WindowState[] }
+  treeManager: FileTreeManager<CachedFileEntry>;
+  getMostRecentPutFileRequestContents: (path: string) => string | null,
 }
 
 interface WorkspaceFileMetadata {
@@ -71,39 +70,37 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: WorkspaceInstance,
   const testDir = async (
     statusLbl: HTMLElement,
     failureLog: HTMLElement,
-    path: string | null = null,
+    dir: WorkspaceDirectory,
     testRunMonitor: { shouldStop: boolean },
     executor: ThreadPoolExecutor,
   ) => {
-    const contents = await getDirContents(workspace, path ?? '');
+    const contents = await dir.getChildren();
     if (!contents) {
       return;
     }
-    for (let i = 0; i < contents.files.length; ++i) {
-      const entry = contents.files[i];
-      const fullPath = `${path ? `${path}/` : ''}${entry.value}`;
+    for (let i = 0; i < contents.length; ++i) {
+      const entry = contents[i];
       if (testRunMonitor.shouldStop) {
         return;
       }
       switch (entry.type) {
-        case 'directory': {
-          // await testDir(statusLbl, failureLog, fullPath, testRunMonitor, executor);
-          executor.submit(() => testDir(statusLbl, failureLog, fullPath, testRunMonitor, executor));
+        case 'dir': {
+          executor.submit(() => testDir(statusLbl, failureLog, entry.value, testRunMonitor, executor));
           break;
         }
         case 'file': {
           const checkFile = async () => {
-            const entry = await getFileContents(workspace, fullPath);
-            if (entry == null) {
+            const txt = await entry.value.getContent();
+            if (txt == null) {
               return;
             }
             if (testRunMonitor.shouldStop) {
               return;
             }
+            const fullPath = entry.value.fullPath;
             const res = await args.textProbeManager.checkFile(
-              // { type: 'text', value: entry.contents },
               { type: 'workspacePath', value: fullPath },
-              entry.contents
+              txt.contents
             );
             if (res === null) {
               return;
@@ -198,30 +195,30 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: WorkspaceInstance,
 
       const start = Date.now();
       const executor = createThreadPoolExecutor(Math.max(1, args.env.workerProcessCount ?? 1));
-      testDir(statusLbl, failureLog, null, currentTestRunMonitor, executor)
-      .then(() => executor.wait())
-      .catch((err) => {
-        console.warn('Failed running tests', err)
-      })
-      .finally(() => {
-        currentlyRunning = false;
-        if (currentTestRunMonitor.shouldStop) {
-          // We tried running again during the run, rerun!
-          rerun();
-          return;
-        }
-        if (info.cancelToken.cancelled) {
-          return;
-        }
-        if (settings.getTextProbeStyle() === 'disabled') {
-          const errLbl = document.createElement('div');
-          errLbl.innerText =`Text probes are disabled, enable them in the settings panel and rerun.`;
-          errLbl.classList.add('captured-stderr');
-          bodyWrapper.appendChild(errLbl);
-        }
-        const doneLbl = document.createElement('div');
-        doneLbl.innerText =`Done in ${Date.now() - start}ms`;
-        bodyWrapper.appendChild(doneLbl);
+      testDir(statusLbl, failureLog, workspace.treeManager.root, currentTestRunMonitor, executor)
+        .then(() => executor.wait())
+        .catch((err) => {
+          console.warn('Failed running tests', err)
+        })
+        .finally(() => {
+          currentlyRunning = false;
+          if (currentTestRunMonitor.shouldStop) {
+            // We tried running again during the run, rerun!
+            rerun();
+            return;
+          }
+          if (info.cancelToken.cancelled) {
+            return;
+          }
+          if (settings.getTextProbeStyle() === 'disabled') {
+            const errLbl = document.createElement('div');
+            errLbl.innerText = `Text probes are disabled, enable them in the settings panel and rerun.`;
+            errLbl.classList.add('captured-stderr');
+            bodyWrapper.appendChild(errLbl);
+          }
+          const doneLbl = document.createElement('div');
+          doneLbl.innerText = `Done in ${Date.now() - start}ms`;
+          bodyWrapper.appendChild(doneLbl);
 
           testBtn.disabled = false;
           testBtn.innerText = 'Run Tests'
@@ -259,55 +256,61 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: WorkspaceInstance,
   }
 }
 
-async function getFileContents(workspace: WorkspaceInstance, path: string): Promise<CachedFileEntry | null> {
-  if (path === unsavedFileKey) {
-    console.warn('Tried loading temp file contents from server?');
-    return null;
-  }
-  const cached = workspace.cachedFiles[path];
-  if (cached) {
-    return cached;
-  }
-  const fresh = await workspace.env.performTypedRpc<GetWorkspaceFileReq, GetWorkspaceFileRes>({ type: 'GetWorkspaceFile', path });
-  if (typeof fresh?.content !== 'string') {
-    console.log('bad resp for gFC', path);
-    return null;
-  }
-  if (!workspace.cachedFiles[path]) {
-    workspace.cachedFiles[path] = { contents: fresh.content, windows: [] };
-  } else {
-    workspace.cachedFiles[path].contents = fresh.content;
-  }
-  if (fresh.metadata) {
-    try {
-      workspace.cachedFiles[path].windows = (fresh.metadata as WorkspaceFileMetadata).windowStates;
-    } catch (e) {
-      console.warn('Failed parsing metadata', e);
-      console.warn('Metadata: ', fresh.metadata);
-    }
-  } else if (workspace.clientSideMetadataCache[path]) {
-    workspace.cachedFiles[path].windows = workspace.clientSideMetadataCache[path];
-  }
-  return workspace.cachedFiles[path];
-}
-async function getDirContents(workspace: Workspace, path: string): Promise<CachedDirEntry | null> {
-  const cached = workspace.cachedDirs[path];
-  if (cached) {
-    return cached;
-  }
-  const fresh = await workspace.env.performTypedRpc<ListWorkspaceDirectoryReq, ListWorkspaceDirectoryRes>({ type: 'ListWorkspaceDirectory', path: path || undefined });
-  if (!fresh?.entries) {
-    return null;
-  }
-  if (!workspace.cachedDirs[path]) {
-    workspace.cachedDirs[path] = { files: fresh.entries };
-  } else {
-    workspace.cachedDirs[path].files = fresh.entries;
-  }
-  return workspace.cachedDirs[path];
+const createFileListManager = (
+  workspace: WorkspaceInstance,
+  dir: WorkspaceDirectory,
+  path: string,
+  setActive: (path: string, contents: CachedFileEntry) => void,
+  performedTypedRpc: ModalEnv['performTypedRpc'],
+  fileList: HTMLElement,
+): { refresh: () => void, } =>{
+  const childRowsByName: { [name: string]: HTMLDivElement } = {};
+  const refresh = () => {
+    dir.getChildren().then(children => {
+      if (!children) {
+        console.warn('Failed listing children for', path, ', is the dir removed?');
+        return;
+      }
+      const remainingChildren = new Set<string>(children.map(x => x.name));
+      Object.entries(childRowsByName).forEach(([name, row]) => {
+        if (!remainingChildren.has(name)) {
+          row.remove();
+          delete childRowsByName[name];
+          if (workspace.getActiveFile().startsWith(`${path ? `${path}/` : ''}${name}`)) {
+            // Active path disappeared!
+            workspace.visibleRows[unsavedFileKey]?.click();
+          }
+        }
+      });
+      children.forEach((child, childIdx) => {
+        if (!childRowsByName[child.name]) {
+          childRowsByName[child.name] = fileList.appendChild(createRow(
+            workspace,
+            child.type === 'dir'
+              ? { type: 'directory', value: child.value }
+              : { type: 'file', value: child.value },
+            child.name, path ? `${path}/${child.name}` : child.name,
+            setActive,
+            performedTypedRpc,
+          ));
+        }
+        childRowsByName[child.name].style.order = `${childIdx}`;
+      });
+    });
+  };
+  dir.setChangeListener(refresh);
+
+  fileList.appendChild(createAddFileButton(workspace, path, fileList, setActive)).style.order = '9999999';
+
+  return {
+    refresh
+  };
 }
 
-type RowKind = 'unsaved' | 'file' | 'dir-open' | 'dir-closed';
+type RowKind =
+  { type: 'unsaved' }
+  | { type: 'file', value: WorkspaceTextFile }
+  | { type: 'directory', value: WorkspaceDirectory }
 const createRow = (
   workspace: WorkspaceInstance,
   kind: RowKind,
@@ -315,18 +318,18 @@ const createRow = (
   path: string,
   setActive: (path: string, contents: CachedFileEntry) => void,
   performedTypedRpc: ModalEnv['performTypedRpc'],
-) => {
+): HTMLDivElement => {
   const row = document.createElement('div');
   row.classList.add('workspace-row');
-  row.classList.add(`workspace-${kind}`);
   if (path === workspace.getActiveFile()) {
     row.classList.add('workspace-row-active');
   }
 
-  const changeKind = (newKind: typeof kind) => {
-    row.classList.remove(`workspace-${kind}`);
-    kind = newKind;
-    row.classList.add(`workspace-${kind}`);
+  let classKind: 'unsaved' | 'dir-open' | 'dir-closed' | 'file' = 'file';
+  const changeKind = (newKind: typeof classKind) => {
+    row.classList.remove(`workspace-${classKind}`);
+    classKind = newKind;
+    row.classList.add(`workspace-${classKind}`);
   }
 
   const headerLine = document.createElement('div');
@@ -338,7 +341,7 @@ const createRow = (
   lbl.innerText = label;
   headerLine.appendChild(lbl);
 
-  if (kind !== 'unsaved') {
+  if (kind.type !== 'unsaved') {
     const btn = createOverflowButton([
       {
         title: 'Rename',
@@ -350,7 +353,15 @@ const createRow = (
           performedTypedRpc<RenameWorkspacePathReq, RenameWorkspacePathRes>({ type: 'RenameWorkspacePath', srcPath: path, dstPath: newPath })
             .then((res) => {
               if (res.ok) {
-                workspace.reload({ type: 'rename', src: path, dst: newPath });
+                const oldParentDir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+                const newParentDir = newPath.includes('/') ? newPath.slice(0, newPath.lastIndexOf('/')) : '';
+                workspace.treeManager.notifyChanges([oldParentDir, newParentDir]);
+                if (kind.type === 'file' && path === workspace.getActiveFile()) {
+                  const content = kind.value.getCachedContent();
+                  if (content) {
+                    setActive(newPath, content);
+                  }
+                }
                 return;
               }
               throw new Error(`Got non-ok response`);
@@ -371,7 +382,8 @@ const createRow = (
           performedTypedRpc<UnlinkWorkspacePathReq, UnlinkWorkspacePathRes>({ type: 'UnlinkWorkspacePath', path })
             .then((res) => {
               if (res.ok) {
-                workspace.reload({ type: 'unlink', path });
+                const parentDir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+                workspace.treeManager.notifyChanges([parentDir]);
                 return;
               }
               throw new Error(`Got non-ok response`);
@@ -386,7 +398,6 @@ const createRow = (
     headerLine.appendChild(btn);
   }
 
-  let fileList: HTMLDivElement | null = null;
   row.setAttribute('data-path', path);
   const updateTestStatus: VisibleRow['updateTestStatus'] = (status) => {
     row.classList.remove('workspace-row-test-success');
@@ -402,79 +413,109 @@ const createRow = (
   if (workspace.knownTestResults[path]) {
     updateTestStatus(workspace.knownTestResults[path]);
   }
-  const click = () => {
-    switch (kind) {
-      case 'unsaved':
-        setActive(path, workspace.cachedFiles[path] ?? { contents: settings.getEditorContents() ?? '', windows: settings.getProbeWindowStates() });
-        break;
-      case 'file':
-        getFileContents(workspace, path)
+  let click: () => void;
+  let clickIfClosedDir: () => void = () => {};
+  const activateTempFile = () => setActive(path, { contents: settings.getEditorContents() ?? '', windows: settings.getProbeWindowStates() });;
+  switch (kind.type) {
+    case 'unsaved':
+      click = activateTempFile;
+      changeKind('unsaved');
+      break;
+
+    case 'file':
+      const tfile = kind.value;
+      changeKind('file');
+      click = () => {
+        tfile.getContent()
           .then(text => {
             if (text !== null) {
               setActive(path, text);
             }
           });
-        break;
-
-      case 'dir-closed':
-        changeKind('dir-open');
-        workspace.preOpenedFiles[path] = true;
-        if (fileList) {
-          fileList.style.display = 'flex';
-        } else {
-          fileList = document.createElement('div');
-          fileList.classList.add('workspace-dir-filelist');
-          if (path.split('/').length % 2 === 1) {
-            fileList.classList.add('workspace-dir-filelist-odd');
-          }
-          getDirContents(workspace, path)
-            .then(contents => {
-              // console.log('contents for', path, '==>', contents);
-              if (contents !== null) {
-                contents.files.forEach(file => {
-                  fileList?.appendChild(createRow(
-                    workspace,
-                    file.type === 'directory' ? 'dir-closed' : 'file',
-                    file.value,
-                    `${path}/${file.value}`,
-                    setActive,
-                    workspace.env.performTypedRpc,
-                  ));
-                })
-              }
-            })
-            .finally(() => {
-              fileList?.appendChild(createAddFileButton(workspace, `${path}/`, fileList, setActive))
-              row.appendChild(fileList as HTMLElement);
-            });
-        }
-
-        break;
-
-      case 'dir-open':
-        if (!fileList) {
-          console.error('How can there be an open dir without a fileList??')
+      }
+      tfile.setChangeListener(() => {
+        if (path !== workspace.getActiveFile()) {
+          // We changed, but are not currently active. Ignore
           return;
         }
-        fileList.style.display = 'none';
-        changeKind('dir-closed');
-        workspace.preOpenedFiles[path] = false;
-        break;
+        if (tfile.isRemoved()) {
+          // We were the active file, but we were removed! Change back to the temp file
+          activateTempFile();
+          return;
+        }
+        let preContents = workspace.getMostRecentPutFileRequestContents(path);
+        tfile.getContent()
+          .then(text => {
+            if (text === null) {
+              console.warn('Failed fetching file after update, is it removed? Path:', path);
+              return;
+            }
+            const posContents = workspace.getMostRecentPutFileRequestContents(path);
+            if (
+                  path === workspace.getActiveFile() // We are still the active file
+              && preContents === posContents // The user didn't type any new character since we started loading
+            ) {
+              setActive(path, text);
+            }
+          });
+      })
+      if (path === workspace.getActiveFile()) {
+        click();
+      }
+      break;
 
+      case 'directory': {
+        const fileList = row.appendChild(document.createElement('div'));
+        fileList.classList.add('workspace-dir-filelist');
+        if (path.split('/').length % 2 === 1) {
+          fileList.classList.add('workspace-dir-filelist-odd');
+        }
+        fileList.style.display = 'none';
+        let dirState: 'open' | 'closed' = 'closed';
+        const dir = kind.value;
+        changeKind(`dir-${dirState}`);
+        const listManager = createFileListManager(workspace, dir, path, setActive, performedTypedRpc, fileList);
+
+        click = () => {
+          dirState = dirState === 'open' ? 'closed' : 'open';
+          changeKind(`dir-${dirState}`);
+          switch (dirState) {
+            case 'closed': {
+              fileList.style.display = 'none';
+              break;
+            }
+            case 'open': {
+              fileList.style.display = 'flex';
+              listManager.refresh();
+              break;
+            }
+            default: {
+              assertUnreachable(dirState);
+              break;
+            }
+          }
+        };
+        if (workspace.preOpenedFiles[path]) {
+          click();
+        }
+        clickIfClosedDir = () => {
+          if (dirState === 'closed') {
+            click();
+          }
+        };
+        break;
+      }
       default:
         assertUnreachable(kind);
-    }
-  };
+        return row;
+  }
+
   workspace.visibleRows[path] = {
     updateTestStatus,
     click,
-    getKind: () => kind,
+    clickIfClosedDir,
   };
   lbl.onclick = click;
-  if ((kind === 'dir-closed' && workspace.preOpenedFiles[path])
-      || (kind === 'file' && path === workspace.getActiveFile())) {
-    click();
-  }
   return row;
 }
 
@@ -495,28 +536,22 @@ const createAddFileButton = (workspace: WorkspaceInstance, basePath: string, tgt
   row.onclick = () => {
     const name = prompt(`Name the new file${basePath ? ` in ${basePath}` : ''}`);
     if (name) {
-      const subPath = `${basePath}${name}`;
+      const fullPath = `${basePath ? `${basePath}/` : ''}${name}`;
 
       // First, check if the file exists
       (async () => {
-        let fileAlreadyExists = !!(await getFileContents(workspace, subPath));
+        let fileAlreadyExists = !!(await workspace.treeManager.lookup(fullPath));
         if (fileAlreadyExists) {
           alert('File already exists');
           return;
         }
-        if (name.includes('/')) {
-          // A little lazy, but lets just create the new file and then reload the UI
-          console.log('putting empty file...')
-          const putRes = await workspace.env.performTypedRpc<PutWorkspaceContentReq, PutWorkspaceContentRes>({ type: 'PutWorkspaceContent', path: subPath, content: '' });
-          if (putRes.ok) {
-            // OK!
-            workspace.reload({ type: 'rename', src: workspace.getActiveFile(), dst: subPath })
-          } else {
-            console.warn('Failed creating new empty file');
-          }
+        const putRes = await workspace.env.performTypedRpc<PutWorkspaceContentReq, PutWorkspaceContentRes>({ type: 'PutWorkspaceContent', path: fullPath, content: '' });
+        if (putRes.ok) {
+          // OK!
+          workspace.treeManager.notifyChanges([basePath]);
+          setActive(fullPath, { contents: '', windows: [] });
         } else {
-          tgtContainer.appendChild(createRow(workspace, 'file', name, subPath, setActive, workspace.env.performTypedRpc,));
-          setActive(subPath, { contents: '', windows: [] });
+          console.warn('Failed creating new empty file');
         }
       })();
     }
@@ -529,148 +564,78 @@ const createAddFileButton = (workspace: WorkspaceInstance, basePath: string, tgt
 const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null> => {
   let activeFile = unsavedFileKey;
   const workspaceList = uiElements.workspaceListWrapper;
-  let setActiveFile = (path: string, data: CachedFileEntry) => {}
+  let setActiveFile = (path: string, data: CachedFileEntry) => { }
   const mostRecentPutFileRequestContents: { [path: string]: string } = {};
+  const ignoreWindowUpdatesForPath: { [path: string]: boolean } = {};
+  const treeManager = setupFileTreeManager<CachedFileEntry>({
+    getFileContent: async path => {
+      const fresh = await workspace.env.performTypedRpc<GetWorkspaceFileReq, GetWorkspaceFileRes>({ type: 'GetWorkspaceFile', path, loadMeta: !ignoreWindowUpdatesForPath[path] });
+      if (typeof fresh?.content !== 'string') {
+        console.log('Failed GetWorkspaceFile for path:"', path, '"');
+        return null;
+      }
+      let ret: CachedFileEntry = { contents: fresh.content, windows: [] };
+      if (fresh.metadata) {
+        ret.windows = (fresh.metadata as WorkspaceFileMetadata).windowStates ?? [];
+      } else if (workspace.clientSideMetadataCache[path]) {
+        ret.windows = workspace.clientSideMetadataCache[path];
+      }
+      return ret;
+    },
+    listDirectory: async path => {
+      const fresh = await workspace.env.performTypedRpc<ListWorkspaceDirectoryReq, ListWorkspaceDirectoryRes>({ type: 'ListWorkspaceDirectory', path });
+      if (!fresh?.entries) {
+        console.log('Failed ListWorkspaceDirectory for path:"', path, '"');
+        return null;
+      }
+      fresh.entries.sort((a, b) => {
+        if (a.type !== b.type) {
+          return a.type === 'directory' ? -1 : 1;
+        }
+        return a.value.localeCompare(b.value);
+      })
+      return fresh.entries;
+    },
+  })
   const workspace: WorkspaceInstance = {
     env: args.env,
-    cachedFiles: {},
-    cachedDirs: {},
     preOpenedFiles: {},
     visibleRows: {},
     knownTestResults: {},
+    treeManager,
     getActiveFile: () => activeFile,
     activeFileIsTempFile: () => activeFile === unsavedFileKey,
-    onActiveFileChange: (contents) => {
-      if (workspace.cachedFiles[activeFile]) {
-        if (workspace.cachedFiles[activeFile].contents == contents) {
+    onActiveFileChange: (contents, states) => {
+      const path = activeFile;
+      if (path === unsavedFileKey) {
+        // Ignore
+        return;
+      }
+      workspace.clientSideMetadataCache[path] = states;
+      mostRecentPutFileRequestContents[path] = contents;
+      const cached = treeManager.lookupCached(activeFile);
+      if (cached?.type !== 'file') {
+        // First change in new file perhaps. Should only happen if they start typing
+        // immediately after creating a file (before the directory refresh request finishes).
+        // No caching to check
+      } else {
+        const ccontent = cached.value.getCachedContent();
+        if (ccontent?.contents === contents && deepEqual(ccontent?.windows ?? [], states, { ignoreUndefinedDiff: true, verbose: true })) {
           // Ignore it
           return;
         }
-        workspace.cachedFiles[activeFile].contents = contents;
+        cached.value.setCachedContent({ contents, windows: states });
       }
-      if (activeFile !== unsavedFileKey) {
-        const path = activeFile;
-        mostRecentPutFileRequestContents[path] = contents;
-        args.env.putWorkspaceContent(path, contents);
-      }
+      args.env.putWorkspaceContent(path, contents, states);
     },
-    onActiveWindowsChange: (states) => {
-      if (workspace.cachedFiles[activeFile]) {
-        if (JSON.stringify(workspace.cachedFiles[activeFile].windows) === JSON.stringify(states)) {
-          // No change
-          return;
-        }
-        workspace.cachedFiles[activeFile].windows = states;
-      }
-      if (activeFile !== unsavedFileKey) {
-        if (!args.serverSupportsWorkspaceMetadata) {
-          // Store client side
-          workspace.clientSideMetadataCache[activeFile] = states;
-        } else {
-          // Store server side
-          const payload: WorkspaceFileMetadata | undefined = states.length === 0 ? undefined : {
-            windowStates: states,
-          };
-          const path = activeFile;
-          args.env.performTypedRpc<PutWorkspaceMetadataReq, PutWorkspaceMetadataRes>({ type: 'PutWorkspaceMetadata', path, metadata: payload })
-            .then((res) => {
-              if (!res.ok) {
-                console.warn('Failed updating metadata for', path);
-              }
-            })
-            .catch(console.error);
-        }
-      }
-    },
-    reload: (reason) => {
-      const preActive = activeFile;
-      Object.keys(workspace.cachedFiles).forEach(key => {
-        if (key !== unsavedFileKey) { delete workspace.cachedFiles[key] }
-      });
-      Object.keys(workspace.cachedDirs).forEach(key => delete workspace.cachedDirs[key]);
-
-      let newActiveFileName = preActive;
-      if (reason) {
-        switch (reason.type) {
-          case 'rename': {
-            if (preActive.startsWith(reason.src)) {
-              newActiveFileName = `${reason.dst}${preActive.slice(reason.src.length)}`;
-            }
-            break;
-          }
-          case 'unlink': {
-            if (preActive.startsWith(reason.path)) {
-              newActiveFileName = unsavedFileKey;
-            }
-            break;
-          }
-        }
-      }
-      while (workspaceList.firstChild) {
-        workspaceList.firstChild.remove();
-      }
-      performSetup()
-        .then((ws) => {
-          if (ws == null) {
-            throw new Error('No workspace active after reload');
-          }
-          return getFileContents(workspace, newActiveFileName);
-        })
-        .then(contents => {
-          if (contents) {
-            setActiveFile(newActiveFileName, contents);
-          } else {
-            throw new Error(`Failed getting ${newActiveFileName} contents after reload`);
-          }
-        })
-        .catch((err) => {
-          console.error('Failed reloading workspace', err);
-        })
-    },
+    getMostRecentPutFileRequestContents: (path: string) => mostRecentPutFileRequestContents[path] ?? null,
     onActiveFileChecked: (res) => {
       workspace.knownTestResults[activeFile] = res;
       if (workspace.visibleRows[activeFile]) {
         workspace.visibleRows[activeFile].updateTestStatus(res);
       }
     },
-    onServerNotifyPathsChanged: async (paths) => {
-      // Poll all changed paths
-      let anyChange = false;
-      let activeFileAtTimeofNewContent = activeFile;
-      let newLocalFileContent: string | null = null;
-      for (let i = 0; i < paths.length; ++i) {
-        const path = paths[i];
-        if (workspace.cachedFiles[path]) {
-          const prevContent = workspace.cachedFiles[path];
-          delete workspace.cachedFiles[path];
-          const prePutReq = mostRecentPutFileRequestContents[path] ?? '';
-          const newContent = await getFileContents(workspace, path);
-          if (!newContent) {
-            continue;
-          }
-          const freshPutReq = mostRecentPutFileRequestContents[path] ?? '';
-          if (prePutReq !== freshPutReq) {
-            // New data was produced simultaneously as we fetched the contents.
-            // Ignore this change notification, a more up-to-date notification will come soon.
-            continue;
-          }
-          if (prevContent.contents !== newContent.contents) {
-            anyChange = true;
-            if (path === activeFile) {
-              activeFileAtTimeofNewContent = activeFile;
-              newLocalFileContent = newContent.contents;
-            }
-          }
-        }
-      }
-      if (newLocalFileContent !== null && activeFile === activeFileAtTimeofNewContent) {
-        // This will naturally trigger a "onChange"
-        args.env.setLocalState(newLocalFileContent);
-      } else if (anyChange) {
-        // Manually notify of a change, for example to get tests to re-run
-        args.notifySomeWorkspacePathChanged();
-      }
-    },
+    onServerNotifyPathsChanged: (paths) => treeManager.notifyChanges(paths),
     setActiveWorkspacePath: (path) => {
       if (workspace.visibleRows[path]) {
         workspace.visibleRows[path].click();
@@ -680,32 +645,21 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
       // Else, path not currently visible. Need to mark all dirs in the path as pre-opened, and then
       // click the top unopened dir. Unopened sub-dirs will then automatically open afterwards.
       const parts = path.split('/');
-      parts.forEach((segment, idx) => {
+      parts.forEach((_segment, idx) => {
         const subPath = parts.slice(0, idx + 1).join('/');
         if (idx < parts.length - 1) {
           workspace.preOpenedFiles[subPath] = true;
-          if (workspace.visibleRows[subPath]?.getKind() === 'dir-closed') {
-            workspace.visibleRows[subPath].click();
-          }
+          workspace.visibleRows[subPath]?.clickIfClosedDir();
         }
       });
-      getFileContents(workspace, path)
-        .then((data) => {
-          if (data) {
-            setActiveFile(path, data);
-          }
-        }).catch(err => {
-          console.warn('Failed getting contents for path', path, ':', err)
-        });
     },
-    clientSideMetadataCache: {}
+    clientSideMetadataCache: {},
   };
-
 
   {
     const fromSettings = settings.getActiveWorkspacePath();
     if (fromSettings !== null && fromSettings !== unsavedFileKey) {
-      if ((await getFileContents(workspace, fromSettings)) !== null) {
+      if ((await treeManager.lookup(fromSettings))?.type === 'file') {
         activeFile = fromSettings;
         const parts = fromSettings.split('/');
         for (let i = 0; i < parts.length - 1; ++i) {
@@ -723,14 +677,11 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
     true,
   );
 
-  workspace.cachedFiles[unsavedFileKey] = {
-    contents: args.initialLocalContent,
-    windows: settings.getProbeWindowStates(),
-  };
   const performSetup = async (): Promise<Workspace | null> => {
-    const initialListingRes = await args.env.performTypedRpc<ListWorkspaceDirectoryReq, ListWorkspaceDirectoryRes>({ type: 'ListWorkspaceDirectory', });
-    if (!initialListingRes.entries) {
-      // We expect empty array if there is a workspace, but it is empty
+    try {
+      await treeManager.root.getChildren();
+    } catch (e) {
+      // We expect empty array if there is an empty workspace.
       // No array at all means there is no workspace to work with
       return null;
     }
@@ -748,34 +699,47 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
       });
     }
     setActiveFile = (path: string, data: CachedFileEntry) => {
+      const isUpdateWithinCurrentFile = activeFile === path;
       activeFile = path;
-      document.querySelectorAll('.auto-click-on-workspace-switch').forEach(btn => {
-        if ((btn as any).customWorkspaceSwitchHandler) {
-          (btn as any).customWorkspaceSwitchHandler();
-        } else {
-          (btn as HTMLElement).click();
-        }
-      })
+      workspace.clientSideMetadataCache[path] = data.windows;
       testModalExtras.shouldIgnoreChangeCallbacks = true;
-      args.setLocalContent(data.contents);
-      args.setLocalWindows(data.windows)
+      const currentWindows = args.getCurrentWindows();
+      if (ignoreWindowUpdatesForPath[path]) {
+        // Ignore
+      } else if (isUpdateWithinCurrentFile && deepEqual(currentWindows, data.windows, { ignoreUndefinedDiff: true, verbose: true })) {
+        // Ignore window update, no change
+      } else {
+        document.querySelectorAll('.auto-click-on-workspace-switch').forEach(btn => {
+          if ((btn as any).customWorkspaceSwitchHandler) {
+            (btn as any).customWorkspaceSwitchHandler();
+          } else {
+            (btn as HTMLElement).click();
+          }
+        });
+        args.setLocalWindows(data.windows);
+        // Ignore future updates for windows in this file. We don't expect the windows to be updated outside CodeProber anyway.
+        // IF two people connect to the same CodeProber instance then the windows can be externally modified.
+        // However, that seems unlikely. Also, they can just reload to see eachothers updated windows.
+        // Ignoring window data saves some network traffic (thanks to `loadMeta` being false above).
+        ignoreWindowUpdatesForPath[path] = true;
+      }
+      if (isUpdateWithinCurrentFile && data.contents == args.getLocalContent()) {
+        // Ignore content update, no change
+      } else {
+        args.setLocalContent(data.contents);
+      }
       setActiveStyling(path);
       args.onActiveFileChanged();
       settings.setActiveWorkspacePath(path);
       testModalExtras.shouldIgnoreChangeCallbacks = false;
     }
-    workspaceList.appendChild(createRow(workspace, 'unsaved', 'Temp file (browser only)', unsavedFileKey, setActiveFile, workspace.env.performTypedRpc));
-    initialListingRes.entries.forEach((file) => {
-      workspaceList.appendChild(createRow(
-        workspace,
-        file.type === 'directory' ? 'dir-closed' : 'file',
-        file.value,
-        file.value,
-        setActiveFile,
-        workspace.env.performTypedRpc,
-      ));
-    });
-    workspaceList.appendChild(createAddFileButton(workspace, '', workspaceList, setActiveFile));
+    workspaceList.appendChild(createRow(workspace, { type: 'unsaved' }, 'Temp file (browser only)', unsavedFileKey, setActiveFile, workspace.env.performTypedRpc));
+
+    const rootFileList = workspaceList.appendChild(document.createElement('div'));
+    rootFileList.style.display = 'flex';
+    rootFileList.style.flexDirection = 'column';
+    const rootFileListManager = createFileListManager(workspace, treeManager.root, '', setActiveFile, workspace.env.performTypedRpc, rootFileList);
+    rootFileListManager.refresh();
 
     setActiveStyling(unsavedFileKey);
     return workspace;

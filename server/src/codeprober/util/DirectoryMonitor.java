@@ -12,10 +12,12 @@ import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /**
  * Like {@link FileMonitor} but for a directory.
@@ -23,7 +25,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public abstract class DirectoryMonitor extends Thread {
 	private final File srcDir;
 	private AtomicBoolean stop = new AtomicBoolean(false);
-	private Map<Path, Long> lastModifieds = new HashMap<>();
+	private Map<Path, Long> fileLastModifieds = new HashMap<>();
+	private Map<Path, String> directoryLastListings = new HashMap<>();
+
 
 	public DirectoryMonitor(File srcDir) {
 		this.srcDir = srcDir;
@@ -51,7 +55,7 @@ public abstract class DirectoryMonitor extends Thread {
 			@Override
 			public FileVisitResult visitFile(Path paramT, BasicFileAttributes paramBasicFileAttributes)
 					throws IOException {
-				lastModifieds.put(paramT, paramT.toFile().lastModified());
+				fileLastModifieds.put(paramT, paramT.toFile().lastModified());
 				return super.visitFile(paramT, paramBasicFileAttributes);
 			}
 
@@ -59,9 +63,19 @@ public abstract class DirectoryMonitor extends Thread {
 			public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
 				dir.register(watchService, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE,
 						StandardWatchEventKinds.ENTRY_MODIFY);
+				directoryLastListings.put(dir, createDirListing(dir));
 				return FileVisitResult.CONTINUE;
 			}
 		});
+	}
+
+	private String createDirListing(Path dir) {
+		final File[] files = dir.toFile().listFiles();
+		if (files == null) {
+			System.out.println("Failed listing dir " + dir);
+			return "";
+		}
+		return Arrays.asList(files).stream().map(x -> x.getName()).sorted().collect(Collectors.toList()) + "";
 	}
 
 	private void pollForChanges()  {
@@ -73,13 +87,25 @@ public abstract class DirectoryMonitor extends Thread {
 				@Override
 				public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
 					long lm = file.toFile().lastModified();
-					Long prev = lastModifieds.get(file);
+					Long prev = fileLastModifieds.get(file);
 					if (prev == null || prev != lm) {
-						lastModifieds.put(file, lm);
+						fileLastModifieds.put(file, lm);
 						onChangeDetected(file);
 						didChange.set(true);
 					}
 					return FileVisitResult.CONTINUE;
+				}
+
+				@Override
+				public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+					final String lastListing = directoryLastListings.get(dir);
+					final String newListing = createDirListing(dir);
+					if (!newListing.equals(lastListing)) {
+						directoryLastListings.put(dir, newListing);
+						onChangeDetected(dir);
+						didChange.set(true);
+					}
+					return super.preVisitDirectory(dir, attrs);
 				}
 
 				@Override
@@ -108,7 +134,7 @@ public abstract class DirectoryMonitor extends Thread {
 			while (!isStopped()) {
 				WatchKey key;
 				try {
-					key = watcher.poll(1000, TimeUnit.MILLISECONDS);
+					key = watcher.poll(500, TimeUnit.MILLISECONDS);
 				} catch (InterruptedException e) {
 					return;
 				}

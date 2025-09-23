@@ -180,7 +180,9 @@ const createInlineWindowManager = (args: CreateWindowManagerArgs = {}): InlineWi
       Object.entries(areas).forEach(([key, val]) => {
         const states: WindowState[] = [];
         Object.values(val.localWindowStateSaves).forEach(saver => saver(states));
-        ret[key] = states;
+        if (states.length) {
+          ret[key] = states;
+        }
       });
       return ret;
     },

@@ -161,9 +161,10 @@ public class TestDefaultRequestHandler {
 		final WorkspaceHandler wsHandler = new WorkspaceHandler() {
 			int requestCount = 0;
 
+			@Override
 			public PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
 				return new PutWorkspaceContentRes(requestCount++ == 1);
-			};
+			}
 		};
 		final DefaultRequestHandler handler = new DefaultRequestHandler(
 				args -> new ParseResult(new TestData.WithTwoLineVariants(null, 456)), wsHandler);

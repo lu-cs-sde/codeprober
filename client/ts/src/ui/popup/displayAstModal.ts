@@ -187,13 +187,14 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
         spinnerWrapper.style.position = 'relative';
         spinnerWrapper.appendChild(spinner);
         root.appendChild(spinnerWrapper);
+        return spinnerWrapper;
       }
-
       if (state === null) {
         addSpinner();
         return;
       }
 
+      let activeSpinner: HTMLDivElement | null = null;
       if (state.type === 'err') {
         if (state.body.length === 0) {
           const text = document.createElement('span');
@@ -400,7 +401,6 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
           hoverClick = 'no';
           renderFrame();
         });
-        setTimeout(() => renderFrame(), 15000);
         cv.addEventListener('mouseleave', () => {
           hover = null;
           if (hasActiveSpanHighlight) {
@@ -801,14 +801,24 @@ const displayAstModal = (env: ModalEnv, modalPos: ModalPosition | null, locator:
         };
         state.reRenderAfterUpdate = () => {
           rootNode = (state?.type === 'ok' ? state.data : rootNode);
+          const needsSpinner = fetchState !== 'idle';
+          if (needsSpinner && !activeSpinner) {
+            activeSpinner = createLoadingSpinner();
+            activeSpinner.classList.add('absoluteCenter');
+            root.appendChild(activeSpinner);
+          } else if (!needsSpinner) {
+            activeSpinner?.remove();
+            activeSpinner = null;
+          }
           renderFrame();
         }
       }
 
       if (fetchState !== 'idle') {
-        const spinner = createLoadingSpinner();
-        spinner.classList.add('absoluteCenter');
-        root.appendChild(spinner);
+        activeSpinner = createLoadingSpinner();
+        activeSpinner.classList.add('absoluteCenter');
+        root.appendChild(activeSpinner);
+
       }
     },
   });

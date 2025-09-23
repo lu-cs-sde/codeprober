@@ -89,6 +89,7 @@ interface GetWorkerStatusRes {
 interface GetWorkspaceFileReq {
   type: "GetWorkspaceFile";
   path: string;
+  loadMeta?: boolean;
 }
 interface GetWorkspaceFileRes {
   content?: string;
