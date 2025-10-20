@@ -36,12 +36,15 @@
   --syntax-attr-dim: #DCDCAA66;
 
   /* Status/result colors */
-  --elp-success-bg: #3933;
-  --elp-fail-bg: #9333;
+  --elp-assertion-bg: #3933;
   --elp-probe-bg: #3993;
   --elp-stored-bg: #3993;
   --elp-flash: yellow;
   --elp-actual-result: lightseagreen;
+  --elp-result-bg: #333;
+  --elp-result-fg: #aaa;
+  --elp-result-fg-err: lightcoral;
+
 
   /* Output colors */
   --captured-stdout: cyan;
@@ -106,12 +109,14 @@ body[data-theme-light="true"] {
   --syntax-attr-dim: #795E2633;
 
   /* Status/result colors */
-  --elp-success-bg: #efe7;
-  --elp-fail-bg: #fee7;
+  --elp-assertion-bg: #efe7;
   --elp-probe-bg: #eff7;
   --elp-stored-bg: #ffe7;
   --elp-flash: magenta;
   --elp-actual-result: hsl(177, 90%, 20%);
+  --elp-result-bg: #eee;
+  --elp-result-fg: #777;
+  --elp-result-fg-err: crimson;
 
   /* Output colors */
   --captured-stdout: darkblue;
@@ -564,22 +569,58 @@ body[data-theme-light="true"] .elp-flash-multiline {
 .monaco-rag-highlight-sticky-8 { background: rgba(255, 160, 122, 0.400); /* lightsalmon */ }
 .monaco-rag-highlight-sticky-9 { background: rgba(135, 207, 235, 0.425); /* skyblue */ }
 
-.elp-result-success  { background: var(--elp-success-bg); outline: 1px solid green; }
-.elp-result-fail     { background: var(--elp-fail-bg); outline: 1px solid red;  }
-.elp-result-probe    { background: var(--elp-probe-bg); outline: 1px solid lightseagreen;   }
-.elp-result-stored   { background: var(--elp-stored-bg); outline: 1px solid goldenrod;   }
+.elp-result-success,
+.elp-result-fail     { background: var(--elp-assertion-bg); }
+
+/* Monaco */
+.input-Monaco .elp-result-success  { box-shadow: inset 0 0 0 1px  green; }
+.input-Monaco .elp-result-fail     { box-shadow: inset 0 0 0 1px red;  }
+.input-Monaco .elp-result-fail     { box-shadow: inset 0 0 0 1px red;  }
+.input-Monaco .elp-result-probe    { box-shadow: inset 0 0 0 1px lightseagreen;   }
+.input-Monaco .elp-result-stored   { box-shadow: inset 0 0 0 1px goldenrod;   }
+/* CodeMirror */
+.input-CodeMirror .elp-result-success  { outline: 1px solid green; }
+.input-CodeMirror .elp-result-fail     { outline: 1px solid red;  }
+.input-CodeMirror .elp-result-fail     { outline: 1px solid red;  }
+.input-CodeMirror .elp-result-probe    { outline: 1px solid lightseagreen;   }
+.input-CodeMirror .elp-result-stored   { outline: 1px solid goldenrod;   }
+
+.elp-result-probe    { background: var(--elp-probe-bg); }
+.elp-result-stored   { background: var(--elp-stored-bg); }
 .elp-flash   { outline: 2px dashed var(--elp-flash); pointer-events: none; }
 .elp-flash-multiline   { box-shadow: 2px 0 0px var(--elp-flash) inset; }
 
 
 .elp-actual-result-err,
 .elp-actual-result-probe {
-  color: crimson !important;
   margin-left: 0.25rem;
-  outline: 1px solid #9333;
-  padding: 1px 0;
+  background:
+    linear-gradient(transparent, transparent) top / 100% 2px no-repeat,
+    linear-gradient(transparent, transparent) bottom / 100% 2px no-repeat,
+    linear-gradient(var(--elp-result-bg), var(--elp-result-bg)) center / 100% calc(100% - 4px) no-repeat;
+  padding: 1px 2px 1px 2px;
 }
-.elp-actual-result-probe { color: var(--elp-actual-result) !important; }
+
+.input-CodeMirror .elp-actual-result-err,
+.input-CodeMirror .elp-actual-result-probe {
+  /* Very slightly different padding here because Monaco and CodeMirror renders things differently */
+  background:
+    linear-gradient(transparent, transparent) top / 100% 3px no-repeat,
+    linear-gradient(transparent, transparent) bottom / 100% 3px no-repeat,
+    linear-gradient(var(--elp-result-bg), var(--elp-result-bg)) center / 100% calc(100% - 6px) no-repeat;
+}
+
+.elp-actual-result-err {
+  color: var(--elp-result-fg-err) !important;
+}
+.elp-actual-result-probe {
+  color: var(--elp-result-fg) !important;
+}
+.elp-actual-result-success {
+  opacity: 0.5;
+  font-size: 0.5rem;
+  vertical-align: middle;
+}
 
 .dimmed {
   color: #777;

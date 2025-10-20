@@ -95,7 +95,7 @@ const createTextProbeCompleteLogic = (args: CreateTextProbeCompleteLogicArgs): T
         if (!node) {
           return;
         }
-        flasher.flash([startEndToSpan(node.start, node.end)]);
+        flasher.flash([startEndToSpan(node.start, node.end + 1)]);
       };
       return {
         from: { line: line + 1, column: column + 1 - existingText.length },
@@ -148,24 +148,23 @@ const createTextProbeCompleteLogic = (args: CreateTextProbeCompleteLogicArgs): T
       if (!locator) {
         return null;
       }
-      // if (prerequisiteAttrs.length != 0) {
-      //   const chainResult = await evaluator.evaluatePropertyChain({ locator, propChain: prerequisiteAttrs });
-      //   if (chainResult === 'stopped' || isBrokenNodeChain(chainResult)) {
-      //     return null;
-      //   }
-      //   if (chainResult[0]?.type !== 'node') {
-      //     return null;
-      //   }
-      //   locator = chainResult[0].value;
-      // }
+      if (prerequisiteAttrs.length != 0) {
+        const chainResult = await evaluator.evaluatePropertyChain({ locator, propChain: prerequisiteAttrs });
+        if (chainResult === 'stopped' || isBrokenNodeChain(chainResult) || chainResult[0]?.type !== 'node') {
+          // Ignore, default to flashing the origin node
+        } else {
+          // Else, flash the more precise node
+          locator = chainResult[0].value;
+        }
+      }
       flasher.flash([
         {
           lineStart: line + 1, colStart: previousStepSpan[0],
-          lineEnd: line + 1, colEnd: previousStepSpan[1],
+          lineEnd: line + 1, colEnd: previousStepSpan[1] + 1,
         },
         {
           lineStart: locator.result.start >>> 12, colStart: locator.result.start & 0xFFF,
-          lineEnd: locator.result.end >>> 12, colEnd: locator.result.end & 0xFFF,
+          lineEnd: locator.result.end >>> 12, colEnd: (locator.result.end & 0xFFF) + 1,
         }
       ])
       window.OnCompletionItemListClosed = () => {
@@ -237,7 +236,7 @@ const createTextProbeCompleteLogic = (args: CreateTextProbeCompleteLogicArgs): T
       if (attrEvalResult[0]?.type === 'node') {
         const node = attrEvalResult[0].value.result;
         if (!node.external) {
-          flasher.flash([startEndToSpan(node.start, node.end)]);
+          flasher.flash([startEndToSpan(node.start, node.end + 1)]);
           window.OnCompletionItemListClosed = () => {
             flasher.clear();
           }

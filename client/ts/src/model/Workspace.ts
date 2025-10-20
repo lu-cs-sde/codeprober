@@ -611,6 +611,10 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
         // Ignore
         return;
       }
+      // Make copy so we don't hold live pointers to data that may change
+      // We want to be able to compare later on to check for updates, live data prohibits this.
+      states = JSON.parse(JSON.stringify(states));
+
       workspace.clientSideMetadataCache[path] = states;
       mostRecentPutFileRequestContents[path] = contents;
       const cached = treeManager.lookupCached(activeFile);
@@ -620,7 +624,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
         // No caching to check
       } else {
         const ccontent = cached.value.getCachedContent();
-        if (ccontent?.contents === contents && deepEqual(ccontent?.windows ?? [], states, { ignoreUndefinedDiff: true, verbose: true })) {
+        if (ccontent?.contents === contents && deepEqual(ccontent?.windows ?? [], states, { ignoreUndefinedDiff: true })) {
           // Ignore it
           return;
         }
@@ -706,7 +710,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
       const currentWindows = args.getCurrentWindows();
       if (ignoreWindowUpdatesForPath[path]) {
         // Ignore
-      } else if (isUpdateWithinCurrentFile && deepEqual(currentWindows, data.windows, { ignoreUndefinedDiff: true, verbose: true })) {
+      } else if (isUpdateWithinCurrentFile && deepEqual(currentWindows, data.windows, { ignoreUndefinedDiff: true })) {
         // Ignore window update, no change
       } else {
         document.querySelectorAll('.auto-click-on-workspace-switch').forEach(btn => {
@@ -716,7 +720,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
             (btn as HTMLElement).click();
           }
         });
-        args.setLocalWindows(data.windows);
+        setTimeout(() => args.setLocalWindows(data.windows), 1);
         // Ignore future updates for windows in this file. We don't expect the windows to be updated outside CodeProber anyway.
         // IF two people connect to the same CodeProber instance then the windows can be externally modified.
         // However, that seems unlikely. Also, they can just reload to see eachothers updated windows.

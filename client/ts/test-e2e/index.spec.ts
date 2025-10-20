@@ -36,13 +36,13 @@ test.describe('CodeProber Integration Tests', () => {
 
       test('text probes', async ({ page }) => {
         const { content } = await fillPageContent({ page, wantedContent: '(1+2) // [[Add.value]]', editor });
-        expect(content).toContain('Result: 3');
+        expect(content).toContain('= 3');
         expect(content).not.toContain('Actual:');
       });
 
       test('text probe with assertion', async ({ page }) => {
         const { content } = await fillPageContent({ page, wantedContent: '(1+2) // [[Add.value=4]]', editor });
-        expect(content).not.toContain('Result:');
+        expect(content).not.toContain('= 3');
         expect(content).toContain('Actual: 3');
       });
       test('run workspace tests', async ({ page, request }) => {
@@ -62,7 +62,10 @@ test.describe('CodeProber Integration Tests', () => {
         expect(`Done: ${numPass} pass, ${numFail} fail`).toBe(expectedStatusLine);
       });
       test('reacts to workspace changes', async ({ page, request }) => {
-        const wsEntryName = `dynamic_entry_${(Math.random() * Number.MAX_SAFE_INTEGER)|0}`;
+        // Generate a name in 2-length chunks. This is to avoid generating a large number like "11123123"
+        // which contains "111", and conflicts with the tests that check for precence of the text "111".
+        const rngNameChunk = () => `_${(Math.random() * Number.MAX_SAFE_INTEGER)|0}`.slice(0, 2)
+        const wsEntryName = `dynamic_entry${rngNameChunk()}${rngNameChunk()}${rngNameChunk()}`;
         // Listen for all console logs
         page.on('console', msg => console.log('[C]', msg.text()));
 

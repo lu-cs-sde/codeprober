@@ -8,9 +8,23 @@ const adjustSpan = (adjuster: LocationAdjuster, span: Span): { start: number, en
     if (span.lineStart === span.lineEnd && span.colStart === span.colEnd) {
       // Accept it, despite it being strange
     } else {
-      // Instead of accepting change to zero-width span, take same line/col diff as before
-      le = ls + (span.lineEnd - span.lineStart);
-      ce = cs + (span.colEnd - span.colStart);
+      // One of the sides of the span moved into the other side
+      // Or, possibly both sides moved a bit and ended up on the same spot.
+      // Instead of accepting change to zero-width span, make sure we have the same line/col diff as before
+      // Whether we move left or right depends on which side moved "most"
+      const startMove = Math.abs(span.lineStart - ls) + Math.abs(span.colStart - cs);
+      const endMove = Math.abs(span.lineEnd - le) + Math.abs(span.colEnd - ce);
+      if (endMove > startMove) {
+        // console.log('inner case 1')
+        // The end moved more, force move start
+        ls = ls + (span.lineStart - span.lineEnd);
+        cs = cs + (span.colStart - span.colEnd);
+      } else {
+        // console.log('inner case 2')
+        // The start moved more, force move end
+        le = ls + (span.lineEnd - span.lineStart);
+        ce = cs + (span.colEnd - span.colStart);
+      }
     }
   }
   return {

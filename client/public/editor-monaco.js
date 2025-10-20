@@ -453,23 +453,82 @@ window.defineEditor(
         });
       }
       stickies.forEach(({ classNames, span, content, contentClassNames }) => {
+        // console.log('applying stick w/ colSpan:', span.colStart, '->', span.colEnd);
         newDecorations.push({
-          range: new monaco.Range(span.lineStart, span.colStart, span.lineEnd, span.colEnd + 1),
+          range: new monaco.Range(span.lineStart, span.colStart, span.lineEnd, span.colEnd),
           options: {
             className: classNames.join(' '),
-            after: content ? { content, inlineClassName: (contentClassNames ?? []).join(' ') }  : undefined,
+            after: (typeof content === 'string') ? { content, inlineClassName: (contentClassNames ?? []).join(' ') }  : undefined,
           },
         });
       })
       lastDecorations = editor.deltaDecorations(lastDecorations, newDecorations);
     };
 
-    // window.onresize = () => {
-    //   console.log('Window resize');
-    //   editor.layout({});
-    // };
+    editor.onDidChangeCursorPosition((e) => {
+      /*
+        This listener fixes a slightly weird case with cursor position.
 
-    // let numActiveMarkers = 0;
+        With Monaco's Decoration API you can render text in the middle of a document that doesn't exist in the real underlying file.
+        For example, if a file contains "HelloWorld", we can insert "Foo" between Hello and World.
+        The result looks like "HelloFooWorld" for the user, but when they mark all text and copy it, they only get "HelloWorld".
+
+        The inline text has zero column span, and the left and right sides of the text ("Foo") are technically the same column number.
+        This makes cursor positioning a little strange. It is most notable for horizontal movement.
+
+        * Assume the document starts like this:
+              Hell|oFooWorld
+          By pressing the right arrow key twice, you get:
+              Hello|FooWorld
+              HelloFooW|orld
+
+        * Assume the document starts like this:
+              HelloFooW|orld
+          By pressing the left arrow key twice, you get:
+              HelloFoo|World
+              Hell|oFooWorld
+
+        Note how the two middle states described above are different.
+        This listener reacts to all cursor position updates in order to force the cursor into the left side.
+       */
+      if (editor.getSelections().length > 1) {
+        // More than one cursor active. This can probably be handled but let's ignore it
+        // This is a cosmetic fix anyway, users doing multi-cursor edits can deal with the cursor-affinity-positioning behaivor.
+        return;
+      }
+      const selection = editor.getSelection();
+
+      const position = e.position;
+
+      // Check if there's a selection (not just a cursor)
+      if (!selection.isEmpty()) {
+          // Determine which end of the selection is the cursor head
+          const isAtStart = position.lineNumber === selection.startLineNumber &&
+                           position.column === selection.startColumn;
+          if (isAtStart) {
+              // Cursor is at the start (selecting backwards)
+              editor.setSelection(new monaco.Selection(
+                  selection.endLineNumber,
+                  selection.endColumn,
+                  position.lineNumber,
+                  position.column
+              ));
+          } else {
+              // Cursor is at the end (selecting forwards)
+              editor.setSelection(new monaco.Selection(
+                  selection.startLineNumber,
+                  selection.startColumn,
+                  position.lineNumber,
+                  position.column
+              ));
+          }
+      } else {
+          // No selection, just one cursor
+          // Setting the position to the current position moves the cursor to the left of the inline text.
+          editor.setPosition(position);
+      }
+  });
+
     let problemIdGenerator = 0;
     return {
       setLocalState: (value) => editor.setValue(value),

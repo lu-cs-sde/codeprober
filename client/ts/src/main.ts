@@ -158,15 +158,19 @@ const doMain = (wsPort: number
               })
             }
           }));
-          stickies.forEach(sticky => {
-            const adj = adjustSpan(adjuster, sticky.span);
-            sticky.span.lineStart = adj.start >>> 12;
-            sticky.span.colStart = adj.start & 0xFFF;
-            sticky.span.lineEnd = adj.end >>> 12;
-            sticky.span.colEnd = adj.end & 0xFFF;
-          });
+            stickies.forEach(sticky => {
+              const adj = adjustSpan(adjuster, { ...sticky.span, colEnd: sticky.span.colEnd });
+              sticky.span.lineStart = adj.start >>> 12;
+              sticky.span.colStart = adj.start & 0xFFF;
+              sticky.span.lineEnd = adj.end >>> 12;
+              sticky.span.colEnd = (adj.end & 0xFFF);
+            });
         });
         updateMarkers();
+
+        if (stickies.length) {
+          updateSpanHighlight(basicHighlight, stickies);
+        }
       }
       Object.values(onChangeListeners).forEach(l => l(adjusters, reason));
       triggerWindowSave();

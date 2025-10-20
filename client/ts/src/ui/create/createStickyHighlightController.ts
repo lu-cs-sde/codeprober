@@ -24,12 +24,13 @@ const createStickyHighlightController = (env: ModalEnv, initialColorClass = ''):
   const applySticky = () => {
     if (!currentTarget || !currentLocator) return;
 
+    const currLoc = currentLocator.get().result;
     env.setStickyHighlight(stickyId, {
       classNames: [
         `monaco-rag-highlight-sticky`,
         activeStickyColorClass,
       ],
-      span: startEndToSpan(currentLocator.get().result.start, currentLocator.get().result.end),
+      span: startEndToSpan(currLoc.start, currLoc.end + 1),
     });
     currentTarget.classList.add(`monaco-rag-highlight-sticky`);
     currentTarget.classList.add(activeStickyColorClass);

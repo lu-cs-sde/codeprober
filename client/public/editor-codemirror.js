@@ -315,10 +315,10 @@ window.defineEditor(
         stickies.forEach(lblCfg => {
           if (lblCfg.content) {
             const line = editor.state.doc.line(clampLine(lblCfg.span.lineEnd));
-            const pos = Math.max(line.from, Math.min(line.to, line.from + lblCfg.span.colEnd))
+            const pos = Math.max(line.from, Math.min(line.to, line.from + lblCfg.span.colEnd - 1))
             afterLabels.push({ ...lblCfg, pos });
           } else {
-            createSetter(lblCfg.span, lblCfg.classNames.join(' '));
+            createSetter({ ...lblCfg.span, colEnd: lblCfg.span.colEnd - 1}, lblCfg.classNames.join(' '));
           }
         });
         if (afterLabels.length) {

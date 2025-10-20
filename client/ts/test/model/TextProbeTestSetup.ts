@@ -74,7 +74,8 @@ const assertFlashedLocations = (actual: Span[], expectedLocs: string[]) => {
   const flashedLocations: string[] = [];
   actual.forEach((span) => {
     const start = (span.lineStart << 12) + span.colStart;
-    const end = (span.lineEnd << 12) + span.colEnd;
+    const end = ((span.lineEnd << 12) + span.colEnd) - 1; // Flash end is exclusive, locator end is inclusive
+                                                          // -1 to align them.
 
     const expLoc = Object.entries(expectedFlashLocations).find(([k, v]) => v.start === start && v.end === end);
     if (expLoc) {

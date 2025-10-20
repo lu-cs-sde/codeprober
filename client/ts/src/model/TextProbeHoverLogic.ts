@@ -70,11 +70,11 @@ const createProbeHoverLogic = (args: CreateProbeHoverLogicArgs): TextProbeHoverL
       const flashNode = (node: TALStep, colStart: number, colEnd: number) => {
         const flashes = [];
         if (!node.external) {
-          flashes.push(startEndToSpan(node.start, node.end));
+          flashes.push(startEndToSpan(node.start, node.end + 1));
         }
         flashes.push({
           lineStart: line + 1, colStart,
-          lineEnd: line + 1, colEnd,
+          lineEnd: line + 1, colEnd: colEnd + 1,
         });
         flasher.flash(flashes, true);
       };
@@ -223,7 +223,6 @@ const createProbeHoverLogic = (args: CreateProbeHoverLogicArgs): TextProbeHoverL
       // Else, Probe
       const locator = await resolveNode(evaluator, match.lhs);
       if (!locator) {
-        console.log('no locator')
         return null;
       }
       const typeStart = match.index;
@@ -236,12 +235,12 @@ const createProbeHoverLogic = (args: CreateProbeHoverLogicArgs): TextProbeHoverL
       if (column >= typeStart && column < typeEnd) {
         const retFlash = [];
         if (!locator.result.external) {
-          retFlash.push(startEndToSpan(locator.result.start, locator.result.end));
+          retFlash.push(startEndToSpan(locator.result.start, locator.result.end + 1));
         }
         retFlash.push({
           // Type in text probe
           lineStart: line + 1, colStart: typeStart + 1,
-          lineEnd: line + 1, colEnd: typeEnd,
+          lineEnd: line + 1, colEnd: typeEnd + 1,
         });
         flasher.flash(retFlash, true);
       } else {

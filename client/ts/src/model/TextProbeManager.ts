@@ -1,6 +1,5 @@
-import { assertUnreachable } from '../hacks';
 
-import { NodeLocator, ParsingSource, RpcBodyLine } from '../protocol';
+import { ParsingSource, RpcBodyLine } from '../protocol';
 import settings from '../settings';
 import evalPropertyBodyToString from './evalPropertyBodyToString';
 import ModalEnv from './ModalEnv'
@@ -125,7 +124,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         });
         args.env.setStickyHighlight(allocateStickyId(), {
           classNames: [],
-          span: stickySpan ?? { ...boxSpan, colStart: boxSpan.colEnd - 2, colEnd: boxSpan.colEnd - 1 },
+          span: stickySpan ?? { ...boxSpan, colStart: boxSpan.colEnd - 3, colEnd: boxSpan.colEnd - 2 },
           content: stickyContent ?? undefined,
           contentClassNames: stickyClass,
         });
@@ -133,7 +132,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       }
 
       (await evaluator.loadVariables()).forEach(vres => {
-        const span: Span = { lineStart: vres.lineIdx + 1, colStart: vres.assign.index - 1, lineEnd: vres.lineIdx + 1, colEnd: vres.assign.index + vres.assign.full.length + 2 };
+        const span: Span = { lineStart: vres.lineIdx + 1, colStart: vres.assign.index - 1, lineEnd: vres.lineIdx + 1, colEnd: vres.assign.index + vres.assign.full.length + 3 };
 
         switch (vres.type) {
           case 'success': {
@@ -160,7 +159,8 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         const match = evaluator.fileMatches.probes[i];
         const lineIdx = match.lineIdx;
         const lhsEvalResult = await evaluator.evaluateNodeAndAttr(match.lhs);
-        const span: Span = { lineStart: lineIdx + 1, colStart: match.index - 1, lineEnd: lineIdx + 1, colEnd: match.index + match.full.length + 2 };
+        const span: Span = { lineStart: lineIdx + 1, colStart: match.index - 1, lineEnd: lineIdx + 1, colEnd: match.index + match.full.length + 3 };
+
         if (lhsEvalResult.type === 'error') {
           addSquiggly(lineIdx, lhsEvalResult.errRange.colStart, lhsEvalResult.errRange.colEnd, lhsEvalResult.msg);
           addStickyBox(
@@ -173,8 +173,9 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         // Else, success!
         if (typeof match.rhs?.expectVal === 'undefined') {
           addStickyBox(
-            ['elp-result-probe'], span,
-            [`elp-actual-result-probe`], `Result: ${evalPropertyBodyToString
+            ['elp-result-probe'], { ...span, colEnd: span.colEnd},
+            // Result:
+            [`elp-actual-result-probe`], `= ${evalPropertyBodyToString
               (lhsEvalResult.output)}`,
           );
           continue;
@@ -214,18 +215,18 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
         const adjustedComparisonSuccsess = match.rhs.exclamation ? !comparisonSuccess : comparisonSuccess;
         if (adjustedComparisonSuccsess) {
           combinedResults.numPass++;
-          args.env.setStickyHighlight(allocateStickyId(), {
-            classNames: ['elp-result-success'], span,
-          });
+          addStickyBox(
+            ['elp-result-success'], span,
+            ['elp-actual-result-success'], ' ✅',
+          )
         } else {
-          const errMsg = actual ? `Actual: ${actual}` : `Assertion failed`;
-          addSquiggly(lineIdx, match.index + match.full.indexOf(match.rhs.expectVal), span.colEnd - 1, errMsg);
+          const errMsg = `❌ ${actual ? `Actual: ${actual}` : `Assertion failed`}`;
+          addSquiggly(lineIdx, match.index + match.full.indexOf(match.rhs.expectVal) + 1, span.colEnd - 3, errMsg);
           addStickyBox(
             ['elp-result-fail'], span,
             ['elp-actual-result-err'], errMsg,
           );
           combinedResults.numFail++;
-
         }
         // }
       }

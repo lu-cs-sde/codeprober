@@ -2,7 +2,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
-import FileTreeManager, { setupFileTreeManager, FileTreeManagerInitArgs, Directory, TextFile } from '../../src/model/FileTreeManager';
+import { setupFileTreeManager, FileTreeManagerInitArgs, Directory, TextFile } from '../../src/model/FileTreeManager';
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 
@@ -179,11 +179,30 @@ describe('FileTreeManager', () => {
     assert.equal(fooCallbacks, 0);
   });
 
+  it('should ignore changes on unloaded file', async () => {
+    const { mgr } = setupTest();
+
+    const fooDir = (await mgr.root.getChildren())?.find(x => x.name === 'foo' && x.type === 'dir')?.value as Directory<string>;
+    const bar = (await fooDir.getChildren())?.find(x => x.name === 'bar')?.value as TextFile<string>;
+
+    let callbacks = 0;
+    bar.setChangeListener(() => { ++callbacks; });
+
+    assert.equal(callbacks, 0); // Initial state: no change
+    mgr.notifyChanges(['foo/bar']); await sleep(1);
+    assert.equal(callbacks, 0); // File is idle, so no change
+
+    await bar.getContent();
+    mgr.notifyChanges(['foo/bar']); await sleep(1);
+    assert.equal(callbacks, 1); // File is no longer idle, so a change is received.
+  });
+
   it('should handle multiple file change listeners', async () => {
     const { tree, mgr } = setupTest();
 
     const fooDir = (await mgr.root.getChildren())?.find(x => x.name === 'foo' && x.type === 'dir')?.value as Directory<string>;
     const bar = (await fooDir.getChildren())?.find(x => x.name === 'bar')?.value as TextFile<string>;
+    await bar.getContent();
 
     let callbacks1 = 0;
     let callbacks2 = 0;
@@ -192,8 +211,7 @@ describe('FileTreeManager', () => {
     bar.setChangeListener(() => { ++callbacks2; }); // This should replace the first listener
 
     tree.foo.bar = 'multiple listeners test';
-    mgr.notifyChanges(['foo/bar']);
-    await sleep(1);
+    mgr.notifyChanges(['foo/bar']); await sleep(1);
 
     // Only the second listener should have been called
     assert.equal(callbacks1, 0);

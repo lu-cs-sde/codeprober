@@ -73,6 +73,10 @@ const setupFileTreeManager = <T>(args: FileTreeManagerInitArgs<T>): FileTreeMana
       return freshContent;
     }
     const invalidate: TTextFile['invalidate'] = () => {
+      if (!dirty && !memoizedContent) {
+        // We are not loaded, nothing to invalidate
+        return;
+      }
       dirty = true;
       getContent().catch((err) => {
         console.warn('Failed fetching contents after change for', path, err)
