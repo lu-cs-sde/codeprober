@@ -28,7 +28,6 @@ public abstract class DirectoryMonitor extends Thread {
 	private Map<Path, Long> fileLastModifieds = new HashMap<>();
 	private Map<Path, String> directoryLastListings = new HashMap<>();
 
-
 	public DirectoryMonitor(File srcDir) {
 		this.srcDir = srcDir;
 		setPriority(Thread.MAX_PRIORITY);
@@ -48,7 +47,7 @@ public abstract class DirectoryMonitor extends Thread {
 
 	public abstract void onChange();
 
-	private void registerRecursive(WatchService watchService, final Path root) throws IOException {
+	protected void registerRecursive(WatchService watchService, final Path root) throws IOException {
 		// register all subfolders
 		Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
 
@@ -78,7 +77,7 @@ public abstract class DirectoryMonitor extends Thread {
 		return Arrays.asList(files).stream().map(x -> x.getName()).sorted().collect(Collectors.toList()) + "";
 	}
 
-	private void pollForChanges()  {
+	private void pollForChanges(WatchService watchService) {
 		final AtomicBoolean didChange = new AtomicBoolean();
 
 		try {
@@ -99,6 +98,13 @@ public abstract class DirectoryMonitor extends Thread {
 				@Override
 				public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
 					final String lastListing = directoryLastListings.get(dir);
+					if (lastListing == null) {
+						// This directory didn't exist before. A change was already detected by our
+						// parent dir. No need to visit the subtree under this. Just register for future
+						// changes and move on.
+						registerRecursive(watchService, dir);
+						return FileVisitResult.SKIP_SUBTREE;
+					}
 					final String newListing = createDirListing(dir);
 					if (!newListing.equals(lastListing)) {
 						directoryLastListings.put(dir, newListing);
@@ -150,7 +156,7 @@ public abstract class DirectoryMonitor extends Thread {
 						Thread.yield();
 						continue;
 					} else {
-						pollForChanges();
+						pollForChanges(watcher);
 					}
 					boolean valid = key.reset();
 					if (!valid) {

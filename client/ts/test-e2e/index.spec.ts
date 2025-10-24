@@ -64,7 +64,7 @@ test.describe('CodeProber Integration Tests', () => {
       test('reacts to workspace changes', async ({ page, request }) => {
         // Generate a name in 2-length chunks. This is to avoid generating a large number like "11123123"
         // which contains "111", and conflicts with the tests that check for precence of the text "111".
-        const rngNameChunk = () => `_${(Math.random() * Number.MAX_SAFE_INTEGER)|0}`.slice(0, 2)
+        const rngNameChunk = () => `_${Math.abs((Math.random() * 1000)|0)}`.slice(0, 3)
         const wsEntryName = `dynamic_entry${rngNameChunk()}${rngNameChunk()}${rngNameChunk()}`;
         // Listen for all console logs
         page.on('console', msg => console.log('[C]', msg.text()));
