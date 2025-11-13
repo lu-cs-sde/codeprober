@@ -45,7 +45,6 @@
   --elp-result-fg: #aaa;
   --elp-result-fg-err: lightcoral;
 
-
   /* Output colors */
   --captured-stdout: cyan;
   --captured-stderr: pink;
@@ -73,6 +72,7 @@
   --spinner-bg: #fff;
   --input-field-text: white;
   --minimized-probe-border: #CCC;
+  --trace-value-change-bg: #796b40;
 }
 
 /* Light mode color overrides */
@@ -145,6 +145,7 @@ body[data-theme-light="true"] {
   --spinner-bg: #555;
   --input-field-text: black;
   --minimized-probe-border: #333;
+  --trace-value-change-bg: lightgoldenrodyellow;
 }
 
 #root {
@@ -653,14 +654,33 @@ body[data-theme-light="true"] .dim-button:active {
 .clickHighlightOnHover:hover:not(:has(.clickHighlightOnHover:hover)) {
   background: var(--hover-highlight);
 }
+.trace-value-cousin-hovered {
+  outline: 1px dashed cyan;
+  background-color: color-mix(in srgb, var(--trace-value-change-bg) 50%, transparent);
+}
+.trace-value-change {
+  background-color: var(--trace-value-change-bg);
+}
+.trace-value-change:hover {
+  background-color: var(--hover-highlight);
+  outline: 1px solid var(--trace-value-change-bg);
+}
+.trace-previous-cycle-blink {
+  animation: trace-previous-cycle-blink-anim 0.5s linear;
+}
+@keyframes trace-previous-cycle-blink-anim {
+  0% {background-color: cyan; }
+  100% {background-color: transparent; }
+}
+
+ .unchanged-circle-value {
+  opacity: 0.8;
+ }
 
 .attr-modal-filter {
   margin: 0.125rem 0.125rem 0.5rem;
   display: block;
   width: calc(100% - 1rem);
-  /* margin-left */
-  /* width: -webkit-fill-available; */
-
 }
 .attr-modal-filter.empty {
   font-style: italic;
@@ -977,11 +997,9 @@ body[data-theme-light="true"] .minimizedProbeWindowOpener:hover:not(:active) {
 }
 
 .tinyLine1 {
-  /* background: linear-gradient(45deg, transparent, transparent 49%, red 49%, transparent 51%); */
   background: linear-gradient(45deg, transparent, transparent 49%, red 49%,  red 51%, transparent 51%);
 }
 .tinyLine2 {
-  /* background: linear-gradient(-45deg, transparent, transparent 49%, red 49%, transparent 51%); */
   background: linear-gradient(-45deg, transparent, transparent 49%, red 49%,  red 51%, transparent 51%);
 }
 .tinyLine {

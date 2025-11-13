@@ -27,7 +27,6 @@ import codeprober.protocol.data.Property;
 import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.Tracing;
-import codeprober.util.BenchmarkTimer;
 
 public class TracingBuilder implements Consumer<Object[]> {
 
@@ -42,6 +41,7 @@ public class TracingBuilder implements Consumer<Object[]> {
 		public final Object preTraceValue;
 		public final PendingTrace parent;
 		public final Object[] computeBeginArgs;
+		public boolean isCircular;
 
 		/**
 		 * Unused field, available for subtypes of {@link TracingBuilder} to store
@@ -50,8 +50,7 @@ public class TracingBuilder implements Consumer<Object[]> {
 		public Object userData = null;
 
 		public PendingTrace(Object node, Property property, Object preTraceValue, PendingTrace parent,
-				Object[] computeBeginArgs
-		) {
+				Object[] computeBeginArgs) {
 			this.node = node;
 			this.astNode = new AstNode(node);
 			this.property = property;
@@ -109,7 +108,7 @@ public class TracingBuilder implements Consumer<Object[]> {
 					}
 				}
 			}
-			return new Tracing(locator, property, depList, result);
+			return new Tracing(locator, property, depList, result, isCircular ? true : null);
 		}
 	}
 
@@ -288,7 +287,8 @@ public class TracingBuilder implements Consumer<Object[]> {
 			}
 			final String event = String.valueOf(args[0]);
 			switch (event) {
-			case "COMPUTE_BEGIN": {
+			case "COMPUTE_BEGIN":
+			case "CIRCULAR_CASE1_START": {
 				/**
 				 * Expected structure:
 				 * <ul>
@@ -310,21 +310,21 @@ public class TracingBuilder implements Consumer<Object[]> {
 					return;
 				}
 
-				final List<PropertyArg> propArgs = decodeTraceArgs(astNode, attribute, args[3]);
-
-				final Property prop = new Property(attribute.substring(attribute.indexOf('.') + 1), propArgs);
+				final Property prop = decodeProperty(attribute, astNode, args[3]);
 				final PendingTrace top = active.isEmpty() ? null : active.peek();
-				final PendingTrace tr;
-				tr = new PendingTrace(astNode, prop, getComputeBeginInformation(astNode, prop, args[3]), top, args);
+				final PendingTrace tr = new PendingTrace(astNode, prop,
+						getComputeBeginInformation(astNode, prop, args[3]), top, args);
 				if (top == null) {
 					completed.add(tr);
 				} else {
 					top.dependencies.add(tr);
 				}
+        tr.isCircular = event.equals("CIRCULAR_CASE1_START");
 				active.push(tr);
 				break;
 			}
-			case "COMPUTE_END": {
+			case "COMPUTE_END":
+			case "CIRCULAR_CASE1_RETURN": {
 				// Expected structure: same as COMPUTE_BEGIN
 				if (args.length != 5) {
 					System.err.println(
@@ -337,9 +337,8 @@ public class TracingBuilder implements Consumer<Object[]> {
 					return;
 				}
 				if (active.isEmpty()) {
-					System.out.println("!! Got COMPUTE_END on empty stack..");
+					System.out.println("!! Got " + event + " on empty stack..");
 					Thread.dumpStack();
-//					dumpLastAcceptsInfo();
 					System.exit(1);
 				}
 
@@ -361,6 +360,38 @@ public class TracingBuilder implements Consumer<Object[]> {
 					onComputeEnd(value, popped.preTraceValue);
 				}
 				popped.value = value;
+				break;
+			}
+			case "CIRCULAR_CASE3_RETURN":
+			case "CACHE_READ": {
+				// CIRCULAR_CASE3_RETURN triggers when a circular attribute is reached during a
+				// circular evaluation, and the default value is returned.
+				// CACHE_READ triggers when a cached value is read.
+				// Both event types are essentially both a COMPUTE_BEGIN and COMPUTE_END
+				// combined into one.
+
+				// Expected structure: same as COMPUTE_BEGIN
+				if (args.length != 5) {
+					System.err.println(
+							"Invalid tracing information - expected 5 items for " + event + ", got " + args.length);
+					return;
+				}
+				final Object astNode = args[1];
+				final String attribute = String.valueOf(args[2]);
+				if (excludeAttribute(astNode, attribute)) {
+					return;
+				}
+				if (active.isEmpty()) {
+					System.out.println("?? Got " + event + " on empty stack..");
+          return;
+				}
+
+				final Property prop = decodeProperty(attribute, astNode, args[3]);
+				final PendingTrace top = active.peek();
+				final PendingTrace pt = new PendingTrace(astNode, prop,
+						getComputeBeginInformation(astNode, prop, args[3]), top, args);
+				top.dependencies.add(pt);
+				pt.value = args[4];
 				break;
 			}
 			default: {
@@ -409,6 +440,11 @@ public class TracingBuilder implements Consumer<Object[]> {
 	}
 
 	private final Map<ArgsKey, Function<List<?>, List<PropertyArg>>> traceArgsDecodingCache = new HashMap<>();
+
+	private Property decodeProperty(String attribute, Object astNode, Object rawParams) {
+		final List<PropertyArg> propArgs = decodeTraceArgs(astNode, attribute, rawParams);
+		return new Property(attribute.substring(attribute.indexOf('.') + 1), propArgs);
+	}
 
 	public List<PropertyArg> decodeTraceArgs(Object astNode, String attribute, Object rawParams) {
 		if (rawParams == null || attribute.endsWith("()")) {

@@ -376,6 +376,7 @@ interface Tracing {
   prop: Property;
   dependencies: Tracing[];
   result: RpcBodyLine;
+  isCircular?: boolean;
 }
 interface TunneledWsPutRequestReq {
   type: "wsput:tunnel";

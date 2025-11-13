@@ -682,9 +682,8 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
   );
 
   const performSetup = async (): Promise<Workspace | null> => {
-    try {
-      await treeManager.root.getChildren();
-    } catch (e) {
+    const rootRes = await treeManager.root.getChildren();
+    if (rootRes === null) {
       // We expect empty array if there is an empty workspace.
       // No array at all means there is no workspace to work with
       return null;

@@ -6,4 +6,5 @@ public class Tracing extends Streamable {
 	public final Object prop = Property.class;
 	public final Object dependencies = arr(Tracing.class);
 	public final Object result = RpcBodyLine.class;
+	public final Object isCircular = opt(Boolean.class);
 }

@@ -10,6 +10,7 @@ import { graphviz as d3 } from '../../dependencies/graphviz/graphviz';
 import { assertUnreachable } from '../../hacks';
 import startEndToSpan from '../startEndToSpan';
 import prepareEncodeRpcNodeContainer from './prepareEncodeRpcNodeContainer';
+import encodeTrace from './encodeTrace';
 
 const getCommonStreamArgWhitespacePrefix = (line: RpcBodyLine): number => {
   if (Array.isArray(line)) {
@@ -50,6 +51,9 @@ interface ExtraEncodingArgs {
   excludeStdIoFromPaths?: true;
   tracingExpansionTracker?: { [id: string]: boolean };
   capWidths?: true;
+}
+interface LineEncodingArgs {
+  omitArrMarginLeft: Boolean;
 }
 const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEncodingArgs = {}): HTMLElement => {
   let needCapturedStreamArgExplanation = false;
@@ -209,13 +213,10 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
     return holder;
   }
 
-  interface ExtraEncodingArgs {
-    omitArrMarginLeft: Boolean;
-  }
 
   const encodeNodeContainer = prepareEncodeRpcNodeContainer({ env, encodeLine: (...args) => encodeLine(...args), }).createNodeContainerNode;
 
-  const encodeLine = (target: HTMLElement, line: RpcBodyLine, nestingLevel: number, bodyPath: number[], extraEncodingArgs?: ExtraEncodingArgs) => {
+  const encodeLine = (target: HTMLElement, line: RpcBodyLine, nestingLevel: number, bodyPath: number[], extraEncodingArgs?: LineEncodingArgs) => {
     const addPlain = (msg: string, plainHoverSpan?: { start: number, end: number }) => {
       const trimmed = msg.trimStart();
       if (extras.decorator) {
@@ -357,156 +358,20 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
       }
 
       case 'tracing': {
-        const encodeTrace = (tr: Tracing, path: number[], isTopTrace: boolean, dst: HTMLElement) => {
-          const locToShortStr = (locator: NodeLocator) => locator.result.label ?? locator.result.type.split('.').slice(-1)[0];
-
-          const summaryHolder = document.createElement('div');
-          summaryHolder.style.display = 'inline';
-          let addResult = !isTopTrace;
-          if (isTopTrace) {
-            const countTraces = (tr: Tracing): number => {
-              return 1 + tr.dependencies.reduce((a, b) => a + countTraces(b), 0);
-            };
-            const count = countTraces(tr);
-            summaryHolder.classList.add('stream-arg-msg');
-            if (count <= 1) {
-              summaryHolder.innerText = `No traces available`;
-            } else {
-              summaryHolder.innerText = `${count - 1} trace${count == 2 ? '' : 's'} available, click to expand`;
-            }
-          } else {
-            const summaryPartNode = document.createElement('span');
-            summaryPartNode.classList.add('syntax-type');
-            summaryPartNode.innerText = locToShortStr(tr.node);
-            summaryPartNode.classList.add('clickHighlightOnHover');
-            summaryPartNode.onmousedown = (e) => {
-              e.stopPropagation();
-              e.stopImmediatePropagation();
-            };
-            const span = startEndToSpan(tr.node.result.start, tr.node.result.end);
-            registerOnHover(summaryPartNode, isHovering => {
-              env.updateSpanHighlight(isHovering ? span : null);
-            })
-            summaryPartNode.onclick = (e) => {
-              e.preventDefault();
-              displayAttributeModal(env.getGlobalModalEnv(), null, createMutableLocator(tr.node));
-            }
-
-
-            const summaryPartAttr = document.createElement('span');
-            summaryPartAttr.classList.add('syntax-attr');
-            summaryPartAttr.innerText = `.${tr.prop.name}`;
-
-            let summaryPartResult: HTMLElement | null = null;
-            const addSummaryResult = (builder: (dst: HTMLDivElement) => void) => {
-              let div = document.createElement('div');
-              div.style.display = 'inline';
-              builder(div);
-              summaryPartResult = div;
-            }
-            const addPlainSummary = (raw: string) => {
-              const val = raw.trim().replace(/\n/g, '\\n');
-              const trimmed = val.length < 16 ? val : `${val.slice(0, 14)}..`;
-              addSummaryResult((tgt) => {
-                if (!trimmed) {
-                  // Empty string, treat specially
-                  tgt.appendChild(document.createTextNode(' = '));
-                  const empty = document.createElement('span');
-                  empty.classList.add('dimmed');
-                  empty.innerText = `(empty str)`;
-                  tgt.appendChild(empty);
-                } else {
-                  tgt.innerText =` = ${trimmed}`;
-                }
-              });
-              if (val.length < 16) {
-                addResult = false;
-              }
-            };
-
-            // let summaryText = `${locToShortStr(tr.node)}.${tr.prop.name}`;
-            switch (tr.result.type) {
-              case 'arr': {
-                const arr = tr.result.value;
-                if (arr.length == 1 && arr[0].type == 'plain') {
-                  addPlainSummary(arr[0].value);
-                }
-                if (arr.length == 2 && arr[0].type == 'node' && arr[1].type == 'plain' && !arr[1].value.trim()) {
-                  const locator = arr[0].value;
-                  addSummaryResult(tgt => {
-                    tgt.appendChild(document.createTextNode(' = '));
-                    createNodeNode(tgt, locator, nestingLevel + 1, path, false);
-                    addResult = false;
-                  });
-                }
-                break;
-              }
-              case 'plain': {
-                addPlainSummary(tr.result.value);
-                break;
-              }
-            }
-            // summary.innerText = summaryText;
-            summaryHolder.appendChild(summaryPartNode);
-            summaryHolder.appendChild(summaryPartAttr);
-            if (!!summaryPartResult) {
-              summaryHolder.appendChild(summaryPartResult);
-            }
-          }
-
-          // encodeLine = (target: HTMLElement, line: RpcBodyLine, nestingLevel: number, bodyPath: number[]) => {
-
-          if (addResult) {
-            switch (tr.result.type) {
-              case 'arr': {
-                addResult = !!tr.result.value.length;
-                break;
-              }
-              case 'plain': {
-                addResult = !!tr.result.value.length;
-                break;
-              }
-            }
-          }
-
-          const body = document.createElement('div');
-          body.style.paddingLeft = '1rem';
-          if (addResult) {
-            encodeLine(body, tr.result, nestingLevel + 1, path, { omitArrMarginLeft: true });
-          }
-          tr.dependencies.forEach((dep, depIdx) => {
-            encodeTrace(dep, [...path, depIdx + 1], false, body);
-          });
-
-          const summary = document.createElement('summary');
-          summary.appendChild(summaryHolder);
-          // summary.classList.add('syntax-attr');
-          if (!addResult && !tr.dependencies.length) {
-            dst.append(summary);
-          } else {
-            summary.onmousedown = (e) => {
-              e.stopPropagation();
-            };
-            summary.classList.add('clickHighlightOnHover');
-
-            const det = document.createElement('details');
-            const trKey = `${JSON.stringify(path)}:${tr.prop.name}`;
-            det.open = extras.tracingExpansionTracker?.[trKey] ?? false;
-
-            det.addEventListener('toggle', e => {
-              const tracker = extras.tracingExpansionTracker;
-              if (tracker) {
-                tracker[trKey] = det.open;
-              }
-            });
-            det.appendChild(summary);
-            det.appendChild(body);
-            dst.appendChild(det);
-          }
-        };
-        localDisableNodeExpander = true;
-        encodeTrace(line.value, bodyPath, true, target);
-        localDisableNodeExpander = false;
+        encodeTrace({
+          env,
+          createNodeNode: (...args) => {
+            localDisableNodeExpander = true;
+            createNodeNode(...args);
+            localDisableNodeExpander = false;
+          },
+          encodeLine,
+          extras,
+          nestingLevel,
+          path: bodyPath,
+          trace: line.value,
+          dst: target,
+        });
         break;
       }
 
@@ -599,4 +464,5 @@ const encodeRpcBodyLines = (env: ModalEnv, body: RpcBodyLine[], extras: ExtraEnc
     return pre;
 };
 
+export { LineEncodingArgs, ExtraEncodingArgs }
 export default encodeRpcBodyLines;
