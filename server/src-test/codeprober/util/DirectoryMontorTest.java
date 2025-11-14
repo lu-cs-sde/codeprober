@@ -46,6 +46,7 @@ public class DirectoryMontorTest {
 	@Test
 	public void testSimple() throws IOException, InterruptedException {
 		final ObservableDirMonitor dm = new ObservableDirMonitor(tmpDir);
+		dm.verboseDebug = true;
 		dm.startAndWaitForStartup();
 
 		final File file = new File(tmpDir, "myfile");
@@ -65,6 +66,7 @@ public class DirectoryMontorTest {
 	@Test
 	public void testChangesInNewSubDirectory() throws IOException, InterruptedException {
 		final ObservableDirMonitor dm = new ObservableDirMonitor(tmpDir);
+		dm.verboseDebug = true;
 		dm.startAndWaitForStartup();
 
 		final File subdir = new File(tmpDir, "subdir");

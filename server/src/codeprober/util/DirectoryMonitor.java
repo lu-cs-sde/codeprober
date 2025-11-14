@@ -27,6 +27,7 @@ public abstract class DirectoryMonitor extends Thread {
 	private AtomicBoolean stop = new AtomicBoolean(false);
 	private Map<Path, Long> fileLastModifieds = new HashMap<>();
 	private Map<Path, String> directoryLastListings = new HashMap<>();
+	public boolean verboseDebug = false;
 
 	public DirectoryMonitor(File srcDir) {
 		this.srcDir = srcDir;
@@ -133,8 +134,14 @@ public abstract class DirectoryMonitor extends Thread {
 			while (!isStopped()) {
 				WatchKey key;
 				try {
+					if (verboseDebug) {
+						System.out.println("Polling...");
+					}
 					key = watcher.poll(500, TimeUnit.MILLISECONDS);
 				} catch (InterruptedException e) {
+					if (verboseDebug) {
+						System.out.println("Interrupted!");
+					}
 					return;
 				}
 				if (key == null) {
@@ -144,6 +151,9 @@ public abstract class DirectoryMonitor extends Thread {
 
 				for (WatchEvent<?> event : key.pollEvents()) {
 					WatchEvent.Kind<?> kind = event.kind();
+					if (verboseDebug) {
+						System.out.println("Polled event: " + kind);
+					}
 
 					boolean didChange;
 					if (kind == StandardWatchEventKinds.OVERFLOW) {
@@ -151,10 +161,16 @@ public abstract class DirectoryMonitor extends Thread {
 						Thread.yield();
 						continue;
 					} else {
+						if (verboseDebug) {
+							System.out.println("Polling for changes..");
+						}
 						didChange = pollForChanges(watcher);
 					}
 					boolean valid = key.reset();
 					if (didChange) {
+						if (verboseDebug) {
+							System.out.println("Detected change!");
+						}
 						try {
 							onChange();
 						} catch (RuntimeException e) {
