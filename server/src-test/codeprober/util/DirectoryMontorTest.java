@@ -53,10 +53,10 @@ public class DirectoryMontorTest {
 		// No initial change
 		assertEquals(0, dm.changes);
 
-		file.createNewFile();
+		Files.write(file.toPath(), new byte[3], StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 		dm.waitForChangeCount(1);
 
-		Files.write(file.toPath(), new byte[3], StandardOpenOption.TRUNCATE_EXISTING);
+		Files.write(file.toPath(), new byte[5], StandardOpenOption.TRUNCATE_EXISTING);
 		dm.waitForChangeCount(2);
 	}
 
