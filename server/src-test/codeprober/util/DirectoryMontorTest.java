@@ -109,6 +109,12 @@ public class DirectoryMontorTest {
 
 		@Override
 		public void onChange() {
+			// Sleep 1ms so that "lastModified" has a chance to update after each change
+			try {
+				Thread.sleep(1L);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 			++changes;
 			synchronized (this) {
 				notifyAll();
