@@ -81,7 +81,7 @@ public class DirectoryMontorTest {
 		System.out.println("Waiting for initial file change...");
 		dm.waitForChangeCount(2);
 
-		Files.write(subdirFile.toPath(), new byte[5], StandardOpenOption.TRUNCATE_EXISTING);
+		Files.write(subdirFile.toPath(), new byte[5], StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 		System.out.println("Waiting for second file change...");
 		dm.waitForChangeCount(3);
 	}

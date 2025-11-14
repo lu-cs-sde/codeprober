@@ -77,7 +77,7 @@ public abstract class DirectoryMonitor extends Thread {
 		return Arrays.asList(files).stream().map(x -> x.getName()).sorted().collect(Collectors.toList()) + "";
 	}
 
-	private void pollForChanges(WatchService watchService) {
+	private boolean pollForChanges(WatchService watchService) {
 		final AtomicBoolean didChange = new AtomicBoolean();
 
 		try {
@@ -123,14 +123,7 @@ public abstract class DirectoryMonitor extends Thread {
 			System.err.println("IO Error when walking directory " + srcDir);
 			e.printStackTrace();
 		}
-		if (didChange.get()) {
-			try {
-				onChange();
-			} catch (RuntimeException e) {
-				System.err.println("Error in DirectoryMonitor.onChange callback");
-				e.printStackTrace();
-			}
-		}
+		return didChange.get();
 	}
 
 	@Override
@@ -152,13 +145,23 @@ public abstract class DirectoryMonitor extends Thread {
 				for (WatchEvent<?> event : key.pollEvents()) {
 					WatchEvent.Kind<?> kind = event.kind();
 
+					boolean didChange;
 					if (kind == StandardWatchEventKinds.OVERFLOW) {
+						System.out.println("Directory monitor event overflow");
 						Thread.yield();
 						continue;
 					} else {
-						pollForChanges(watcher);
+						didChange = pollForChanges(watcher);
 					}
 					boolean valid = key.reset();
+					if (didChange) {
+						try {
+							onChange();
+						} catch (RuntimeException e) {
+							System.err.println("Error in DirectoryMonitor.onChange callback");
+							e.printStackTrace();
+						}
+					}
 					if (!valid) {
 						break;
 					}
