@@ -73,13 +73,16 @@ public class DirectoryMontorTest {
 		assertEquals(0, dm.changes);
 
 		subdir.mkdirs();
+		System.out.println("Waiting for subdir creation...");
 		dm.waitForChangeCount(1);
 
 		final File subdirFile = new File(subdir, "innerfile");
 		Files.write(subdirFile.toPath(), new byte[3], StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+		System.out.println("Waiting for initial file change...");
 		dm.waitForChangeCount(2);
 
 		Files.write(subdirFile.toPath(), new byte[5], StandardOpenOption.TRUNCATE_EXISTING);
+		System.out.println("Waiting for second file change...");
 		dm.waitForChangeCount(3);
 	}
 
