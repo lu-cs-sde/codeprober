@@ -31,6 +31,7 @@ addTest () {
   case $CLS in
     codeprober\.ast\.TestData|\
     codeprober\.ast\.ASTNodeAnnotation|\
+    codeprober\.JUnitTestRunnerWrapper|\
     codeprober\.*RunDemoTests)
       # Exclude from tests
       ;;
@@ -42,5 +43,5 @@ addTest () {
 for i in $(find src-test -name "*.java"); do [ -f "$i" ] && addTest "$i"; done
 
 echo "Test classes: $TEST_CLASSES"
-java -cp "$LIBS$(echo $SEP)test_tmp" org.junit.runner.JUnitCore $TEST_CLASSES
+java -cp "$LIBS$(echo $SEP)test_tmp" codeprober.JUnitTestRunnerWrapper $TEST_CLASSES
 echo "All Tests pass successfully"
