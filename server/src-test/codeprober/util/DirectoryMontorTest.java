@@ -54,9 +54,11 @@ public class DirectoryMontorTest {
 		assertEquals(0, dm.changes);
 
 		Files.write(file.toPath(), new byte[3], StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+		System.out.println("Waiting for initial change..");
 		dm.waitForChangeCount(1);
 
 		Files.write(file.toPath(), new byte[5], StandardOpenOption.TRUNCATE_EXISTING);
+		System.out.println("Waiting for second  change..");
 		dm.waitForChangeCount(2);
 	}
 
@@ -77,7 +79,7 @@ public class DirectoryMontorTest {
 		Files.write(subdirFile.toPath(), new byte[3], StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 		dm.waitForChangeCount(2);
 
-		Files.write(subdirFile.toPath(), new byte[5], StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+		Files.write(subdirFile.toPath(), new byte[5], StandardOpenOption.TRUNCATE_EXISTING);
 		dm.waitForChangeCount(3);
 	}
 
@@ -109,8 +111,8 @@ public class DirectoryMontorTest {
 
 		@Override
 		public void onChange() {
-			++changes;
 			synchronized (this) {
+				++changes;
 				notifyAll();
 			}
 		}
