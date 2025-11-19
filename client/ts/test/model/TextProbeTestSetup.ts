@@ -19,6 +19,7 @@ interface Span {
 
 const mkNode = (type: string, start: number, end: number, props: Node['props'] = {}): Node => ({ type, start, end, props, });
 const nodes: { [id: string]: Node } = {
+  prog: mkNode('Program', (1 << 12) + 1, (5 << 12) + 2, { call: () => nodes.call }),
   add: mkNode('Add', (1 << 12) + 1, (1 << 12) + 5, { lhs: () => nodes.var, rhs: () => nodes.num, }),
   var: mkNode('Var', (1 << 12) + 1, (1 << 12) + 2),
   num: mkNode('Num', (1 << 12) + 4, (1 << 12) + 5),
@@ -33,7 +34,7 @@ const sourceDocument = {
     ``,
     `f(     // [[$c:=Call]] [[$ca:=Call.arg]]`,
     `  true // [[$b:=Bool]] [[Call.arg=Bool]] [[Bool=$c.arg]]`,
-    `)`,
+    `)      // [[Program.call.arg=Bool]]`,
   ],
   nodes: Object.values(nodes),
 }
@@ -62,6 +63,8 @@ const textProbeLocations = {
   [`txtprobe:Bool`]:          { start: (4 << 12) + 44, end: (4 << 12) + 47 },
   [`txtprobe:Bool->$c`]:      { start: (4 << 12) + 49, end: (4 << 12) + 50 },
   [`txtprobe:Bool->$c.arg`]:  { start: (4 << 12) + 52, end: (4 << 12) + 54 },
+
+  [`txtprobe:Program.call.arg`]: { start: (5 << 12) + 26, end: (5 << 12) + 29 },
 };
 
 // Merge of node locations and text probe locations

@@ -15,6 +15,10 @@ interface TestModalEnvArgs {
   src: string;
 }
 
+const looksLikeTestNode = (val: any) => {
+  return val?.type && val?.start && val?.end;
+}
+
 const setupTestModalEnv = (setupArgs: TestModalEnvArgs): ModalEnv => {
 
   const evaluateProperty = (req: EvaluatePropertyReq): SynchronousEvaluationResult | null => {
@@ -27,8 +31,7 @@ const setupTestModalEnv = (setupArgs: TestModalEnvArgs): ModalEnv => {
       if (!val) {
         return wrapLines([{ type: 'plain', value: 'null' }])
       }
-      if (val?.type && val?.start && val?.end) {
-        // Just assume it is a node
+      if (looksLikeTestNode(val)) {
         return wrapLines([{ type: 'node', value: nodeToLocator(val as Node)}]);
       }
       console.log('unknown prop result value:', val);
@@ -86,9 +89,19 @@ const setupTestModalEnv = (setupArgs: TestModalEnvArgs): ModalEnv => {
     }
   }
   const listProperties = async (req: ListPropertiesReq): Promise<ListPropertiesRes> => {
-    const node = setupArgs.nodes.find(x => x.type === req.locator.result.type);
+    let node = setupArgs.nodes.find(x => x.type === req.locator.result.type);
     if (!node) {
       throw new Error('Bad locator in request');
+    }
+    if (req.attrChain) {
+      for (let i = 0; i < req.attrChain.length; ++i) {
+        const res = node.props[req.attrChain[i]]?.();
+        if (looksLikeTestNode(res)) {
+          node = res as Node;
+        } else {
+          throw new Error(`Bad attr chain (faulty step: ${req.attrChain[i]})`);
+        }
+      }
     }
     return { body: [], properties: Object.keys(node.props).map(name => ({ name })), };
   }

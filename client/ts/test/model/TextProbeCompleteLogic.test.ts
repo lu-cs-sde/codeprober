@@ -42,18 +42,19 @@ describe('TextProbeCompleteLogic', () => {
 
   const vars = ['$c', '$ca', '$b'];
   const simpleCompleteToItemsTestCases: Partial<Record<keyof typeof textProbeLocations, string[]>> = {
-    "txtprobe:Add": ['Add', 'Var', 'Num', ...vars],
+    "txtprobe:Add": ['Program', 'Add', 'Var', 'Num', ...vars],
     "txtprobe:Add.lhs": ['lhs', 'rhs'],
-    "txtprobe:$b:=Bool": ['Bool', 'Call'],
+    "txtprobe:$b:=Bool": ['Program', 'Bool', 'Call'],
     "txtprobe:$c": [],
     "txtprobe:$ca": [],
-    "txtprobe:$ca->Call": ['Call'],
+    "txtprobe:$ca->Call": ['Program', 'Call'],
     "txtprobe:$ca->Call.arg": ['arg'],
-    "txtprobe:Call": ['Call', 'Bool', ...vars],
+    "txtprobe:Call": ['Program', 'Call', 'Bool', ...vars],
     "txtprobe:Call.arg": ['arg'],
-    "txtprobe:Bool": ['Call', 'Bool', ...vars],
+    "txtprobe:Bool": ['Program', 'Call', 'Bool', ...vars],
     "txtprobe:Bool->$c": ['Bool'],
     "txtprobe:Bool->$c.arg": ['arg'],
+    "txtprobe:Program.call.arg": ['arg'],
   };
 
   Object.entries(simpleCompleteToItemsTestCases).forEach(([key, vals]) => {

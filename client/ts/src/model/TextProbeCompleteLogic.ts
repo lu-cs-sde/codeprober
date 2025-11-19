@@ -155,6 +155,7 @@ const createTextProbeCompleteLogic = (args: CreateTextProbeCompleteLogicArgs): T
         } else {
           // Else, flash the more precise node
           locator = chainResult[0].value;
+          prerequisiteAttrs = [];
         }
       }
       flasher.flash([
