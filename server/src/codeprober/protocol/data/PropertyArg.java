@@ -11,6 +11,7 @@ public class PropertyArg implements codeprober.util.JsonUtil.ToJsonable {
     collection,
     outputstream,
     nodeLocator,
+    any,
   }
   private static final Type[] typeValues = Type.values();
 
@@ -42,8 +43,11 @@ public class PropertyArg implements codeprober.util.JsonUtil.ToJsonable {
         this.value = src.readUTF();
         break;
     case nodeLocator:
-    default:
         this.value = new NullableNodeLocator(src);
+        break;
+    case any:
+    default:
+        this.value = new PropertyArg(src);
         break;
     }
   }
@@ -53,6 +57,7 @@ public class PropertyArg implements codeprober.util.JsonUtil.ToJsonable {
   public static PropertyArg fromCollection(PropertyArgCollection val) { return new PropertyArg(Type.collection, val); }
   public static PropertyArg fromOutputstream(String val) { return new PropertyArg(Type.outputstream, val); }
   public static PropertyArg fromNodeLocator(NullableNodeLocator val) { return new PropertyArg(Type.nodeLocator, val); }
+  public static PropertyArg fromAny(PropertyArg val) { return new PropertyArg(Type.any, val); }
 
   public boolean isString() { return type == Type.string; }
   public String asString() { if (type != Type.string) { throw new IllegalStateException("This PropertyArg is not of type string, it is '" + type + "'"); } return (String)value; }
@@ -66,6 +71,8 @@ public class PropertyArg implements codeprober.util.JsonUtil.ToJsonable {
   public String asOutputstream() { if (type != Type.outputstream) { throw new IllegalStateException("This PropertyArg is not of type outputstream, it is '" + type + "'"); } return (String)value; }
   public boolean isNodeLocator() { return type == Type.nodeLocator; }
   public NullableNodeLocator asNodeLocator() { if (type != Type.nodeLocator) { throw new IllegalStateException("This PropertyArg is not of type nodeLocator, it is '" + type + "'"); } return (NullableNodeLocator)value; }
+  public boolean isAny() { return type == Type.any; }
+  public PropertyArg asAny() { if (type != Type.any) { throw new IllegalStateException("This PropertyArg is not of type any, it is '" + type + "'"); } return (PropertyArg)value; }
 
   public static PropertyArg fromJSON(JSONObject obj) {
     final Type type;
@@ -108,10 +115,17 @@ public class PropertyArg implements codeprober.util.JsonUtil.ToJsonable {
         throw new org.json.JSONException("Not a valid PropertyArg", e);
       }
     case nodeLocator:
-    default:
       try {
         final NullableNodeLocator val = NullableNodeLocator.fromJSON(obj.getJSONObject("value"));
         return fromNodeLocator(val);
+      } catch (org.json.JSONException e) {
+        throw new org.json.JSONException("Not a valid PropertyArg", e);
+      }
+    case any:
+    default:
+      try {
+        final PropertyArg val = PropertyArg.fromJSON(obj.getJSONObject("value"));
+        return fromAny(val);
       } catch (org.json.JSONException e) {
         throw new org.json.JSONException("Not a valid PropertyArg", e);
       }
@@ -137,8 +151,11 @@ public class PropertyArg implements codeprober.util.JsonUtil.ToJsonable {
       ret.put("value", ((String)value));
       break;
     case nodeLocator:
-    default:
       ret.put("value", ((NullableNodeLocator)value).toJSON());
+      break;
+    case any:
+    default:
+      ret.put("value", ((PropertyArg)value).toJSON());
       break;
     }
     return ret;
@@ -165,8 +182,11 @@ public class PropertyArg implements codeprober.util.JsonUtil.ToJsonable {
       dst.writeUTF(((String)value));
       break;
     case nodeLocator:
-    default:
       ((NullableNodeLocator)value).writeTo(dst);
+      break;
+    case any:
+    default:
+      ((PropertyArg)value).writeTo(dst);
       break;
     }
   }

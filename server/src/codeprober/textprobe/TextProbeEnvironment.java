@@ -9,8 +9,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import codeprober.metaprogramming.StdIoInterceptor;
@@ -18,9 +20,11 @@ import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.ClientRequest;
 import codeprober.protocol.PositionRecoveryStrategy;
 import codeprober.protocol.data.AsyncRpcUpdateValue;
+import codeprober.protocol.data.CompleteRes;
 import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
 import codeprober.protocol.data.NodeLocator;
+import codeprober.protocol.data.NullableNodeLocator;
 import codeprober.protocol.data.ParsingRequestData;
 import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.Property;
@@ -31,9 +35,17 @@ import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.SynchronousEvaluationResult;
 import codeprober.protocol.data.TALStep;
 import codeprober.protocol.data.WorkerTaskDone;
-import codeprober.requesthandler.LazyParser;
 import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.rpc.JsonRequestHandler;
+import codeprober.textprobe.ast.ASTNode;
+import codeprober.textprobe.ast.Container;
+import codeprober.textprobe.ast.Document;
+import codeprober.textprobe.ast.Label;
+import codeprober.textprobe.ast.Probe;
+import codeprober.textprobe.ast.PropertyAccess;
+import codeprober.textprobe.ast.Query;
+import codeprober.textprobe.ast.QueryAssert;
+import codeprober.textprobe.ast.QueryHead;
 
 public class TextProbeEnvironment {
 
@@ -41,13 +53,59 @@ public class TextProbeEnvironment {
 		NONE, LOAD_SUCCESS, LOAD_ERR,
 	};
 
+	public static class ErrorMessage {
+		public final ASTNode context;
+		public final String message;
+
+		public ErrorMessage(ASTNode context, String message) {
+			this.context = context;
+			this.message = message;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(context, message);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj) {
+				return true;
+			}
+			if (!(obj instanceof ErrorMessage)) {
+				return false;
+			}
+			final ErrorMessage other = (ErrorMessage) obj;
+			return Objects.equals(context, other.context) && Objects.equals(message, other.message);
+		}
+
+		public String toString() {
+			String loc = context.loc();
+			StringBuilder res = new StringBuilder(loc);
+			final String[] lines = message.split("\n");
+			for (int i = 0; i < lines.length; ++i) {
+				if (i == 0) {
+					res.append(" ");
+				} else {
+					res.append("\n ");
+					for (int j = 0; j < loc.length(); ++j) {
+						res.append(" ");
+					}
+				}
+				res.append(lines[i]);
+			}
+			return res.toString();
+		}
+	}
+
 	private VariableLoadStatus varLoadStatus = VariableLoadStatus.NONE;
 	private final JsonRequestHandler requestHandler;
-	private final ParsingRequestData parsingRequestData;
+	public final ParsingRequestData parsingRequestData;
 
-	public final ParsedTextProbes parsedFile;
-	public final Map<String, List<RpcBodyLine>> variables = new HashMap<>();
-	public final List<String> errMsgs = new ArrayList<>();
+//	public final ParsedTextProbes parsedFile;
+	public final Document document;
+	public final Map<String, Query> variables = new HashMap<>();
+	public final List<ErrorMessage> errMsgs = new ArrayList<>();
 
 	private final StdIoInterceptor interceptor;
 	private final boolean runConcurrent;
@@ -55,47 +113,27 @@ public class TextProbeEnvironment {
 	public boolean printExpectedValuesInComparisonFailures = true;
 
 	public TextProbeEnvironment(JsonRequestHandler requestHandler, WorkspaceHandler wsHandler,
-			ParsingSource srcContents, StdIoInterceptor interceptor, boolean runConcurrent) {
+			ParsingSource srcContents, Document document, StdIoInterceptor interceptor, boolean runConcurrent) {
 		this.requestHandler = requestHandler;
 		final String posRecoveryOverride = System.getProperty("cpr.posRecoveryStrategy");
+		final String cacheStrategyOverride = System.getProperty("cpr.astCacheStrategy");
 		this.parsingRequestData = new ParsingRequestData(
 				posRecoveryOverride != null ? PositionRecoveryStrategy.valueOf(posRecoveryOverride)
 						: PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD,
-				AstCacheStrategy.PARTIAL, srcContents, null, ".tmp");
-		this.parsedFile = ParsedTextProbes.fromFileContents(LazyParser.extractText(srcContents, wsHandler));
+				cacheStrategyOverride != null ? AstCacheStrategy.valueOf(cacheStrategyOverride)
+						: AstCacheStrategy.PARTIAL,
+				srcContents, null, ".tmp");
+		this.document = document;
 		this.interceptor = interceptor;
 		this.runConcurrent = runConcurrent;
 	}
 
 	public void loadVariables() {
 		final int preErr = errMsgs.size();
-		for (VarAssignMatch assign : parsedFile.assignments) {
-			final TextQueryMatch srcVal = assign.matchSrcAsQuery();
-			if (srcVal == null) {
-				errMsgs.add("Invalid syntax");
-			} else {
-				if (srcVal.full.length() != assign.srcVal.length()) {
-					errMsgs.add("Invalid syntax");
-				} else if (srcVal.nodeType.startsWith("$")) {
-					errMsgs.add("Cannot use variables on right-hand side");
-				} else {
-
-					final String attrFilter = srcVal.attrNames.length > 0 ? srcVal.attrNames[0] : "";
-					final List<NodeLocator> listing = listNodes(assign.lineIdx, attrFilter,
-							String.format("this<:%s&@lineSpan~=%d", srcVal.nodeType, assign.lineIdx + 1));
-					if (listing == null || listing.isEmpty()) {
-						errMsgs.add("No matching nodes");
-						continue;
-					}
-					final List<RpcBodyLine> evalRes = evaluateQuery(srcVal);
-					if (evalRes != null) {
-						if (variables.containsKey(assign.varName)) {
-							errMsgs.add("Duplicate definition of " + assign.varName);
-						} else {
-							variables.put(assign.varName, evalRes);
-						}
-					}
-				}
+		for (Container cont : document.containers) {
+			final Probe probe = cont.probe();
+			if (probe != null && probe.type == Probe.Type.VARDECL) {
+				evaluateQuery(probe.asVarDecl().src);
 			}
 		}
 		if (errMsgs.size() == preErr) {
@@ -129,11 +167,16 @@ public class TextProbeEnvironment {
 				.collect(Collectors.toList());
 	}
 
-	private SynchronousEvaluationResult performEvalReq(ParsingRequestData src, NodeLocator locator, Property property) {
+	public SynchronousEvaluationResult performEvalReq(ParsingRequestData src, NodeLocator locator, Property property) {
+		return performEvalReq(src, locator, property, null);
+	}
+
+	public SynchronousEvaluationResult performEvalReq(ParsingRequestData src, NodeLocator locator, Property property,
+			List<List<PropertyArg>> attrChainArgs) {
 
 		if (!runConcurrent) {
 			final EvaluatePropertyReq req = new EvaluatePropertyReq(src, locator, property, false, null, null, null,
-					null, null, true);
+					null, null, true, attrChainArgs);
 			final ClientRequest clientReq = new ClientRequest(req.toJSON(), obj -> {
 			}, new AtomicBoolean(true), (p) -> {
 			});
@@ -207,75 +250,173 @@ public class TextProbeEnvironment {
 		return resPtr[0];
 	}
 
-	public List<RpcBodyLine> evaluateQuery(TextQueryMatch query) {
-		List<RpcBodyLine> body;
-		if (query.nodeType.startsWith("$")) {
-			body = variables.get(query.nodeType);
-			if (body == null) {
-				errMsgs.add("No such variable");
-				return null;
-			}
-			if (query.attrNames.length == 0) {
-				return body;
-			}
-		} else {
-			final TALStep rootNode = new TALStep("<ROOT>", null, ((query.lineIdx + 1) << 12) + 1,
-					((query.lineIdx + 1) << 12) + 4095, 0);
-			final SynchronousEvaluationResult result = performEvalReq(parsingRequestData,
-					new NodeLocator(rootNode, Collections.emptyList()), //
-					new Property("m:NodesWithProperty", Arrays.asList( //
-							PropertyArg.fromString(query.attrNames.length > 0 ? query.attrNames[0] : ""), //
-							PropertyArg.fromString(
-									String.format("this<:%s&@lineSpan~=%d", query.nodeType, query.lineIdx + 1)) //
-					)));
-			body = result.body;
-			if (body.size() == 0 || body.get(0).type != RpcBodyLine.Type.arr) {
-				errMsgs.add("No matching nodes");
-				return null;
-			}
-			body = body.get(0).asArr();
+	private void addErr(ASTNode context, String msg) {
+		errMsgs.add(new ErrorMessage(context, msg));
+	}
+
+	public NodeLocator evaluateQueryHead(QueryHead head, Integer index) {
+		if (head.type == QueryHead.Type.VAR) {
+			throw new IllegalArgumentException("Unexpected VAR QueryHead");
+		}
+		final String headType = head.asType().value;
+//		query = query.inflate();
+		final TALStep rootNode = new TALStep("<ROOT>", null, ((head.start.line) << 12) + 1,
+				(head.start.line << 12) + 4095, 0);
+		final SynchronousEvaluationResult result = performEvalReq(parsingRequestData,
+				new NodeLocator(rootNode, Collections.emptyList()), //
+				new Property("m:NodesWithProperty", Arrays.asList( //
+						PropertyArg.fromString(""), //
+						PropertyArg.fromString(String.format("this<:%s&@lineSpan~=%d", headType, head.start.line)) //
+				)));
+		final List<RpcBodyLine> ret = result.body;
+		if (ret.size() == 0 || ret.get(0).type != RpcBodyLine.Type.arr) {
+			addErr(head, "No matching nodes");
+			return null;
 		}
 
-		final List<NodeLocator> nodes = body.stream() //
+		final List<NodeLocator> nodes = ret.get(0).asArr().stream() //
 				.filter(RpcBodyLine::isNode) //
 				.map(RpcBodyLine::asNode) //
 				.collect(Collectors.toList());
 
 		NodeLocator locator;
-		if (query.nodeIndex != null) {
-			if (query.nodeIndex >= 0 && query.nodeIndex < nodes.size()) {
-				locator = nodes.get(query.nodeIndex);
+		if (index != null) {
+			if (index >= 0 && index < nodes.size()) {
+				locator = nodes.get(index);
 			} else {
-				errMsgs.add("Invalid index");
+				addErr(head, String.format("Invalid index, outside expected range [%d..%d]", 0, nodes.size()));
 				return null;
 			}
 		} else {
 			if (nodes.size() == 1) {
 				locator = nodes.get(0);
 			} else {
-				errMsgs.add(nodes.isEmpty() ? "No matching nodes"
-						: String.format("%d nodes of type \"%s\". Add [idx] to disambiguate, e.g. \"%s[0]\"",
-								nodes.size(), query.nodeType, query.nodeType));
+				addErr(head,
+						nodes.isEmpty() ? "No matching nodes"
+								: String.format("%d nodes %s. Add [idx] to disambiguate, e.g. \"%s[0]\"", //
+										nodes.size(), //
+										head.type == QueryHead.Type.VAR //
+												? String.format("in var \"%s\"", headType)
+												: String.format("type \"%s\"", headType),
+										head.pp()));
 				return null;
 			}
 		}
-		if (query.attrNames.length == 0) {
+		return locator;
+	}
+
+	public List<List<PropertyArg>> mapPropAccessesToArgLists(Iterable<PropertyAccess> accesses) {
+		boolean anyHasArgs = false;
+		for (PropertyAccess acc : accesses) {
+			if (acc.arguments.isPresent()) {
+				anyHasArgs = true;
+				break;
+			}
+		}
+		if (!anyHasArgs) {
+			// No args, no need to decode anything
+			return null;
+		}
+
+		List<List<PropertyArg>> attrChainArgs = new ArrayList<>();
+		for (PropertyAccess step : accesses) {
+			if (!step.arguments.isPresent()) {
+				attrChainArgs.add(Collections.emptyList());
+				continue;
+			}
+			final List<PropertyArg> mapped = step.arguments.get().stream().map(arg -> {
+				switch (arg.type) {
+				case INT:
+					return PropertyArg.fromInteger(arg.asInt());
+
+				case QUERY:
+					final List<RpcBodyLine> qval = evaluateQuery(arg.asQuery());
+					if (qval == null) {
+						return null;
+					}
+					if (qval.isEmpty()) {
+						addErr(arg, "Failed evaluating arugment");
+						return null;
+					}
+					final RpcBodyLine head = qval.get(0);
+					switch (head.type) {
+					case node:
+						final NodeLocator node = head.asNode();
+						return PropertyArg.fromNodeLocator(new NullableNodeLocator(node.result.type, node));
+
+					case plain:
+						final String plain = head.asPlain();
+						if (!plain.isEmpty()) {
+							// Maybe coerce to int
+							final char first = plain.charAt(0);
+							if (first >= '0' && first <= '9') {
+								try {
+									int ival = Integer.parseInt(plain);
+									return PropertyArg.fromInteger(ival);
+								} catch (NumberFormatException nfe) {
+									// OK, not a number
+								}
+							}
+							switch (plain) {
+							case "true":
+								return PropertyArg.fromBool(true);
+							case "false":
+								return PropertyArg.fromBool(false);
+							}
+						}
+						return PropertyArg.fromString(plain);
+					default: {
+						System.err.println("Unknown arg type " + head.type);
+						return null;
+					}
+					}
+
+				case STRING:
+					return PropertyArg.fromString(arg.asString());
+
+				default:
+					throw new IllegalArgumentException("Invalid arg type " + arg.type);
+				}
+			}).collect(Collectors.toList());
+			if (mapped.contains(null)) {
+				attrChainArgs.add(null);
+			}
+			attrChainArgs.add(mapped);
+		}
+		return attrChainArgs;
+	}
+
+	public List<RpcBodyLine> evaluateQuery(Query query) {
+		return evaluateQuery(query, true);
+	}
+
+	public List<RpcBodyLine> evaluateQuery(Query query, boolean automaticallyExtractErrors) {
+
+		query = query.inflate();
+		final NodeLocator locator = evaluateQueryHead(query.head, query.index);
+		if (locator == null) {
+			return null;
+		}
+		if (query.tail.isEmpty()) {
 			return Arrays.asList(RpcBodyLine.fromNode(locator));
+		}
+
+		final List<List<PropertyArg>> attrChainArgs = mapPropAccessesToArgLists(query.tail);
+		if (attrChainArgs != null && attrChainArgs.contains(null)) {
+			// Some argument failed to map
+			return null;
 		}
 		final List<RpcBodyLine> resp = performEvalReq(parsingRequestData, locator, new Property( //
 				"m:AttrChain", //
-				Arrays.asList(query.attrNames).stream().map(x -> PropertyArg.fromString(x)).collect(Collectors.toList()) //
-		)).body;
-		if (resp.size() == 1) {
+				query.tail.stream().map(x -> PropertyArg.fromString(x.name.value)).collect(Collectors.toList()) //
+		), attrChainArgs).body;
+		if (automaticallyExtractErrors && resp.size() == 1) {
 			final RpcBodyLine line = resp.get(0);
 			if (line.isPlain()) {
 				final String msg = line.asPlain();
-				if (msg.startsWith("No such attribute '")) {
-					errMsgs.add(msg);
-					return null;
-				}
-				if (msg.startsWith("Failed evaluating '")) {
-					errMsgs.add(msg);
+				if (msg.startsWith("No such attribute '") || msg.startsWith("Failed evaluating '")
+						|| Pattern.compile("Expected \\d+ arguments?, got \\d+").matcher(msg).matches()) {
+					addErr(query.tail.isEmpty() ? query.tail.getChild(0) : query, msg);
 					return null;
 				}
 			}
@@ -283,40 +424,31 @@ public class TextProbeEnvironment {
 		return resp;
 	}
 
-	public boolean evaluateComparison(TextAssertionMatch tam, List<RpcBodyLine> lhsBody) {
-		if (tam.expectVal == null) {
+	public boolean evaluateComparison(Query tam, List<RpcBodyLine> lhsBody) {
+		if (!tam.assertion.isPresent()) {
 			// No assertion, automatic pass
 			return true;
 		}
+		final QueryAssert qassert = tam.assertion.get();
 		List<RpcBodyLine> rhsBody;
-		if (tam.expectVal.startsWith("$")) {
-			// High resolution comparison
-			final TextQueryMatch rhsMatch = TextProbeParser.matchTextQuery(tam.expectVal, tam.lineIdx, tam.columnIdx);
-			if (rhsMatch == null) {
-				errMsgs.add("Invalid syntax");
-				return false;
-			}
-			if (rhsMatch.full.length() != tam.expectVal.length()) {
-				errMsgs.add("Invalid syntax");
-				return false;
-			}
-
-			rhsBody = evaluateQuery(rhsMatch);
+		switch (qassert.expectedValue.type) {
+		case QUERY: {
+			rhsBody = evaluateQuery(qassert.expectedValue.asQuery());
 			if (rhsBody == null) {
 				return false;
 			}
-		} else {
-			rhsBody = Arrays.asList(RpcBodyLine.fromPlain(tam.expectVal));
+			break;
 		}
-
-		if (lhsBody.size() == 0 || rhsBody.size() == 0) {
-			errMsgs.add("Failed evaluation");
-			return false;
+		case CONSTANT:
+			rhsBody = Arrays.asList(RpcBodyLine.fromPlain(qassert.expectedValue.asConstant().value));
+			break;
+		default:
+			throw new IllegalArgumentException("Unknown ExpectedValue " + qassert.expectedValue.type);
 		}
 
 		final String lhs, rhs;
 		final boolean rawComparison;
-		if (tam.tilde) {
+		if (qassert.tilde) {
 			// Either a contains-in-array checking, or string.contains checking
 			if (lhsBody.get(0).isArr() && rhsBody.get(0).isNode()) {
 				final byte[] rhsArr = preparePropertyBodyForHighIshPrecisionComparison(rhsBody.subList(0, 1));
@@ -326,15 +458,17 @@ public class TextProbeEnvironment {
 			} else {
 				rawComparison = flattenBody(lhsBody).contains(flattenBody(rhsBody));
 			}
-			final boolean adjustedComparison = tam.exclamation ? !rawComparison : rawComparison;
+			final boolean adjustedComparison = qassert.exclamation ? !rawComparison : rawComparison;
 			if (adjustedComparison) {
 				return true;
 			}
+			String prefix = "";
 			if (printExpectedValuesInComparisonFailures) {
-				errMsgs.add("-        Expected: " + flattenBody(lhsBody));
-				errMsgs.add("   " + (tam.exclamation ? "NOT t" : "   T") + "o contain: " + flattenBody(rhsBody));
+				prefix = String.format("Expected: %s %s contain: %s\n", //
+						flattenBody(lhsBody), qassert.exclamation ? "NOT to" : "   To", //
+						flattenBody(rhsBody));
 			} else {
-				errMsgs.add("Actual:" + flattenBody(rhsBody));
+				addErr(qassert.expectedValue, prefix + "Actual:" + flattenBody(rhsBody));
 			}
 			return false;
 		}
@@ -345,7 +479,7 @@ public class TextProbeEnvironment {
 		if (lhsBody.get(0).isNode() && rhsBody.get(0).isNode()) {
 			rawComparison = Arrays.equals(preparePropertyBodyForHighIshPrecisionComparison(lhsBody.subList(0, 1)),
 					preparePropertyBodyForHighIshPrecisionComparison(rhsBody.subList(0, 1)));
-			if (!rawComparison && !tam.exclamation) {
+			if (!rawComparison && !qassert.exclamation) {
 				// Default "expected/actual" prints can be very confusing if the ast types are
 				// the same
 				if (lhsBody.get(0).asNode().result.type.equals(rhsBody.get(0).asNode().result.type)) {
@@ -357,14 +491,42 @@ public class TextProbeEnvironment {
 		}
 		lhs = flattenBody(lhsBody);
 		rhs = flattenBody(rhsBody);
-		final boolean adjustedComparison = tam.exclamation ? !rawComparison : rawComparison;
+		final boolean adjustedComparison = qassert.exclamation ? !rawComparison : rawComparison;
 		if (adjustedComparison) {
 			return true;
 		} else {
+
+			String msg = "";
 			if (printExpectedValuesInComparisonFailures) {
-				errMsgs.add("-    " + (tam.exclamation ? "Expected NOT: " : "    Expected: ") + rhs);
+				if (qassert.exclamation) {
+					msg = "Expected NOT: " + rhs + "\n      ";
+				} else {
+					msg = "Expected: " + rhs + "\n  ";
+				}
 			}
-			errMsgs.add("           Actual: " + lhs + notTheSame);
+
+			msg += "Actual: " + lhs + notTheSame;
+
+			// Try to extract extra information for the message if the
+			// cpr_getAssertFailSuffix API is implemented
+			{
+				List<PropertyAccess> concatList = new ArrayList<>(tam.tail.toList());
+				concatList.add(new PropertyAccess(tam.start, tam.end,
+						new Label(tam.start, tam.end, "cpr_getAssertFailSuffix")));
+				final Query extendedQuery = new Query(tam.start, tam.end, tam.head, tam.index, concatList);
+				tam.enclosingContainer().adopt(extendedQuery);
+				List<RpcBodyLine> betterMessage = evaluateQuery(extendedQuery, false);
+				if (betterMessage != null) {
+					if (betterMessage.size() == 1 && betterMessage.get(0).isPlain()
+							&& betterMessage.get(0).asPlain().startsWith("No such attribute '")) {
+						// The API is not implemented
+					} else {
+						// It is implemented
+						msg += ", " + flattenBody(betterMessage);
+					}
+				}
+			}
+			addErr(qassert.expectedValue, msg);
 			return false;
 		}
 	}

@@ -1,0 +1,17 @@
+
+{{A=B}} // [[$a:=Container]]
+
+/*
+    -- Check bounds
+    [[$a.loc=[2:1->2:7]]]
+
+    -- In bounds
+    [[Document.containerAt(2, 1)=$a]]
+    [[Document.containerAt(2, 7)=$a]]
+
+    -- Out of bounds
+    [[Document.containerAt(1, 1)=null]]
+    [[Document.containerAt(2, 0)=null]]
+    [[Document.containerAt(2, 8)=null]]
+    [[Document.containerAt(3, 1)=null]]
+*/

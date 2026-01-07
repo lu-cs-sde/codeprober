@@ -321,12 +321,12 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 				@Override
 				protected HoverRes handleHover(HoverReq req) {
-					return HoverHandler.apply(req, lp);
+					return HoverHandler.apply(req, DefaultRequestHandler.this, lp, workspaceHandler);
 				}
 
 				@Override
 				protected CompleteRes handleComplete(CompleteReq req) {
-					return CompleteHandler.apply(req, lp);
+					return CompleteHandler.apply(req, DefaultRequestHandler.this, lp, workspaceHandler);
 				}
 
 				@Override

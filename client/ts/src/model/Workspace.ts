@@ -1,5 +1,5 @@
 import { assertUnreachable } from '../hacks';
-import { GetWorkspaceFileReq, GetWorkspaceFileRes, ListWorkspaceDirectoryReq, ListWorkspaceDirectoryRes, PutWorkspaceContentReq, PutWorkspaceContentRes, RenameWorkspacePathReq, RenameWorkspacePathRes, UnlinkWorkspacePathReq, UnlinkWorkspacePathRes, WorkspaceEntry } from '../protocol';
+import { GetDecorationsReq, GetDecorationsRes, GetWorkspaceFileReq, GetWorkspaceFileRes, ListWorkspaceDirectoryReq, ListWorkspaceDirectoryRes, PutWorkspaceContentReq, PutWorkspaceContentRes, RenameWorkspacePathReq, RenameWorkspacePathRes, UnlinkWorkspacePathReq, UnlinkWorkspacePathRes, WorkspaceEntry } from '../protocol';
 import settings from '../settings';
 import createModalTitle, { createOverflowButton } from '../ui/create/createModalTitle';
 import showWindow from '../ui/create/showWindow';
@@ -67,6 +67,8 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: WorkspaceInstance,
   let numPass = 0;
   let numFail = 0;
 
+  const baseParsingData = args.env.createParsingRequestData();
+
   const testDir = async (
     statusLbl: HTMLElement,
     failureLog: HTMLElement,
@@ -90,43 +92,38 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: WorkspaceInstance,
         }
         case 'file': {
           const checkFile = async () => {
-            const txt = await entry.value.getContent();
-            if (txt == null) {
-              return;
-            }
-            if (testRunMonitor.shouldStop) {
-              return;
-            }
             const fullPath = entry.value.fullPath;
-            const res = await args.textProbeManager.checkFile(
-              { type: 'workspacePath', value: fullPath },
-              txt.contents
-            );
-            if (res === null) {
+            const res = await args.env.performTypedRpc<GetDecorationsReq, GetDecorationsRes>({
+              type: 'ide:decorations',
+              src: { ...baseParsingData, src: { type: 'workspacePath', value: fullPath }}
+            })
+            if (!res.lines) {
               return;
             }
-            numPass += res.numPass;
-            numFail += res.numFail;
+            const stats: TextProbeCheckResults = {
+              numPass: res.lines.filter(x => x.type === 'ok' || x.type === 'query').length,
+              numFail: res.lines.filter(x => x.type === 'error').length,
+            };
+            numPass += stats.numPass;
+            numFail += stats.numFail;
             const debug = location.search.includes('debug=true');
-            if (res.numFail || debug) {
+            if (stats.numFail || debug) {
               const logEntry = document.createElement('div');
               logEntry.classList.add('workspace-test-failure-log-entry')
-              logEntry.innerText = `${res.numFail} failure${res.numFail > 1 ? 's' : ''}${debug ? `, ${res.numPass} pass` : ''} in ${fullPath}`;
+              logEntry.innerText = `${stats.numFail} failure${stats.numFail > 1 ? 's' : ''}${debug ? `, ${stats.numPass} pass` : ''} in ${fullPath}`;
 
               failureLog.appendChild(logEntry);
               failureLog.style.display = 'flex';
 
-              if (res.numFail) {
-                logEntry.classList.add('clickHighlightOnHover');
-                logEntry.onclick = () => workspace.setActiveWorkspacePath(fullPath);
-              }
+              logEntry.classList.add('clickHighlightOnHover');
+              logEntry.onclick = () => workspace.setActiveWorkspacePath(fullPath);
             }
-            workspace.knownTestResults[fullPath] = res;
+            workspace.knownTestResults[fullPath] = stats;
             statusLbl.innerText = `Running.. ${numPass} pass, ${numFail} fail`;
 
             const row = workspace.visibleRows[fullPath];
             if (row) {
-              row.updateTestStatus(res);
+              row.updateTestStatus(stats);
             }
           };
           executor.submit(checkFile);

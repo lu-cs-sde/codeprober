@@ -14,7 +14,7 @@ rm -rf test_tmp/
 mkdir test_tmp
 
 echo "Gathering sources.."
-find src-test src -name "*.java" > sources.txt
+find src-test ../textprobe/src src -name "*.java" > sources.txt
 
 echo "Building.."
 javac @sources.txt -cp $LIBS -d test_tmp -source 8 -target 8
@@ -32,6 +32,7 @@ addTest () {
     codeprober\.ast\.TestData|\
     codeprober\.ast\.ASTNodeAnnotation|\
     codeprober\.JUnitTestRunnerWrapper|\
+    codeprober\.ExistingTextProbeTest|\
     codeprober\.*RunDemoTests)
       # Exclude from tests
       ;;

@@ -1,0 +1,1 @@
+1 // [[$p:=Program]] [[$p.greet($p.greet("Hej"))=Hello Hello Hej]]

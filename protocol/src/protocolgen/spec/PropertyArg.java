@@ -7,4 +7,5 @@ public class PropertyArg extends StreamableUnion{
 	public final Object collection = PropertyArgCollection.class;
 	public final Object outputstream = String.class;
 	public final Object nodeLocator = NullableNodeLocator.class;
+	public final Object any = PropertyArg.class;
 }

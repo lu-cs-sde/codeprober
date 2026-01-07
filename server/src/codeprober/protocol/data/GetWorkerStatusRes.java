@@ -16,7 +16,7 @@ public class GetWorkerStatusRes implements codeprober.util.JsonUtil.ToJsonable {
 
   public static GetWorkerStatusRes fromJSON(JSONObject obj) {
     return new GetWorkerStatusRes(
-      codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("stackTrace"), (arr, idx) -> arr.getString(idx))
+      codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("stackTrace"), (arr1, idx1) -> arr1.getString(idx1))
     );
   }
   public JSONObject toJSON() {
@@ -28,6 +28,6 @@ public class GetWorkerStatusRes implements codeprober.util.JsonUtil.ToJsonable {
     writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
-    codeprober.util.JsonUtil.<String>writeDataArr(dst, stackTrace, ent -> dst.writeUTF(ent));
+    codeprober.util.JsonUtil.<String>writeDataArr(dst, stackTrace, ent1 -> dst.writeUTF(ent1));
   }
 }

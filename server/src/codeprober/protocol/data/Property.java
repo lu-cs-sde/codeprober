@@ -35,7 +35,7 @@ public class Property implements codeprober.util.JsonUtil.ToJsonable {
   public static Property fromJSON(JSONObject obj) {
     return new Property(
       obj.getString("name")
-    , obj.has("args") ? (codeprober.util.JsonUtil.<PropertyArg>mapArr(obj.getJSONArray("args"), (arr, idx) -> PropertyArg.fromJSON(arr.getJSONObject(idx)))) : null
+    , obj.has("args") ? (codeprober.util.JsonUtil.<PropertyArg>mapArr(obj.getJSONArray("args"), (arr1, idx1) -> PropertyArg.fromJSON(arr1.getJSONObject(idx1)))) : null
     , obj.has("astChildName") ? (obj.getString("astChildName")) : null
     , obj.has("aspect") ? (obj.getString("aspect")) : null
     );
@@ -53,7 +53,7 @@ public class Property implements codeprober.util.JsonUtil.ToJsonable {
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
     dst.writeUTF(name);
-    if (args != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<PropertyArg>writeDataArr(dst, args, ent -> ent.writeTo(dst));; } else { dst.writeBoolean(false); }
+    if (args != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<PropertyArg>writeDataArr(dst, args, ent1 -> ent1.writeTo(dst));; } else { dst.writeBoolean(false); }
     if (astChildName != null) { dst.writeBoolean(true); dst.writeUTF(astChildName);; } else { dst.writeBoolean(false); }
     if (aspect != null) { dst.writeBoolean(true); dst.writeUTF(aspect);; } else { dst.writeBoolean(false); }
   }

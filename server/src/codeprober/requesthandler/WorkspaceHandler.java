@@ -231,12 +231,11 @@ public class WorkspaceHandler {
 			if (debugApiFailureReasons) {
 				System.out.println("Path is not a file");
 			}
-			return null;
+			return new GetWorkspaceFileRes();
 		}
 		try {
 			final byte[] textBytes = Files.readAllBytes(subFile.toPath());
 			JSONObject metadata = null;
-
 			if (supportsStoringWorkspaceMetadata() && req.loadMeta != null && req.loadMeta) {
 				final File metadataFile = getMetadataFileForRealFile(subFile);
 				if (metadataFile.exists()) {

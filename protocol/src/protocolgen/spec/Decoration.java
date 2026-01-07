@@ -5,4 +5,6 @@ public class Decoration extends Streamable {
 	public Object end = Integer.class;
 	public Object type = String.class;
 	public Object message = opt(String.class);
+	public Object contextStart = opt(Integer.class);
+	public Object contextEnd = opt(Integer.class);
 }

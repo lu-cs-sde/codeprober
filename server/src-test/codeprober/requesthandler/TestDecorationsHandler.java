@@ -36,7 +36,7 @@ public class TestDecorationsHandler {
 		final String src = "[[Foo.foobarAttr~=Foo and Bar]]";
 		final Decoration line = evaluateSimple(src);
 		assertEquals("ok", line.type);
-		assertEquals((1 << 12) + 2, line.start); // 2=second character on the line (second '[')
+		assertEquals((1 << 12) + 1, line.start);
 		assertEquals((1 << 12) + src.length(), line.end);
 	}
 
@@ -45,7 +45,7 @@ public class TestDecorationsHandler {
 		final String src = "[[Foo.badAttr!=This attr doesn't exist!]]";
 		final Decoration line = evaluateSimple(src);
 		assertEquals("error", line.type);
-		assertEquals((1 << 12) + 2, line.start);
+		assertEquals((1 << 12) + 1, line.start);
 		assertEquals((1 << 12) + src.length(), line.end);
 	}
 
@@ -54,7 +54,7 @@ public class TestDecorationsHandler {
 		final String src = "[[$f:=Foo]]";
 		final Decoration line = evaluateSimple(src);
 		assertEquals("var", line.type);
-		assertEquals((1 << 12) + 2, line.start);
+		assertEquals((1 << 12) + 1, line.start);
 		assertEquals((1 << 12) + src.length(), line.end);
 	}
 }

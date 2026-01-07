@@ -367,7 +367,6 @@ const displayProbeModal = (
       if (!locator) {
         console.error('no locator??');
       }
-      // console.log('req attr:', JSON.stringify(attr, null, 2));
 
       env.currentlyLoadingModals.add(queryId);
       const rpcQueryStart = performance.now();

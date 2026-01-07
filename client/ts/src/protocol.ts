@@ -25,13 +25,26 @@ interface CompleteReq {
   column: number;
 }
 interface CompleteRes {
-  lines?: string[];
+  lines?: CompletionItem[];
+  originContextStart?: number;
+  originContextEnd?: number;
+}
+interface CompletionItem {
+  label: string;
+  insertText: string;
+  kind: number;
+  sortText?: string;
+  detail?: string;
+  contextStart?: number;
+  contextEnd?: number;
 }
 interface Decoration {
   start: number;
   end: number;
   type: string;
   message?: string;
+  contextStart?: number;
+  contextEnd?: number;
 }
 interface Diagnostic {
   type: ('ERROR'| 'WARNING'| 'INFO'| 'HINT'| 'LINE_PP'| 'LINE_AA'| 'LINE_AP'| 'LINE_PA');
@@ -51,6 +64,7 @@ interface EvaluatePropertyReq {
   captureTraces?: boolean;
   flushBeforeTraceCollection?: boolean;
   flattenForTextProbes?: boolean;
+  attrChainArgs?: PropertyArg[][];
 }
 interface EvaluatePropertyRes {
   response: PropertyEvaluationResult;
@@ -108,6 +122,10 @@ interface HoverReq {
 }
 interface HoverRes {
   lines?: string[];
+  originContextStart?: number;
+  originContextEnd?: number;
+  remoteContextStart?: number;
+  remoteContextEnd?: number;
 }
 interface InitInfo {
   type: "init";
@@ -236,6 +254,7 @@ type PropertyArg = (
   | { type: 'collection'; value: PropertyArgCollection; }
   | { type: 'outputstream'; value: string; }
   | { type: 'nodeLocator'; value: NullableNodeLocator; }
+  | { type: 'any'; value: PropertyArg; }
 );
 interface PropertyArgCollection {
   type: string;
@@ -441,6 +460,7 @@ export {
  , BackingFileUpdated
  , CompleteReq
  , CompleteRes
+ , CompletionItem
  , Decoration
  , Diagnostic
  , EvaluatePropertyReq

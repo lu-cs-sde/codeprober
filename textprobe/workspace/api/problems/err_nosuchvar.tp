@@ -1,0 +1,1 @@
+{{A.b=$c}} // [[Document.problems~=No such var 'c']]

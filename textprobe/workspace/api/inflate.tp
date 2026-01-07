@@ -1,0 +1,11 @@
+{{$a:=X[2]}}
+{{$b:=$a.f}}
+{{$c:=$b.g("abc", 123,).h}}
+{{$c}} // [[$inf:=Query.inflate]] 
+
+/*
+    [[$inf.pp=X[2].f.g("abc", 123).h]]
+    [[$inf.head.loc=[1:7->1:10]]]
+    [[$inf.loc=[4:3->4:4]]]
+    [[Document.getVar("c").src.head.asVar.decl.src.head.asVar.decl.src.pp=X[2]]]
+*/

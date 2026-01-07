@@ -204,7 +204,6 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: Updata
         argValues[argIdx] = arg;
         switch (arg.type) {
           case 'integer': {
-            // argValues[argIdx] = arg.value || '0';
             attrList.appendChild(setupTextInput(
               (elem) => {
                 elem.type = 'number';
@@ -336,6 +335,16 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: Updata
             node.innerText = '<captured to probe output>';
             node.classList.add('stream-arg-msg');
             attrList.appendChild(node);
+            break;
+          }
+
+          case 'any': {
+            // TODO allow entering numbers, booleans and AST node pointers into 'any' args as well
+            attrList.appendChild(setupTextInput((elem) => {
+              elem.type = 'text';
+              const existing = argValues[argIdx].value;
+              elem.value = `${typeof existing === 'object' && (existing as any).value || ''}`;
+            }, val => ({ type: 'any', value: { type: 'string', value: val } })));
             break;
           }
 

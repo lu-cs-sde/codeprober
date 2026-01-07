@@ -1,12 +1,15 @@
 package codeprober.util;
 
 import java.io.PrintStream;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import codeprober.metaprogramming.StdIoInterceptor;
 import codeprober.metaprogramming.StreamInterceptor.OtherThreadDataHandling;
@@ -15,13 +18,19 @@ import codeprober.protocol.data.ListWorkspaceDirectoryRes;
 import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.WorkspaceEntry;
+import codeprober.requesthandler.LazyParser;
 import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.rpc.JsonRequestHandler;
-import codeprober.textprobe.TextAssertionMatch;
 import codeprober.textprobe.TextProbeEnvironment;
+import codeprober.textprobe.TextProbeEnvironment.ErrorMessage;
+import codeprober.textprobe.Parser;
+import codeprober.textprobe.ast.Container;
+import codeprober.textprobe.ast.Document;
+import codeprober.textprobe.ast.Probe;
+import codeprober.textprobe.ast.Probe.Type;
+import codeprober.textprobe.ast.Query;
 
 public class RunWorkspaceTest {
-
 	public static enum MergedResult {
 		ALL_PASS, SOME_FAIL,
 	}
@@ -34,8 +43,7 @@ public class RunWorkspaceTest {
 	private static boolean verbose = "true".equals(System.getProperty("cpr.verbose"));
 	private final ExecutorService concurrentExecutor;
 
-	private RunWorkspaceTest(JsonRequestHandler requestHandler, int numWorkerProcesses,
-			WorkspaceHandler workspaceHandler) {
+	private RunWorkspaceTest(JsonRequestHandler requestHandler, int numWorkerProcesses, WorkspaceHandler workspaceHandler) {
 		this.requestHandler = requestHandler;
 		if (numWorkerProcesses >= 1) {
 			// Each thread sends messages sequentially. Therefore, if #threads==#workers,
@@ -113,21 +121,50 @@ public class RunWorkspaceTest {
 				final String fullPath = parentPath + e.asFile().name;
 
 				final Runnable runFile = () -> {
+					final String src = LazyParser.extractText(ParsingSource.fromWorkspacePath(fullPath),
+							workspaceHandler);
+					final Document doc = Parser.parse(src, '[', ']');
+					// First check the static semantics of the text probes themselves
+					final Set<String> problems = doc.problems();
+					if (!problems.isEmpty()) {
+						numFail.addAndGet(problems.size());
+						final StringBuilder msg = new StringBuilder();
+						msg.append("  ❌ " + fullPath);
+						for (String errMsg : problems) {
+							msg.append(Arrays.asList(errMsg.split("\n")).stream().map(x -> "\n     " + x)
+									.collect(Collectors.joining("")));
+						}
+						println.accept(msg.toString());
+						return;
+					}
+					// Else no problems -> time to actually evaluate the queries
 					final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, workspaceHandler,
-							ParsingSource.fromWorkspacePath(fullPath), null, concurrentExecutor != null);
+							ParsingSource.fromWorkspacePath(fullPath), doc, null, concurrentExecutor != null);
 					env.loadVariables();
 					localNumFail[0] += env.errMsgs.size();
 
-					for (TextAssertionMatch tam : env.parsedFile.assertions) {
-						final int preErrSize = env.errMsgs.size();
-						final List<RpcBodyLine> actual = env.evaluateQuery(tam);
-						if (actual != null) {
-							if (env.evaluateComparison(tam, actual)) {
-								++localNumPass[0];
-							}
+					for (Container c : doc.containers) {
+						Probe p = c.probe();
+						if (p == null) {
+							continue;
 						}
-						if (env.errMsgs.size() != preErrSize) {
-							++localNumFail[0];
+						if (p.type == Type.QUERY) {
+							final Query q = p.asQuery();
+							final int preErrSize = env.errMsgs.size();
+							final List<RpcBodyLine> lhs = env.evaluateQuery(q);
+							if (lhs != null) {
+								if (q.assertion.isPresent()) {
+									if (env.evaluateComparison(q, lhs)) {
+										++localNumPass[0];
+									}
+								} else {
+									// Not an assert, it is a success by virtue of lhs being non-null.
+									++localNumPass[0];
+								}
+							}
+							if (env.errMsgs.size() != preErrSize || lhs == null) {
+								++localNumFail[0];
+							}
 						}
 					}
 					numFail.addAndGet(localNumFail[0]);
@@ -143,8 +180,9 @@ public class RunWorkspaceTest {
 					} else {
 						final StringBuilder msg = new StringBuilder();
 						msg.append("  ❌ " + fullPath);
-						for (String errMsg : env.errMsgs) {
-							msg.append("\n     " + errMsg);
+						for (ErrorMessage errMsg : env.errMsgs) {
+							msg.append(Arrays.asList(errMsg.toString().split("\n")).stream().map(x -> "\n     " + x)
+									.collect(Collectors.joining("")));
 						}
 						println.accept(msg.toString());
 					}

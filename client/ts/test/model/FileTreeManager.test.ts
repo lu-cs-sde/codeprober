@@ -5,7 +5,6 @@ import assert from 'node:assert';
 import { setupFileTreeManager, FileTreeManagerInitArgs, Directory, TextFile, DirectoryListEntry } from '../../src/model/FileTreeManager';
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-
 const setupTest = () => {
   const tree: any = {
     foo: {

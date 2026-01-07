@@ -25,10 +25,10 @@ public class NestedTest implements codeprober.util.JsonUtil.ToJsonable {
 
   public static NestedTest fromJSON(JSONObject obj) {
     return new NestedTest(
-      codeprober.util.JsonUtil.<Integer>mapArr(obj.getJSONArray("path"), (arr, idx) -> arr.getInt(idx))
+      codeprober.util.JsonUtil.<Integer>mapArr(obj.getJSONArray("path"), (arr1, idx1) -> arr1.getInt(idx1))
     , Property.fromJSON(obj.getJSONObject("property"))
-    , codeprober.util.JsonUtil.<RpcBodyLine>mapArr(obj.getJSONArray("expectedOutput"), (arr, idx) -> RpcBodyLine.fromJSON(arr.getJSONObject(idx)))
-    , codeprober.util.JsonUtil.<NestedTest>mapArr(obj.getJSONArray("nestedProperties"), (arr, idx) -> NestedTest.fromJSON(arr.getJSONObject(idx)))
+    , codeprober.util.JsonUtil.<RpcBodyLine>mapArr(obj.getJSONArray("expectedOutput"), (arr2, idx2) -> RpcBodyLine.fromJSON(arr2.getJSONObject(idx2)))
+    , codeprober.util.JsonUtil.<NestedTest>mapArr(obj.getJSONArray("nestedProperties"), (arr3, idx3) -> NestedTest.fromJSON(arr3.getJSONObject(idx3)))
     );
   }
   public JSONObject toJSON() {
@@ -43,9 +43,9 @@ public class NestedTest implements codeprober.util.JsonUtil.ToJsonable {
     writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
-    codeprober.util.JsonUtil.<Integer>writeDataArr(dst, path, ent -> dst.writeInt(ent));
+    codeprober.util.JsonUtil.<Integer>writeDataArr(dst, path, ent1 -> dst.writeInt(ent1));
     property.writeTo(dst);
-    codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, expectedOutput, ent -> ent.writeTo(dst));
-    codeprober.util.JsonUtil.<NestedTest>writeDataArr(dst, nestedProperties, ent -> ent.writeTo(dst));
+    codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, expectedOutput, ent2 -> ent2.writeTo(dst));
+    codeprober.util.JsonUtil.<NestedTest>writeDataArr(dst, nestedProperties, ent3 -> ent3.writeTo(dst));
   }
 }

@@ -47,7 +47,7 @@ public class ListedTreeChildNode implements codeprober.util.JsonUtil.ToJsonable 
     switch (type) {
     case children:
       try {
-        final java.util.List<ListedTreeNode> val = codeprober.util.JsonUtil.<ListedTreeNode>mapArr(obj.getJSONArray("value"), (arr, idx) -> ListedTreeNode.fromJSON(arr.getJSONObject(idx)));
+        final java.util.List<ListedTreeNode> val = codeprober.util.JsonUtil.<ListedTreeNode>mapArr(obj.getJSONArray("value"), (arr1, idx1) -> ListedTreeNode.fromJSON(arr1.getJSONObject(idx1)));
         return fromChildren(val);
       } catch (org.json.JSONException e) {
         throw new org.json.JSONException("Not a valid ListedTreeChildNode", e);
@@ -83,7 +83,7 @@ public class ListedTreeChildNode implements codeprober.util.JsonUtil.ToJsonable 
     dst.writeInt(type.ordinal());
     switch (type) {
     case children:
-      codeprober.util.JsonUtil.<ListedTreeNode>writeDataArr(dst, ((java.util.List<ListedTreeNode>)value), ent -> ent.writeTo(dst));
+      codeprober.util.JsonUtil.<ListedTreeNode>writeDataArr(dst, ((java.util.List<ListedTreeNode>)value), ent1 -> ent1.writeTo(dst));
       break;
     case placeholder:
     default:

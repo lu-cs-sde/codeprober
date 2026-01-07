@@ -69,9 +69,7 @@ public class Add extends Node {
 
 	@Attribute
 	public Object pointLeftToRight() {
-		return new Diagnostic(
-      "Pointing in editor",
-      String.format("LINE-PA@%d;%d;#F007", lhs().getStart(), rhs().getStart())
-    );
+		return new Diagnostic("Pointing in editor",
+				String.format("LINE-PA@%d;%d;#F007", lhs().getStart(), rhs().getStart()));
 	}
 }

@@ -17,7 +17,6 @@ const createSpanFlasher = (env: ModalEnv): SpanFlasher => {
     if (act && JSON.stringify(act) === JSON.stringify(spans) /* bit hacky comparison, but it works */) {
       // Already flashing this, update the hover pos reference and exit
       Object.assign(activeSpanReferenceHoverPos, lastKnownMousePos);
-      console.log('already flashing this')
       return;
     }
     activeFlashSpan = spans;

@@ -40,6 +40,9 @@ public abstract class CreateType {
 			// We will treat the parameter as an AST type
 			return PropertyArg.fromNodeLocator(new NullableNodeLocator(param.getName(), null));
 		}
+		if (param == Object.class) {
+			return PropertyArg.fromAny(PropertyArg.fromString(""));
+		}
 		return null;
 	}
 

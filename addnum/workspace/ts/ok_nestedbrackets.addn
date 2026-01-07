@@ -6,13 +6,13 @@
 		// too many leading '['
 		// [[[Add]] 
 		
-		// too many trailing ']'
+		// too many trailing ']' before the "="
 		// [[Add]=Add]]
 		
-		// too many trailing ']]'
-		// [[Add=[[Add]]]]] 
+		// ok
+		// [[Add!=[[Add]]]]] 
 
 		// ok
-		// [[Other=[[Add=Add]]
+		// [[Add!=[[Add!=Add]]
 
 +2

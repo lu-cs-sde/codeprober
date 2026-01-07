@@ -129,6 +129,9 @@ public class TestRunWorkspaceTest {
 					return RpcBodyLine.fromPlain("b");
 				case "m:AttrChain":
 					return apply(args.get(args.size() - 1).asString(), Collections.emptyList());
+        case "cpr_getAssertFailSuffix":
+          return RpcBodyLine.fromPlain("No such attribute '");
+
 				default:
 					return RpcBodyLine.fromPlain("??? query=" + query);
 				}

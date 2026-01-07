@@ -25,7 +25,7 @@ public class FindWorkspaceFilesRes implements codeprober.util.JsonUtil.ToJsonabl
 
   public static FindWorkspaceFilesRes fromJSON(JSONObject obj) {
     return new FindWorkspaceFilesRes(
-      obj.has("matches") ? (codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("matches"), (arr, idx) -> arr.getString(idx))) : null
+      obj.has("matches") ? (codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("matches"), (arr1, idx1) -> arr1.getString(idx1))) : null
     , obj.has("truncatedSearch") ? (obj.getBoolean("truncatedSearch")) : null
     );
   }
@@ -39,7 +39,7 @@ public class FindWorkspaceFilesRes implements codeprober.util.JsonUtil.ToJsonabl
     writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
-    if (matches != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<String>writeDataArr(dst, matches, ent -> dst.writeUTF(ent));; } else { dst.writeBoolean(false); }
+    if (matches != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<String>writeDataArr(dst, matches, ent1 -> dst.writeUTF(ent1));; } else { dst.writeBoolean(false); }
     if (truncatedSearch != null) { dst.writeBoolean(true); dst.writeBoolean(truncatedSearch);; } else { dst.writeBoolean(false); }
   }
 }

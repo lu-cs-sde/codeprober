@@ -1,58 +1,54 @@
   ❌ ts/err_ambiguous.addn
-     2 nodes of type "Num". Add [idx] to disambiguate, e.g. "Num[0]"
+     [1:11->1:13] 2 nodes type "Num". Add [idx] to disambiguate, e.g. "Num[0]"
   ❌ ts/err_badattrchain.addn
-     No such attribute 'asNum' on addnum.ast.Num
+     [1:12->1:34] No such attribute 'asNum' on addnum.ast.Num
   ❌ ts/err_badindex.addn
-     Invalid index
-     Invalid index
+     [1:11->1:16] Invalid index, outside expected range [0..2]
+     [1:33->1:42] Invalid index, outside expected range [0..1]
   ❌ ts/err_containscases.addn
-     No such attribute 'value' on java.util.ArrayList
-     No such attribute 'value' on java.util.ArrayList
-     No such attribute 'value' on java.util.ArrayList
-     -        Expected: [$three, $four]
-                Actual: [Add, Num]
-     -        Expected: Num
-                Actual: Num (same type, not the same node)
-     -    Expected NOT: Num
-                Actual: Num
-     -        Expected: 3
-                Actual: 7
-     -        Expected: 7
-                Actual: (0 + 7)
+     [6:6->6:33] No such attribute 'value' on java.util.ArrayList
+     [7:6->7:31] No such attribute 'value' on java.util.ArrayList
+     [8:6->8:30] No such attribute 'value' on java.util.ArrayList
+     [11:22->11:36] Expected: [$three, $four]
+                      Actual: [Add, Num]
+     [14:14->14:17] Expected: Num
+                      Actual: Num (same type, not the same node)
+     [15:15->15:19] Expected NOT: Num
+                          Actual: Num
+     [18:18->18:29] Expected: 3
+                      Actual: 7
+     [19:36->19:47] Expected: 7
+                      Actual: (0 + 7)
   ❌ ts/err_empty.addn
-     No matching nodes
+     [1:7->1:7] No matching nodes
   ❌ ts/err_nosuchnode.addn
-     No matching nodes
-     No matching nodes
-     No such variable
+     [1:44->1:50] No such var 'badvar'
   ❌ ts/err_nosuchvar.addn
-     No such variable
+     [1:10->1:11] No such var 'v'
   ❌ ts/err_nullaccess.addn
-     No such attribute 'foo' on null
-     No matching nodes
-     No such attribute 'foo' on addnum.ast.Num
-     No such attribute 'foo' on addnum.ast.Num
+     [3:7->3:27] No such attribute 'foo' on null
+     [4:7->4:13] No such attribute 'foo' on addnum.ast.Add
+     [5:7->5:17] No such attribute 'foo' on addnum.ast.Num
+     [6:7->6:21] No such attribute 'foo' on addnum.ast.Num
   ❌ ts/err_redefvar.addn
-     Duplicate definition of $x
+     [1:20->1:26] Duplicate variable 'x'
   ❌ ts/err_syntaxabuse.addn
-     Invalid syntax
-     Invalid syntax
-     Invalid syntax
-     -        Expected:  a
-                Actual: Add
+     [6:10->6:11] Expected:  a
+                    Actual: Add
   ❌ ts/err_throw.addn
-     Failed evaluating 'throwSomething' on addnum.ast.Add
-     Failed evaluating 'throwSomething' on addnum.ast.Add
-     Failed evaluating 'throwSomething' on addnum.ast.Add
-     Failed evaluating 'throwSomething' on addnum.ast.Add
-  ❌ ts/err_varvar.addn
-     Cannot use variables on right-hand side
+     [2:8->2:38] Failed evaluating 'throwSomething' on addnum.ast.Add
+     [3:8->3:25] Failed evaluating 'throwSomething' on addnum.ast.Add
+     [4:8->4:42] Failed evaluating 'throwSomething' on addnum.ast.Add
+     [5:8->5:29] Failed evaluating 'throwSomething' on addnum.ast.Add
   ✅ ts/ok_add.addn
   ✅ ts/ok_containscases.addn
+  ✅ ts/ok_greet.addn
   ✅ ts/ok_large.addn
   ✅ ts/ok_listvar.addn
   ✅ ts/ok_nestedbrackets.addn
+  ✅ ts/ok_nestedcall.addn
   ✅ ts/ok_num.addn
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
-Done: 56 pass, 31 fail
+  ✅ ts/ok_varvar.addn
+Done: 62 pass, 25 fail

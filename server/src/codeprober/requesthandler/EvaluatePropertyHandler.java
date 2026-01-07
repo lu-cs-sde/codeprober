@@ -14,6 +14,8 @@ import java.util.function.Consumer;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
+import org.json.JSONObject;
+
 import codeprober.AstInfo;
 import codeprober.locator.ApplyLocator;
 import codeprober.locator.ApplyLocator.ResolvedNode;
@@ -106,6 +108,12 @@ public class EvaluatePropertyHandler {
 			return new UnpackedAttrValue(si, val);
 		}
 
+		case any: {
+			final PropertyArg any = val.asAny();
+			final UnpackedAttrValue unpacked = unpackAttrValue(info, any, streamMsgReceiver);
+			return new UnpackedAttrValue(unpacked, PropertyArg.fromAny(any));
+		}
+
 		default:
 			throw new RuntimeException("Unknown attr value type " + val.type);
 		}
@@ -131,6 +139,9 @@ public class EvaluatePropertyHandler {
 		}
 		case outputstream: {
 			return info.loadAstClass.apply(arg.asOutputstream());
+		}
+		case any: {
+			return Object.class;
 		}
 		default: {
 			throw new RuntimeException("Unsupported arg type '" + arg.type + "'");
@@ -286,7 +297,7 @@ public class EvaluatePropertyHandler {
 							// A list of 1 or more attribute names to be evaluated in sequence
 							Object chainVal = match.node.underlyingAstNode;
 							if (req.property.args != null) {
-								chainVal = ListPropertiesHandler.evaluateAttrChain(chainVal,
+								chainVal = ListPropertiesHandler.evaluateAttrChain(parsed.info, chainVal,
 										req.property.args.stream().map(arg -> {
 											if (!arg.isString()) {
 												throw new IllegalArgumentException(
@@ -294,7 +305,7 @@ public class EvaluatePropertyHandler {
 																+ arg.type);
 											}
 											return arg.asString();
-										}).collect(Collectors.toList()), body);
+										}).collect(Collectors.toList()), req.attrChainArgs, body);
 
 								if (chainVal == ListPropertiesHandler.ATTR_CHAIN_FAILED) {
 									if (!req.captureStdout && shouldExpandListNodes) {

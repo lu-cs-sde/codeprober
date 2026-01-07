@@ -20,7 +20,7 @@ import { createTestManager } from './model/test/TestManager';
 import displayTestSuiteListModal from './ui/popup/displayTestSuiteListModal';
 import ModalEnv from './model/ModalEnv';
 import displayWorkerStatus from './ui/popup/displayWorkerStatus';
-import { AsyncRpcUpdate, BackingFileUpdated, CompleteReq, CompleteRes, Diagnostic, HoverReq, HoverRes, InitInfo, ParsingRequestData, PutWorkspaceContentReq, PutWorkspaceContentRes, PutWorkspaceMetadataReq, PutWorkspaceMetadataRes, Refresh, TALStep, WorkspacePathsUpdated } from './protocol';
+import { AsyncRpcUpdate, BackingFileUpdated, CompleteReq, CompleteRes, CompletionItem, Diagnostic, HoverReq, HoverRes, InitInfo, ParsingRequestData, PutWorkspaceContentReq, PutWorkspaceContentRes, PutWorkspaceMetadataReq, PutWorkspaceMetadataRes, Refresh, TALStep, WorkspacePathsUpdated } from './protocol';
 import showWindow from './ui/create/showWindow';
 import { createMutableLocator } from './model/UpdatableNodeLocator';
 import WindowState from './model/WindowState';
@@ -33,6 +33,8 @@ import Workspace, { initWorkspace } from './model/Workspace';
 import TextProbeManager, { setupTextProbeManager, TextProbeStyle } from './model/TextProbeManager';
 import { adjustSpan, adjustStartEnd } from './model/adjustTypeAtLoc';
 import { tealInit } from './languages/teal';
+import SpanFlasher, { createSpanFlasher } from './model/SpanFlasher';
+import startEndToSpan from './ui/startEndToSpan';
 
 const uiElements = new UIElements();
 
@@ -755,19 +757,10 @@ const doMain = (wsPort: number
 
       showVersionInfo(uiElements.versionInfo, hash, clean, buildTimeSeconds, disableVersionCheckerByDefault, modalEnv.performTypedRpc);
 
-      const deferLspToBackend = location.search.includes('debug=true');
+      const hoverFlasher = createSpanFlasher(modalEnv);
       window.HandleLspLikeInteraction = async (type, pos) => {
         switch (type) {
           case 'hover': {
-            if (activeTextProbeManager) {
-              const res = await activeTextProbeManager.hover(pos.line, pos.column);
-              if (res) {
-                return res;
-              }
-            }
-            if (!deferLspToBackend) {
-              return null;
-            }
             const req: HoverReq = {
               type: 'ide:hover',
               src: modalEnv.createParsingRequestData(),
@@ -783,21 +776,20 @@ const doMain = (wsPort: number
             result.lines.forEach((line) => {
               ret.push(...line.split('\n').map(value => ({ value: value.trim() })));
             });
+
+            if (result.originContextStart && result.originContextEnd) {
+              const flashes: Span[] = [startEndToSpan(result.originContextStart, result.originContextEnd)];
+              if (result.remoteContextStart && result.remoteContextEnd) {
+                flashes.push(startEndToSpan(result.remoteContextStart, result.remoteContextEnd))
+              }
+              hoverFlasher.flash(flashes, true);
+            }
             return { contents: ret };
           }
 
           case 'complete': {
             window.OnCompletionItemFocused = null;
             window.OnCompletionItemListClosed = null;
-            if (activeTextProbeManager) {
-              const res = await activeTextProbeManager.complete(pos.line, pos.column);
-              if (res) {
-                return { suggestions: res.items, from: res.from };
-              }
-            }
-            if (!deferLspToBackend) {
-              return null;
-            }
             const req: CompleteReq = {
               type: 'ide:complete',
               src: modalEnv.createParsingRequestData(),
@@ -805,15 +797,44 @@ const doMain = (wsPort: number
               column: pos.column,
             };
             const result = await modalEnv.performTypedRpc<CompleteReq, CompleteRes>(req);
-            if (!result.lines) {
+            const { lines } = result;
+            if (!lines) {
               return null;
             }
 
-            const ret: any = [];
-            result.lines.forEach((line) => {
-              ret.push({ label: line, insertText: line, kind: 3 })
-            });
-            return { suggestions: ret };
+            let originFlasher: SpanFlasher | null = null;
+            let itemFlasher: SpanFlasher | null = null;
+            if (result.originContextStart && result.originContextEnd) {
+              originFlasher = createSpanFlasher(modalEnv);
+              originFlasher.flash([startEndToSpan(result.originContextStart, result.originContextEnd + 1)]);
+            }
+
+            if (lines.some(x => x.contextStart && x.contextEnd)) {
+              // At least one line has a context
+              itemFlasher = createSpanFlasher(modalEnv);
+              let lastFlash: CompletionItem | null = null;
+
+              window.OnCompletionItemFocused = (item: CompletionItem) => {
+                if (!item || !item.contextStart || !item.contextEnd) {
+                  itemFlasher?.clear();
+                  lastFlash = null;
+                  return;
+                }
+                if (lastFlash === item) {
+                  return;
+                }
+                lastFlash = item;
+                itemFlasher?.flash([startEndToSpan(item.contextStart, item.contextEnd + 1)]);
+              };
+            }
+            if (originFlasher || itemFlasher) {
+              window.OnCompletionItemListClosed = () => {
+                originFlasher?.clear();
+                itemFlasher?.clear();
+              }
+            }
+
+            return { suggestions: lines };
           }
 
           default: {
