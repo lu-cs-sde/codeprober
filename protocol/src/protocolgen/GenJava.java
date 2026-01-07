@@ -28,8 +28,8 @@ public class GenJava {
 
 	private static enum FieldKind {
 		PRIMITIVE, STREAMABLE, STRING_CONSTANT, NULLPOINTER, ENUM, OPTIONAL_PRIMITIVE, OPTIONAL_STREAMABLE,
-		OPTIONAL_LIST_OF_STREAMABLES, OPTIONAL_LIST_OF_PRIMITIVES, OPTIONAL_ENUM, LIST_OF_PRIMTIIVES,
-		LIST_OF_STREAMABLES;
+		OPTIONAL_LIST_OF_STREAMABLES, OPTIONAL_LIST_OF_LIST_OF_STREAMABLES, OPTIONAL_LIST_OF_PRIMITIVES, OPTIONAL_ENUM,
+		LIST_OF_PRIMTIIVES, LIST_OF_STREAMABLES, LIST_OF_LIST_OF_STREAMABLES;
 
 		boolean isConstant() {
 			switch (this) {
@@ -46,6 +46,7 @@ public class GenJava {
 			case OPTIONAL_ENUM:
 			case OPTIONAL_LIST_OF_PRIMITIVES:
 			case OPTIONAL_LIST_OF_STREAMABLES:
+			case OPTIONAL_LIST_OF_LIST_OF_STREAMABLES:
 			case OPTIONAL_PRIMITIVE:
 			case OPTIONAL_STREAMABLE:
 				return true;
@@ -244,7 +245,8 @@ public class GenJava {
 			println.accept("  public " + getTypeName() + "(java.io.DataInputStream src) throws java.io.IOException {");
 			println.accept("    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));");
 			println.accept("  }");
-			println.accept("  public " + getTypeName() + "(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {");
+			println.accept("  public " + getTypeName()
+					+ "(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {");
 			println.accept("    this.type = typeValues[src.readInt()];");
 			println.accept("    switch (this.type) {");
 			for (int i = 0; i < members.size(); i++) {
@@ -254,7 +256,8 @@ public class GenJava {
 					println.accept("    default:");
 				}
 //				final String capped = fn.substring(0, 1).toUpperCase(Locale.ENGLISH) + fn.substring(1);
-				println.accept("        this.value = " + types.get(i).genReadFromDataStream.apply("src", "UNUSED") + ";");
+				println.accept(
+						"        this.value = " + types.get(i).genReadFromDataStream.apply("src", "UNUSED") + ";");
 				println.accept("        break;");
 			}
 			println.accept("    }");
@@ -324,7 +327,8 @@ public class GenJava {
 			println.accept("  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {");
 			println.accept("    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));");
 			println.accept("  }");
-			println.accept("  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {");
+			println.accept(
+					"  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {");
 			println.accept("    dst.writeInt(type.ordinal());");
 			println.accept("    switch (type) {");
 			for (int i = 0; i < members.size(); i++) {
@@ -467,6 +471,7 @@ public class GenJava {
 	}
 
 	private Set<RequestedType> requestedTypes = new HashSet<>();
+	private int idGenerator = 0;
 
 	private File getDstDir() throws Exception {
 		final String dstDirStr = System.getProperty("JAVA_DST_DIR");
@@ -582,7 +587,7 @@ public class GenJava {
 				if (numForwardedArgs > 0) {
 					print.accept(", ");
 				}
-				print.accept("(" + refs.get(i).name +")");
+				print.accept("(" + refs.get(i).name + ")");
 				print.accept("null");
 				++numForwardedArgs;
 			}
@@ -617,7 +622,8 @@ public class GenJava {
 		println.accept("  public " + tname + "(java.io.DataInputStream src) throws java.io.IOException {");
 		println.accept("    this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));");
 		println.accept("  }");
-		println.accept("  public " + tname + "(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {");
+		println.accept(
+				"  public " + tname + "(codeprober.protocol.BinaryInputStream src) throws java.io.IOException {");
 		for (int i = 0; i < fields.size(); i++) {
 			final GeneratedType ref = refs.get(i);
 			final String name = fields.get(i).getName();
@@ -625,7 +631,7 @@ public class GenJava {
 				println.accept("    this." + name + " = \"" + (String) (fields.get(i).get(s)) + "\";");
 				continue;
 			} else {
-				println.accept("    this." + name +" = " + ref.genReadFromDataStream.apply("src", "UNUSED") +";");
+				println.accept("    this." + name + " = " + ref.genReadFromDataStream.apply("src", "UNUSED") + ";");
 			}
 //			if (numAddedArgs > 0) {
 //				print.accept(", ");
@@ -706,14 +712,23 @@ public class GenJava {
 				break;
 			}
 			case LIST_OF_STREAMABLES: {
-//				List<String> l = new ArrayList<>();
-//				System.out.println(l.stream().map(x -> x.toString()).collect(Collectors.toList()) );
 				println.accept(prefix + "new org.json.JSONArray(" + field
 						+ ".stream().<Object>map(x->x.toJSON()).collect(java.util.stream.Collectors.toList())));");
 				break;
 			}
+			case LIST_OF_LIST_OF_STREAMABLES: {
+				println.accept(prefix + "new org.json.JSONArray(" + field
+						+ ".stream().<Object>map(x->new JSONArray(x.stream().<Object>map(y -> y.toJSON()).collect(java.util.stream.Collectors.toList())).collect(java.util.stream.Collectors.toList())));");
+				break;
+			}
 			case OPTIONAL_LIST_OF_PRIMITIVES: {
 				String arrVal = "new org.json.JSONArray(" + field + ")";
+				println.accept("    if (" + field + " != null) _ret.put(\"" + field + "\", " + arrVal + ");");
+				break;
+			}
+			case OPTIONAL_LIST_OF_LIST_OF_STREAMABLES: {
+				final String arrVal = "new org.json.JSONArray(" + field
+						+ ".stream().<Object>map(x->new org.json.JSONArray(x.stream().<Object>map(y -> y.toJSON()).collect(java.util.stream.Collectors.toList()))).collect(java.util.stream.Collectors.toList()))";
 				println.accept("    if (" + field + " != null) _ret.put(\"" + field + "\", " + arrVal + ");");
 				break;
 			}
@@ -729,7 +744,8 @@ public class GenJava {
 		println.accept("  public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {");
 		println.accept("    writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));");
 		println.accept("  }");
-		println.accept("  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {");
+		println.accept(
+				"  public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {");
 		for (int i = 0; i < fields.size(); i++) {
 			final String field = fields.get(i).getName();
 			println.accept("    " + refs.get(i).genWriteToDataStream.genWrite("dst", "UNUSED", field));
@@ -790,7 +806,7 @@ public class GenJava {
 				return new GeneratedType("org.json.JSONObject", FieldKind.PRIMITIVE,
 						(obj, field) -> obj + ".getJSONObject(" + field + ")", //
 						(obj, field, val) -> String.format("%s.put(%s, %s);", obj, field, val),
-						(obj, field) -> "new org.json.JSONObject(" + obj+ ".readUTF())",
+						(obj, field) -> "new org.json.JSONObject(" + obj + ".readUTF())",
 						(obj, field, val) -> String.format("%s.writeUTF(%s.toString());", obj, val));
 			} else if (clazz.isEnum()) {
 				return new GeneratedType(clazz.getName(), FieldKind.ENUM,
@@ -884,6 +900,10 @@ public class GenJava {
 				kind = FieldKind.OPTIONAL_LIST_OF_STREAMABLES;
 				boxedName = ent.name;
 				break;
+			case LIST_OF_LIST_OF_STREAMABLES:
+				kind = FieldKind.OPTIONAL_LIST_OF_LIST_OF_STREAMABLES;
+				boxedName = ent.name;
+				break;
 			case LIST_OF_PRIMTIIVES:
 				kind = FieldKind.OPTIONAL_LIST_OF_PRIMITIVES;
 				boxedName = ent.name;
@@ -904,10 +924,10 @@ public class GenJava {
 					(obj, field, val) -> {
 						return String.format("if (%s != null) %s;", val, ent.genWriteToJson.genWrite(obj, field, val));
 					},
-					(obj, field) -> obj + ".readBoolean() ? " + ent.genReadFromDataStream.apply(obj, field)
-							+ " : null", //
+					(obj, field) -> obj + ".readBoolean() ? " + ent.genReadFromDataStream.apply(obj, field) + " : null", //
 					(obj, field, val) -> {
-						return String.format("if (%s != null) { %s.writeBoolean(true); %s; } else { %s.writeBoolean(false); }", val,
+						return String.format(
+								"if (%s != null) { %s.writeBoolean(true); %s; } else { %s.writeBoolean(false); }", val,
 								obj, ent.genWriteToDataStream.genWrite(obj, field, val), obj);
 					});
 //					(obj, field, val) -> String.format("%s.put(%s, %s == null ? JSONObject.NULL : (%s))", obj, field, val, //
@@ -970,14 +990,23 @@ public class GenJava {
 			case STREAMABLE:
 				kind = FieldKind.LIST_OF_STREAMABLES;
 				break;
+			case LIST_OF_STREAMABLES:
+				kind = FieldKind.LIST_OF_LIST_OF_STREAMABLES;
+				break;
 			default:
 				throw new Exception("Illegal list field kind " + ref.kind);
 			}
 
+			final int localId = ++idGenerator;
+			final String arrId = "arr" + localId;
+			final String idxId = "idx" + localId;
+			final String entId = "ent" + localId;
+
 			return new GeneratedType("java.util.List<" + ref.getBoxedName() + ">", kind,
-					(obj, field) -> "codeprober.util.JsonUtil.<" + ref.getBoxedName() + ">mapArr(" + obj
-							+ ".getJSONArray(" + field + "), (arr, idx) -> "
-							+ ref.genReadFromJsonObj.apply("arr", "idx") + ")", //
+					(obj, field) -> String.format(
+							"codeprober.util.JsonUtil.<%s>mapArr(%s.getJSONArray(%s), (%s, %s) -> "
+									+ ref.genReadFromJsonObj.apply(arrId, idxId) + ")",
+							ref.getBoxedName(), obj, field, arrId, idxId), //
 					(obj, field, val) -> {
 						String putter;
 						if (ref.kind == FieldKind.PRIMITIVE) {
@@ -987,16 +1016,16 @@ public class GenJava {
 									+ ".stream().<Object>map(x->x.toJSON()).collect(java.util.stream.Collectors.toList())";
 						}
 						return String.format("%s.put(%s, new org.json.JSONArray(%s));", obj, field, putter);
-					},
-					(obj, field) -> {
+					}, (obj, field) -> {
 						final String reader = ref.genReadFromDataStream.apply(obj, "UNUSED");
-						return "codeprober.util.JsonUtil.<" + ref.getBoxedName() + ">readDataArr(" + obj
-								+ ", () -> " + (reader.endsWith(";") ? reader.substring(0, reader.length() - 1) : reader) + ")";
+						return "codeprober.util.JsonUtil.<" + ref.getBoxedName() + ">readDataArr(" + obj + ", () -> "
+								+ (reader.endsWith(";") ? reader.substring(0, reader.length() - 1) : reader) + ")";
 					}, //
 					(obj, field, val) -> {
-						final String writer = ref.genWriteToDataStream.genWrite(obj, "UNUSED", "ent");
-						return "codeprober.util.JsonUtil.<" + ref.getBoxedName() + ">writeDataArr(" + obj + ", " + val + ", ent -> "
-								+ (writer.endsWith(";") ? writer.substring(0, writer.length() - 1) : writer) + ");";
+						final String writer = ref.genWriteToDataStream.genWrite(obj, "UNUSED", entId);
+						return String.format( //
+								"codeprober.util.JsonUtil.<%s>writeDataArr(%s, %s, %s -> %s);", ref.getBoxedName(), obj,
+								val, entId, (writer.endsWith(";") ? writer.substring(0, writer.length() - 1) : writer));
 					});
 		} else {
 			throw new Exception("TODO encode " + rawRef);

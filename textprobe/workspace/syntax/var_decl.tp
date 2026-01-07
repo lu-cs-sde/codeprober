@@ -1,0 +1,12 @@
+{{$a:=B.c}} // [[$a:=VarDecl]] 
+{{X=$a}} // [[QueryAssert.expectedValue.type=QUERY]]  [[Query[0].head.loc=[2:3->2:3]]]
+
+/*
+[[$a.pp.equals("$a:=B.c")=true]] [[$a.loc=[1:3->1:9]]]
+
+[[$a.name.loc=[1:4->1:4]]] [[$a.name.value=a]]
+[[$a.name.value=a]] [[$a.src.pp=B.c]] [[$a.src.head.loc=[1:7->1:7]]]
+
+*/
+
+// [[$a.loc=[1:3->1:9]]]

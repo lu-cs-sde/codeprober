@@ -28,9 +28,9 @@ public class ListNodesRes implements codeprober.util.JsonUtil.ToJsonable {
 
   public static ListNodesRes fromJSON(JSONObject obj) {
     return new ListNodesRes(
-      codeprober.util.JsonUtil.<RpcBodyLine>mapArr(obj.getJSONArray("body"), (arr, idx) -> RpcBodyLine.fromJSON(arr.getJSONObject(idx)))
-    , obj.has("nodes") ? (codeprober.util.JsonUtil.<NodeLocator>mapArr(obj.getJSONArray("nodes"), (arr, idx) -> NodeLocator.fromJSON(arr.getJSONObject(idx)))) : null
-    , obj.has("errors") ? (codeprober.util.JsonUtil.<Diagnostic>mapArr(obj.getJSONArray("errors"), (arr, idx) -> Diagnostic.fromJSON(arr.getJSONObject(idx)))) : null
+      codeprober.util.JsonUtil.<RpcBodyLine>mapArr(obj.getJSONArray("body"), (arr1, idx1) -> RpcBodyLine.fromJSON(arr1.getJSONObject(idx1)))
+    , obj.has("nodes") ? (codeprober.util.JsonUtil.<NodeLocator>mapArr(obj.getJSONArray("nodes"), (arr2, idx2) -> NodeLocator.fromJSON(arr2.getJSONObject(idx2)))) : null
+    , obj.has("errors") ? (codeprober.util.JsonUtil.<Diagnostic>mapArr(obj.getJSONArray("errors"), (arr3, idx3) -> Diagnostic.fromJSON(arr3.getJSONObject(idx3)))) : null
     );
   }
   public JSONObject toJSON() {
@@ -44,8 +44,8 @@ public class ListNodesRes implements codeprober.util.JsonUtil.ToJsonable {
     writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
-    codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, body, ent -> ent.writeTo(dst));
-    if (nodes != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<NodeLocator>writeDataArr(dst, nodes, ent -> ent.writeTo(dst));; } else { dst.writeBoolean(false); }
-    if (errors != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<Diagnostic>writeDataArr(dst, errors, ent -> ent.writeTo(dst));; } else { dst.writeBoolean(false); }
+    codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, body, ent1 -> ent1.writeTo(dst));
+    if (nodes != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<NodeLocator>writeDataArr(dst, nodes, ent2 -> ent2.writeTo(dst));; } else { dst.writeBoolean(false); }
+    if (errors != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<Diagnostic>writeDataArr(dst, errors, ent3 -> ent3.writeTo(dst));; } else { dst.writeBoolean(false); }
   }
 }

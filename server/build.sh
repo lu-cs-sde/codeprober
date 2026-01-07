@@ -5,7 +5,7 @@ rm -rf build_tmp/
 mkdir build_tmp
 
 echo "Gathering sources.."
-find src -name "*.java" > sources.txt
+find src ../textprobe/src -name "*.java" > sources.txt
 
 echo "Building.."
 if [[ "$(uname -a)" == "CYGWIN"* ]]; then

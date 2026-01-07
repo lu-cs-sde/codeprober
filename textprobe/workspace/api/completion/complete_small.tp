@@ -1,0 +1,14 @@
+{{A.b=c}}
+
+/*
+    [[$d:=Document]]
+    [[$d.completionContextAt(1,1)=null]]
+    [[$d.completionContextAt(1,2)=null]]
+    [[$d.completionContextAt(1,3).type=TYPE]]
+    [[$d.completionContextAt(1,4).type=TYPE]]
+    [[$d.completionContextAt(1,5).type=PROPERTY_NAME]]
+    [[$d.completionContextAt(1,6).type=PROPERTY_NAME]]
+    [[$d.completionContextAt(1,7).type=QUERY_RESULT]]
+    [[$d.completionContextAt(1,8).type=QUERY_RESULT]]
+    [[$d.completionContextAt(1,9).=null]]
+*/

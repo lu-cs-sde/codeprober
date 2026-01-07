@@ -1,0 +1,2 @@
+{{$a:=X}} 
+{{$a:=Y}} // [[Document.problems=[[2:3->2:7] Duplicate variable 'a']]]

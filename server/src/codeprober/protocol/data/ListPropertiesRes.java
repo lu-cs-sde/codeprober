@@ -22,8 +22,8 @@ public class ListPropertiesRes implements codeprober.util.JsonUtil.ToJsonable {
 
   public static ListPropertiesRes fromJSON(JSONObject obj) {
     return new ListPropertiesRes(
-      codeprober.util.JsonUtil.<RpcBodyLine>mapArr(obj.getJSONArray("body"), (arr, idx) -> RpcBodyLine.fromJSON(arr.getJSONObject(idx)))
-    , obj.has("properties") ? (codeprober.util.JsonUtil.<Property>mapArr(obj.getJSONArray("properties"), (arr, idx) -> Property.fromJSON(arr.getJSONObject(idx)))) : null
+      codeprober.util.JsonUtil.<RpcBodyLine>mapArr(obj.getJSONArray("body"), (arr5, idx5) -> RpcBodyLine.fromJSON(arr5.getJSONObject(idx5)))
+    , obj.has("properties") ? (codeprober.util.JsonUtil.<Property>mapArr(obj.getJSONArray("properties"), (arr6, idx6) -> Property.fromJSON(arr6.getJSONObject(idx6)))) : null
     );
   }
   public JSONObject toJSON() {
@@ -36,7 +36,7 @@ public class ListPropertiesRes implements codeprober.util.JsonUtil.ToJsonable {
     writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
-    codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, body, ent -> ent.writeTo(dst));
-    if (properties != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<Property>writeDataArr(dst, properties, ent -> ent.writeTo(dst));; } else { dst.writeBoolean(false); }
+    codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, body, ent5 -> ent5.writeTo(dst));
+    if (properties != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<Property>writeDataArr(dst, properties, ent6 -> ent6.writeTo(dst));; } else { dst.writeBoolean(false); }
   }
 }

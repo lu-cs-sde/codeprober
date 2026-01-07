@@ -8,6 +8,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import codeprober.DefaultRequestHandler;
 import codeprober.protocol.data.ListWorkspaceDirectoryReq;
@@ -15,20 +17,27 @@ import codeprober.protocol.data.ListWorkspaceDirectoryRes;
 import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.WorkspaceEntry;
+import codeprober.requesthandler.LazyParser;
 import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.rpc.JsonRequestHandler;
-import codeprober.textprobe.TextAssertionMatch;
-import codeprober.textprobe.TextProbeEnvironment;
-import codeprober.textprobe.TextProbeEnvironment.VariableLoadStatus;
+import codeprober.textprobe.DogEnvironment;
+import codeprober.textprobe.DogEnvironment.VariableLoadStatus;
+import codeprober.textprobe.Parser;
+import codeprober.textprobe.ast.Container;
+import codeprober.textprobe.ast.Document;
+import codeprober.textprobe.ast.Probe;
+import codeprober.textprobe.ast.Probe.Type;
+import codeprober.textprobe.ast.Query;
+import codeprober.textprobe.ast.VarDecl;
 import codeprober.toolglue.UnderlyingTool;
 
 public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 
-	private final TextProbeEnvironment env;
+	private final DogEnvironment env;
 	private final String srcFilePath;
-	private final TextAssertionMatch assertion;
+	private final Query assertion;
 
-	public WorkspaceTestCase(TextProbeEnvironment env, String srcFilePath, TextAssertionMatch assertion) {
+	public WorkspaceTestCase(DogEnvironment env, String srcFilePath, Query assertion) {
 		this.env = env;
 		this.srcFilePath = srcFilePath;
 		this.assertion = assertion;
@@ -41,7 +50,7 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 	// name() is used by JUnit to label the test case
 	public String name() {
 		return srcFilePath + ":"
-				+ (assertion == null ? "Variable load checking" : ((assertion.lineIdx + 1) + " -> " + assertion.full));
+				+ (assertion == null ? "Variable load checking" : ((assertion.start.line) + " -> " + assertion.pp()));
 	}
 
 	@Override
@@ -56,11 +65,20 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 		if (assertion == null) {
 			return 0;
 		}
-		return Integer.compare(assertion.lineIdx, o.assertion.lineIdx);
+		return Integer.compare(assertion.start.line, o.assertion.start.line);
 	}
 
 	public void doAssert(boolean expectPass) {
 		if (env.getVariableStatus() == VariableLoadStatus.NONE) {
+			final Set<String> staticProblems = env.document.problems();
+			if (!staticProblems.isEmpty()) {
+				if (expectPass) {
+					fail("Document errors: " + staticProblems);
+				} else {
+					// OK
+					return;
+				}
+			}
 			env.loadVariables();
 		}
 		if (env.getVariableStatus() == VariableLoadStatus.LOAD_ERR) {
@@ -81,6 +99,10 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 			if (expectPass) {
 				fail(env.errMsgs.isEmpty() ? "No matching nodes" : env.errMsgs.toString());
 			}
+			return;
+		}
+
+		if (!(assertion.assertion.isPresent())) {
 			return;
 		}
 
@@ -105,8 +127,8 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 		return name();
 	}
 
-	private static void listAllWorkspaceFiles(JsonRequestHandler requestHandler, WorkspaceHandler workspaceHandler,
-			String prefix, List<WorkspaceTestCase> out) {
+	public static void listWorkspaceFilePaths(WorkspaceHandler workspaceHandler, String prefix,
+			Consumer<String> onFoundPath) {
 		final ListWorkspaceDirectoryRes res = workspaceHandler
 				.handleListWorkspaceDirectory(new ListWorkspaceDirectoryReq(prefix));
 		if (res.entries == null) {
@@ -115,22 +137,10 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 		for (WorkspaceEntry entry : res.entries) {
 			if (entry.isDirectory()) {
 				final String fullPath = (prefix != null ? (prefix + "/") : "") + entry.asDirectory();
-				listAllWorkspaceFiles(requestHandler, workspaceHandler, fullPath, out);
+				listWorkspaceFilePaths(workspaceHandler, fullPath, onFoundPath);
 			} else {
 				final String fullPath = (prefix != null ? (prefix + "/") : "") + entry.asFile().name;
-				final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, workspaceHandler,
-						ParsingSource.fromWorkspacePath(fullPath), null, false);
-
-				if (env.parsedFile.assertions.isEmpty() && env.parsedFile.assignments.isEmpty()) {
-					continue;
-				}
-				if (env.parsedFile.assertions.isEmpty()) {
-					out.add(new WorkspaceTestCase(env, fullPath, null));
-				} else {
-					for (TextAssertionMatch tam : env.parsedFile.assertions) {
-						out.add(new WorkspaceTestCase(env, fullPath, tam));
-					}
-				}
+				onFoundPath.accept(fullPath);
 			}
 		}
 	}
@@ -139,7 +149,42 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 		final WorkspaceHandler wsh = new WorkspaceHandler(dir);
 		final JsonRequestHandler requestHandler = new DefaultRequestHandler(tool, wsh);
 		final List<WorkspaceTestCase> ret = new ArrayList<>();
-		listAllWorkspaceFiles(requestHandler, wsh, null, ret);
+		listWorkspaceFilePaths(wsh, null, fullPath -> {
+			final ParsingSource psrc = ParsingSource.fromWorkspacePath(fullPath);
+
+			final Document doc = Parser.parse(LazyParser.extractText(psrc, wsh), '[', ']');
+			final DogEnvironment env = new DogEnvironment(requestHandler, wsh, psrc, doc, null, false);
+			if (!doc.problems().isEmpty()) {
+				// There are static errors. Add dummy case
+				// for reporting them
+				ret.add(new WorkspaceTestCase(env, fullPath, null));
+			} else {
+				boolean anyQuery = false;
+				boolean anyVar = false;
+				for (Container c : doc.containers) {
+					Probe probe = c.probe();
+					if (probe == null) {
+						return;
+					}
+					switch (probe.type) {
+					case QUERY:
+						anyQuery = true;
+						ret.add(new WorkspaceTestCase(env, fullPath, probe.asQuery()));
+						break;
+					case VARDECL:
+						anyVar = true;
+						break;
+					default:
+						System.err.print("Unknown probe type " + probe.type);
+					}
+				}
+				if (!anyQuery && anyVar) {
+					// No explicit queries, but we still want to evaluate varDecl's.
+					// Create case with null query
+					ret.add(new WorkspaceTestCase(env, fullPath, null));
+				}
+			}
+		});
 		return ret;
 	}
 }

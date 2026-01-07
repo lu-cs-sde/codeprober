@@ -124,6 +124,7 @@ const setupFileTreeManager = <T>(args: FileTreeManagerInitArgs<T>): FileTreeMana
             // We were invalidated at least once during the loading, try again!
             return getChildren();
           }
+          console.log('freshListing', path, '->', listing);
           if (!listing) {
             return null;
           }

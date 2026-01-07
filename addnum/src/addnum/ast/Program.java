@@ -39,7 +39,8 @@ public class Program extends Node {
 		while (!toVisit.isEmpty()) {
 			final Node last = toVisit.remove(toVisit.size() - 1);
 			if (last.value() == needle) {
-				ret.add(new Diagnostic(last, String.format("INFO@%d;%d;value=%d",last.getStart(), last.getEnd(), needle)));
+				ret.add(new Diagnostic(last,
+						String.format("INFO@%d;%d;value=%d", last.getStart(), last.getEnd(), needle)));
 			}
 			for (Node child : last) {
 				toVisit.add(child);
@@ -50,14 +51,19 @@ public class Program extends Node {
 	}
 
 	public List<String> cpr_extraAstReferences() {
-    return java.util.Arrays.asList("leftmostChild");
+		return java.util.Arrays.asList("leftmostChild");
 	}
 
-  public Object leftmostChild() {
-    Node child = this;
-    while (child.getNumChild() > 0) {
-      child = child.getChild(0);
-    }
-    return child;
-  }
+	public Object leftmostChild() {
+		Node child = this;
+		while (child.getNumChild() > 0) {
+			child = child.getChild(0);
+		}
+		return child;
+	}
+
+	@Attribute
+	public Object greet(Object obj) {
+		return "Hello " + obj;
+	}
 }

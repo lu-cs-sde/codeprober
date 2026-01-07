@@ -1,0 +1,6 @@
+{{A }}      // [[Container.probe=null]]         [[Container.contents=A ]]                     [[Container.loc=[1:1->1:6]]]
+{{A}}       // [[Container.probe.type=QUERY]]   [[Container.contents=A]]                      [[Container.loc=[2:1->2:5]]]  [[Query.loc=[2:3->2:3]]] [[QueryHead.loc=[2:3->2:3]]] 
+{{A.b}}     // [[Container.probe.type=QUERY]]   [[Container.contents=A.b]]                    [[Container.loc=[3:1->3:7]]]  [[Query.loc=[3:3->3:5]]] [[QueryHead.loc=[3:3->3:3]]] [[Query.pp=A.b]] [[Query.assertion=null]]
+{{A.b=c}}}  // [[Container.probe.type=QUERY]]   [[Container.contents=A.b=c}]]                 [[Container.loc=[4:1->4:10]]] [[Query.loc=[4:3->4:8]]] [[QueryHead.loc=[4:3->4:3]]] [[Query.pp=A.b="c}"]] [[Query.assertion=QueryAssert]]
+{{$Foo:=A}} // [[Container.probe.type=VARDECL]] [[Container.contents.equals("$Foo:=A")=true]] [[Container.loc=[5:1->5:11]]] [[Query.loc=[5:9->5:9]]] [[QueryHead.loc=[5:9->5:9]]] [[Query.pp=A]] [[Query.assertion=null]]
+{{A.b=c=d}} // [[$a:=Query]] [[$a=$a]]

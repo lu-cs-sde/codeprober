@@ -55,7 +55,7 @@ public class WorkerTaskDone implements codeprober.util.JsonUtil.ToJsonable {
     case unexpectedError:
     default:
       try {
-        final java.util.List<String> val = codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("value"), (arr, idx) -> arr.getString(idx));
+        final java.util.List<String> val = codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("value"), (arr34, idx34) -> arr34.getString(idx34));
         return fromUnexpectedError(val);
       } catch (org.json.JSONException e) {
         throw new org.json.JSONException("Not a valid WorkerTaskDone", e);
@@ -87,7 +87,7 @@ public class WorkerTaskDone implements codeprober.util.JsonUtil.ToJsonable {
       break;
     case unexpectedError:
     default:
-      codeprober.util.JsonUtil.<String>writeDataArr(dst, ((java.util.List<String>)value), ent -> dst.writeUTF(ent));
+      codeprober.util.JsonUtil.<String>writeDataArr(dst, ((java.util.List<String>)value), ent34 -> dst.writeUTF(ent34));
       break;
     }
   }

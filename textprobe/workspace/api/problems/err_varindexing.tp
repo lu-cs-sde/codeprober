@@ -1,0 +1,1 @@
+{{$a[1].b.c}} // [[Document.problems~=Cannot mix var ref and indexing]]

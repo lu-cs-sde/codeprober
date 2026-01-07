@@ -223,6 +223,7 @@ public class WorkspaceHandler {
 	}
 
 	public GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {
+
 		final File subFile = getWorkspaceFile(req.path);
 		if (subFile == null) {
 			return new GetWorkspaceFileRes();
@@ -231,12 +232,11 @@ public class WorkspaceHandler {
 			if (debugApiFailureReasons) {
 				System.out.println("Path is not a file");
 			}
-			return null;
+			return new GetWorkspaceFileRes();
 		}
 		try {
 			final byte[] textBytes = Files.readAllBytes(subFile.toPath());
 			JSONObject metadata = null;
-
 			if (supportsStoringWorkspaceMetadata() && req.loadMeta != null && req.loadMeta) {
 				final File metadataFile = getMetadataFileForRealFile(subFile);
 				if (metadataFile.exists()) {

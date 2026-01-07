@@ -30,6 +30,11 @@ echo "Client unit tests success"
 
 # -------------------------
 # Test normal JUnit tests
+echo "Building textprobe jar"
+cd textprobe
+./build.sh
+cd -
+
 cd server
 ./test.sh
 if [ "$?" -ne "0" ]; then

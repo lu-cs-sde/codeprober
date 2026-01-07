@@ -1,0 +1,3 @@
+{{$a:=$b}} // [[Document.problems~=Circular definition of 'a']]
+{{$b:=$c.x}}
+{{$c:=$a}}

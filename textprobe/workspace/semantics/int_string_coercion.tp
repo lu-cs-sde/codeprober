@@ -1,0 +1,15 @@
+{{A.b}}
+
+// [[Document.problems=[]]]
+// [[Document.problems.size=0]]
+
+// [[$d:=Document]]
+// [[$d.problems=[]]]
+// [[$d.problems.size=0]]
+
+// [[$p:=$d.problems]] 
+// [[$p=[]]]
+// [[$p.size=0]]
+
+// Implicit string coercion
+// [[$p.size=$p.size.toString]]

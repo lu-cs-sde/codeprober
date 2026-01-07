@@ -9,6 +9,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.json.JSONObject;
+
 import codeprober.AstInfo;
 import codeprober.protocol.data.NullableNodeLocator;
 import codeprober.protocol.data.PropertyArg;
@@ -39,6 +41,9 @@ public abstract class CreateType {
 			// Formal parameter is an interface, actual value is an AST node.
 			// We will treat the parameter as an AST type
 			return PropertyArg.fromNodeLocator(new NullableNodeLocator(param.getName(), null));
+		}
+		if (param == Object.class) {
+			return PropertyArg.fromAny(new JSONObject().put("type", "java.lang.Object"));
 		}
 		return null;
 	}

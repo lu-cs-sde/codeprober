@@ -1,0 +1,6 @@
+{{$x:=A}} // [[$x:=VarDecl]] [[$d:=Document]]
+
+/*
+  [[$d.getVar("x")=$x]]
+  [[$d.getVar("y")=null]]
+*/

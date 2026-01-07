@@ -43,7 +43,7 @@ public class TextProbeEnvironment {
 
 	private VariableLoadStatus varLoadStatus = VariableLoadStatus.NONE;
 	private final JsonRequestHandler requestHandler;
-	private final ParsingRequestData parsingRequestData;
+	public final ParsingRequestData parsingRequestData;
 
 	public final ParsedTextProbes parsedFile;
 	public final Map<String, List<RpcBodyLine>> variables = new HashMap<>();
@@ -58,10 +58,13 @@ public class TextProbeEnvironment {
 			ParsingSource srcContents, StdIoInterceptor interceptor, boolean runConcurrent) {
 		this.requestHandler = requestHandler;
 		final String posRecoveryOverride = System.getProperty("cpr.posRecoveryStrategy");
+		final String cacheStrategyOverride = System.getProperty("cpr.astCacheStrategy");
 		this.parsingRequestData = new ParsingRequestData(
 				posRecoveryOverride != null ? PositionRecoveryStrategy.valueOf(posRecoveryOverride)
 						: PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD,
-				AstCacheStrategy.PARTIAL, srcContents, null, ".tmp");
+				cacheStrategyOverride != null ? AstCacheStrategy.valueOf(cacheStrategyOverride)
+						: AstCacheStrategy.PARTIAL,
+				srcContents, null, ".tmp");
 		this.parsedFile = ParsedTextProbes.fromFileContents(LazyParser.extractText(srcContents, wsHandler));
 		this.interceptor = interceptor;
 		this.runConcurrent = runConcurrent;
@@ -129,7 +132,7 @@ public class TextProbeEnvironment {
 				.collect(Collectors.toList());
 	}
 
-	private SynchronousEvaluationResult performEvalReq(ParsingRequestData src, NodeLocator locator, Property property) {
+	public SynchronousEvaluationResult performEvalReq(ParsingRequestData src, NodeLocator locator, Property property) {
 
 		if (!runConcurrent) {
 			final EvaluatePropertyReq req = new EvaluatePropertyReq(src, locator, property, false, null, null, null,

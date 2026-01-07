@@ -26,7 +26,6 @@ public class AttrsInNode {
 		}
 		whitelistFilter
 				.addAll(Arrays.asList(new String[] { "getChild", "getParent", "getNumChild", "toString", "dumpTree" }));
-//		final Pattern illegalNamePattern = Pattern.compile(".*(\\$|_).*");
 
 		for (Method m : node.underlyingAstNode.getClass().getMethods()) { // getMethods() rather than
 																			// getDeclaredMethods() to only get public
@@ -44,39 +43,33 @@ public class AttrsInNode {
 			ret.add(new Property(m.getName(), args, MethodKindDetector.getAstChildName(m),
 					MethodKindDetector.getRelatedAspect(m)));
 		}
-    final boolean canDescribeChildNames = info.hasOverride1(node.underlyingAstNode.getClass(), "cpr_lGetChildName", String.class);
-    final boolean canDescribeLabeledProperties = info.hasOverride1(node.underlyingAstNode.getClass(), "cpr_lGetAspectName", String.class);
+		final boolean canDescribeChildNames = info.hasOverride1(node.underlyingAstNode.getClass(), "cpr_lGetChildName",
+				String.class);
+		final boolean canDescribeLabeledProperties = info.hasOverride1(node.underlyingAstNode.getClass(),
+				"cpr_lGetAspectName", String.class);
 		for (String filter : whitelistFilter) {
 			if (filter.startsWith("l:")) {
 				// Special "label-invoke" method, always add it
-        String childName = null;
-        if (canDescribeChildNames) {
-          try {
-            childName = (String)Reflect.invokeN(
-              node.underlyingAstNode,
-              "cpr_lGetChildName",
-              new Class[]{ String.class },
-              new Object[]{ filter.substring("l:".length()) }
-            );
-          } catch (InvokeProblem | ClassCastException e) {
-            System.out.println("Error invoking cpr_lGetChildName");
-            e.printStackTrace();
-          }
-        }
-        String relatedAspect = null;
-        if (canDescribeLabeledProperties && childName == null) {
-          try {
-            relatedAspect = (String)Reflect.invokeN(
-              node.underlyingAstNode,
-              "cpr_lGetAspectName",
-              new Class[]{ String.class },
-              new Object[]{ filter.substring("l:".length()) }
-            );
-          } catch (InvokeProblem | ClassCastException e) {
-            System.out.println("Error invoking cpr_lGetAspectName");
-            e.printStackTrace();
-          }
-        }
+				String childName = null;
+				if (canDescribeChildNames) {
+					try {
+						childName = (String) Reflect.invokeN(node.underlyingAstNode, "cpr_lGetChildName",
+								new Class[] { String.class }, new Object[] { filter.substring("l:".length()) });
+					} catch (InvokeProblem | ClassCastException e) {
+						System.out.println("Error invoking cpr_lGetChildName");
+						e.printStackTrace();
+					}
+				}
+				String relatedAspect = null;
+				if (canDescribeLabeledProperties && childName == null) {
+					try {
+						relatedAspect = (String) Reflect.invokeN(node.underlyingAstNode, "cpr_lGetAspectName",
+								new Class[] { String.class }, new Object[] { filter.substring("l:".length()) });
+					} catch (InvokeProblem | ClassCastException e) {
+						System.out.println("Error invoking cpr_lGetAspectName");
+						e.printStackTrace();
+					}
+				}
 				ret.add(new Property(filter, new ArrayList<>(), childName, relatedAspect));
 			}
 		}

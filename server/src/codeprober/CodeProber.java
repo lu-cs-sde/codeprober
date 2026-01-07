@@ -37,6 +37,7 @@ import codeprober.server.WebSocketServer;
 import codeprober.toolglue.UnderlyingTool;
 import codeprober.toolglue.UnderlyingToolProxy;
 import codeprober.util.DirectoryMonitor;
+import codeprober.util.DogFoodTest;
 import codeprober.util.FileMonitor;
 import codeprober.util.ParsedArgs;
 import codeprober.util.ParsedArgs.ConcurrencyMode;
@@ -196,6 +197,12 @@ public class CodeProber {
 			File workspace = WorkspaceHandler.getWorkspaceRoot(false);
 			if (workspace != null) {
 				// Test files in workspace
+				if (System.getenv("DOG") != null) {
+					final DogFoodTest.MergedResult res = DogFoodTest.run(userFacingHandler, //
+							parsedArgs.workerProcessCount == null ? 0 : parsedArgs.workerProcessCount);
+					System.exit(res == DogFoodTest.MergedResult.ALL_PASS ? 0 : 1);
+				}
+
 				final codeprober.util.RunWorkspaceTest.MergedResult res = RunWorkspaceTest.run(userFacingHandler, //
 						parsedArgs.workerProcessCount == null ? 0 : parsedArgs.workerProcessCount);
 				System.exit(res == codeprober.util.RunWorkspaceTest.MergedResult.ALL_PASS ? 0 : 1);

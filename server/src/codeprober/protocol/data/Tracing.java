@@ -33,7 +33,7 @@ public class Tracing implements codeprober.util.JsonUtil.ToJsonable {
     return new Tracing(
       NodeLocator.fromJSON(obj.getJSONObject("node"))
     , Property.fromJSON(obj.getJSONObject("prop"))
-    , codeprober.util.JsonUtil.<Tracing>mapArr(obj.getJSONArray("dependencies"), (arr, idx) -> Tracing.fromJSON(arr.getJSONObject(idx)))
+    , codeprober.util.JsonUtil.<Tracing>mapArr(obj.getJSONArray("dependencies"), (arr31, idx31) -> Tracing.fromJSON(arr31.getJSONObject(idx31)))
     , RpcBodyLine.fromJSON(obj.getJSONObject("result"))
     , obj.has("isCircular") ? (obj.getBoolean("isCircular")) : null
     );
@@ -53,7 +53,7 @@ public class Tracing implements codeprober.util.JsonUtil.ToJsonable {
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
     node.writeTo(dst);
     prop.writeTo(dst);
-    codeprober.util.JsonUtil.<Tracing>writeDataArr(dst, dependencies, ent -> ent.writeTo(dst));
+    codeprober.util.JsonUtil.<Tracing>writeDataArr(dst, dependencies, ent31 -> ent31.writeTo(dst));
     result.writeTo(dst);
     if (isCircular != null) { dst.writeBoolean(true); dst.writeBoolean(isCircular);; } else { dst.writeBoolean(false); }
   }

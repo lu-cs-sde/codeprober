@@ -39,8 +39,8 @@ public class TestCase implements codeprober.util.JsonUtil.ToJsonable {
     , Property.fromJSON(obj.getJSONObject("property"))
     , NodeLocator.fromJSON(obj.getJSONObject("locator"))
     , codeprober.protocol.TestCaseAssertType.parseFromJson(obj.getString("assertType"))
-    , codeprober.util.JsonUtil.<RpcBodyLine>mapArr(obj.getJSONArray("expectedOutput"), (arr, idx) -> RpcBodyLine.fromJSON(arr.getJSONObject(idx)))
-    , codeprober.util.JsonUtil.<NestedTest>mapArr(obj.getJSONArray("nestedProperties"), (arr, idx) -> NestedTest.fromJSON(arr.getJSONObject(idx)))
+    , codeprober.util.JsonUtil.<RpcBodyLine>mapArr(obj.getJSONArray("expectedOutput"), (arr26, idx26) -> RpcBodyLine.fromJSON(arr26.getJSONObject(idx26)))
+    , codeprober.util.JsonUtil.<NestedTest>mapArr(obj.getJSONArray("nestedProperties"), (arr27, idx27) -> NestedTest.fromJSON(arr27.getJSONObject(idx27)))
     );
   }
   public JSONObject toJSON() {
@@ -63,7 +63,7 @@ public class TestCase implements codeprober.util.JsonUtil.ToJsonable {
     property.writeTo(dst);
     locator.writeTo(dst);
     dst.writeInt(assertType.ordinal());
-    codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, expectedOutput, ent -> ent.writeTo(dst));
-    codeprober.util.JsonUtil.<NestedTest>writeDataArr(dst, nestedProperties, ent -> ent.writeTo(dst));
+    codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, expectedOutput, ent26 -> ent26.writeTo(dst));
+    codeprober.util.JsonUtil.<NestedTest>writeDataArr(dst, nestedProperties, ent27 -> ent27.writeTo(dst));
   }
 }

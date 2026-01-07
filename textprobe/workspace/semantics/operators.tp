@@ -1,0 +1,3 @@
+{{A.b=c}}  // [[QueryAssert.negate=false]] [[QueryAssert.contains=false]] [[QueryAssert.loc=[1:6->1:7]]]
+{{A.b!=c}} // [[QueryAssert.negate=true]]  [[QueryAssert.contains=false]] [[QueryAssert.loc=[2:6->2:8]]]
+{{A.b~=c}} // [[QueryAssert.negate=false]] [[QueryAssert.contains=true]]  [[QueryAssert.loc=[3:6->3:8]]]

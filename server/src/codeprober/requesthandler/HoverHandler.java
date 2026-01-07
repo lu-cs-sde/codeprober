@@ -1,6 +1,7 @@
 package codeprober.requesthandler;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import codeprober.AstInfo;
@@ -10,7 +11,18 @@ import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
 import codeprober.protocol.data.HoverReq;
 import codeprober.protocol.data.HoverRes;
+import codeprober.protocol.data.NodeLocator;
+import codeprober.protocol.data.RpcBodyLine;
 import codeprober.requesthandler.LazyParser.ParsedAst;
+import codeprober.rpc.JsonRequestHandler;
+import codeprober.textprobe.CompletionContext;
+import codeprober.textprobe.CompletionContext.PropertyNameDetail;
+import codeprober.textprobe.DogEnvironment;
+import codeprober.textprobe.Parser;
+import codeprober.textprobe.ast.Position;
+import codeprober.textprobe.ast.PropertyAccess;
+import codeprober.textprobe.ast.Query;
+import codeprober.textprobe.ast.QueryHead.Type;
 
 public class HoverHandler {
 
@@ -26,9 +38,131 @@ public class HoverHandler {
 		}
 	}
 
-	public static HoverRes apply(HoverReq req, LazyParser parser) {
+	public static HoverRes apply(HoverReq req, JsonRequestHandler reqHandler, LazyParser parser,
+			WorkspaceHandler wsHandler) {
 		final ParsedAst parsed = parser.parse(req.src);
-		return new HoverRes(extract0(parsed, "cpr_ide_hover", req.line, req.column));
+		final List<String> customHover = extract0(parsed, "cpr_ide_hover", req.line, req.column);
+		if (customHover != null) {
+			return new HoverRes(customHover);
+		}
+
+		final String txt = LazyParser.extractText(req.src.src, wsHandler);
+		if (txt != null) {
+			final DogEnvironment env = new DogEnvironment(reqHandler, wsHandler, req.src.src,
+					Parser.parse(txt, '[', ']'), null, false);
+
+			// Use the "completionContext" api to help identify what is being hovered
+			final CompletionContext compCtx = env.document.completionContextAt(req.line, req.column);
+			if (compCtx == null) {
+				// No hover to be done here
+				return new HoverRes();
+			}
+			switch (compCtx.type) {
+			case QUERY_HEAD_TYPE: {
+				final Query q = compCtx.asQueryHead();
+
+				if (q.head.type == Type.VAR && !env.document.problems().isEmpty()) {
+					// Cannot reliably interact with variables when there are static errors
+					return new HoverRes();
+				}
+				final NodeLocator subject;
+				switch (q.head.type) {
+				case VAR: {
+					// The var may be defined as [[$var:=SomeOtherType.foo.bar.baz]]
+					// In this case, $var may or may not be a node locator at all.
+					// Let's find out
+					final List<RpcBodyLine> varDef = env.evaluateQuery(q.head.asVar().decl().src);
+					if (varDef == null) {
+						subject = null;
+					} else if (varDef.size() >= 1 && varDef.get(0).type == RpcBodyLine.Type.node) {
+						subject = varDef.get(0).asNode();
+					} else {
+						// Not a node. We _could_ evaluate a shorter chain of steps. The query head is
+						// guaranteed to be a node, and some of the intermediate steps may also be
+						// nodes. In this case, the last step was not a node.
+						// In theory we could iteratively test evaluating with one fewer steps until we
+						// get a node. However, if the user is hovering something that isn't a node and
+						// we highlight a node, that could easily cause confusion. The solution: just
+						// don't highlight anything.
+						subject = null;
+					}
+					break;
+				}
+				case TYPE: {
+					subject = env.evaluateQueryHead(q.inflate().head, q.index);
+					break;
+				}
+				default: {
+					System.err.println("Unexpected QueryHead type " + q.head.type);
+					return new HoverRes();
+				}
+				}
+				return hoverNodeLocator(q, q.head.start, q.head.end, subject);
+			}
+
+			case PROPERTY_NAME:
+				final PropertyNameDetail prop = compCtx.asPropertyName();
+
+				int hoverAccessIdx;
+				if (prop.access == null) {
+					hoverAccessIdx = prop.query.tail.getNumChild();
+				} else {
+					hoverAccessIdx = 0;
+					for (PropertyAccess infl : prop.query.tail) {
+						++hoverAccessIdx;
+						if (infl == prop.access) {
+							break;
+						}
+					}
+				}
+				final Query q = prop.query;
+				Query subQ = new Query(q.start, q.end, q.head, q.index, q.tail.toList().subList(0, hoverAccessIdx));
+				q.adopt(subQ);
+				Position localStart = q.start;
+				Position localEnd = q.tail.isEmpty() ? subQ.end : subQ.tail.get(subQ.tail.getNumChild() - 1).end;
+				List<RpcBodyLine> subRes = null;
+				if (env.document.problems().isEmpty()) {
+					subRes = env.evaluateQuery(subQ.inflate());
+					if (subRes == null) {
+						return new HoverRes();
+					}
+					if (subRes.size() >= 1 && subRes.get(0).isNode()) {
+						final NodeLocator node = subRes.get(0).asNode();
+						return hoverNodeLocator(subQ, localStart, localEnd, node);
+					}
+				}
+				return new HoverRes(subRes == null //
+						? Collections.emptyList() //
+						: Arrays.asList(DogEnvironment.flattenBody(subRes)), //
+						localStart.getPackedBits(), localEnd.getPackedBits() + 1);
+
+			case QUERY_RESULT:
+				// Nothing to do here, the query should already be visible in the editor
+				return new HoverRes();
+
+			default:
+				System.err.println("Unknown completion context: " + compCtx.type);
+				return new HoverRes();
+			}
+		}
+
+		return new HoverRes();
+	}
+
+	private static HoverRes hoverNodeLocator(final Query q, Position localStart, Position localEnd,
+			final NodeLocator subject) {
+		Integer remoteStart, remoteEnd;
+		if (subject == null || subject.result.start == 0 || subject.result.end == 0) {
+			remoteStart = null;
+			remoteEnd = null;
+		} else {
+			remoteStart = subject.result.start;
+			remoteEnd = subject.result.end + 1;
+		}
+		return new HoverRes(subject == null //
+				? Collections.emptyList() //
+				: Arrays.asList(DogEnvironment.flattenLine(RpcBodyLine.fromNode(subject))), localStart.getPackedBits(),
+				localEnd.getPackedBits() + 1, remoteStart, remoteEnd);
 	}
 
 	@SuppressWarnings("unchecked")

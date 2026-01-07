@@ -55,7 +55,7 @@ public class SynchronousEvaluationResult implements codeprober.util.JsonUtil.ToJ
 
   public static SynchronousEvaluationResult fromJSON(JSONObject obj) {
     return new SynchronousEvaluationResult(
-      codeprober.util.JsonUtil.<RpcBodyLine>mapArr(obj.getJSONArray("body"), (arr, idx) -> RpcBodyLine.fromJSON(arr.getJSONObject(idx)))
+      codeprober.util.JsonUtil.<RpcBodyLine>mapArr(obj.getJSONArray("body"), (arr28, idx28) -> RpcBodyLine.fromJSON(arr28.getJSONObject(idx28)))
     , obj.getLong("totalTime")
     , obj.getLong("parseTime")
     , obj.getLong("createLocatorTime")
@@ -63,8 +63,8 @@ public class SynchronousEvaluationResult implements codeprober.util.JsonUtil.ToJ
     , obj.getLong("attrEvalTime")
     , obj.getLong("listNodesTime")
     , obj.getLong("listPropertiesTime")
-    , obj.has("errors") ? (codeprober.util.JsonUtil.<Diagnostic>mapArr(obj.getJSONArray("errors"), (arr, idx) -> Diagnostic.fromJSON(arr.getJSONObject(idx)))) : null
-    , obj.has("args") ? (codeprober.util.JsonUtil.<PropertyArg>mapArr(obj.getJSONArray("args"), (arr, idx) -> PropertyArg.fromJSON(arr.getJSONObject(idx)))) : null
+    , obj.has("errors") ? (codeprober.util.JsonUtil.<Diagnostic>mapArr(obj.getJSONArray("errors"), (arr29, idx29) -> Diagnostic.fromJSON(arr29.getJSONObject(idx29)))) : null
+    , obj.has("args") ? (codeprober.util.JsonUtil.<PropertyArg>mapArr(obj.getJSONArray("args"), (arr30, idx30) -> PropertyArg.fromJSON(arr30.getJSONObject(idx30)))) : null
     , obj.has("locator") ? (NodeLocator.fromJSON(obj.getJSONObject("locator"))) : null
     );
   }
@@ -87,7 +87,7 @@ public class SynchronousEvaluationResult implements codeprober.util.JsonUtil.ToJ
     writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
-    codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, body, ent -> ent.writeTo(dst));
+    codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, body, ent28 -> ent28.writeTo(dst));
     dst.writeLong(totalTime);
     dst.writeLong(parseTime);
     dst.writeLong(createLocatorTime);
@@ -95,8 +95,8 @@ public class SynchronousEvaluationResult implements codeprober.util.JsonUtil.ToJ
     dst.writeLong(attrEvalTime);
     dst.writeLong(listNodesTime);
     dst.writeLong(listPropertiesTime);
-    if (errors != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<Diagnostic>writeDataArr(dst, errors, ent -> ent.writeTo(dst));; } else { dst.writeBoolean(false); }
-    if (args != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<PropertyArg>writeDataArr(dst, args, ent -> ent.writeTo(dst));; } else { dst.writeBoolean(false); }
+    if (errors != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<Diagnostic>writeDataArr(dst, errors, ent29 -> ent29.writeTo(dst));; } else { dst.writeBoolean(false); }
+    if (args != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<PropertyArg>writeDataArr(dst, args, ent30 -> ent30.writeTo(dst));; } else { dst.writeBoolean(false); }
     if (locator != null) { dst.writeBoolean(true); locator.writeTo(dst);; } else { dst.writeBoolean(false); }
   }
 }

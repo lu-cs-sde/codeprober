@@ -68,14 +68,14 @@ public class AsyncRpcUpdateValue implements codeprober.util.JsonUtil.ToJsonable 
       }
     case workerStackTrace:
       try {
-        final java.util.List<String> val = codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("value"), (arr, idx) -> arr.getString(idx));
+        final java.util.List<String> val = codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("value"), (arr32, idx32) -> arr32.getString(idx32));
         return fromWorkerStackTrace(val);
       } catch (org.json.JSONException e) {
         throw new org.json.JSONException("Not a valid AsyncRpcUpdateValue", e);
       }
     case workerStatuses:
       try {
-        final java.util.List<String> val = codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("value"), (arr, idx) -> arr.getString(idx));
+        final java.util.List<String> val = codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("value"), (arr33, idx33) -> arr33.getString(idx33));
         return fromWorkerStatuses(val);
       } catch (org.json.JSONException e) {
         throw new org.json.JSONException("Not a valid AsyncRpcUpdateValue", e);
@@ -120,10 +120,10 @@ public class AsyncRpcUpdateValue implements codeprober.util.JsonUtil.ToJsonable 
       dst.writeUTF(((String)value));
       break;
     case workerStackTrace:
-      codeprober.util.JsonUtil.<String>writeDataArr(dst, ((java.util.List<String>)value), ent -> dst.writeUTF(ent));
+      codeprober.util.JsonUtil.<String>writeDataArr(dst, ((java.util.List<String>)value), ent32 -> dst.writeUTF(ent32));
       break;
     case workerStatuses:
-      codeprober.util.JsonUtil.<String>writeDataArr(dst, ((java.util.List<String>)value), ent -> dst.writeUTF(ent));
+      codeprober.util.JsonUtil.<String>writeDataArr(dst, ((java.util.List<String>)value), ent33 -> dst.writeUTF(ent33));
       break;
     case workerTaskDone:
     default:

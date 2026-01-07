@@ -19,13 +19,52 @@ public class Reflect {
 
 	public static Object invokeN(Object astNode, String mth, Class<?>[] argTypes, Object[] argValues) {
 		try {
-			final Method m = astNode.getClass().getMethod(mth, argTypes);
+			final Method m = findCompatibleMethod(astNode.getClass(), mth, argTypes);
 			m.setAccessible(true);
 			final Object val = m.invoke(astNode, argValues);
 			return m.getReturnType() == Void.TYPE ? VOID_RETURN_VALUE : val;
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException
 				| SecurityException e) {
 			throw new InvokeProblem(e);
+		}
+	}
+
+	private static Method findCompatibleMethod(Class<?> clazz, String methodName, Class<?>[] argTypes)
+			throws NoSuchMethodException {
+		// First try exact match (fast path)
+		try {
+			return clazz.getMethod(methodName, argTypes);
+		} catch (NoSuchMethodException e) {
+			// Search all public methods for compatible signatures instead
+			for (Method method : clazz.getMethods()) {
+				if (!method.getName().equals(methodName)) {
+					continue;
+				}
+
+				final Class<?>[] paramTypes = method.getParameterTypes();
+				if (paramTypes.length != argTypes.length) {
+					continue;
+				}
+
+				boolean compatible = true;
+				for (int i = 0; i < paramTypes.length; i++) {
+					if (!paramTypes[i].isAssignableFrom(argTypes[i])) {
+						// Check if argTypes[i] is a subtype of paramTypes[i]
+						if (paramTypes[i] == Object.class && argTypes[i].isPrimitive()) {
+							// Allow, autoboxing will make this work even if `isAssignableFrom` says no.
+						} else {
+							compatible = false;
+						}
+						break;
+					}
+				}
+
+				if (compatible) {
+					return method;
+				}
+			}
+			// No compatible method found, throw original exception
+			throw e;
 		}
 	}
 

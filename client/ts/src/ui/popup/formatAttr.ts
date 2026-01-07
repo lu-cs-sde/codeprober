@@ -5,8 +5,7 @@ const formatAttrType = (orig: PropertyArg) => {
   switch (orig.type) {
     case 'nodeLocator': return  orig.value.type;
     case 'integer': return 'int';
-    // case ''
-    // case 'java.lang.String': return 'String';
+    case 'any': return 'any';
     default: return orig.type;
   }
 };
@@ -77,6 +76,13 @@ const formatAttrArgList = (target: HTMLElement, attr: Property) => {
         const node = document.createElement('span');
         node.classList.add('stream-arg-msg');
         node.innerText = '<stream>';
+        target.appendChild(node);
+        break;
+      }
+      case 'any': {
+        const node = document.createElement('span');
+        node.classList.add('syntax-string');
+        node.innerText = `"${arg.value?.value ?? '<any>'}"`;
         target.appendChild(node);
         break;
       }

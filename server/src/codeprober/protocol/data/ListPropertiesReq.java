@@ -35,7 +35,7 @@ public class ListPropertiesReq implements codeprober.util.JsonUtil.ToJsonable {
       obj.getBoolean("all")
     , NodeLocator.fromJSON(obj.getJSONObject("locator"))
     , ParsingRequestData.fromJSON(obj.getJSONObject("src"))
-    , obj.has("attrChain") ? (codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("attrChain"), (arr, idx) -> arr.getString(idx))) : null
+    , obj.has("attrChain") ? (codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("attrChain"), (arr4, idx4) -> arr4.getString(idx4))) : null
     );
   }
   public JSONObject toJSON() {
@@ -55,6 +55,6 @@ public class ListPropertiesReq implements codeprober.util.JsonUtil.ToJsonable {
     dst.writeBoolean(all);
     locator.writeTo(dst);
     src.writeTo(dst);
-    if (attrChain != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<String>writeDataArr(dst, attrChain, ent -> dst.writeUTF(ent));; } else { dst.writeBoolean(false); }
+    if (attrChain != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<String>writeDataArr(dst, attrChain, ent4 -> dst.writeUTF(ent4));; } else { dst.writeBoolean(false); }
   }
 }

@@ -139,7 +139,7 @@ public class RunWorkspaceTest {
 							println.accept("Nothing in file " + fullPath + "..");
 						}
 					} else if (localNumFail[0] == 0) {
-						println.accept("  ✅ " + fullPath);
+						println.accept("  ✅ " + localNumPass[0] +" " + fullPath);
 					} else {
 						final StringBuilder msg = new StringBuilder();
 						msg.append("  ❌ " + fullPath);
