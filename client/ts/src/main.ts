@@ -32,6 +32,7 @@ import configureCheckboxWithHiddenCheckbox from './ui/configureCheckboxWithHidde
 import Workspace, { initWorkspace } from './model/Workspace';
 import TextProbeManager, { setupTextProbeManager, TextProbeStyle } from './model/TextProbeManager';
 import { adjustSpan, adjustStartEnd } from './model/adjustTypeAtLoc';
+import { tealInit } from './languages/teal';
 
 const uiElements = new UIElements();
 
@@ -397,6 +398,7 @@ const doMain = (wsPort: number
               }
             }
           }
+          tealInit(editorType);
           const res = init(settings.getEditorContents() ?? `// Hello World!\n// Write some code in this field, then right click and select 'Create Probe' to get started\n\n`, onChange, settings.getSyntaxHighlighting());
           setLocalState = res.setLocalState || setLocalState;
           getLocalState = res.getLocalState || getLocalState;
@@ -484,12 +486,6 @@ const doMain = (wsPort: number
                   if (ws.activeFileIsTempFile()) {
                     loadSavedWindows();
                   }
-                  // Initialize Monaco editor
-                  // const editor = monaco.editor.create(document.getElementById('container'), {
-                  //   value: '',
-                  //   language: 'javascript',
-                  //   theme: 'vs-dark'
-                  // });
                 } else {
                   loadSavedWindows();
                 }

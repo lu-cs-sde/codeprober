@@ -73,6 +73,7 @@ const langstoSuffixes: { [key in SyntaxHighlightingLanguageId]: SuffixAndAlias}
   systemverilog: [ 'sv', 'SV' ],
   verilog: [ 'v', 'V' ],
   tcl: [ 'tcl', 'tcl' ],
+  teal: [ 'teal', 'TEAL' ],
   twig: [ 'twig', 'Twig' ],
   typescript: [ 'ts', 'TypeScript' ],
   vb: [ 'vb', 'Visual Basic' ],
