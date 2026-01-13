@@ -531,7 +531,10 @@ window.defineEditor(
 
     let problemIdGenerator = 0;
     return {
-      setLocalState: (value) => editor.setValue(value),
+      setLocalState: (value, readOnly) => {
+        editor.setValue(value);
+        editor.updateOptions({ readOnly });
+      },
       getLocalState: () => editor.getValue(),
       updateSpanHighlight,
       markText: ({ severity, lineStart, colStart, lineEnd, colEnd, source, message }) => {

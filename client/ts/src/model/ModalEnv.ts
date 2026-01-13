@@ -8,11 +8,10 @@ type JobId = number;
 
 interface ModalEnv {
   showWindow: (args: ShowWindowArgs) => ShowWindowResult;
-  putWorkspaceContent: (path: string, contents: string, windows: WindowState[]) => void;
+  putWorkspaceContent: (path: string, contents: string, windows: WindowState[] | null) => void;
   performTypedRpc: <Req, Res>(req: Req) => Promise<Res>;
   createParsingRequestData: () => ParsingRequestData;
   getLocalState: () => string;
-  setLocalState: (val: string) => void;
   updateSpanHighlight: (span: Span | null) => void;
   setStickyHighlight: (probeId: string, hl: StickyHighlight) => void;
   clearStickyHighlight: (probeId: string) => void;

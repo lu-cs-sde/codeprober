@@ -19,7 +19,7 @@ interface WorkspaceInitArgs {
   env: ModalEnv;
   initialLocalContent: string;
   getLocalContent: () => string;
-  setLocalContent: (contents: string) => void;
+  setLocalContent: (contents: string, readOnly: boolean) => void;
   onActiveFileChanged: () => void;
   getCurrentWindows: () => WindowState[];
   setLocalWindows: (states: WindowState[]) => void;
@@ -260,7 +260,7 @@ const createFileListManager = (
   workspace: WorkspaceInstance,
   dir: WorkspaceDirectory,
   path: string,
-  setActive: (path: string, contents: CachedFileEntry) => void,
+  setActive: (path: string, contents: CachedFileEntry, readOnly: boolean) => void,
   performedTypedRpc: ModalEnv['performTypedRpc'],
   fileList: HTMLElement,
 ): { refresh: () => void, } =>{
@@ -316,7 +316,7 @@ const createRow = (
   kind: RowKind,
   label: string,
   path: string,
-  setActive: (path: string, contents: CachedFileEntry) => void,
+  setActive: (path: string, contents: CachedFileEntry, readOnly: boolean) => void,
   performedTypedRpc: ModalEnv['performTypedRpc'],
 ): HTMLDivElement => {
   const row = document.createElement('div');
@@ -359,7 +359,7 @@ const createRow = (
                 if (kind.type === 'file' && path === workspace.getActiveFile()) {
                   const content = kind.value.getCachedContent();
                   if (content) {
-                    setActive(newPath, content);
+                    setActive(newPath, content, false);
                   }
                 }
                 return;
@@ -415,7 +415,7 @@ const createRow = (
   }
   let click: () => void;
   let clickIfClosedDir: () => void = () => {};
-  const activateTempFile = () => setActive(path, { contents: settings.getEditorContents() ?? '', windows: settings.getProbeWindowStates() });;
+  const activateTempFile = () => setActive(path, { contents: settings.getEditorContents() ?? '', windows: settings.getProbeWindowStates() }, false);
   switch (kind.type) {
     case 'unsaved':
       click = activateTempFile;
@@ -429,7 +429,7 @@ const createRow = (
         tfile.getContent()
           .then(text => {
             if (text !== null) {
-              setActive(path, text);
+              setActive(path, text, tfile.readOnly());
             }
           });
       }
@@ -455,7 +455,7 @@ const createRow = (
                   path === workspace.getActiveFile() // We are still the active file
               && preContents === posContents // The user didn't type any new character since we started loading
             ) {
-              setActive(path, text);
+              setActive(path, text, tfile.readOnly());
             }
           });
       })
@@ -519,7 +519,7 @@ const createRow = (
   return row;
 }
 
-const createAddFileButton = (workspace: WorkspaceInstance, basePath: string, tgtContainer: HTMLElement, setActive: (path: string, contents: CachedFileEntry) => void) => {
+const createAddFileButton = (workspace: WorkspaceInstance, basePath: string, tgtContainer: HTMLElement, setActive: (path: string, contents: CachedFileEntry, readOnly: boolean) => void) => {
   const row = document.createElement('div');
   row.classList.add('workspace-row');
   row.classList.add(`workspace-addfile`);
@@ -549,9 +549,9 @@ const createAddFileButton = (workspace: WorkspaceInstance, basePath: string, tgt
         if (putRes.ok) {
           // OK!
           workspace.treeManager.notifyChanges([basePath]);
-          setActive(fullPath, { contents: '', windows: [] });
+          setActive(fullPath, { contents: '', windows: [] }, false); // Expect readOnly=false in new files
         } else {
-          console.warn('Failed creating new empty file');
+          alert('Failed creating the file, check the server log for details');
         }
       })();
     }
@@ -560,11 +560,10 @@ const createAddFileButton = (workspace: WorkspaceInstance, basePath: string, tgt
   return row;
 }
 
-
 const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null> => {
   let activeFile = unsavedFileKey;
   const workspaceList = uiElements.workspaceListWrapper;
-  let setActiveFile = (path: string, data: CachedFileEntry) => { }
+  let setActiveFile = (path: string, data: CachedFileEntry, readOnly: boolean) => { }
   const mostRecentPutFileRequestContents: { [path: string]: string } = {};
   const ignoreWindowUpdatesForPath: { [path: string]: boolean } = {};
   const treeManager = setupFileTreeManager<CachedFileEntry>({
@@ -588,11 +587,12 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
         console.log('Failed ListWorkspaceDirectory for path:"', path, '"');
         return null;
       }
+      const extractEntryName = (v: DirectoryListEntry) => v.type === 'directory' ? v.value : v.value.name;
       fresh.entries.sort((a, b) => {
         if (a.type !== b.type) {
           return a.type === 'directory' ? -1 : 1;
         }
-        return a.value.localeCompare(b.value);
+        return extractEntryName(a).localeCompare(extractEntryName(b));
       })
       return fresh.entries;
     },
@@ -605,7 +605,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
     treeManager,
     getActiveFile: () => activeFile,
     activeFileIsTempFile: () => activeFile === unsavedFileKey,
-    onActiveFileChange: (contents, states) => {
+    onActiveFileChange: (contents, newStates) => {
       const path = activeFile;
       if (path === unsavedFileKey) {
         // Ignore
@@ -613,9 +613,10 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
       }
       // Make copy so we don't hold live pointers to data that may change
       // We want to be able to compare later on to check for updates, live data prohibits this.
-      states = JSON.parse(JSON.stringify(states));
+      const stateCopy = JSON.parse(JSON.stringify(newStates));
+      let states: WindowState[] | null = stateCopy;
 
-      workspace.clientSideMetadataCache[path] = states;
+      workspace.clientSideMetadataCache[path] = stateCopy;
       mostRecentPutFileRequestContents[path] = contents;
       const cached = treeManager.lookupCached(activeFile);
       if (cached?.type !== 'file') {
@@ -623,12 +624,18 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
         // immediately after creating a file (before the directory refresh request finishes).
         // No caching to check
       } else {
+        if (cached.value.readOnly()) {
+          states = null;
+        }
         const ccontent = cached.value.getCachedContent();
-        if (ccontent?.contents === contents && deepEqual(ccontent?.windows ?? [], states, { ignoreUndefinedDiff: true })) {
+        const sameContent = ccontent?.contents === contents;
+        // Read-only window states, or same windows?
+        const sameWindowsIsh = !states || deepEqual(ccontent?.windows ?? [], states, { ignoreUndefinedDiff: true });
+        cached.value.setCachedContent({ contents, windows: stateCopy });
+        if (sameContent && sameWindowsIsh) {
           // Ignore it
           return;
         }
-        cached.value.setCachedContent({ contents, windows: states });
       }
       args.env.putWorkspaceContent(path, contents, states);
     },
@@ -701,7 +708,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
         }
       });
     }
-    setActiveFile = (path: string, data: CachedFileEntry) => {
+    setActiveFile = (path: string, data: CachedFileEntry, readOnly: boolean) => {
       const isUpdateWithinCurrentFile = activeFile === path;
       activeFile = path;
       workspace.clientSideMetadataCache[path] = data.windows;
@@ -729,7 +736,7 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
       if (isUpdateWithinCurrentFile && data.contents == args.getLocalContent()) {
         // Ignore content update, no change
       } else {
-        args.setLocalContent(data.contents);
+        args.setLocalContent(data.contents, readOnly);
       }
       setActiveStyling(path);
       args.onActiveFileChanged();

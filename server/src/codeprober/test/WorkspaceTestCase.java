@@ -117,7 +117,7 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 				final String fullPath = (prefix != null ? (prefix + "/") : "") + entry.asDirectory();
 				listAllWorkspaceFiles(requestHandler, workspaceHandler, fullPath, out);
 			} else {
-				final String fullPath = (prefix != null ? (prefix + "/") : "") + entry.asFile();
+				final String fullPath = (prefix != null ? (prefix + "/") : "") + entry.asFile().name;
 				final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, workspaceHandler,
 						ParsingSource.fromWorkspacePath(fullPath), null, false);
 

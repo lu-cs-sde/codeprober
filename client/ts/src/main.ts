@@ -312,7 +312,7 @@ const doMain = (wsPort: number
           locIndicator.innerText = `(${backingFile.path})`;
           inputLabel.appendChild(locIndicator);
         }
-        installWsNotificationHandler<BackingFileUpdated>('backing_file_update', ({ contents }) => modalEnv.setLocalState(contents));
+        installWsNotificationHandler<BackingFileUpdated>('backing_file_update', ({ contents }) => setLocalState(contents, false));
       } else {
         shouldTryInitializingWorkspace = true;
       }
@@ -328,7 +328,7 @@ const doMain = (wsPort: number
         notifyLocalChangeListeners(adjusters);
       };
 
-      let setLocalState = (value: string) => { };
+      let setLocalState = (value: string, readOnly: boolean) => { };
 
       const themeSelector  = uiElements.themeDropdown;
       themeSelector.value = settings.getTheme();
@@ -464,7 +464,7 @@ const doMain = (wsPort: number
               env: modalEnv,
               initialLocalContent: settings.getEditorContents() ?? '',
               getLocalContent: () => getLocalState(),
-              setLocalContent: contents => setLocalState(contents),
+              setLocalContent: (contents, readOnly) => setLocalState(contents, readOnly),
               onActiveFileChanged,
               getCurrentWindows: getCurrentWindowStates,
               setLocalWindows: (states) => {
@@ -669,17 +669,19 @@ const doMain = (wsPort: number
               console.warn('Failed updating content for', path);
             }
 
-            const newWindows = JSON.stringify(windows);
-            if (newWindows !== lastWorkspaceMetadata[path] && supportsWorkspaceMetadata) {
-              lastWorkspaceMetadata[path] = newWindows;
-              const metaReq: PutWorkspaceMetadataReq = {
-                type: 'PutWorkspaceMetadata',
-                path,
-                metadata: { windowStates: windows },
-              };
-              const metaRes: PutWorkspaceContentRes = await wsHandler.sendRpc(metaReq);
-              if (!metaRes.ok) {
-                console.warn('Failed updating workspace metadata for', path);
+            if (windows) {
+              const newWindows = JSON.stringify(windows);
+              if (newWindows !== lastWorkspaceMetadata[path] && supportsWorkspaceMetadata) {
+                lastWorkspaceMetadata[path] = newWindows;
+                const metaReq: PutWorkspaceMetadataReq = {
+                  type: 'PutWorkspaceMetadata',
+                  path,
+                  metadata: { windowStates: windows },
+                };
+                const metaRes: PutWorkspaceContentRes = await wsHandler.sendRpc(metaReq);
+                if (!metaRes.ok) {
+                  console.warn('Failed updating workspace metadata for', path);
+                }
               }
             }
           });
@@ -704,7 +706,6 @@ const doMain = (wsPort: number
         probeMarkers, onChangeListeners, themeChangeListeners, updateMarkers,
         themeIsLight: () => settings.isLightTheme(),
         getLocalState: () => getLocalState(),
-        setLocalState: (newVal) => setLocalState(newVal),
         captureStdout: () => uiElements.captureStdoutCheckbox.checked,
         duplicateOnAttr: () => uiElements.duplicateProbeCheckbox.checked,
         updateSpanHighlight: (hl) => {
@@ -830,7 +831,7 @@ const doMain = (wsPort: number
           case "probe-statistics": return displayStatistics(
             statCollectorImpl,
             disabled => uiElements.displayStatisticsButton.disabled = disabled,
-            newContents => setLocalState(newContents),
+            newContents => setLocalState(newContents, false),
             () => modalEnv.currentlyLoadingModals.size > 0,
           );
           case 'worker-status': return displayWorkerStatus(

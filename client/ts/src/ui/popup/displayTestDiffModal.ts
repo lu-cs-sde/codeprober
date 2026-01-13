@@ -585,7 +585,8 @@ const displayTestDiffModal = (
                   btn.style.margin = '0 0.125rem';
                   btn.innerText = `Load Source`;
                   btn.onclick = () => {
-                    env.setLocalState(testCase.src.src.value);
+                    // TODO restore if this version of the testing code is to be revived
+                    // env.setLocalState(testCase.src.src.value);
                   };
                   wrapper.appendChild(btn);
                   addText(`to replace CodeProber text with the test source.`);

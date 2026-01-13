@@ -1,18 +1,25 @@
 package codeprober.server;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import codeprober.protocol.data.GetWorkspaceFileReq;
+import codeprober.protocol.data.GetWorkspaceFileRes;
+import codeprober.protocol.data.ListWorkspaceDirectoryReq;
+import codeprober.protocol.data.ListWorkspaceDirectoryRes;
+import codeprober.protocol.data.PutWorkspaceContentRes;
+import codeprober.protocol.data.PutWorkspaceMetadataRes;
+import codeprober.protocol.data.RenameWorkspacePathReq;
+import codeprober.protocol.data.RenameWorkspacePathRes;
+import codeprober.protocol.data.UnlinkWorkspacePathReq;
+import codeprober.protocol.data.UnlinkWorkspacePathRes;
 import codeprober.requesthandler.WorkspaceHandler;
 
 public class WorkspaceApi {
@@ -65,82 +72,25 @@ public class WorkspaceApi {
 		}
 	}
 
-	private static final String METADATA_DIR_NAME = ".cpr";
-	private static boolean debugApiFailureReasons = true;
 	private final Responder resp;
-
-	private static Pattern getWorkspaceFilePattern() {
-		final String custom = System.getProperty("cpr.workspaceFilePattern");
-		if (custom == null) {
-			return null;
-		}
-		return Pattern.compile(custom);
-	}
 
 	public WorkspaceApi(Responder resp) {
 		this.resp = resp;
 	}
 
-	private boolean checkValidPath(String path) throws IOException {
-		if (path == null || path.contains("..")) {
-			// Missing path, or trying to write outside the workspace dir, not legal.
-			if (debugApiFailureReasons) {
-				System.out.println("Invalid path: '" + path + "'");
-			}
-			resp.respondBadRequest();
-			return false;
-		}
-		return true;
-	}
-
-	private File getMetadataFileForRealFile(File realFile) {
-		return new File(new File(realFile.getParentFile(), METADATA_DIR_NAME), realFile.getName());
-
-	}
-
 	public void rename(String srcPath, String dstPath) throws IOException {
+		final RenameWorkspacePathRes res = new WorkspaceHandler()
+				.handleRenameWorkspacePath(new RenameWorkspacePathReq(srcPath, dstPath));
+		if (res.ok) {
+			resp.respondOK();
+		} else {
+			resp.respondBadRequest();
+		}
 		final File workspaceRootFile = WorkspaceHandler.getWorkspaceRoot(false);
 		if (workspaceRootFile == null) {
 			resp.respondBadRequest();
 			return;
 		}
-		if (!checkValidPath(srcPath) || !checkValidPath(dstPath)) {
-			return;
-		}
-		final File srcFile = new File(workspaceRootFile, srcPath);
-		final File dstFile = new File(workspaceRootFile, dstPath);
-		if (!srcFile.exists()) {
-			if (debugApiFailureReasons) {
-				System.out.println("Rename src does not exist");
-			}
-			resp.respondBadRequest();
-			return;
-		}
-		if (dstFile.exists()) {
-			if (debugApiFailureReasons) {
-				System.out.println("Rename dst file already exists");
-			}
-			resp.respondBadRequest();
-			return;
-		}
-		if (!dstFile.getAbsoluteFile().getParentFile().exists()) {
-			// Target dir nonexisting
-			resp.respondBadRequest();
-			if (debugApiFailureReasons) {
-				System.out.println("Rename dst directory does not exist");
-			}
-			return;
-		}
-		srcFile.renameTo(dstFile);
-
-		final File srcMetadataFile = getMetadataFileForRealFile(srcFile);
-		final File dstMetadataFile = getMetadataFileForRealFile(dstFile);
-		if (srcMetadataFile.exists()) {
-			srcMetadataFile.renameTo(dstMetadataFile);
-		} else {
-			dstMetadataFile.delete();
-		}
-		resp.respondOK();
 	}
 
 	// This class is easier to test if we don't use the actual Socket class,
@@ -150,107 +100,33 @@ public class WorkspaceApi {
 	}
 
 	public void putContents(String path, int contentLen, SocketLike body) throws IOException {
-		final File workspaceRootFile = WorkspaceHandler.getWorkspaceRoot(false);
-
-		if (workspaceRootFile == null) {
-			if (debugApiFailureReasons) {
-				System.out.println("No workspace dir configured");
-			}
+		final PutWorkspaceContentRes res = new WorkspaceHandler().handlePutWorkspaceContent(path,
+				out -> drain(contentLen, body, out));
+		if (res.ok) {
+			resp.respondOK();
+		} else {
 			resp.respondBadRequest();
-			return;
 		}
-		if (!checkValidPath(path)) {
-			if (debugApiFailureReasons) {
-				System.out.println("Invalid putContents path '" + path +"'");
-			}
-			return;
-		}
-		final File file = new File(workspaceRootFile, path);
-		if (file.exists() && file.isDirectory()) {
-			if (debugApiFailureReasons) {
-				System.out.println("Tried putContents to a directory");
-			}
-			resp.respondBadRequest();
-			return;
-		}
-		file.getParentFile().mkdirs();
-
-		try (FileOutputStream fos = new FileOutputStream(file)) {
-			drain(contentLen, body, fos);
-		}
-		resp.respondOK();
 	}
 
 	public void putMetadata(String path, int contentLen, SocketLike body) throws IOException {
-		final File workspaceRootFile = WorkspaceHandler.getWorkspaceRoot(false);
-		if (workspaceRootFile == null) {
-			resp.respondBadRequest();
-			return;
-		}
-		if (!checkValidPath(path)) {
-			return;
-		}
-		final File realFile = new File(workspaceRootFile, path);
-		if (!realFile.exists()) {
-			// Tried writing metadata for nonexisting file??
-			resp.respondBadRequest();
-			return;
-		}
-		if (realFile.isDirectory()) {
-			// Cannot write metdata for directories
-			resp.respondBadRequest();
-			return;
-		}
-		final File metadataFile = getMetadataFileForRealFile(realFile);
-		metadataFile.getParentFile().mkdirs();
-
-		try (FileOutputStream fos = new FileOutputStream(metadataFile)) {
-			drain(contentLen, body, fos);
+		final PutWorkspaceMetadataRes res = new WorkspaceHandler().handlePutWorkspaceMetadata(path,
+				contentLen == 0 ? null : out -> drain(contentLen, body, out));
+		if (res.ok) {
 			resp.respondOK();
-		}
-	}
-
-
-	public void unlink(String path) throws  IOException {
-		final File workspaceRootFile = WorkspaceHandler.getWorkspaceRoot(false);
-		if (workspaceRootFile == null) {
-			resp.respondBadRequest();
-			return;
-		}
-		if (!checkValidPath(path)) {
-			return;
-		}
-		final File realFile = new File(workspaceRootFile, path);
-		if (!realFile.exists()) {
-			if (debugApiFailureReasons) {
-				System.out.println("Tried removing nonexisting file");
-			}
-			resp.respondBadRequest();
-			return;
-		}
-		recursiveRemove(realFile, workspaceRootFile.toPath());
-		if (realFile.exists()) {
-			// Failed somehow
-			resp.respondInternalError();
 		} else {
-			resp.respondOK();
+			resp.respondBadRequest();
 		}
 	}
 
-	private void recursiveRemove(File file, Path boundingDir) {
-		if (!file.toPath().startsWith(boundingDir)) {
-			// Followed symlink outside of the dir. Could accidentally delete too many files. Stop here
-			return;
+	public void unlink(String path) throws IOException {
+		final UnlinkWorkspacePathRes res = new WorkspaceHandler()
+				.handleUnlinkWorkspacePath(new UnlinkWorkspacePathReq(path));
+		if (res.ok) {
+			resp.respondOK();
+		} else {
+			resp.respondBadRequest();
 		}
-		if (file.isDirectory()) {
-			File[] children = file.listFiles();
-			if (children != null) {
-				for (File child : children) {
-					recursiveRemove(child, boundingDir);
-				}
-			}
-		}
-		file.delete();
 	}
 
 	private static void drain(int numBytes, SocketLike src, OutputStream dst) throws IOException {
@@ -271,71 +147,43 @@ public class WorkspaceApi {
 	}
 
 	public void getWorkspace() throws IOException {
-		final File workspaceRootFile = WorkspaceHandler.getWorkspaceRoot(false);
-		if (workspaceRootFile == null) {
-			resp.respondNoContent();
-			return;
-		}
-		resp.respondOK(listWorkspaceFiles(workspaceRootFile).toString().getBytes(StandardCharsets.UTF_8));
+		getContents(null);
 	}
-
 
 	public void getContents(String path) throws IOException {
-		final File workspaceRootFile = WorkspaceHandler.getWorkspaceRoot(false);
-		if (workspaceRootFile == null) {
-			resp.respondBadRequest();
-			return;
-		}
-		if (!checkValidPath(path)) {
-			return;
-		}
-		final File textFile = new File(workspaceRootFile, path);
-		if (!textFile.exists()) {
+		final WorkspaceHandler handler = new WorkspaceHandler();
+		final File file = path == null ? WorkspaceHandler.getWorkspaceRoot(false) : handler.relativePathToFile(path);
+		if (file == null) {
 			resp.respondBadRequest();
 			return;
 		}
 
-		final byte[] respBytes;
-		if (textFile.isDirectory()) {
-			respBytes = listWorkspaceFiles(textFile).toString().getBytes(StandardCharsets.UTF_8);
+		final JSONObject respObj;
+		if (file.isDirectory()) {
+			final ListWorkspaceDirectoryRes res = handler
+					.handleListWorkspaceDirectory(new ListWorkspaceDirectoryReq(path));
+			if (res.entries == null) {
+				resp.respondBadRequest();
+				return;
+			}
+			final JSONArray arr = new JSONArray(res.entries.stream().map(x -> new JSONObject() //
+					.put("t", x.isFile() ? "f" : "d") // type (file or dir)
+					.put("n", x.isFile() ? x.asFile().name : x.asDirectory()) // name
+			).collect(Collectors.toList()));
+			respObj = new JSONObject().put("files", arr);
 		} else {
-			final byte[] textBytes = Files.readAllBytes(textFile.toPath());
-			final JSONObject writeObj = new JSONObject() //
-					.put("text", new String(textBytes, 0, textBytes.length, StandardCharsets.UTF_8));
-
-			final File metadataFile = new File(new File(textFile.getParentFile(), ".cpr"), textFile.getName());
-			if (metadataFile.exists()) {
-				final byte[] metadataBytes = Files.readAllBytes(metadataFile.toPath());
-				writeObj.put("metadata", new String(metadataBytes, 0, metadataBytes.length, StandardCharsets.UTF_8));
+			final GetWorkspaceFileRes res = handler.handleGetWorkspaceFile(new GetWorkspaceFileReq(path));
+			if (res.content == null) {
+				resp.respondBadRequest();
+				return;
 			}
-			respBytes = writeObj.toString().getBytes(StandardCharsets.UTF_8);
-		}
-		resp.respondOK(respBytes);
-	}
 
-	private JSONObject listWorkspaceFiles(final File srcDir) {
-		final Pattern pattern = getWorkspaceFilePattern();
-		final JSONArray arr = new JSONArray();
-		final File[] children = srcDir.listFiles();
-		if (children != null) {
-			for (File child : children) {
-				if (child.isDirectory() && child.getName().equals(".cpr")) {
-					// Metadata directory, hide it
-					continue;
-				}
-				if (child.isFile() && pattern != null && !pattern.matcher(child.getName()).matches()) {
-					System.out.println("child " + child.getName() +" does not match");
-					continue;
-				}
-				arr.put(new JSONObject() //
-						.put("t", child.isFile() ? "f" : "d") // type (file or dir)
-						.put("n", child.getName()) // name
-				);
+			respObj = new JSONObject() //
+					.put("text", res.content);
+			if (res.metadata != null) {
+				respObj.put("metadata", res.metadata);
 			}
 		}
-		return new JSONObject() //
-				.put("files", arr) //
-		;
+		resp.respondOK(respObj.toString().getBytes(StandardCharsets.UTF_8));
 	}
-
 }

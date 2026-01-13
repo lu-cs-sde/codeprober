@@ -406,9 +406,13 @@ type WorkerTaskDone = (
   | { type: 'unexpectedError'; value: string[]; }
 );
 type WorkspaceEntry = (
-    { type: 'file'; value: string; }
+    { type: 'file'; value: WorkspaceFile; }
   | { type: 'directory'; value: string; }
 );
+interface WorkspaceFile {
+  name: string;
+  readOnly?: boolean;
+}
 interface WorkspacePathsUpdated {
   type: "workspace_paths_updated";
   paths: string[];
@@ -516,6 +520,7 @@ export {
  , UnsubscribeFromWorkerStatusRes
  , WorkerTaskDone
  , WorkspaceEntry
+ , WorkspaceFile
  , WorkspacePathsUpdated
  , WsPutInitReq
  , WsPutInitRes

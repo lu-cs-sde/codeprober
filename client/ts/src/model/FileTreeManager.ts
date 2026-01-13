@@ -11,6 +11,7 @@ interface TextFile<T> {
   setChangeListener: (callback: () => void) => void;
   isRemoved: () => boolean;
   fullPath: string,
+  readOnly: () => boolean;
 }
 
 // Private extensions of the file/dir types
@@ -39,10 +40,10 @@ interface FileTreeManager<T> {
   lookup: (path: string) => Promise<FileTreeEntry<T> | null>;
 }
 
-type DirectoryListEntry = {
-  type: 'directory' | 'file',
-  value: string,
-}
+type DirectoryListEntryDir = { type: 'directory', value: string };
+type DirectoryListEntryFile = { type: 'file', value: { name: string, readOnly?: boolean } };
+
+type DirectoryListEntry = DirectoryListEntryDir | DirectoryListEntryFile;
 
 interface FileTreeManagerInitArgs<T> {
   listDirectory: (prefix: string) => Promise<DirectoryListEntry[] | null>;
@@ -54,7 +55,7 @@ const setupFileTreeManager = <T>(args: FileTreeManagerInitArgs<T>): FileTreeMana
   type TDirectory = InvalidatableDirectory<T>;
   type TFileManager = FileTreeManager<T>
 
-  const createFile = (path: string): TTextFile => {
+  const createFile = (path: string, readOnly: boolean): TTextFile => {
     let memoizedContent: T | null = null;
     let changeListener = () => {};
     let dirty: boolean = false;
@@ -98,6 +99,7 @@ const setupFileTreeManager = <T>(args: FileTreeManagerInitArgs<T>): FileTreeMana
       onRemoved,
       isRemoved: () => isRemoved,
       fullPath: path,
+      readOnly: () => readOnly,
     };
   };
 
@@ -126,16 +128,18 @@ const setupFileTreeManager = <T>(args: FileTreeManagerInitArgs<T>): FileTreeMana
             return null;
           }
           const prevChildren = memoizedChildren ?? [];
-          memoizedChildren = listing.map(v => {
-            const name = v.value;
+
+          const extractEntryName = (v: DirectoryListEntry) => v.type === 'directory' ? v.value : v.value.name;
+          memoizedChildren = listing.map((v): InvalidatableTreeEntry<T> => {
+            const name = extractEntryName(v);
             const prev = prevChildren.find(x => x.name === name);
             if (prev) {
               return prev;
             }
             const fullPath = path ? `${path}/${name}` : name;
             return v.type === 'directory'
-            ? { type: 'dir', name, value: createDirectory(fullPath) }
-            : { type: 'file', name, value: createFile(fullPath) }
+              ? { type: 'dir', name, value: createDirectory(fullPath) }
+              : { type: 'file', name, value: createFile(fullPath, v.value.readOnly ?? false) }
           });
           prevChildren.forEach(prev => {
             if (!listing.some(x => x.value === prev.name)) {

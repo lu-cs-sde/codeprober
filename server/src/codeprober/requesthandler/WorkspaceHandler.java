@@ -3,6 +3,7 @@ package codeprober.requesthandler;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -35,6 +36,7 @@ import codeprober.protocol.data.RenameWorkspacePathRes;
 import codeprober.protocol.data.UnlinkWorkspacePathReq;
 import codeprober.protocol.data.UnlinkWorkspacePathRes;
 import codeprober.protocol.data.WorkspaceEntry;
+import codeprober.protocol.data.WorkspaceFile;
 import codeprober.requesthandler.FuzzyMatcher.ScoredMatch;
 
 public class WorkspaceHandler {
@@ -45,14 +47,27 @@ public class WorkspaceHandler {
 	private static Pattern preCompiledWorkspaceFilePattern;
 
 	public static Pattern getWorkspaceFilePattern() {
-		final String custom = System.getProperty("cpr.workspaceFilePattern");
-		if (custom == null) {
-			return null;
-		}
 		if (preCompiledWorkspaceFilePattern == null) {
+			final String custom = System.getProperty("cpr.workspaceFilePattern");
+			if (custom == null) {
+				return null;
+			}
 			preCompiledWorkspaceFilePattern = Pattern.compile(custom);
 		}
 		return preCompiledWorkspaceFilePattern;
+	}
+
+	private static Pattern preCompiledWorkspaceReadOnlyPattern;
+
+	public static Pattern getWorkspaceReadOnlyPattern() {
+		if (preCompiledWorkspaceReadOnlyPattern == null) {
+			final String custom = System.getProperty("cpr.workspaceReadOnlyPattern");
+			if (custom == null) {
+				return null;
+			}
+			preCompiledWorkspaceReadOnlyPattern = Pattern.compile(custom);
+		}
+		return preCompiledWorkspaceReadOnlyPattern;
 	}
 
 	public static boolean supportsStoringWorkspaceMetadata() {
@@ -79,7 +94,13 @@ public class WorkspaceHandler {
 		return sInstance;
 	}
 
-	private static File pathToValidFile(File workspaceRoot, String path) {
+	public File relativePathToFile(String path) {
+		if (workspaceRoot == null) {
+			if (debugApiFailureReasons) {
+				System.out.println("No workspace configured");
+			}
+			return null;
+		}
 		if (path == null || path.contains("..")) {
 			// Missing path, or trying to write outside the workspace dir, not legal.
 			if (debugApiFailureReasons) {
@@ -128,18 +149,25 @@ public class WorkspaceHandler {
 						continue;
 					}
 					if (child.isFile() && pattern != null) {
-						final String relpath = workspaceRoot.toPath().relativize(child.toPath()).toString();
-						if (!pattern.matcher(relpath).matches()) {
+						if (!pattern.matcher(relativize(child)).matches()) {
 							continue;
 						}
 					}
+					final Pattern readOnlyPattern = getWorkspaceReadOnlyPattern();
+					final boolean isReadOnly = readOnlyPattern != null
+							&& readOnlyPattern.matcher(relativize(child)).matches();
+
 					ret.add(child.isFile() //
-							? WorkspaceEntry.fromFile(child.getName())
+							? WorkspaceEntry.fromFile(new WorkspaceFile(child.getName(), isReadOnly ? true : null))
 							: WorkspaceEntry.fromDirectory(child.getName()));
 				}
 			}
 		}
 		return ret;
+	}
+
+	private String relativize(File workspaceFile) {
+		return workspaceRoot.toPath().relativize(workspaceFile.toPath()).toString();
 	}
 
 	public static final String WORKSPACE_SYSTEM_PROPERTY_KEY = "cpr.workspace";
@@ -169,20 +197,15 @@ public class WorkspaceHandler {
 				return null;
 			}
 			// Else, only the child path does not exist. Create it
-			System.out.println("'cpr.workspace' path '" + workspaceRootCfg + "' is missing. Creating an empty direcyory");
+			System.out
+					.println("'cpr.workspace' path '" + workspaceRootCfg + "' is missing. Creating an empty directory");
 			workspaceRootFile.mkdir();
 		}
 		return workspaceRootFile;
 	}
 
 	public File getWorkspaceFile(String path) {
-		if (workspaceRoot == null) {
-			if (debugApiFailureReasons) {
-				System.out.println("No workspace configured");
-			}
-			return null;
-		}
-		final File subFile = pathToValidFile(workspaceRoot, path);
+		final File subFile = relativePathToFile(path);
 		if (subFile == null) {
 			if (debugApiFailureReasons) {
 				System.out.println("Invalid getFile path");
@@ -215,7 +238,8 @@ public class WorkspaceHandler {
 							new String(metadataBytes, 0, metadataBytes.length, StandardCharsets.UTF_8));
 				}
 			}
-			return new GetWorkspaceFileRes(new String(textBytes, 0, textBytes.length, StandardCharsets.UTF_8), metadata);
+			return new GetWorkspaceFileRes(new String(textBytes, 0, textBytes.length, StandardCharsets.UTF_8),
+					metadata);
 		} catch (IOException | JSONException e) {
 			System.out.println("Error when reading workspace file and/or its accompanying metadata entry");
 			return new GetWorkspaceFileRes();
@@ -229,7 +253,7 @@ public class WorkspaceHandler {
 		if (req.path == null) {
 			return new ListWorkspaceDirectoryRes(listWorkspaceFiles(workspaceRoot));
 		}
-		final File subFile = pathToValidFile(workspaceRoot, req.path);
+		final File subFile = relativePathToFile(req.path);
 		if (subFile == null) {
 			if (debugApiFailureReasons) {
 				System.out.println("Invalid list path");
@@ -246,16 +270,25 @@ public class WorkspaceHandler {
 	}
 
 	public PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
-		if (workspaceRoot == null) {
+		return handlePutWorkspaceContent(req.path, out -> out.write(req.content.getBytes(StandardCharsets.UTF_8)));
+	}
+
+	public static interface OutputConsumer {
+		void accept(OutputStream oos) throws IOException;
+	}
+
+	public PutWorkspaceContentRes handlePutWorkspaceContent(String path, OutputConsumer writeFileContents) {
+		final File subFile = getWorkspaceFile(path);
+		if (subFile == null) {
 			if (debugApiFailureReasons) {
-				System.out.println("No workspace dir configured");
+				System.out.println("Invalid putContents path '" + path + "'");
 			}
 			return new PutWorkspaceContentRes(false);
 		}
-		final File subFile = pathToValidFile(workspaceRoot, req.path);
-		if (subFile == null) {
+		final Pattern readOnlyPt = getWorkspaceReadOnlyPattern();
+		if (readOnlyPt != null && readOnlyPt.matcher(path).matches()) {
 			if (debugApiFailureReasons) {
-				System.out.println("Invalid putContents path '" + req.path + "'");
+				System.out.println("Tried writing to file matching read-only pattern, path=" + path);
 			}
 			return new PutWorkspaceContentRes(false);
 		}
@@ -268,7 +301,7 @@ public class WorkspaceHandler {
 		subFile.getParentFile().mkdirs();
 
 		try (FileOutputStream fos = new FileOutputStream(subFile)) {
-			fos.write(req.content.getBytes(StandardCharsets.UTF_8));
+			writeFileContents.accept(fos);
 		} catch (IOException e) {
 			System.err.println("Error when writing to workspace file " + subFile);
 			e.printStackTrace();
@@ -286,16 +319,15 @@ public class WorkspaceHandler {
 	}
 
 	public PutWorkspaceMetadataRes handlePutWorkspaceMetadata(PutWorkspaceMetadataReq req) {
-		if (workspaceRoot == null) {
-			if (debugApiFailureReasons) {
-				System.out.println("No workspace dir configured");
-			}
-			return new PutWorkspaceMetadataRes(false);
-		}
-		final File subFile = pathToValidFile(workspaceRoot, req.path);
+		return handlePutWorkspaceMetadata(req.path, req.metadata == null ? null
+				: out -> out.write(req.metadata.toString().getBytes(StandardCharsets.UTF_8)));
+	}
+
+	public PutWorkspaceMetadataRes handlePutWorkspaceMetadata(String path, OutputConsumer writeFileContents) {
+		final File subFile = getWorkspaceFile(path);
 		if (subFile == null) {
 			if (debugApiFailureReasons) {
-				System.out.println("Invalid putMetadata path '" + req.path + "'");
+				System.out.println("Invalid putMetadata path '" + path + "'");
 			}
 			return new PutWorkspaceMetadataRes(false);
 		}
@@ -313,13 +345,20 @@ public class WorkspaceHandler {
 			return new PutWorkspaceMetadataRes(false);
 		}
 		final File metadataFile = getMetadataFileForRealFile(subFile);
-		if (req.metadata == null) {
+		final Pattern readOnlyPt = getWorkspaceReadOnlyPattern();
+		if (readOnlyPt != null && readOnlyPt.matcher(relativize(subFile)).matches()) {
+			if (debugApiFailureReasons) {
+				System.out.println("Tried putMetadata wherefor a file that matches the read-only pattern");
+			}
+			return new PutWorkspaceMetadataRes(false);
+		}
+		if (writeFileContents == null) {
 			metadataFile.delete();
 		} else {
 			metadataFile.getParentFile().mkdirs();
 
 			try (FileOutputStream fos = new FileOutputStream(metadataFile)) {
-				fos.write(req.metadata.toString().getBytes(StandardCharsets.UTF_8));
+				writeFileContents.accept(fos);
 			} catch (IOException e) {
 				System.err.println("Error when writing to workspace file " + subFile);
 				e.printStackTrace();
@@ -330,14 +369,8 @@ public class WorkspaceHandler {
 	}
 
 	public RenameWorkspacePathRes handleRenameWorkspacePath(RenameWorkspacePathReq req) {
-		if (workspaceRoot == null) {
-			if (debugApiFailureReasons) {
-				System.out.println("Workspace not configured");
-			}
-			return new RenameWorkspacePathRes(false);
-		}
-		final File srcFile = pathToValidFile(workspaceRoot, req.srcPath);
-		final File dstFile = pathToValidFile(workspaceRoot, req.dstPath);
+		final File srcFile = getWorkspaceFile(req.srcPath);
+		final File dstFile = getWorkspaceFile(req.dstPath);
 		if (srcFile == null || dstFile == null) {
 			if (debugApiFailureReasons) {
 				System.out.println("Invalid rename paths. src=" + req.srcPath + ", dst=" + req.dstPath);
@@ -370,6 +403,14 @@ public class WorkspaceHandler {
 			}
 			return new RenameWorkspacePathRes(false);
 		}
+		final Pattern readOnlyPt = getWorkspaceReadOnlyPattern();
+		if (readOnlyPt != null
+				&& (readOnlyPt.matcher(req.srcPath).matches() || readOnlyPt.matcher(req.dstPath).matches())) {
+			if (debugApiFailureReasons) {
+				System.out.println("Tried renaming to or from a read-only matching pattern");
+			}
+			return new RenameWorkspacePathRes(false);
+		}
 		srcFile.renameTo(dstFile);
 
 		final File srcMetadataFile = getMetadataFileForRealFile(srcFile);
@@ -383,10 +424,7 @@ public class WorkspaceHandler {
 	}
 
 	public UnlinkWorkspacePathRes handleUnlinkWorkspacePath(UnlinkWorkspacePathReq req) {
-		if (workspaceRoot == null) {
-			return new UnlinkWorkspacePathRes(false);
-		}
-		final File file = pathToValidFile(workspaceRoot, req.path);
+		final File file = relativePathToFile(req.path);
 		if (file == null) {
 			return new UnlinkWorkspacePathRes(false);
 		}
@@ -396,6 +434,14 @@ public class WorkspaceHandler {
 			}
 			return new UnlinkWorkspacePathRes(false);
 		}
+		final Pattern readOnlyPt = getWorkspaceReadOnlyPattern();
+		if (readOnlyPt != null && readOnlyPt.matcher(req.path).matches()) {
+			if (debugApiFailureReasons) {
+				System.out.println("Tried removing read-only matching pattern");
+			}
+			return new UnlinkWorkspacePathRes(false);
+		}
+
 		recursiveRemove(file, workspaceRoot.toPath());
 		if (file.exists()) {
 			if (debugApiFailureReasons) {

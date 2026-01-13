@@ -2,7 +2,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
-import { setupFileTreeManager, FileTreeManagerInitArgs, Directory, TextFile } from '../../src/model/FileTreeManager';
+import { setupFileTreeManager, FileTreeManagerInitArgs, Directory, TextFile, DirectoryListEntry } from '../../src/model/FileTreeManager';
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 
@@ -26,10 +26,12 @@ const setupTest = () => {
     return ret;
   }
   const listDirectory: FileTreeManagerInitArgs<string>['listDirectory'] = async (path) => {
-    return Object.entries(lookupEntry(path)).map(([name, val]) => ({
-      type: typeof val === 'string' ? 'file' : 'directory',
-      value: name
-    }));
+    return Object.entries(lookupEntry(path)).map<DirectoryListEntry>(([name, val]) => {
+      if (typeof val === 'string') {
+        return { type: 'file', value: { name, readOnly: false } };
+      }
+      return { type: 'directory', value: name };
+    });
   }
   const getFileContent: FileTreeManagerInitArgs<string>['getFileContent'] = async (path) => {
     const segments = path.split('/');

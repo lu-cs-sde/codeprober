@@ -110,7 +110,7 @@ public class RunWorkspaceTest {
 			case file: {
 				final int[] localNumPass = new int[1];
 				final int[] localNumFail = new int[1];
-				final String fullPath = parentPath + e.asFile();
+				final String fullPath = parentPath + e.asFile().name;
 
 				final Runnable runFile = () -> {
 					final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, workspaceHandler,

@@ -58,7 +58,7 @@ public class TestRunWorkspaceTest {
 				final String reqPath = req.path != null ? req.path : "";
 				if (reqPath.equals("")) {
 					for (WorkspaceFile file : files) {
-						ret.add(WorkspaceEntry.fromFile(file.name));
+						ret.add(WorkspaceEntry.fromFile(new codeprober.protocol.data.WorkspaceFile(file.name)));
 					}
 				}
 				return new ListWorkspaceDirectoryRes(ret);

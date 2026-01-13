@@ -23,7 +23,7 @@ public class WorkspaceEntry implements codeprober.util.JsonUtil.ToJsonable {
     this.type = typeValues[src.readInt()];
     switch (this.type) {
     case file:
-        this.value = src.readUTF();
+        this.value = new WorkspaceFile(src);
         break;
     case directory:
     default:
@@ -31,11 +31,11 @@ public class WorkspaceEntry implements codeprober.util.JsonUtil.ToJsonable {
         break;
     }
   }
-  public static WorkspaceEntry fromFile(String val) { return new WorkspaceEntry(Type.file, val); }
+  public static WorkspaceEntry fromFile(WorkspaceFile val) { return new WorkspaceEntry(Type.file, val); }
   public static WorkspaceEntry fromDirectory(String val) { return new WorkspaceEntry(Type.directory, val); }
 
   public boolean isFile() { return type == Type.file; }
-  public String asFile() { if (type != Type.file) { throw new IllegalStateException("This WorkspaceEntry is not of type file, it is '" + type + "'"); } return (String)value; }
+  public WorkspaceFile asFile() { if (type != Type.file) { throw new IllegalStateException("This WorkspaceEntry is not of type file, it is '" + type + "'"); } return (WorkspaceFile)value; }
   public boolean isDirectory() { return type == Type.directory; }
   public String asDirectory() { if (type != Type.directory) { throw new IllegalStateException("This WorkspaceEntry is not of type directory, it is '" + type + "'"); } return (String)value; }
 
@@ -46,7 +46,7 @@ public class WorkspaceEntry implements codeprober.util.JsonUtil.ToJsonable {
     switch (type) {
     case file:
       try {
-        final String val = obj.getString("value");
+        final WorkspaceFile val = WorkspaceFile.fromJSON(obj.getJSONObject("value"));
         return fromFile(val);
       } catch (org.json.JSONException e) {
         throw new org.json.JSONException("Not a valid WorkspaceEntry", e);
@@ -66,7 +66,7 @@ public class WorkspaceEntry implements codeprober.util.JsonUtil.ToJsonable {
     final JSONObject ret = new JSONObject().put("type", type.name());
     switch (type) {
     case file:
-      ret.put("value", ((String)value));
+      ret.put("value", ((WorkspaceFile)value).toJSON());
       break;
     case directory:
     default:
@@ -82,7 +82,7 @@ public class WorkspaceEntry implements codeprober.util.JsonUtil.ToJsonable {
     dst.writeInt(type.ordinal());
     switch (type) {
     case file:
-      dst.writeUTF(((String)value));
+      ((WorkspaceFile)value).writeTo(dst);
       break;
     case directory:
     default:
