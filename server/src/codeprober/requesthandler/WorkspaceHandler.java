@@ -42,7 +42,7 @@ import codeprober.requesthandler.FuzzyMatcher.ScoredMatch;
 public class WorkspaceHandler {
 
 	public static final String METADATA_DIR_NAME = ".cpr";
-	private static boolean debugApiFailureReasons = false;
+	private static boolean debugApiFailureReasons = true;
 
 	private static Pattern preCompiledWorkspaceFilePattern;
 
@@ -208,16 +208,17 @@ public class WorkspaceHandler {
 		final File subFile = relativePathToFile(path);
 		if (subFile == null) {
 			if (debugApiFailureReasons) {
-				System.out.println("Invalid getFile path");
+				System.out.println("Invalid workspace file path");
 			}
 			return null;
 		}
-		if (!subFile.exists() || subFile.isDirectory()) {
+		if (subFile.isDirectory()) {
 			if (debugApiFailureReasons) {
-				System.out.println("Path is not a file");
+				System.out.println("Path is a directory");
 			}
 			return null;
 		}
+
 		return subFile;
 	}
 
@@ -225,6 +226,12 @@ public class WorkspaceHandler {
 		final File subFile = getWorkspaceFile(req.path);
 		if (subFile == null) {
 			return new GetWorkspaceFileRes();
+		}
+		if (!subFile.exists()) {
+			if (debugApiFailureReasons) {
+				System.out.println("Path is not a file");
+			}
+			return null;
 		}
 		try {
 			final byte[] textBytes = Files.readAllBytes(subFile.toPath());
