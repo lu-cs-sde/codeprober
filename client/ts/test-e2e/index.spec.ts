@@ -61,19 +61,20 @@ test.describe('CodeProber Integration Tests', () => {
 
         expect(`Done: ${numPass} pass, ${numFail} fail`).toBe(expectedStatusLine);
       });
+      // Generate a name in 2-length chunks. This is to avoid generating a large number like "11123123"
+      // which contains "111", and conflicts with the tests that check for precence of the text "111".
+      const rngNameChunk = () => `_${Math.abs((Math.random() * 1000)|0)}`.slice(0, 3)
+
+      // For updates that require file syncing, set a generous timeout.
+      // This is mainly needed for OSX, where the WatchService is slow.
+      const fileSyncTimeout = 30_000;
+
+      const generateWorkspaceEntryName = () => `dynamic_entry${rngNameChunk()}${rngNameChunk()}${rngNameChunk()}`;
       test('reacts to workspace changes', async ({ page, request }) => {
-        // Generate a name in 2-length chunks. This is to avoid generating a large number like "11123123"
-        // which contains "111", and conflicts with the tests that check for precence of the text "111".
-        const rngNameChunk = () => `_${Math.abs((Math.random() * 1000)|0)}`.slice(0, 3)
-        const wsEntryName = `dynamic_entry${rngNameChunk()}${rngNameChunk()}${rngNameChunk()}`;
-        // Listen for all console logs
-        page.on('console', msg => console.log('[C]', msg.text()));
+        const wsEntryName = generateWorkspaceEntryName();
 
         await fillPageContent({ page, wantedContent: '(1+2)', editor });
 
-        // For updates that require file syncing, set a generous timeout.
-        // This is mainly needed for OSX, where the WatchService is slow.
-        const fileSyncTimeout = 30_000;
 
         await expect(page.getByText(wsEntryName)).toBeHidden();
 
@@ -155,6 +156,33 @@ test.describe('CodeProber Integration Tests', () => {
 
         expect(await page.textContent('.modalWindow pre')).toContain('333');
       });
+      test('create a new empty file', async ({ page }) => {
+        await fillPageContent({ page, wantedContent: '(1+2)', editor });
+
+        // The temp file should be active and contain (1+2)
+        const activeTempFile = page.locator('.workspace-row.workspace-unsaved.workspace-row-active');
+        await expect(activeTempFile).toBeVisible();
+        await expect(page.getByText('(1+2)')).toBeVisible();
+
+        const basePath = `../../addnum/workspace/`;
+        const wsEntryName = generateWorkspaceEntryName();
+        try {
+          page.on('dialog', dia => dia.accept(wsEntryName));
+          await page.click('.workspace-addfile');
+
+          await new Promise(res => setTimeout(res, 10));
+          await expect(page.getByText('(1+2)')).not.toBeVisible();
+
+          // // Wait a while for the new file to load in
+          await new Promise(res => setTimeout(res, fileSyncTimeout));
+
+          // The contents in the default (temp) file should not follow us into the new file
+          await expect(activeTempFile).not.toBeVisible();
+          await expect(page.getByText('(1+2)')).not.toBeVisible();
+        } finally {
+          rmSync(`${basePath}/${wsEntryName}`);
+        }
+      });
     });
   });
 
@@ -165,6 +193,8 @@ test.describe('CodeProber Integration Tests', () => {
   }
   async function fillPageContent(args: FillArgs) {
     const { editor, page, wantedContent } = args;
+    // Listen for all console logs
+    page.on('console', msg => console.log('[C]', msg.text()));
     await page.goto(`/?editor=${editor}`);
     await page.waitForLoadState('networkidle');
 

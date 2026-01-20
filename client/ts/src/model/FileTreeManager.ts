@@ -142,7 +142,7 @@ const setupFileTreeManager = <T>(args: FileTreeManagerInitArgs<T>): FileTreeMana
               : { type: 'file', name, value: createFile(fullPath, v.value.readOnly ?? false) }
           });
           prevChildren.forEach(prev => {
-            if (!listing.some(x => x.value === prev.name)) {
+            if (!listing.some(x => extractEntryName(x) === prev.name)) {
               // It is gone!
               prev.value.onRemoved();
             }
