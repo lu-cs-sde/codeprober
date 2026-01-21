@@ -20,7 +20,7 @@ public class PropertyArgCollection implements codeprober.util.JsonUtil.ToJsonabl
   public static PropertyArgCollection fromJSON(JSONObject obj) {
     return new PropertyArgCollection(
       obj.getString("type")
-    , codeprober.util.JsonUtil.<PropertyArg>mapArr(obj.getJSONArray("entries"), (arr24, idx24) -> PropertyArg.fromJSON(arr24.getJSONObject(idx24)))
+    , codeprober.util.JsonUtil.<PropertyArg>mapArr(obj.getJSONArray("entries"), (arr30, idx30) -> PropertyArg.fromJSON(arr30.getJSONObject(idx30)))
     );
   }
   public JSONObject toJSON() {
@@ -34,6 +34,6 @@ public class PropertyArgCollection implements codeprober.util.JsonUtil.ToJsonabl
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
     dst.writeUTF(type);
-    codeprober.util.JsonUtil.<PropertyArg>writeDataArr(dst, entries, ent24 -> ent24.writeTo(dst));
+    codeprober.util.JsonUtil.<PropertyArg>writeDataArr(dst, entries, ent30 -> ent30.writeTo(dst));
   }
 }

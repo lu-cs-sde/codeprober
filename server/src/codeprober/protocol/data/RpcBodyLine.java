@@ -138,7 +138,7 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
       }
     case arr:
       try {
-        final java.util.List<RpcBodyLine> val = codeprober.util.JsonUtil.<RpcBodyLine>mapArr(obj.getJSONArray("value"), (arr21, idx21) -> RpcBodyLine.fromJSON(arr21.getJSONObject(idx21)));
+        final java.util.List<RpcBodyLine> val = codeprober.util.JsonUtil.<RpcBodyLine>mapArr(obj.getJSONArray("value"), (arr20, idx20) -> RpcBodyLine.fromJSON(arr20.getJSONObject(idx20)));
         return fromArr(val);
       } catch (org.json.JSONException e) {
         throw new org.json.JSONException("Not a valid RpcBodyLine", e);
@@ -248,7 +248,7 @@ public class RpcBodyLine implements codeprober.util.JsonUtil.ToJsonable {
       dst.writeUTF(((String)value));
       break;
     case arr:
-      codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, ((java.util.List<RpcBodyLine>)value), ent21 -> ent21.writeTo(dst));
+      codeprober.util.JsonUtil.<RpcBodyLine>writeDataArr(dst, ((java.util.List<RpcBodyLine>)value), ent20 -> ent20.writeTo(dst));
       break;
     case node:
       ((NodeLocator)value).writeTo(dst);

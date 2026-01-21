@@ -134,7 +134,6 @@ public class Document extends AbstractASTNode {
 
 		final Predicate<ASTNode> isInsideOrEnd = node -> col >= node.start.column && col <= node.end.column + 1;
 		final Predicate<ASTNode> isInside = node -> col >= node.start.column && col <= node.end.column;
-
 		switch (probe.type) {
 		case QUERY:
 			return completeQuery(col, isInsideOrEnd, isInside, probe.asQuery());
@@ -149,7 +148,6 @@ public class Document extends AbstractASTNode {
 
 		default:
 			System.err.println("Unknown probe type " + probe);
-//			return new CompleteRes();
 			return null;
 
 		}
@@ -158,7 +156,6 @@ public class Document extends AbstractASTNode {
 
 	private CompletionContext completeQuery(int col, Predicate<ASTNode> isInsideOrEnd, Predicate<ASTNode> isInside,
 			Query q) {
-//		System.out.println("Inside q " + q.pp() + " @ " + q.loc());
 		if (isInsideOrEnd.test(q.head)) {
 			return CompletionContext.fromType(q);
 		}
@@ -172,12 +169,6 @@ public class Document extends AbstractASTNode {
 
 			if (isInsideOrEnd.test(acc.name)) {
 				// Accessing property name
-				if (q.head.type == QueryHead.Type.VAR && !q.doc().problems().isEmpty()) {
-					// Cannot reliably expand variable references when there are semantic errors
-					return null;
-				}
-
-//				return completePropAccess(req, parsed, env, inflated, inflatedToIdx);
 				return CompletionContext.fromPropertyName(q, acc);
 			}
 
@@ -203,13 +194,7 @@ public class Document extends AbstractASTNode {
 			return null;
 		}
 		final Container container = q.enclosingContainer();
-//			System.out.println("req.col:" + req.column + "; head.loc=" + q.head.loc() + "; q.loc=" + q.loc());
-//			System.out.println("<<" + q.enclosingContainer().contents + ">>");
 		final String contents = container.contents;
-//			System.out.println(
-//					container.start.column + " -> " + q.start.column + " -> " + q.assertion.get().start.column
-//							+ ";; contents: <" + contents + ">; contents.len: " + contents.length());
-
 		if (
 		//
 		(col == q.end.column + 1 && contents.endsWith("."))
@@ -218,19 +203,9 @@ public class Document extends AbstractASTNode {
 						&& q.start.column + contents.length() >= col //
 						&& col == q.assertion.get().start.column //
 						&& contents.charAt(q.assertion.get().start.column - 1 - q.start.column) == '.')) {
-			if (q.head.type == QueryHead.Type.VAR && !q.doc().problems().isEmpty()) {
-				// Cannot reliably expand variable references when there are semantic errors
-				return null;
-			}
-//			final Query inflated = q.inflate();
-//			return completePropAccess(req, parsed, env, inflated, inflated.tail.getNumChild());
 			return CompletionContext.fromPropertyName(q, null);
 		}
-//			System.out.println("col: " + req.column + ", q.loc:" + q.loc() + "; q.as.loc:"
-//					+ (q.assertion.isPresent() ? q.assertion.get().loc() : null) + "; q.eq.loc: "
-//					+ (q.assertion.isPresent() ? q.assertion.get().eq.toString() : null));
 
-		System.out.println(contents.charAt(q.assertion.get().start.column - 1 - 2 - container.start.column));
 		if (q.assertion.isPresent()) {
 			final QueryAssert aq = q.assertion.get();
 			if (isInsideOrEnd.test(aq)) { // req.column >= aq.eq.column
@@ -247,16 +222,6 @@ public class Document extends AbstractASTNode {
 				// Else, right side is a constant string. Complete to the string repr of the
 				// left side
 				return CompletionContext.fromQueryResult(q);
-
-//				final List<RpcBodyLine> lhsEval = env.evaluateQuery(q);
-//				if (lhsEval == null) {
-//					return null;
-//				}
-//				final List<CompletionItem> ret = new ArrayList<>();
-//				addMetaVars(env.document, ret);
-//				final String flat = DogEnvironment.flattenBody(lhsEval);
-//				ret.add(new CompletionItem(flat, flat, CompletionItemKind.Constant.ordinal()));
-//				return new CompleteRes(ret);
 			}
 		}
 		return null;

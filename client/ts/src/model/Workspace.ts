@@ -100,12 +100,10 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: WorkspaceInstance,
             if (!res.lines) {
               return;
             }
-
             const stats: TextProbeCheckResults = {
-              numPass: res.lines.filter(x => x.type === 'ok').length,
+              numPass: res.lines.filter(x => x.type === 'ok' || x.type === 'query').length,
               numFail: res.lines.filter(x => x.type === 'error').length,
             };
-
             numPass += stats.numPass;
             numFail += stats.numFail;
             const debug = location.search.includes('debug=true');
@@ -439,7 +437,6 @@ const createRow = (
         }
         if (tfile.isRemoved()) {
           // We were the active file, but we were removed! Change back to the temp file
-          console.log('active file is removed!', tfile);
           activateTempFile();
           return;
         }

@@ -48,8 +48,7 @@ public class ListPropertiesHandler {
 		}
 		// Else, plain java object. List methods with zero arguments that return
 		// something
-		List<Property> methods = extractPropertiesFromNonAstNode(parsed.info, chainVal);
-		return new ListPropertiesRes(body, methods);
+		return new ListPropertiesRes(body, extractPropertiesFromNonAstNode(parsed.info, chainVal));
 	}
 
 	public static List<Property> extractPropertiesFromNonAstNode(AstInfo info, Object chainVal) {
@@ -58,13 +57,11 @@ public class ListPropertiesHandler {
 			if (m.getReturnType() == Void.TYPE) {
 				continue;
 			}
-
 			final List<PropertyArg> args = CreateType.fromParameters(info, m.getParameters());
 			if (args == null) {
 				continue;
 			}
-
-			String name = m.getName();
+			final String name = m.getName();
 			switch (name) {
 			case "wait":
 			case "notify":

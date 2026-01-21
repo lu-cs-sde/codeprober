@@ -14,8 +14,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import org.junit.Test;
-
 import codeprober.protocol.ClientRequest;
 import codeprober.protocol.data.CompleteReq;
 import codeprober.protocol.data.CompleteRes;
@@ -28,8 +26,8 @@ import codeprober.requesthandler.LazyParser;
 import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.test.WorkspaceTestCase;
-import codeprober.textprobe.DogEnvironment;
 import codeprober.textprobe.Parser;
+import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.ast.ASTNode;
 import codeprober.textprobe.ast.ASTNode.TraversalResult;
 import codeprober.textprobe.ast.Document;
@@ -55,9 +53,9 @@ public abstract class ExistingTextProbeTest {
 	public static class CompleteTestCase {
 		public final String fullPath;
 		public final JsonRequestHandler requestHandler;
-		public final DogEnvironment env;
+		public final TextProbeEnvironment env;
 
-		public CompleteTestCase(String fullPath, JsonRequestHandler requestHandler, DogEnvironment env) {
+		public CompleteTestCase(String fullPath, JsonRequestHandler requestHandler, TextProbeEnvironment env) {
 			this.fullPath = fullPath;
 			this.requestHandler = requestHandler;
 			this.env = env;
@@ -81,7 +79,7 @@ public abstract class ExistingTextProbeTest {
 			final ParsingSource psrc = ParsingSource.fromWorkspacePath(fullPath);
 			final Document doc = Parser.parse(LazyParser.extractText(psrc, wsh), '[', ']');
 			ret.add(new CompleteTestCase(fullPath, requestHandler,
-					new DogEnvironment(requestHandler, wsh, psrc, doc, null, false)));
+					new TextProbeEnvironment(requestHandler, wsh, psrc, doc, null, false)));
 
 		});
 		return ret;
@@ -93,8 +91,7 @@ public abstract class ExistingTextProbeTest {
 		this.tc = tc;
 	}
 
-	@Test
-	public void run() {
+	protected void run() {
 		tc.env.document.traverseDescendants(desc -> {
 			if (desc instanceof Query) {
 				checkQueryCompletion((Query) desc);

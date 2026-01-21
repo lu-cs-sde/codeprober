@@ -35,7 +35,7 @@ public class ListedTreeNode implements codeprober.util.JsonUtil.ToJsonable {
       NodeLocator.fromJSON(obj.getJSONObject("locator"))
     , obj.has("name") ? (obj.getString("name")) : null
     , ListedTreeChildNode.fromJSON(obj.getJSONObject("children"))
-    , obj.has("remotes") ? (codeprober.util.JsonUtil.<NodeLocator>mapArr(obj.getJSONArray("remotes"), (arr23, idx23) -> NodeLocator.fromJSON(arr23.getJSONObject(idx23)))) : null
+    , obj.has("remotes") ? (codeprober.util.JsonUtil.<NodeLocator>mapArr(obj.getJSONArray("remotes"), (arr21, idx21) -> NodeLocator.fromJSON(arr21.getJSONObject(idx21)))) : null
     );
   }
   public JSONObject toJSON() {
@@ -55,6 +55,6 @@ public class ListedTreeNode implements codeprober.util.JsonUtil.ToJsonable {
     locator.writeTo(dst);
     if (name != null) { dst.writeBoolean(true); dst.writeUTF(name);; } else { dst.writeBoolean(false); }
     children.writeTo(dst);
-    if (remotes != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<NodeLocator>writeDataArr(dst, remotes, ent23 -> ent23.writeTo(dst));; } else { dst.writeBoolean(false); }
+    if (remotes != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<NodeLocator>writeDataArr(dst, remotes, ent21 -> ent21.writeTo(dst));; } else { dst.writeBoolean(false); }
   }
 }

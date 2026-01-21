@@ -223,7 +223,6 @@ public class WorkspaceHandler {
 	}
 
 	public GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {
-
 		final File subFile = getWorkspaceFile(req.path);
 		if (subFile == null) {
 			return new GetWorkspaceFileRes();

@@ -20,7 +20,7 @@ public class TestSuite implements codeprober.util.JsonUtil.ToJsonable {
   public static TestSuite fromJSON(JSONObject obj) {
     return new TestSuite(
       obj.getInt("v")
-    , codeprober.util.JsonUtil.<TestCase>mapArr(obj.getJSONArray("cases"), (arr18, idx18) -> TestCase.fromJSON(arr18.getJSONObject(idx18)))
+    , codeprober.util.JsonUtil.<TestCase>mapArr(obj.getJSONArray("cases"), (arr16, idx16) -> TestCase.fromJSON(arr16.getJSONObject(idx16)))
     );
   }
   public JSONObject toJSON() {
@@ -34,6 +34,6 @@ public class TestSuite implements codeprober.util.JsonUtil.ToJsonable {
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
     dst.writeInt(v);
-    codeprober.util.JsonUtil.<TestCase>writeDataArr(dst, cases, ent18 -> ent18.writeTo(dst));
+    codeprober.util.JsonUtil.<TestCase>writeDataArr(dst, cases, ent16 -> ent16.writeTo(dst));
   }
 }

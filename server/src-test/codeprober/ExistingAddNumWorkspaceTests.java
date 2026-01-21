@@ -3,6 +3,7 @@ package codeprober;
 import java.io.File;
 import java.io.IOException;
 
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -20,5 +21,11 @@ public class ExistingAddNumWorkspaceTests extends ExistingTextProbeTest {
 
 	public ExistingAddNumWorkspaceTests(CompleteTestCase tc) {
 		super(tc);
+	}
+
+	@Test
+	@Override
+	public void run() {
+		super.run();
 	}
 }

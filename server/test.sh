@@ -32,6 +32,7 @@ addTest () {
     codeprober\.ast\.TestData|\
     codeprober\.ast\.ASTNodeAnnotation|\
     codeprober\.JUnitTestRunnerWrapper|\
+    codeprober\.ExistingTextProbeTest|\
     codeprober\.*RunDemoTests)
       # Exclude from tests
       ;;

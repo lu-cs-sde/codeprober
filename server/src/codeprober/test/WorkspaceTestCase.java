@@ -20,8 +20,8 @@ import codeprober.protocol.data.WorkspaceEntry;
 import codeprober.requesthandler.LazyParser;
 import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.rpc.JsonRequestHandler;
-import codeprober.textprobe.DogEnvironment;
-import codeprober.textprobe.DogEnvironment.VariableLoadStatus;
+import codeprober.textprobe.TextProbeEnvironment;
+import codeprober.textprobe.TextProbeEnvironment.VariableLoadStatus;
 import codeprober.textprobe.Parser;
 import codeprober.textprobe.ast.Container;
 import codeprober.textprobe.ast.Document;
@@ -33,11 +33,11 @@ import codeprober.toolglue.UnderlyingTool;
 
 public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 
-	private final DogEnvironment env;
+	private final TextProbeEnvironment env;
 	private final String srcFilePath;
 	private final Query assertion;
 
-	public WorkspaceTestCase(DogEnvironment env, String srcFilePath, Query assertion) {
+	public WorkspaceTestCase(TextProbeEnvironment env, String srcFilePath, Query assertion) {
 		this.env = env;
 		this.srcFilePath = srcFilePath;
 		this.assertion = assertion;
@@ -153,7 +153,7 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 			final ParsingSource psrc = ParsingSource.fromWorkspacePath(fullPath);
 
 			final Document doc = Parser.parse(LazyParser.extractText(psrc, wsh), '[', ']');
-			final DogEnvironment env = new DogEnvironment(requestHandler, wsh, psrc, doc, null, false);
+			final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, wsh, psrc, doc, null, false);
 			if (!doc.problems().isEmpty()) {
 				// There are static errors. Add dummy case
 				// for reporting them

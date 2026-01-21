@@ -82,7 +82,6 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       src: args.env.createParsingRequestData(),
     });
     const combinedResults: TextProbeCheckResults = { numPass: 0, numFail: 0 };
-    console.log('res:', res.lines);
     if (res.lines) {
       res.lines.forEach(line => {
         switch (line.type) {

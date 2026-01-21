@@ -20,7 +20,7 @@ public class WorkspacePathsUpdated implements codeprober.util.JsonUtil.ToJsonabl
   public static WorkspacePathsUpdated fromJSON(JSONObject obj) {
     codeprober.util.JsonUtil.requireString(obj.getString("type"), "workspace_paths_updated");
     return new WorkspacePathsUpdated(
-      codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("paths"), (arr22, idx22) -> arr22.getString(idx22))
+      codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("paths"), (arr19, idx19) -> arr19.getString(idx19))
     );
   }
   public JSONObject toJSON() {
@@ -34,6 +34,6 @@ public class WorkspacePathsUpdated implements codeprober.util.JsonUtil.ToJsonabl
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
     
-    codeprober.util.JsonUtil.<String>writeDataArr(dst, paths, ent22 -> dst.writeUTF(ent22));
+    codeprober.util.JsonUtil.<String>writeDataArr(dst, paths, ent19 -> dst.writeUTF(ent19));
   }
 }

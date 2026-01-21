@@ -8,7 +8,7 @@ import codeprober.protocol.data.GetDecorationsReq;
 import codeprober.protocol.data.GetDecorationsRes;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.rpc.JsonRequestHandler;
-import codeprober.textprobe.DogEnvironment;
+import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.Parser;
 import codeprober.textprobe.ast.ASTNode;
 import codeprober.textprobe.ast.Container;
@@ -24,7 +24,7 @@ public class DecorationsHandler {
 
 	public static GetDecorationsRes apply(GetDecorationsReq req, JsonRequestHandler requestHandler,
 			WorkspaceHandler workspaceHandler, LazyParser parser) {
-		final DogEnvironment env = new DogEnvironment(requestHandler, workspaceHandler, req.src.src, //
+		final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, workspaceHandler, req.src.src, //
 				Parser.parse(LazyParser.extractText(req.src.src, workspaceHandler), '[', ']'), //
 				null, false);
 
@@ -95,7 +95,7 @@ public class DecorationsHandler {
 					}
 				} else {
 					if (lhs != null) {
-						final String flat = DogEnvironment.flattenBody(lhs);
+						final String flat = TextProbeEnvironment.flattenBody(lhs);
 						addDecoration.add(probe, "query", "= " + flat);
 					}
 				}

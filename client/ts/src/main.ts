@@ -768,7 +768,6 @@ const doMain = (wsPort: number
               column: pos.column,
             };
             const result = await modalEnv.performTypedRpc<HoverReq, HoverRes>(req);
-            console.log('hover res:', result);
             if (!result.lines) {
               return null;
             }

@@ -22,7 +22,7 @@ import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.textprobe.CompletionContext;
 import codeprober.textprobe.CompletionContext.PropertyNameDetail;
-import codeprober.textprobe.DogEnvironment;
+import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.Parser;
 import codeprober.textprobe.ast.Position;
 import codeprober.textprobe.ast.PropertyAccess;
@@ -72,7 +72,7 @@ public class CompleteHandler {
 		// Else, perhaps text probe logic
 		final String txt = LazyParser.extractText(req.src.src, wsHandler);
 		if (txt != null) {
-			final DogEnvironment env = new DogEnvironment(reqHandler, wsHandler, req.src.src,
+			final TextProbeEnvironment env = new TextProbeEnvironment(reqHandler, wsHandler, req.src.src,
 					Parser.parse(txt, '[', ']'), null, false);
 			final CompletionContext compCtx = env.document.completionContextAt(req.line, req.column);
 			if (compCtx == null) {
@@ -107,7 +107,7 @@ public class CompleteHandler {
 					return new CompleteRes();
 				}
 				final List<CompletionItem> ret = new ArrayList<>();
-				final String flat = DogEnvironment.flattenBody(lhsEval);
+				final String flat = TextProbeEnvironment.flattenBody(lhsEval);
 				final String sortText = String.format("%s", SortTextPrefix.QUERYRESULT.getPrefix());
 				ret.add(new CompletionItem(flat, flat, CompletionItemKind.Constant.ordinal(), sortText,
 						"Query result"));
@@ -131,7 +131,7 @@ public class CompleteHandler {
 		}
 	}
 
-	private static CompleteRes completeTypes(CompleteReq req, ParsedAst parsed, DogEnvironment env) {
+	private static CompleteRes completeTypes(CompleteReq req, ParsedAst parsed, TextProbeEnvironment env) {
 		List<NodeLocator> items = new ArrayList<>();
 		Map<String, Integer> itemCount = new HashMap<>();
 
@@ -177,7 +177,7 @@ public class CompleteHandler {
 		return new CompleteRes(ret);
 	}
 
-	private static CompleteRes completePropAccess(CompleteReq req, ParsedAst parsed, DogEnvironment env,
+	private static CompleteRes completePropAccess(CompleteReq req, ParsedAst parsed, TextProbeEnvironment env,
 			Query preinflated, Query inflated, PropertyAccess mainAccess, int tailIdx) {
 		final NodeLocator loc = env.evaluateQueryHead(inflated.head, inflated.index);
 		if (loc == null) {
@@ -256,7 +256,7 @@ public class CompleteHandler {
 				localContextStart, localContextEnd);
 	}
 
-	private static void addMetaVars(DogEnvironment env, List<CompletionItem> out) {
+	private static void addMetaVars(TextProbeEnvironment env, List<CompletionItem> out) {
 		int varIdx = 0;
 		final Map<String, VarDecl> vdecls = env.document.varDecls();
 		for (String metaVar : new TreeSet<>(vdecls.keySet())) {
@@ -276,7 +276,7 @@ public class CompleteHandler {
 			}
 
 			final String detail = (evalRes != null && !evalRes.isEmpty()) //
-					? DogEnvironment.flattenBody(evalRes) //
+					? TextProbeEnvironment.flattenBody(evalRes) //
 					: srcQuery.pp();
 			out.add(new CompletionItem(item, item, CompletionItemKind.Variable.ordinal(), sortText, detail,
 					contextStart, contextEnd));

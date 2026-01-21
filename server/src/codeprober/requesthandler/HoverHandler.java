@@ -17,7 +17,7 @@ import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.textprobe.CompletionContext;
 import codeprober.textprobe.CompletionContext.PropertyNameDetail;
-import codeprober.textprobe.DogEnvironment;
+import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.Parser;
 import codeprober.textprobe.ast.Position;
 import codeprober.textprobe.ast.PropertyAccess;
@@ -48,7 +48,7 @@ public class HoverHandler {
 
 		final String txt = LazyParser.extractText(req.src.src, wsHandler);
 		if (txt != null) {
-			final DogEnvironment env = new DogEnvironment(reqHandler, wsHandler, req.src.src,
+			final TextProbeEnvironment env = new TextProbeEnvironment(reqHandler, wsHandler, req.src.src,
 					Parser.parse(txt, '[', ']'), null, false);
 
 			// Use the "completionContext" api to help identify what is being hovered
@@ -116,10 +116,11 @@ public class HoverHandler {
 					}
 				}
 				final Query q = prop.query;
-				Query subQ = new Query(q.start, q.end, q.head, q.index, q.tail.toList().subList(0, hoverAccessIdx));
+				final Query subQ = new Query(q.start, q.end, q.head, q.index,
+						q.tail.toList().subList(0, hoverAccessIdx));
 				q.adopt(subQ);
-				Position localStart = q.start;
-				Position localEnd = q.tail.isEmpty() ? subQ.end : subQ.tail.get(subQ.tail.getNumChild() - 1).end;
+				final Position localStart = q.start;
+				final Position localEnd = q.tail.isEmpty() ? subQ.end : subQ.tail.get(subQ.tail.getNumChild() - 1).end;
 				List<RpcBodyLine> subRes = null;
 				if (env.document.problems().isEmpty()) {
 					subRes = env.evaluateQuery(subQ.inflate());
@@ -133,7 +134,7 @@ public class HoverHandler {
 				}
 				return new HoverRes(subRes == null //
 						? Collections.emptyList() //
-						: Arrays.asList(DogEnvironment.flattenBody(subRes)), //
+						: Arrays.asList(TextProbeEnvironment.flattenBody(subRes)), //
 						localStart.getPackedBits(), localEnd.getPackedBits() + 1);
 
 			case QUERY_RESULT:
@@ -161,8 +162,8 @@ public class HoverHandler {
 		}
 		return new HoverRes(subject == null //
 				? Collections.emptyList() //
-				: Arrays.asList(DogEnvironment.flattenLine(RpcBodyLine.fromNode(subject))), localStart.getPackedBits(),
-				localEnd.getPackedBits() + 1, remoteStart, remoteEnd);
+				: Arrays.asList(TextProbeEnvironment.flattenLine(RpcBodyLine.fromNode(subject))),
+				localStart.getPackedBits(), localEnd.getPackedBits() + 1, remoteStart, remoteEnd);
 	}
 
 	@SuppressWarnings("unchecked")
