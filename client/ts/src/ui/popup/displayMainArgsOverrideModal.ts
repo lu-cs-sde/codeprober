@@ -225,6 +225,7 @@ const displayMainArgsOverrideModal = (
           enabled: false,
         },
         wordWrap: true,
+        renderValidationDecorations: 'on',
       });
       editor.onDidChangeModelContent(() => {
         const errs: { line: number, col: number, msg: string }[] = [];

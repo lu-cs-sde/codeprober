@@ -23,6 +23,7 @@ window.defineEditor(
       minimap: {
         enabled: !window.location.search.includes('fullscreen=true'),
       },
+      renderValidationDecorations: 'on',
     });
 
     const suggestController = editor.getContribution("editor.contrib.suggestController");
