@@ -70,17 +70,39 @@ public class ParserSource {
 		int start = offset;
 
 		// First character must be a valid identifier start (letter or underscore)
-		if (!Character.isJavaIdentifierStart(src.charAt(offset))) {
+		if (!isValidIDStart(src.charAt(offset))) {
 			return null;
 		}
 		offset++;
 
 		// Remaining characters can be letters, digits, or underscores
-		while (offset < src.length() && Character.isJavaIdentifierPart(src.charAt(offset))) {
+		while (offset < src.length() && isValidIDFollowup(src.charAt(offset))) {
 			offset++;
 		}
 
 		return src.substring(start, offset);
+	}
+
+	private static boolean isValidIDStart(char c) {
+		if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+			return true;
+		}
+		if (c == '$') {
+			return true;
+		}
+		return false;
+	}
+
+	private static boolean isValidIDFollowup(char c) {
+		if (isValidIDStart(c)) {
+			return true;
+		}
+		switch (c) {
+		case '_':
+			return true;
+		default:
+			return false;
+		}
 	}
 
 	// Similar as parseID, but parse an integer.
