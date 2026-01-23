@@ -109,14 +109,9 @@ public class EvaluatePropertyHandler {
 		}
 
 		case any: {
-			String value = val.asAny().optString("value");
-			if (value == null) {
-				value = "";
-			}
-			return new UnpackedAttrValue(value, //
-					PropertyArg.fromAny(new JSONObject() //
-							.put("type", "java.lang.Object") //
-							.put("value", value)));
+			final PropertyArg any = val.asAny();
+			final UnpackedAttrValue unpacked = unpackAttrValue(info, any, streamMsgReceiver);
+			return new UnpackedAttrValue(unpacked, PropertyArg.fromAny(any));
 		}
 
 		default:

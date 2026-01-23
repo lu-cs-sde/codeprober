@@ -33,6 +33,7 @@ echo "Client unit tests success"
 echo "Building textprobe jar"
 cd textprobe
 ./build.sh
+./test.sh
 cd -
 
 cd server

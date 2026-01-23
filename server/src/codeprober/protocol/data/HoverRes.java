@@ -43,7 +43,7 @@ public class HoverRes implements codeprober.util.JsonUtil.ToJsonable {
 
   public static HoverRes fromJSON(JSONObject obj) {
     return new HoverRes(
-      obj.has("lines") ? (codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("lines"), (arr12, idx12) -> arr12.getString(idx12))) : null
+      obj.has("lines") ? (codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("lines"), (arr1, idx1) -> arr1.getString(idx1))) : null
     , obj.has("originContextStart") ? (obj.getInt("originContextStart")) : null
     , obj.has("originContextEnd") ? (obj.getInt("originContextEnd")) : null
     , obj.has("remoteContextStart") ? (obj.getInt("remoteContextStart")) : null
@@ -63,7 +63,7 @@ public class HoverRes implements codeprober.util.JsonUtil.ToJsonable {
     writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
-    if (lines != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<String>writeDataArr(dst, lines, ent12 -> dst.writeUTF(ent12));; } else { dst.writeBoolean(false); }
+    if (lines != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<String>writeDataArr(dst, lines, ent1 -> dst.writeUTF(ent1));; } else { dst.writeBoolean(false); }
     if (originContextStart != null) { dst.writeBoolean(true); dst.writeInt(originContextStart);; } else { dst.writeBoolean(false); }
     if (originContextEnd != null) { dst.writeBoolean(true); dst.writeInt(originContextEnd);; } else { dst.writeBoolean(false); }
     if (remoteContextStart != null) { dst.writeBoolean(true); dst.writeInt(remoteContextStart);; } else { dst.writeBoolean(false); }

@@ -19,7 +19,7 @@ public class GetDecorationsRes implements codeprober.util.JsonUtil.ToJsonable {
 
   public static GetDecorationsRes fromJSON(JSONObject obj) {
     return new GetDecorationsRes(
-      obj.has("lines") ? (codeprober.util.JsonUtil.<Decoration>mapArr(obj.getJSONArray("lines"), (arr14, idx14) -> Decoration.fromJSON(arr14.getJSONObject(idx14)))) : null
+      obj.has("lines") ? (codeprober.util.JsonUtil.<Decoration>mapArr(obj.getJSONArray("lines"), (arr1, idx1) -> Decoration.fromJSON(arr1.getJSONObject(idx1)))) : null
     );
   }
   public JSONObject toJSON() {
@@ -31,6 +31,6 @@ public class GetDecorationsRes implements codeprober.util.JsonUtil.ToJsonable {
     writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
-    if (lines != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<Decoration>writeDataArr(dst, lines, ent14 -> ent14.writeTo(dst));; } else { dst.writeBoolean(false); }
+    if (lines != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<Decoration>writeDataArr(dst, lines, ent1 -> ent1.writeTo(dst));; } else { dst.writeBoolean(false); }
   }
 }

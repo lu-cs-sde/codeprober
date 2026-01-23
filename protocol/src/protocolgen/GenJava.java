@@ -524,6 +524,7 @@ public class GenJava {
 	}
 
 	private String genTypescriptDef(String tname, Streamable s) throws Exception {
+		idGenerator = 0;
 		final StringBuilder out = new StringBuilder();
 		final Consumer<String> println = line -> out.append(line + "\n");
 		final Consumer<String> print = line -> out.append(line);

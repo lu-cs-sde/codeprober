@@ -31,7 +31,7 @@ public class ParsingRequestData implements codeprober.util.JsonUtil.ToJsonable {
       codeprober.protocol.PositionRecoveryStrategy.parseFromJson(obj.getString("posRecovery"))
     , codeprober.protocol.AstCacheStrategy.parseFromJson(obj.getString("cache"))
     , ParsingSource.fromJSON(obj.getJSONObject("src"))
-    , obj.has("mainArgs") ? (codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("mainArgs"), (arr22, idx22) -> arr22.getString(idx22))) : null
+    , obj.has("mainArgs") ? (codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("mainArgs"), (arr1, idx1) -> arr1.getString(idx1))) : null
     , obj.getString("tmpSuffix")
     );
   }
@@ -51,7 +51,7 @@ public class ParsingRequestData implements codeprober.util.JsonUtil.ToJsonable {
     dst.writeInt(posRecovery.ordinal());
     dst.writeInt(cache.ordinal());
     src.writeTo(dst);
-    if (mainArgs != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<String>writeDataArr(dst, mainArgs, ent22 -> dst.writeUTF(ent22));; } else { dst.writeBoolean(false); }
+    if (mainArgs != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<String>writeDataArr(dst, mainArgs, ent1 -> dst.writeUTF(ent1));; } else { dst.writeBoolean(false); }
     dst.writeUTF(tmpSuffix);
   }
 }

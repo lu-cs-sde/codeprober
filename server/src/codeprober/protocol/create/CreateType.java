@@ -9,8 +9,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.json.JSONObject;
-
 import codeprober.AstInfo;
 import codeprober.protocol.data.NullableNodeLocator;
 import codeprober.protocol.data.PropertyArg;
@@ -43,7 +41,7 @@ public abstract class CreateType {
 			return PropertyArg.fromNodeLocator(new NullableNodeLocator(param.getName(), null));
 		}
 		if (param == Object.class) {
-			return PropertyArg.fromAny(new JSONObject().put("type", "java.lang.Object"));
+			return PropertyArg.fromAny(PropertyArg.fromString(""));
 		}
 		return null;
 	}

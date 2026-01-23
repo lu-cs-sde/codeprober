@@ -20,7 +20,7 @@ public class NodeLocator implements codeprober.util.JsonUtil.ToJsonable {
   public static NodeLocator fromJSON(JSONObject obj) {
     return new NodeLocator(
       TALStep.fromJSON(obj.getJSONObject("result"))
-    , codeprober.util.JsonUtil.<NodeLocatorStep>mapArr(obj.getJSONArray("steps"), (arr17, idx17) -> NodeLocatorStep.fromJSON(arr17.getJSONObject(idx17)))
+    , codeprober.util.JsonUtil.<NodeLocatorStep>mapArr(obj.getJSONArray("steps"), (arr1, idx1) -> NodeLocatorStep.fromJSON(arr1.getJSONObject(idx1)))
     );
   }
   public JSONObject toJSON() {
@@ -34,6 +34,6 @@ public class NodeLocator implements codeprober.util.JsonUtil.ToJsonable {
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
     result.writeTo(dst);
-    codeprober.util.JsonUtil.<NodeLocatorStep>writeDataArr(dst, steps, ent17 -> ent17.writeTo(dst));
+    codeprober.util.JsonUtil.<NodeLocatorStep>writeDataArr(dst, steps, ent1 -> ent1.writeTo(dst));
   }
 }

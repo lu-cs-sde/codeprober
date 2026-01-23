@@ -31,7 +31,7 @@ public class CompleteRes implements codeprober.util.JsonUtil.ToJsonable {
 
   public static CompleteRes fromJSON(JSONObject obj) {
     return new CompleteRes(
-      obj.has("lines") ? (codeprober.util.JsonUtil.<CompletionItem>mapArr(obj.getJSONArray("lines"), (arr13, idx13) -> CompletionItem.fromJSON(arr13.getJSONObject(idx13)))) : null
+      obj.has("lines") ? (codeprober.util.JsonUtil.<CompletionItem>mapArr(obj.getJSONArray("lines"), (arr1, idx1) -> CompletionItem.fromJSON(arr1.getJSONObject(idx1)))) : null
     , obj.has("originContextStart") ? (obj.getInt("originContextStart")) : null
     , obj.has("originContextEnd") ? (obj.getInt("originContextEnd")) : null
     );
@@ -47,7 +47,7 @@ public class CompleteRes implements codeprober.util.JsonUtil.ToJsonable {
     writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
-    if (lines != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<CompletionItem>writeDataArr(dst, lines, ent13 -> ent13.writeTo(dst));; } else { dst.writeBoolean(false); }
+    if (lines != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<CompletionItem>writeDataArr(dst, lines, ent1 -> ent1.writeTo(dst));; } else { dst.writeBoolean(false); }
     if (originContextStart != null) { dst.writeBoolean(true); dst.writeInt(originContextStart);; } else { dst.writeBoolean(false); }
     if (originContextEnd != null) { dst.writeBoolean(true); dst.writeInt(originContextEnd);; } else { dst.writeBoolean(false); }
   }

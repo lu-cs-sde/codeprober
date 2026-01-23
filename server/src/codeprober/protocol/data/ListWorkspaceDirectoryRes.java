@@ -19,7 +19,7 @@ public class ListWorkspaceDirectoryRes implements codeprober.util.JsonUtil.ToJso
 
   public static ListWorkspaceDirectoryRes fromJSON(JSONObject obj) {
     return new ListWorkspaceDirectoryRes(
-      obj.has("entries") ? (codeprober.util.JsonUtil.<WorkspaceEntry>mapArr(obj.getJSONArray("entries"), (arr10, idx10) -> WorkspaceEntry.fromJSON(arr10.getJSONObject(idx10)))) : null
+      obj.has("entries") ? (codeprober.util.JsonUtil.<WorkspaceEntry>mapArr(obj.getJSONArray("entries"), (arr1, idx1) -> WorkspaceEntry.fromJSON(arr1.getJSONObject(idx1)))) : null
     );
   }
   public JSONObject toJSON() {
@@ -31,6 +31,6 @@ public class ListWorkspaceDirectoryRes implements codeprober.util.JsonUtil.ToJso
     writeTo(new codeprober.protocol.BinaryOutputStream.DataOutputStreamWrapper(dst));
   }
   public void writeTo(codeprober.protocol.BinaryOutputStream dst) throws java.io.IOException {
-    if (entries != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<WorkspaceEntry>writeDataArr(dst, entries, ent10 -> ent10.writeTo(dst));; } else { dst.writeBoolean(false); }
+    if (entries != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<WorkspaceEntry>writeDataArr(dst, entries, ent1 -> ent1.writeTo(dst));; } else { dst.writeBoolean(false); }
   }
 }

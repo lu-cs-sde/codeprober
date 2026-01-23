@@ -254,7 +254,7 @@ type PropertyArg = (
   | { type: 'collection'; value: PropertyArgCollection; }
   | { type: 'outputstream'; value: string; }
   | { type: 'nodeLocator'; value: NullableNodeLocator; }
-  | { type: 'any'; value: { [key: string]: any }; }
+  | { type: 'any'; value: PropertyArg; }
 );
 interface PropertyArgCollection {
   type: string;

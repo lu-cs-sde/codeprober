@@ -344,7 +344,7 @@ const displayArgModal = (env: ModalEnv, modalPos: ModalPosition, locator: Updata
               elem.type = 'text';
               const existing = argValues[argIdx].value;
               elem.value = `${typeof existing === 'object' && (existing as any).value || ''}`;
-            }, val => ({ type: 'any', value: { type: arg.value.type, value: val } })));
+            }, val => ({ type: 'any', value: { type: 'string', value: val } })));
             break;
           }
 

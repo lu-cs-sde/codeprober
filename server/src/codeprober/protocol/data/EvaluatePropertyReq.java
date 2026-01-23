@@ -81,7 +81,7 @@ public class EvaluatePropertyReq implements codeprober.util.JsonUtil.ToJsonable 
     , obj.has("captureTraces") ? (obj.getBoolean("captureTraces")) : null
     , obj.has("flushBeforeTraceCollection") ? (obj.getBoolean("flushBeforeTraceCollection")) : null
     , obj.has("flattenForTextProbes") ? (obj.getBoolean("flattenForTextProbes")) : null
-    , obj.has("attrChainArgs") ? (codeprober.util.JsonUtil.<java.util.List<PropertyArg>>mapArr(obj.getJSONArray("attrChainArgs"), (arr8, idx8) -> codeprober.util.JsonUtil.<PropertyArg>mapArr(arr8.getJSONArray(idx8), (arr7, idx7) -> PropertyArg.fromJSON(arr7.getJSONObject(idx7))))) : null
+    , obj.has("attrChainArgs") ? (codeprober.util.JsonUtil.<java.util.List<PropertyArg>>mapArr(obj.getJSONArray("attrChainArgs"), (arr2, idx2) -> codeprober.util.JsonUtil.<PropertyArg>mapArr(arr2.getJSONArray(idx2), (arr1, idx1) -> PropertyArg.fromJSON(arr1.getJSONObject(idx1))))) : null
     );
   }
   public JSONObject toJSON() {
@@ -115,6 +115,6 @@ public class EvaluatePropertyReq implements codeprober.util.JsonUtil.ToJsonable 
     if (captureTraces != null) { dst.writeBoolean(true); dst.writeBoolean(captureTraces);; } else { dst.writeBoolean(false); }
     if (flushBeforeTraceCollection != null) { dst.writeBoolean(true); dst.writeBoolean(flushBeforeTraceCollection);; } else { dst.writeBoolean(false); }
     if (flattenForTextProbes != null) { dst.writeBoolean(true); dst.writeBoolean(flattenForTextProbes);; } else { dst.writeBoolean(false); }
-    if (attrChainArgs != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<java.util.List<PropertyArg>>writeDataArr(dst, attrChainArgs, ent8 -> codeprober.util.JsonUtil.<PropertyArg>writeDataArr(dst, ent8, ent7 -> ent7.writeTo(dst)));; } else { dst.writeBoolean(false); }
+    if (attrChainArgs != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<java.util.List<PropertyArg>>writeDataArr(dst, attrChainArgs, ent2 -> codeprober.util.JsonUtil.<PropertyArg>writeDataArr(dst, ent2, ent1 -> ent1.writeTo(dst)));; } else { dst.writeBoolean(false); }
   }
 }
