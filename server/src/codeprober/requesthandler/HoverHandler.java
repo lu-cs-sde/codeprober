@@ -119,28 +119,15 @@ public class HoverHandler {
 				final Query subQ = new Query(q.start, q.end, q.head, q.index,
 						q.tail.toList().subList(0, hoverAccessIdx));
 				q.adopt(subQ);
-				final Position localStart = q.start;
-				final Position localEnd = q.tail.isEmpty() ? subQ.end : subQ.tail.get(subQ.tail.getNumChild() - 1).end;
-				List<RpcBodyLine> subRes = null;
-				if (env.document.problems().isEmpty()) {
-					subRes = env.evaluateQuery(subQ.inflate());
-					if (subRes == null) {
-						return new HoverRes();
-					}
-					if (subRes.size() >= 1 && subRes.get(0).isNode()) {
-						final NodeLocator node = subRes.get(0).asNode();
-						return hoverNodeLocator(subQ, localStart, localEnd, node);
-					}
-				}
-				return new HoverRes(subRes == null //
-						? Collections.emptyList() //
-						: Arrays.asList(TextProbeEnvironment.flattenBody(subRes)), //
-						localStart.getPackedBits(), localEnd.getPackedBits() + 1);
+				return hoverQuery(env, subQ);
 
 			case QUERY_RESULT:
 				// Nothing to do here, the query should already be visible in the editor
 				return new HoverRes();
 
+			case VAR_DECL_NAME: {
+				return hoverQuery(env, compCtx.asVarDecl().src);
+			}
 			default:
 				System.err.println("Unknown completion context: " + compCtx.type);
 				return new HoverRes();
@@ -148,6 +135,26 @@ public class HoverHandler {
 		}
 
 		return new HoverRes();
+	}
+
+	private static HoverRes hoverQuery(final TextProbeEnvironment env, final Query q) {
+		final Position localStart = q.start;
+		final Position localEnd = q.tail.isEmpty() ? q.end : q.tail.get(q.tail.getNumChild() - 1).end;
+		List<RpcBodyLine> subRes = null;
+		if (env.document.problems().isEmpty()) {
+			subRes = env.evaluateQuery(q.inflate());
+			if (subRes == null) {
+				return new HoverRes();
+			}
+			if (subRes.size() >= 1 && subRes.get(0).isNode()) {
+				final NodeLocator node = subRes.get(0).asNode();
+				return hoverNodeLocator(q, localStart, localEnd, node);
+			}
+		}
+		return new HoverRes(subRes == null //
+				? Collections.emptyList() //
+				: Arrays.asList(TextProbeEnvironment.flattenBody(subRes)), //
+				localStart.getPackedBits(), localEnd.getPackedBits() + 1);
 	}
 
 	private static HoverRes hoverNodeLocator(final Query q, Position localStart, Position localEnd,

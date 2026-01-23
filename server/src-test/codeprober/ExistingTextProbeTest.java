@@ -50,12 +50,12 @@ import codeprober.toolglue.UnderlyingTool;
  */
 public abstract class ExistingTextProbeTest {
 
-	public static class CompleteTestCase {
+	public static class TextProbeFile {
 		public final String fullPath;
 		public final JsonRequestHandler requestHandler;
 		public final TextProbeEnvironment env;
 
-		public CompleteTestCase(String fullPath, JsonRequestHandler requestHandler, TextProbeEnvironment env) {
+		public TextProbeFile(String fullPath, JsonRequestHandler requestHandler, TextProbeEnvironment env) {
 			this.fullPath = fullPath;
 			this.requestHandler = requestHandler;
 			this.env = env;
@@ -67,10 +67,10 @@ public abstract class ExistingTextProbeTest {
 		}
 	}
 
-	public static Iterable<CompleteTestCase> listTests(File workspace, UnderlyingTool tool, String expectedFileSuffix) {
+	public static Iterable<TextProbeFile> listTests(File workspace, UnderlyingTool tool, String expectedFileSuffix) {
 		final WorkspaceHandler wsh = new WorkspaceHandler(workspace);
 		final JsonRequestHandler requestHandler = new DefaultRequestHandler(tool, wsh);
-		final List<CompleteTestCase> ret = new ArrayList<>();
+		final List<TextProbeFile> ret = new ArrayList<>();
 		WorkspaceTestCase.listWorkspaceFilePaths(wsh, null, fullPath -> {
 			if (fullPath.contains("err_") || !fullPath.endsWith(expectedFileSuffix)) {
 				// Ignore
@@ -78,16 +78,16 @@ public abstract class ExistingTextProbeTest {
 			}
 			final ParsingSource psrc = ParsingSource.fromWorkspacePath(fullPath);
 			final Document doc = Parser.parse(LazyParser.extractText(psrc, wsh), '[', ']');
-			ret.add(new CompleteTestCase(fullPath, requestHandler,
+			ret.add(new TextProbeFile(fullPath, requestHandler,
 					new TextProbeEnvironment(requestHandler, wsh, psrc, doc, null, false)));
 
 		});
 		return ret;
 	}
 
-	private final CompleteTestCase tc;
+	private final TextProbeFile tc;
 
-	public ExistingTextProbeTest(CompleteTestCase tc) {
+	public ExistingTextProbeTest(TextProbeFile tc) {
 		this.tc = tc;
 	}
 

@@ -60,8 +60,8 @@
     [[$d.completionContextAt(4, 2)=null]]
 
 3-6: '$f:='
-    [[$d.completionContextAt(4, 3)=null]]
-    [[$d.completionContextAt(4, 4)=null]]
+    [[$d.completionContextAt(4, 3)=[VAR_DECL_NAME, VarDecl]]]
+    [[$d.completionContextAt(4, 4)=$d.completionContextAt(4, 3)]]
     [[$d.completionContextAt(4, 5)=null]]
     [[$d.completionContextAt(4, 6)=null]]
 

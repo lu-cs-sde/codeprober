@@ -104,10 +104,6 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
             break;
           }
           case 'query': {
-            // args.env.setStickyHighlight(allocateStickyId(), {
-            //   classNames: ['elp-result-probe'],
-            //   span: startEndToSpan(line.start, line.end + 1),
-            // });
             addStickyBox(
               ['elp-result-probe'], startEndToSpan(line.start, line.end + 1 ),
               ['elp-actual-result-probe'], line.message ?? '=',

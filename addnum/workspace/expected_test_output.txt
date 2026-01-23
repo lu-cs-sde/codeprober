@@ -46,8 +46,9 @@
   ✅ ts/ok_large.addn
   ✅ ts/ok_listvar.addn
   ✅ ts/ok_nestedbrackets.addn
+  ✅ ts/ok_nestedcall.addn
   ✅ ts/ok_num.addn
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
   ✅ ts/ok_varvar.addn
-Done: 61 pass, 25 fail
+Done: 62 pass, 25 fail

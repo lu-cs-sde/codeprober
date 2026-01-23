@@ -5,11 +5,12 @@ import java.util.Arrays;
 import codeprober.textprobe.ast.ASTNodeAnnotation.Attribute;
 import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
+import codeprober.textprobe.ast.VarDecl;
 
 public class CompletionContext {
 
 	public static enum Type {
-		QUERY_HEAD_TYPE, PROPERTY_NAME, QUERY_RESULT;
+		QUERY_HEAD_TYPE, PROPERTY_NAME, QUERY_RESULT, VAR_DECL_NAME;
 	}
 
 	public final Type type;
@@ -36,6 +37,10 @@ public class CompletionContext {
 		return new CompletionContext(Type.QUERY_RESULT, q);
 	}
 
+	public static CompletionContext fromVarDeclName(VarDecl v) {
+		return new CompletionContext(Type.VAR_DECL_NAME, v);
+	}
+
 	@Attribute
 	public Type type() {
 		return type;
@@ -53,6 +58,10 @@ public class CompletionContext {
 
 	public Query asQueryResult() {
 		return (Query) detail;
+	}
+
+	public VarDecl asVarDecl() {
+		return (VarDecl) detail;
 	}
 
 	public Object cpr_getOutput() {

@@ -17,6 +17,7 @@ import codeprober.protocol.data.CompleteRes;
 import codeprober.protocol.data.CompletionItem;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.Property;
+import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.rpc.JsonRequestHandler;
@@ -81,6 +82,13 @@ public class CompleteHandler {
 			}
 			switch (compCtx.type) {
 			case QUERY_HEAD_TYPE:
+				final Query qhead = compCtx.asQueryHead();
+				if (qhead != null && qhead.isArgument()) {
+					// Arguments inside other queries cannot be normal types. Only add the metavars
+					final List<CompletionItem> ret = new ArrayList<>();
+					addMetaVars(env, ret);
+					return new CompleteRes(ret);
+				}
 				return completeTypes(req, parsed, env);
 
 			case PROPERTY_NAME:
@@ -113,6 +121,10 @@ public class CompleteHandler {
 						"Query result"));
 				addMetaVars(env, ret);
 				return new CompleteRes(ret);
+
+			case VAR_DECL_NAME:
+				// Nothing to do
+				return new CompleteRes();
 
 			default:
 				System.err.println("Unknown completion context: " + compCtx.type);
@@ -191,8 +203,13 @@ public class CompleteHandler {
 
 		final List<PropertyAccess> subAccesses = inflated.tail.toList().subList(0, tailIdx);
 		final List<String> attrs = subAccesses.stream().map(x -> x.name.value).collect(Collectors.toList());
+		final List<List<PropertyArg>> argList = env.mapPropAccessesToArgLists(subAccesses);
+		if (argList != null && argList.contains(null)) {
+			// Some argument failed to map
+			return new CompleteRes();
+		}
 		final Object result = ListPropertiesHandler.evaluateAttrChain(parsed.info, match.node.underlyingAstNode, attrs,
-				env.mapPropAccessesToArgLists(subAccesses), new ArrayList<>());
+				argList, new ArrayList<>());
 		if (result == null || result == ListPropertiesHandler.ATTR_CHAIN_FAILED) {
 			return new CompleteRes();
 		}

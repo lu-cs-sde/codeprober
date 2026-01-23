@@ -20,9 +20,11 @@ import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.ClientRequest;
 import codeprober.protocol.PositionRecoveryStrategy;
 import codeprober.protocol.data.AsyncRpcUpdateValue;
+import codeprober.protocol.data.CompleteRes;
 import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
 import codeprober.protocol.data.NodeLocator;
+import codeprober.protocol.data.NullableNodeLocator;
 import codeprober.protocol.data.ParsingRequestData;
 import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.Property;
@@ -322,13 +324,52 @@ public class TextProbeEnvironment {
 				attrChainArgs.add(Collections.emptyList());
 				continue;
 			}
-			attrChainArgs.add(step.arguments.get().stream().map(arg -> {
+			final List<PropertyArg> mapped = step.arguments.get().stream().map(arg -> {
 				switch (arg.type) {
 				case INT:
 					return PropertyArg.fromInteger(arg.asInt());
 
 				case QUERY:
-					throw new RuntimeException("TODO");
+					final List<RpcBodyLine> qval = evaluateQuery(arg.asQuery());
+					if (qval == null) {
+						return null;
+					}
+					if (qval.isEmpty()) {
+						addErr(arg, "Failed evaluating arugment");
+						return null;
+					}
+					final RpcBodyLine head = qval.get(0);
+					switch (head.type) {
+					case node:
+						final NodeLocator node = head.asNode();
+						return PropertyArg.fromNodeLocator(new NullableNodeLocator(node.result.type, node));
+
+					case plain:
+						final String plain = head.asPlain();
+						if (!plain.isEmpty()) {
+							// Maybe coerce to int
+							final char first = plain.charAt(0);
+							if (first >= '0' && first <= '9') {
+								try {
+									int ival = Integer.parseInt(plain);
+									return PropertyArg.fromInteger(ival);
+								} catch (NumberFormatException nfe) {
+									// OK, not a number
+								}
+							}
+							switch (plain) {
+							case "true":
+								return PropertyArg.fromBool(true);
+							case "false":
+								return PropertyArg.fromBool(false);
+							}
+						}
+						return PropertyArg.fromString(plain);
+					default: {
+						System.err.println("Unknown arg type " + head.type);
+						return null;
+					}
+					}
 
 				case STRING:
 					return PropertyArg.fromString(arg.asString());
@@ -336,7 +377,11 @@ public class TextProbeEnvironment {
 				default:
 					throw new IllegalArgumentException("Invalid arg type " + arg.type);
 				}
-			}).collect(Collectors.toList()));
+			}).collect(Collectors.toList());
+			if (mapped.contains(null)) {
+				attrChainArgs.add(null);
+			}
+			attrChainArgs.add(mapped);
 		}
 		return attrChainArgs;
 	}
@@ -357,6 +402,10 @@ public class TextProbeEnvironment {
 		}
 
 		final List<List<PropertyArg>> attrChainArgs = mapPropAccessesToArgLists(query.tail);
+		if (attrChainArgs != null && attrChainArgs.contains(null)) {
+			// Some argument failed to map
+			return null;
+		}
 		final List<RpcBodyLine> resp = performEvalReq(parsingRequestData, locator, new Property( //
 				"m:AttrChain", //
 				query.tail.stream().map(x -> PropertyArg.fromString(x.name.value)).collect(Collectors.toList()) //

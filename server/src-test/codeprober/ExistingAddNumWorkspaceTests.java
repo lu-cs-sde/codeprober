@@ -14,12 +14,12 @@ import codeprober.toolglue.UnderlyingTool;
 public class ExistingAddNumWorkspaceTests extends ExistingTextProbeTest {
 
 	@Parameters(name = "{0}")
-	public static Iterable<CompleteTestCase> data() throws IOException {
+	public static Iterable<TextProbeFile> data() throws IOException {
 		return ExistingTextProbeTest.listTests(new File("../addnum/workspace"),
 				UnderlyingTool.fromJar("../addnum/AddNum.jar"), ".addn");
 	}
 
-	public ExistingAddNumWorkspaceTests(CompleteTestCase tc) {
+	public ExistingAddNumWorkspaceTests(TextProbeFile tc) {
 		super(tc);
 	}
 

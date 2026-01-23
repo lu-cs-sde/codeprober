@@ -19,29 +19,24 @@ import codeprober.textprobe.ast.VarUse;
 
 public class Parser {
 
+	/**
+	 * Parse all text probes in the given strings. Parsing can never fail - for
+	 * unexpected inputs, this simply returns a document with zero
+	 * containers/probes.
+	 * <p>
+	 * The document contains a number of containers, which represent "[[", "]]", and
+	 * the content in between (or different brackets depending on how
+	 * <code>startBracket</code> and <code>endBracket</code> is specified. Each
+	 * container in turn contains zero or one probes (see
+	 * {@link Container#probe()}). If the probe is <code>null</code>, then it means
+	 * that the content inside the container is empty, or of an unexpected syntax.
+	 * Handling empty/unexpected syntax can be important for language services
+	 * (completion/hover/etc).
+	 *
+	 */
 	public static Document parse(String s, char startBracket, char endBracket) {
 		final String[] lines = s.split("\n");
 		List<Container> containers = new ArrayList<>();
-
-		// Parse lines, find any "containers" in the text, compute their location as two
-		// Position objects, their content as a String, and add a "TODO" for them to be
-		// further parsed in the next step.
-		// A "container" starts with two "[[", and ends with two "]]".
-		// The end of a container is greedily parsed if there are more than two "]]" in
-		// a row. For example, if a container ends with "]]]", then the first "]" is
-		// part of the content of the container, and the last two are the ending.
-		// Any text after "//" on a line, or in between "/*" and "*/" should be ignored.
-		// Any text that doesn't match the container pattern should also be ignored.
-		// As an example, a source file may look like this:
-		/*
-		 * [[Abc]] // [[Def]] qwerty [[X lorem [[Ghi]] ipsum [[Jkl]]
-		 */
-		// There are three containers in that file: "[[Abc]]", "[[Ghi]]" and [[Jkl]].
-		// Their contents are Abc and Ghi respectively.
-		// "[[Def]]" is commented out, so it should be ignored
-		// querty, lorem and ipsum are just text and should be ignored.
-		// "[[X" has no ending before the line ends, so it should be ignored (all
-		// containers are always on a single line)
 
 		for (int lineIdx = 0; lineIdx < lines.length; ++lineIdx) {
 			final String line = lines[lineIdx];
@@ -73,12 +68,7 @@ public class Parser {
 						final Position start = new Position(lineNumber, startCol);
 						final Position end = new Position(lineNumber, endPos);
 						final String content = line.substring(startCol + 1, endPos - 2);
-						Probe probe = parseProbe(start, end, content);
-						if (probe != null) {
-							containers.add(new Container(start, end, content, probe));
-						} else {
-							containers.add(new Container(start, end, content));
-						}
+						containers.add(new Container(start, end, content, parseProbe(start, end, content)));
 						col = endPos; // Continue after the closing brackets (endPos already points past them)
 					} else {
 						// No valid end found, can skip the entire rest of the line
@@ -96,47 +86,35 @@ public class Parser {
 	}
 
 	private static Probe parseProbe(Position start, Position end, String content) {
-		// Multiple styles of containers are possible
-
+		// Multiple styles of probes are possible
+		// Try parsing each one in turn
 		ParserSource src = new ParserSource(content);
 
-		// Starting simple; a simple query has the following structure:
-		// ID (. ID)*
-		// E.g. at least one ID, followed by a dot-separated list of additional IDs
-
-		// An AssertQuery beings just like a Query, but is followed by "=" and an
-		// arbitrary string (can be empty).
-		// Try to parse as AssertQuery first (more specific than Query)
-		Query assertQuery = parseAssertQuery(start, end, src);
-		if (assertQuery != null) {
-			return Probe.fromQuery(assertQuery);
+		Position contentStart = new Position(start.line, start.column + 2);
+		QueryParseResult queryRes = parseQueryPattern(contentStart, src);
+		if (queryRes != null) {
+			if (src.isEOF()) {
+				final Position contentEnd = new Position(end.line, end.column - 2);
+				return Probe
+						.fromQuery(new Query(contentStart, contentEnd, queryRes.head, queryRes.index, queryRes.tail));
+			} else {
+				// Not EOF, maybe an assertion?
+				final Query assertQuery = parseAssertQuery(start, contentStart, end, queryRes, src);
+				if (assertQuery != null) {
+					return Probe.fromQuery(assertQuery);
+				}
+			}
 		}
-
-		// Reset for next parse attempt
-		src.reset(0);
-
-		// Try to parse as a Query
-		Query query = parseQuery(start, end, src);
-		if (query != null) {
-			return Probe.fromQuery(query);
-		}
-
 		// Reset for next parse attempt
 		src.reset(0);
 
 		// Try to parse as VarDecl.
-		// Syntax is:
-		// $ID:=Query
-		// Starts with dollar sign, then an ID, then ":=", then a Query (same as above,
-		// no assertion).
-		// No spaces permitted between the components
 		VarDecl varDecl = parseVarDecl(start, end, src);
 		if (varDecl != null) {
 			return Probe.fromVarDecl(varDecl);
 		}
 
-		// It is OK/not an error to not match any known container structure, just return
-		// null.
+		// Neither pattern worked, just return null
 		return null;
 	}
 
@@ -213,34 +191,46 @@ public class Parser {
 					Argument arg = null;
 
 					int argOffset = src.getOffset();
-					String litStr = src.parseQuotedString();
-					if (litStr != null) {
+					final char peek = src.peek();
+					switch (peek) {
+					case '"': {
+						String litStr = src.parseQuotedString();
+						if (litStr == null) {
+							return null;
+						}
 						Position strStart = new Position(start.line, start.column + argOffset + 1);
 						Position strEnd = new Position(start.line, start.column + src.getOffset() - 2);
 						arg = new Argument(new Label(strStart, strEnd, litStr));
-					} else {
-						Integer litNum = src.parseInt();
-						if (litNum != null) {
+						break;
+					}
+					case '$': {
+						// Parse a Query argument
+						int queryStart = src.getOffset();
+						QueryParseResult queryResult = parseQueryPattern(start, src);
+						if (queryResult == null) {
+							return null; // Invalid query
+						}
+						final Position queryStartPos = new Position(start.line, start.column + queryStart);
+						final Position queryEndPos = new Position(start.line, start.column + src.getOffset() - 1);
+						final Query query = new Query(queryStartPos, queryEndPos, queryResult.head, queryResult.index,
+								queryResult.tail);
+						arg = new Argument(query);
+						break;
+					}
+					default: {
+						if (peek >= '0' && peek <= '9' || peek == '-') {
+							Integer litNum = src.parseInt();
+							if (litNum == null) {
+								return null;
+							}
 							Position numStart = new Position(start.line, start.column + argOffset);
 							Position numEnd = new Position(start.line, start.column + src.getOffset() - 1);
 							arg = new Argument(numStart, numEnd, litNum);
-						} else if (src.peek() == '$') {
-							// Parse a Query argument
-							int queryStart = src.getOffset();
-							ParserSource querySrc = new ParserSource(src.remaining());
-							Position queryStartPos = new Position(start.line, start.column + queryStart);
-							QueryParseResult queryResult = parseQueryPattern(queryStartPos, querySrc);
-							if (queryResult == null) {
-								return null; // Invalid query
-							}
-							src.setOffset(queryStart + queryResult.endOffset);
-							Position queryEndPos = new Position(start.line, start.column + src.getOffset() - 1);
-							Query query = new Query(queryStartPos, queryEndPos, queryResult.head, queryResult.index,
-									queryResult.tail);
-							arg = new Argument(query);
 						} else {
-							return null; // Unknown argument type
+							return null;
 						}
+						break;
+					}
 					}
 
 					if (arg != null) {
@@ -287,15 +277,10 @@ public class Parser {
 				src.getOffset());
 	}
 
-	private static Query parseAssertQuery(Position containerStart, Position end, ParserSource src) {
+	private static Query parseAssertQuery(Position containerStart, Position contentStart, Position end,
+			QueryParseResult queryRes, ParserSource src) {
 		// Parse pattern: ID (. ID)* [!][~]= val
 		// Where val can be any string (including empty) or a Query starting with $
-
-		Position contentStart = new Position(containerStart.line, containerStart.column + 2);
-		QueryParseResult result = parseQueryPattern(contentStart, src);
-		if (result == null) {
-			return null;
-		}
 
 		final Position eqPos = new Position(contentStart.line, contentStart.column + src.getOffset());
 		// Check for optional ! and ~ modifiers
@@ -333,25 +318,8 @@ public class Parser {
 
 		// Calculate content positions for AssertQuery
 		Position contentEnd = new Position(end.line, end.column - 2);
-		return new Query(contentStart, contentEnd, result.head, result.index, result.tail,
+		return new Query(contentStart, contentEnd, queryRes.head, queryRes.index, queryRes.tail,
 				new QueryAssert(eqPos, contentEnd, exclamation, tilde, eqPos, expectedValue));
-	}
-
-	private static Query parseQuery(Position start, Position end, ParserSource src) {
-		// Parse pattern: ID (. ID)*
-		// ID is a sequence of letters, digits, and underscores (typical identifier)
-
-		Position contentStart = new Position(start.line, start.column + 2);
-		QueryParseResult result = parseQueryPattern(contentStart, src);
-		if (result == null || !src.isEOF()) {
-			return null; // Extra content after query, not a valid Query
-		}
-
-		// Calculate content positions (not container positions)
-		Position contentEnd = new Position(end.line, end.column - 2);
-
-		// First label is the type, rest are property steps
-		return new Query(contentStart, contentEnd, result.head, result.index, result.tail);
 	}
 
 	private static VarDecl parseVarDecl(Position start, Position end, ParserSource src) {
@@ -364,7 +332,7 @@ public class Parser {
 		}
 
 		// Parse the variable name (ID)
-		int nameStart = src.getOffset();
+		int nameStart = src.getOffset() - 1; // -1 for '$'
 		String varName = src.parseID();
 		if (varName == null) {
 			return null; // No identifier found

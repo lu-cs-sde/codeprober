@@ -33,9 +33,26 @@ public class Query extends AbstractASTNode {
 		this.assertion = addChild(new Opt<>(assertion));
 	}
 
+	@Attribute
+	public boolean isArgument() {
+		ASTNode parent = getParent();
+		while (parent != null) {
+			if (parent instanceof PropertyAccess) {
+				return true;
+			}
+			parent = parent.getParent();
+		}
+		return false;
+	}
+
 	@Child(name = "head")
 	public QueryHead head() {
 		return head;
+	}
+
+	@Child(name = "tail")
+	public ASTList<PropertyAccess> tail() {
+		return tail;
 	}
 
 	@Child(name = "assertion")

@@ -11,6 +11,7 @@ import java.util.function.Predicate;
 
 import codeprober.textprobe.CompletionContext;
 import codeprober.textprobe.ast.ASTNodeAnnotation.Attribute;
+import codeprober.textprobe.ast.Argument.ArgumentType;
 import codeprober.textprobe.ast.Probe.Type;
 
 public class Document extends AbstractASTNode {
@@ -140,11 +141,13 @@ public class Document extends AbstractASTNode {
 
 		case VARDECL:
 			VarDecl vd = probe.asVarDecl();
-			if (!isInsideOrEnd.test(vd.src)) {
-				// Nothing to do here
-				return null;
+			if (isInside.test(vd.name)) {
+				return CompletionContext.fromVarDeclName(vd);
 			}
-			return completeQuery(col, isInsideOrEnd, isInside, vd.src);
+			if (isInsideOrEnd.test(vd.src)) {
+				return completeQuery(col, isInsideOrEnd, isInside, vd.src);
+			}
+			return null;
 
 		default:
 			System.err.println("Unknown probe type " + probe);
@@ -181,12 +184,13 @@ public class Document extends AbstractASTNode {
 					// In an existing arg?
 					for (Argument arg : acc.arguments.get()) {
 						if (isInsideOrEnd.test(arg)) {
-							System.out.println("In arg " + arg.pp());
+							if (arg.type == ArgumentType.QUERY) {
+								return completeQuery(col, isInsideOrEnd, isInside, arg.asQuery());
+							}
 							return null;
 						}
 					}
-					System.out.println(
-							"Perhaps at end of list? Search backwards in string, see if a comma sign is found");
+					// Perhaps at end of list? TODO backwards in string, see if a comma sign is found
 					return null;
 				}
 			}
