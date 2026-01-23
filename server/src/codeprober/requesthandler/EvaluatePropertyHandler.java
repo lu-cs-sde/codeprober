@@ -14,8 +14,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
-import org.json.JSONObject;
-
 import codeprober.AstInfo;
 import codeprober.locator.ApplyLocator;
 import codeprober.locator.ApplyLocator.ResolvedNode;

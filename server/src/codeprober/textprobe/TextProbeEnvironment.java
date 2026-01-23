@@ -20,7 +20,6 @@ import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.ClientRequest;
 import codeprober.protocol.PositionRecoveryStrategy;
 import codeprober.protocol.data.AsyncRpcUpdateValue;
-import codeprober.protocol.data.CompleteRes;
 import codeprober.protocol.data.EvaluatePropertyReq;
 import codeprober.protocol.data.EvaluatePropertyRes;
 import codeprober.protocol.data.NodeLocator;
@@ -259,7 +258,6 @@ public class TextProbeEnvironment {
 			throw new IllegalArgumentException("Unexpected VAR QueryHead");
 		}
 		final String headType = head.asType().value;
-//		query = query.inflate();
 		final TALStep rootNode = new TALStep("<ROOT>", null, ((head.start.line) << 12) + 1,
 				(head.start.line << 12) + 4095, 0);
 		final SynchronousEvaluationResult result = performEvalReq(parsingRequestData,
