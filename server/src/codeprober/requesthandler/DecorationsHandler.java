@@ -6,12 +6,13 @@ import java.util.List;
 import codeprober.protocol.data.Decoration;
 import codeprober.protocol.data.GetDecorationsReq;
 import codeprober.protocol.data.GetDecorationsRes;
-import codeprober.protocol.data.RpcBodyLine;
-import codeprober.rpc.JsonRequestHandler;
-import codeprober.textprobe.TextProbeEnvironment;
+import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.textprobe.Parser;
+import codeprober.textprobe.TextProbeEnvironment;
+import codeprober.textprobe.TextProbeEnvironment.QueryResult;
 import codeprober.textprobe.ast.ASTNode;
 import codeprober.textprobe.ast.Container;
+import codeprober.textprobe.ast.Document;
 import codeprober.textprobe.ast.Probe;
 import codeprober.textprobe.ast.Probe.Type;
 import codeprober.textprobe.ast.Query;
@@ -22,14 +23,31 @@ public class DecorationsHandler {
 		void add(ASTNode node, String type, String message);
 	}
 
-	public static GetDecorationsRes apply(GetDecorationsReq req, JsonRequestHandler requestHandler,
-			WorkspaceHandler workspaceHandler, LazyParser parser) {
-		final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, workspaceHandler, req.src.src, //
-				Parser.parse(LazyParser.extractText(req.src.src, workspaceHandler), '[', ']'), //
-				null, false);
-
+	public static GetDecorationsRes apply(GetDecorationsReq req, WorkspaceHandler workspaceHandler, LazyParser parser) {
+		final String txt = LazyParser.extractText(req.src.src, workspaceHandler);
+		if (txt == null) {
+			return new GetDecorationsRes();
+		}
+		final Document document = Parser.parse(txt, '[', ']');
+		if (document.containers.isEmpty()) {
+			return new GetDecorationsRes();
+		}
+		final ParsedAst parsedAst = parser.parse(req.src);
+		if (parsedAst.info == null) {
+			List<Decoration> ret = new ArrayList<>();
+			for (Container c : document.containers) {
+				if (c.probe() != null) {
+					ret.add(new Decoration(c.start.getPackedBits(), c.end.getPackedBits(), "error", "Failed parsing input"));
+				}
+			}
+			return new GetDecorationsRes(ret);
+		}
+		final TextProbeEnvironment env = new TextProbeEnvironment(parsedAst.info, document);
 		env.printExpectedValuesInComparisonFailures = false;
+		return apply(env);
+	}
 
+	public static GetDecorationsRes apply(TextProbeEnvironment env) {
 		final List<Decoration> ret = new ArrayList<>();
 		final DecorationAdder addDecoration = (node, type, msg) -> {
 			final Container con = node.enclosingContainer();
@@ -50,7 +68,7 @@ public class DecorationsHandler {
 		for (Container container : env.document.containers) {
 			final Probe probe = container.probe();
 			if (probe != null && probe.type == Type.VARDECL) {
-				final List<RpcBodyLine> rhs = env.evaluateQuery(probe.asVarDecl().src);
+				final QueryResult rhs = env.evaluateQuery(probe.asVarDecl().src);
 				if (rhs != null) {
 					addDecoration.add(probe, "var", null);
 				}
@@ -86,7 +104,7 @@ public class DecorationsHandler {
 			switch (probe.type) {
 			case QUERY: {
 				final Query query = probe.asQuery();
-				final List<RpcBodyLine> lhs = env.evaluateQuery(query);
+				final QueryResult lhs = env.evaluateQuery(query);
 				if (query.assertion.isPresent()) {
 					if (lhs != null) {
 						if (env.evaluateComparison(query, lhs)) {
@@ -95,7 +113,7 @@ public class DecorationsHandler {
 					}
 				} else {
 					if (lhs != null) {
-						final String flat = TextProbeEnvironment.flattenBody(lhs);
+						final String flat = env.flattenBody(lhs);
 						addDecoration.add(probe, "query", "= " + flat);
 					}
 				}

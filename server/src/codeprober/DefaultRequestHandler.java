@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.json.JSONException;
@@ -116,6 +117,10 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 		this.workspaceHandler = workspaceHandler != null ? workspaceHandler : WorkspaceHandler.getDefault();
 	}
 
+	public WorkspaceHandler getWorkspaceHandler() {
+		return workspaceHandler;
+	}
+
 	private AstInfo parsedAstToInfo(Object ast, PositionRecoveryStrategy posRecovery) {
 		AstNode astNode = new AstNode(ast);
 
@@ -196,6 +201,127 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 	@Override
 	public JSONObject handleRequest(ClientRequest request) {
+		final AtomicBoolean addLog = new AtomicBoolean(logger != null);
+		JSONObject ret = performParsedRequest(lp -> new RequestAdapter() {
+
+			@Override
+			protected ListTreeRes handleListTree(ListTreeReq req) {
+				return ListTreeRequestHandler.apply(req, lp);
+			}
+
+			@Override
+			protected ListNodesRes handleListNodes(ListNodesReq req) {
+				if (addLog.getAndSet(false)) {
+					logger.log(new JSONObject() //
+							.put("t", "ListNodes") //
+							.put("pos", req.pos));
+				}
+				return ListNodesHandler.apply(req, lp);
+			}
+
+			@Override
+			protected ListPropertiesRes handleListProperties(ListPropertiesReq req) {
+				if (addLog.getAndSet(false)) {
+					logger.log(new JSONObject() //
+							.put("t", "ListProperties") //
+							.put("node", req.locator.result.type));
+				}
+				return ListPropertiesHandler.apply(req, lp);
+			}
+
+			@Override
+			protected ListTestSuitesRes handleListTestSuites(ListTestSuitesReq req) {
+				return TestRequestHandler.list(req);
+			}
+
+			@Override
+			protected GetTestSuiteRes handleGetTestSuite(GetTestSuiteReq req) {
+				return TestRequestHandler.get(req);
+			}
+
+			@Override
+			protected PutTestSuiteRes handlePutTestSuite(PutTestSuiteReq req) {
+				return TestRequestHandler.put(req);
+			}
+
+			@Override
+			protected EvaluatePropertyRes handleEvaluateProperty(EvaluatePropertyReq req) {
+				if (addLog.getAndSet(false)) {
+					logger.log(new JSONObject() //
+							.put("t", "EvaluateProperty") //
+							.put("prop", req.property.name) //
+							.put("node", req.locator.result.type));
+				}
+				return EvaluatePropertyHandler.apply(req, lp);
+			}
+
+			@Override
+			protected HoverRes handleHover(HoverReq req) {
+				return HoverHandler.apply(req, DefaultRequestHandler.this, lp, workspaceHandler);
+			}
+
+			@Override
+			protected CompleteRes handleComplete(CompleteReq req) {
+				return CompleteHandler.apply(req, DefaultRequestHandler.this, lp, workspaceHandler);
+			}
+
+			@Override
+			protected GetDecorationsRes handleGetDecorations(GetDecorationsReq req) {
+				return DecorationsHandler.apply(req, workspaceHandler, lp);
+			};
+
+			@Override
+			protected GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {
+				return workspaceHandler.handleGetWorkspaceFile(req);
+			}
+
+			@Override
+			protected ListWorkspaceDirectoryRes handleListWorkspaceDirectory(ListWorkspaceDirectoryReq req) {
+				return workspaceHandler.handleListWorkspaceDirectory(req);
+			}
+
+			@Override
+			protected PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
+				final PutWorkspaceContentRes ret = workspaceHandler.handlePutWorkspaceContent(req);
+				if (ret.ok) {
+					request.onDidUpdateWorkspacePath.accept(req.path);
+				}
+				return ret;
+			}
+
+			@Override
+			protected FindWorkspaceFilesRes handleFindWorkspaceFiles(FindWorkspaceFilesReq req) {
+				return workspaceHandler.handleFindWorkspaceFiles(req);
+			}
+
+			@Override
+			protected PutWorkspaceMetadataRes handlePutWorkspaceMetadata(PutWorkspaceMetadataReq req) {
+				return workspaceHandler.handlePutWorkspaceMetadata(req);
+			}
+
+			@Override
+			protected RenameWorkspacePathRes handleRenameWorkspacePath(RenameWorkspacePathReq req) {
+				return workspaceHandler.handleRenameWorkspacePath(req);
+			}
+
+			@Override
+			protected UnlinkWorkspacePathRes handleUnlinkWorkspacePath(UnlinkWorkspacePathReq req) {
+				return workspaceHandler.handleUnlinkWorkspacePath(req);
+			}
+		}.handle(request.data));
+		if (addLog.getAndSet(false)) {
+			final String type = request.data.optString("type");
+			if (type != null) {
+				logger.log(new JSONObject().put("t", type));
+			}
+		}
+		if (ret != null) {
+			return ret;
+		}
+		throw new JSONException("Unexpected request type");
+	}
+
+	public <T> T performParsedRequest(Function<LazyParser, T> performWithParser) {
 		final AtomicReference<File> tmp = new AtomicReference<>(null);
 		final BiFunction<String, String, File> createTmpFile = (inputText, tmpSuffix) -> {
 			final File existing = tmp.get();
@@ -265,128 +391,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 					lastParsedInput = null;
 				}
 			};
-			final AtomicBoolean addLog = new AtomicBoolean(logger != null);
-			final JSONObject handled = new RequestAdapter() {
-
-				@Override
-				protected ListTreeRes handleListTree(ListTreeReq req) {
-					return ListTreeRequestHandler.apply(req, lp);
-				}
-
-				@Override
-				protected ListNodesRes handleListNodes(ListNodesReq req) {
-					if (addLog.getAndSet(false)) {
-						logger.log(new JSONObject() //
-								.put("t", "ListNodes") //
-								.put("pos", req.pos));
-					}
-					return ListNodesHandler.apply(req, lp);
-				}
-
-				@Override
-				protected ListPropertiesRes handleListProperties(ListPropertiesReq req) {
-					if (addLog.getAndSet(false)) {
-						logger.log(new JSONObject() //
-								.put("t", "ListProperties") //
-								.put("node", req.locator.result.type));
-					}
-					return ListPropertiesHandler.apply(req, lp);
-				}
-
-				@Override
-				protected ListTestSuitesRes handleListTestSuites(ListTestSuitesReq req) {
-					return TestRequestHandler.list(req);
-				}
-
-				@Override
-				protected GetTestSuiteRes handleGetTestSuite(GetTestSuiteReq req) {
-					return TestRequestHandler.get(req);
-				}
-
-				@Override
-				protected PutTestSuiteRes handlePutTestSuite(PutTestSuiteReq req) {
-					return TestRequestHandler.put(req);
-				}
-
-				@Override
-				protected EvaluatePropertyRes handleEvaluateProperty(EvaluatePropertyReq req) {
-					if (addLog.getAndSet(false)) {
-						logger.log(new JSONObject() //
-								.put("t", "EvaluateProperty") //
-								.put("prop", req.property.name) //
-								.put("node", req.locator.result.type));
-					}
-					return EvaluatePropertyHandler.apply(req, lp);
-				}
-
-				@Override
-				protected HoverRes handleHover(HoverReq req) {
-					return HoverHandler.apply(req, DefaultRequestHandler.this, lp, workspaceHandler);
-				}
-
-				@Override
-				protected CompleteRes handleComplete(CompleteReq req) {
-					return CompleteHandler.apply(req, DefaultRequestHandler.this, lp, workspaceHandler);
-				}
-
-				@Override
-				protected GetDecorationsRes handleGetDecorations(GetDecorationsReq req) {
-					return DecorationsHandler.apply(req, DefaultRequestHandler.this, workspaceHandler, lp);
-				};
-
-				@Override
-				protected GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {
-					return workspaceHandler.handleGetWorkspaceFile(req);
-				}
-
-				@Override
-				protected ListWorkspaceDirectoryRes handleListWorkspaceDirectory(ListWorkspaceDirectoryReq req) {
-					return workspaceHandler.handleListWorkspaceDirectory(req);
-				}
-
-				@Override
-				protected PutWorkspaceContentRes handlePutWorkspaceContent(PutWorkspaceContentReq req) {
-					final PutWorkspaceContentRes ret = workspaceHandler.handlePutWorkspaceContent(req);
-					if (ret.ok) {
-						request.onDidUpdateWorkspacePath.accept(req.path);
-					}
-					return ret;
-				}
-
-				@Override
-				protected FindWorkspaceFilesRes handleFindWorkspaceFiles(FindWorkspaceFilesReq req) {
-					return workspaceHandler.handleFindWorkspaceFiles(req);
-				}
-
-				@Override
-				protected PutWorkspaceMetadataRes handlePutWorkspaceMetadata(PutWorkspaceMetadataReq req) {
-					return workspaceHandler.handlePutWorkspaceMetadata(req);
-				}
-
-				@Override
-				protected RenameWorkspacePathRes handleRenameWorkspacePath(RenameWorkspacePathReq req) {
-					return workspaceHandler.handleRenameWorkspacePath(req);
-				}
-
-				@Override
-				protected UnlinkWorkspacePathRes handleUnlinkWorkspacePath(UnlinkWorkspacePathReq req) {
-					return workspaceHandler.handleUnlinkWorkspacePath(req);
-				}
-			}.handle(request.data);
-			if (addLog.getAndSet(false)) {
-				final String type = request.data.optString("type");
-				if (type != null) {
-					logger.log(new JSONObject().put("t", type));
-				}
-			}
-			if (handled != null) {
-				return handled;
-			}
-			throw new JSONException("Unexpected request type");
-//		} catch (JSONException e) {
-//			System.err.println("Failed handling typed request");
-//			e.printStackTrace();
-			// Fall down to old implementation, if available
+			return performWithParser.apply(lp);
 		} finally {
 			final File tmpFile = tmp.get();
 			if (tmpFile != null) {

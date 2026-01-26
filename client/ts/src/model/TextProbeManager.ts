@@ -86,6 +86,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
       res.lines.forEach(line => {
         switch (line.type) {
           case 'error': {
+            ++combinedResults.numFail;
             const msg = `❌ ${line.message ?? 'Error'}`;
             addStickyBox(
               ['elp-result-fail'], startEndToSpan(line.start, line.end + 1 ),
@@ -104,6 +105,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
             break;
           }
           case 'query': {
+            ++combinedResults.numPass;
             addStickyBox(
               ['elp-result-probe'], startEndToSpan(line.start, line.end + 1 ),
               ['elp-actual-result-probe'], line.message ?? '=',
@@ -112,6 +114,7 @@ const setupTextProbeManager = (args: TextProbeManagerArgs): TextProbeManager => 
             break;
           }
           case 'ok': {
+            ++combinedResults.numPass;
             addStickyBox(
               ['elp-result-success'], startEndToSpan(line.start, line.end + 1 ),
               ['elp-actual-result-success'], line.message ?? ' ✅',

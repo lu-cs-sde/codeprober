@@ -89,7 +89,6 @@ const displayFuzzyWorkspaceFileFinder = (env: ModalEnv, workspace: Workspace, sh
         row.classList.add('fileMatch');
         row.innerText = match;
         const onclick = () => {
-          console.log('goto it!')
           cleanup();
           workspace.setActiveWorkspacePath(match);
         }
@@ -134,7 +133,6 @@ const displayFuzzyWorkspaceFileFinder = (env: ModalEnv, workspace: Workspace, sh
 
   const updateDispatcher = env.createCullingTaskSubmitter(150);
   input.addEventListener('input', () => {
-    console.log('changed to', input.value);
     updateDispatcher.submit(updateResultArea);
   });
 

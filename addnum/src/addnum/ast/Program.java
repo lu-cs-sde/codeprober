@@ -4,6 +4,7 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 
+import addnum.FluentTestHelper;
 import addnum.ast.ASTNodeAnnotation.Attribute;
 import addnum.ast.ASTNodeAnnotation.Child;
 
@@ -65,5 +66,10 @@ public class Program extends Node {
 	@Attribute
 	public Object greet(Object obj) {
 		return "Hello " + obj;
+	}
+
+	@Attribute
+	public FluentTestHelper fluentTest() {
+		return new FluentTestHelper();
 	}
 }

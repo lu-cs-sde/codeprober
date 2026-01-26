@@ -484,9 +484,9 @@ public class WorkspaceHandler {
 			Files.walkFileTree(wsrootPath, new SimpleFileVisitor<Path>() {
 
 				@Override
-				public FileVisitResult visitFile(Path paramT, BasicFileAttributes paramBasicFileAttributes)
+				public FileVisitResult visitFile(Path path, BasicFileAttributes attrs)
 						throws IOException {
-					final String relPath = wsrootPath.relativize(paramT).toString();
+					final String relPath = wsrootPath.relativize(path).toString();
 					if (pattern == null || pattern.matcher(relPath).matches()) {
 						final Integer score = FuzzyMatcher.score(query, relPath);
 						if (score != null) {
@@ -496,7 +496,15 @@ public class WorkspaceHandler {
 							}
 						}
 					}
-					return super.visitFile(paramT, paramBasicFileAttributes);
+					return super.visitFile(path, attrs);
+				}
+
+				@Override
+				public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+					if (dir.toFile().getName().equals(METADATA_DIR_NAME)) {
+						return FileVisitResult.SKIP_SUBTREE;
+					}
+					return super.preVisitDirectory(dir, attrs);
 				}
 			});
 		} catch (IOException e) {

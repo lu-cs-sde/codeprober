@@ -103,6 +103,11 @@ public class ASTNode {
 		}
 	}
 
+	@Override
+	public boolean equals(Object obj) {
+		return this == obj;
+	}
+
 	public static enum TraversalResult {
 		CONTINUE, SKIP_SUBTREE;
 	}

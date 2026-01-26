@@ -1,0 +1,17 @@
+{{A.b!}} // [[$q:=Query]]
+
+/*
+[[$q.pp=A.b!="false"]]
+
+[[$a:=$q.assertion]]
+    [[$a!=null]]
+    [[$a.loc=[1:6->1:6]]]
+    [[$a.negate=true]]
+    [[$a.contains=false]]
+    [[$a.expectedValue.type=CONSTANT]]
+
+[[$ev:=$a.expectedValue.asConstant]]
+    [[$ev!=null]]
+    [[$ev.value=false]]
+    [[$ev.loc=$a.loc]]
+*/

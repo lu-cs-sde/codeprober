@@ -1,6 +1,5 @@
 package codeprober.textprobe.ast;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -13,9 +12,6 @@ public class Query extends AbstractASTNode {
 	public final Integer index;
 	public final ASTList<PropertyAccess> tail;
 	public final Opt<QueryAssert> assertion;
-
-	// Attribute caches
-	private Query inflate_value = null;
 
 	public Query(Position start, Position end, QueryHead head, Integer index, List<PropertyAccess> tail) {
 		this(start, end, head, index, tail, null);
@@ -82,21 +78,5 @@ public class Query extends AbstractASTNode {
 		if (head.type == Type.VAR && index != null) {
 			addErr.accept(head, "Cannot mix var ref and indexing");
 		}
-	}
-
-	@Attribute(isNTA = true)
-	public Query inflate() {
-		if (inflate_value == null) {
-			if (head.type != Type.VAR) {
-				inflate_value = this;
-			} else {
-				Query remoteQuery = head.asVar().decl().src.inflate();
-				final List<PropertyAccess> mergedList = new ArrayList<>();
-				mergedList.addAll(remoteQuery.tail.toList());
-				mergedList.addAll(tail.toList());
-				inflate_value = adopt(new Query(start, end, remoteQuery.head, remoteQuery.index, mergedList));
-			}
-		}
-		return inflate_value;
 	}
 }

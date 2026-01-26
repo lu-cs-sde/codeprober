@@ -15,13 +15,16 @@
 // Imprecise string-contains-based comparison
 //   [[$rn.getChildren~=Add]]
 //   [[$rn.getChildren~=Num]]
-// Precise contains-based comparison
 //   [[$rn.getChildren!=$one]]
 //   [[$rn.getChildren~=$three]]
 //   [[$rn.getChildren~=$four]]
-//   [[$p.rootNode.getChildren~=$rn.rhs]]
 //   [[$p.rootNode.getChildren~=$rn.lhs]]
-//   [[$p.rootNode.getChildren!~=$rn.lhs.lhs]]
+//   [[$p.rootNode.getChildren~=$rn.lhs.lhs]]
+// Precise contains-based comparison
+//   [[$p.rootNode.getChildren.contains($rn.lhs)!]]
+//   [[$p.rootNode.getChildren.contains($rn.rhs)=true]]
+//   [[$p.rootNode.getChildren.contains($rn.lhs.rhs)=false]]
+//   [[$p.rootNode.getChildren.contains($rn.lhs.lhs)=false]]
 
 // Note that string-interpolation doesn't work in the middle of a RHS
 //   [[$rn.getChildren!=[$three, $four]]]

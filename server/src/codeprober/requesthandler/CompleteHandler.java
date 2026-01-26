@@ -8,8 +8,6 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import codeprober.ast.AstNode;
-import codeprober.locator.ApplyLocator;
-import codeprober.locator.ApplyLocator.ResolvedNode;
 import codeprober.locator.AttrsInNode;
 import codeprober.locator.Span;
 import codeprober.protocol.data.CompleteReq;
@@ -17,14 +15,13 @@ import codeprober.protocol.data.CompleteRes;
 import codeprober.protocol.data.CompletionItem;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.Property;
-import codeprober.protocol.data.PropertyArg;
-import codeprober.protocol.data.RpcBodyLine;
 import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.textprobe.CompletionContext;
 import codeprober.textprobe.CompletionContext.PropertyNameDetail;
-import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.Parser;
+import codeprober.textprobe.TextProbeEnvironment;
+import codeprober.textprobe.TextProbeEnvironment.QueryResult;
 import codeprober.textprobe.ast.Position;
 import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
@@ -69,70 +66,82 @@ public class CompleteHandler {
 					.map(x -> new CompletionItem(x, x, CompletionItemKind.Function.ordinal())) //
 					.collect(Collectors.toList()));
 		}
+		if (parsed.info == null) {
+			return new CompleteRes();
+		}
 
 		// Else, perhaps text probe logic
 		final String txt = LazyParser.extractText(req.src.src, wsHandler);
 		if (txt != null) {
-			final TextProbeEnvironment env = new TextProbeEnvironment(reqHandler, wsHandler, req.src.src,
-					Parser.parse(txt, '[', ']'), null, false);
-			final CompletionContext compCtx = env.document.completionContextAt(req.line, req.column);
-			if (compCtx == null) {
-				// No completion to be done here
-				return new CompleteRes();
-			}
-			switch (compCtx.type) {
-			case QUERY_HEAD_TYPE:
-				final Query qhead = compCtx.asQueryHead();
-				if (qhead != null && qhead.isArgument()) {
-					// Arguments inside other queries cannot be normal types. Only add the metavars
-					final List<CompletionItem> ret = new ArrayList<>();
-					addMetaVars(env, ret);
-					return new CompleteRes(ret);
-				}
-				return completeTypes(req, parsed, env);
-
-			case PROPERTY_NAME:
-				final PropertyNameDetail prop = compCtx.asPropertyName();
-
-				final Query inflated = prop.query.inflate();
-				int inflatedToIdx;
-				if (prop.access == null) {
-					inflatedToIdx = inflated.tail.getNumChild();
-				} else {
-					inflatedToIdx = -1;
-					for (PropertyAccess infl : inflated.tail) {
-						++inflatedToIdx;
-						if (infl == prop.access) {
-							break;
-						}
-					}
-				}
-				return completePropAccess(req, parsed, env, prop.query, inflated, prop.access, inflatedToIdx);
-
-			case QUERY_RESULT:
-				final List<RpcBodyLine> lhsEval = env.evaluateQuery(compCtx.asQueryResult());
-				if (lhsEval == null) {
-					return new CompleteRes();
-				}
-				final List<CompletionItem> ret = new ArrayList<>();
-				final String flat = TextProbeEnvironment.flattenBody(lhsEval);
-				final String sortText = String.format("%s", SortTextPrefix.QUERYRESULT.getPrefix());
-				ret.add(new CompletionItem(flat, flat, CompletionItemKind.Constant.ordinal(), sortText,
-						"Query result"));
-				addMetaVars(env, ret);
-				return new CompleteRes(ret);
-
-			case VAR_DECL_NAME:
-				// Nothing to do
-				return new CompleteRes();
-
-			default:
-				System.err.println("Unknown completion context: " + compCtx.type);
-				return new CompleteRes();
-			}
+			final TextProbeEnvironment env = new TextProbeEnvironment(parsed.info, Parser.parse(txt, '[', ']'));
+			return completeTextProbes(env, req.line, req.column);
 		}
 
 		return new CompleteRes();
+	}
+
+	public static CompleteRes completeTextProbes(TextProbeEnvironment env, int line, int column) {
+		final CompletionContext compCtx = env.document.completionContextAt(line, column);
+		if (compCtx == null) {
+			// No completion to be done here
+			return new CompleteRes();
+		}
+		switch (compCtx.type) {
+		case QUERY_HEAD_TYPE:
+			final Query qhead = compCtx.asQueryHead();
+			if (qhead != null && qhead.isArgument()) {
+				// Arguments inside other queries cannot be normal types. Only add the metavars
+				final List<CompletionItem> ret = new ArrayList<>();
+				addMetaVars(env, ret);
+				return new CompleteRes(ret);
+			}
+			return completeTypes(env, line);
+
+		case PROPERTY_NAME:
+			final PropertyNameDetail prop = compCtx.asPropertyName();
+
+			final Query subQuery;
+			if (prop.access == null) {
+				subQuery = prop.query;
+			} else {
+				int inflatedToIdx = 0;
+				final Query srcQuery = prop.query;
+				for (PropertyAccess infl : srcQuery.tail) {
+					if (infl == prop.access) {
+						break;
+					}
+					++inflatedToIdx;
+				}
+				if (inflatedToIdx == srcQuery.tail.getNumChild()) {
+					subQuery = prop.query;
+				} else {
+					subQuery = new Query(srcQuery.start, srcQuery.end, srcQuery.head, srcQuery.index,
+							srcQuery.tail.toList().subList(0, Math.max(0, inflatedToIdx)));
+					srcQuery.adopt(subQuery);
+				}
+			}
+			return completePropAccess(env, subQuery);
+
+		case QUERY_RESULT:
+			final QueryResult lhsEval = env.evaluateQuery(compCtx.asQueryResult());
+			if (lhsEval == null) {
+				return new CompleteRes();
+			}
+			final List<CompletionItem> ret = new ArrayList<>();
+			final String flat = env.flattenBody(lhsEval);
+			final String sortText = String.format("%s", SortTextPrefix.QUERYRESULT.getPrefix());
+			ret.add(new CompletionItem(flat, flat, CompletionItemKind.Constant.ordinal(), sortText, "Query result"));
+			addMetaVars(env, ret);
+			return new CompleteRes(ret);
+
+		case VAR_DECL_NAME:
+			// Nothing to do
+			return new CompleteRes();
+
+		default:
+			System.err.println("Unknown completion context: " + compCtx.type);
+			return new CompleteRes();
+		}
 	}
 
 	private static String extractTypeLabel(NodeLocator nl) {
@@ -143,11 +152,11 @@ public class CompleteHandler {
 		}
 	}
 
-	private static CompleteRes completeTypes(CompleteReq req, ParsedAst parsed, TextProbeEnvironment env) {
+	private static CompleteRes completeTypes(TextProbeEnvironment env, int line) {
 		List<NodeLocator> items = new ArrayList<>();
 		Map<String, Integer> itemCount = new HashMap<>();
 
-		for (NodeLocator nl : env.listNodes(req.line, "", String.format("@lineSpan~=%d", req.line))) {
+		for (NodeLocator nl : env.listNodes(line, "", String.format("@lineSpan~=%d", line))) {
 			items.add(nl);
 			String name = extractTypeLabel(nl);
 			final int prevCount = itemCount.containsKey(name) ? itemCount.get(name) : 0;
@@ -189,64 +198,36 @@ public class CompleteHandler {
 		return new CompleteRes(ret);
 	}
 
-	private static CompleteRes completePropAccess(CompleteReq req, ParsedAst parsed, TextProbeEnvironment env,
-			Query preinflated, Query inflated, PropertyAccess mainAccess, int tailIdx) {
-		final NodeLocator loc = env.evaluateQueryHead(inflated.head, inflated.index);
-		if (loc == null) {
+	private static CompleteRes completePropAccess(TextProbeEnvironment env, Query query) {
+		final QueryResult qres = env.evaluateQuery(query);
+		if (qres == null || qres.value == null) {
 			return new CompleteRes();
 		}
 
-		ResolvedNode match = ApplyLocator.toNode(parsed.info, loc);
-		if (match == null || match.node == null) {
-			return new CompleteRes();
-		}
-
-		final List<PropertyAccess> subAccesses = inflated.tail.toList().subList(0, tailIdx);
-		final List<String> attrs = subAccesses.stream().map(x -> x.name.value).collect(Collectors.toList());
-		final List<List<PropertyArg>> argList = env.mapPropAccessesToArgLists(subAccesses);
-		if (argList != null && argList.contains(null)) {
-			// Some argument failed to map
-			return new CompleteRes();
-		}
-		final Object result = ListPropertiesHandler.evaluateAttrChain(parsed.info, match.node.underlyingAstNode, attrs,
-				argList, new ArrayList<>());
-		if (result == null || result == ListPropertiesHandler.ATTR_CHAIN_FAILED) {
-			return new CompleteRes();
-		}
+		AstNode subject = null;
 		final List<Property> rawAttrs;
-		// The subject (owner) of the property may not be the same as the query head
-		// node.
-		final AstNode subject;
-		if (parsed.info.baseAstClazz.isInstance(result)) {
-			subject = new AstNode(result);
-			rawAttrs = AttrsInNode.getTyped(parsed.info, subject, AttrsInNode.extractFilter(parsed.info, match.node),
+		if (env.info.baseAstClazz.isInstance(qres.value)) {
+			subject = new AstNode(qres.value);
+			rawAttrs = AttrsInNode.getTyped(env.info, subject, AttrsInNode.extractFilter(env.info, subject),
 					true /* all */);
 		} else {
-			rawAttrs = ListPropertiesHandler.extractPropertiesFromNonAstNode(parsed.info, result);
-			subject = null;
+			rawAttrs = ListPropertiesHandler.extractPropertiesFromNonAstNode(env.info, qres.value);
 		}
 
 		Integer remoteContextStart, remoteContextEnd;
-		if (subject == null || !subject.getRecoveredSpan(parsed.info).isMeaningful()) {
+		if (subject == null || !subject.getRecoveredSpan(env.info).isMeaningful()) {
 			remoteContextStart = null;
 			remoteContextEnd = null;
 		} else {
-			final Span span = subject.getRecoveredSpan(parsed.info);
+			final Span span = subject.getRecoveredSpan(env.info);
 			remoteContextStart = span.start;
 			remoteContextEnd = span.end;
 		}
 
-		int preinflatedIdx = -2;
-		for (PropertyAccess acc : preinflated.tail) {
-			++preinflatedIdx;
-			if (acc == mainAccess) {
-				break;
-			}
-		}
-		int localContextStart = preinflated.head.start.getPackedBits();
-		int localContextEnd = ((preinflatedIdx < 0 || preinflatedIdx >= preinflated.tail.getNumChild())
-				? preinflated.head //
-				: preinflated.tail.get(preinflatedIdx) //
+		int localContextStart = query.head.start.getPackedBits();
+		int localContextEnd = (query.tail.isEmpty() //
+				? query.head //
+				: query.tail.get(query.tail.getNumChild() - 1) //
 		).end.getPackedBits();
 
 		return new CompleteRes( //
@@ -274,6 +255,7 @@ public class CompleteHandler {
 	}
 
 	private static void addMetaVars(TextProbeEnvironment env, List<CompletionItem> out) {
+		final boolean hasProblems = !env.document.problems().isEmpty();
 		int varIdx = 0;
 		final Map<String, VarDecl> vdecls = env.document.varDecls();
 		for (String metaVar : new TreeSet<>(vdecls.keySet())) {
@@ -283,21 +265,26 @@ public class CompleteHandler {
 			final Query srcQuery = vdecls.get(metaVar).src;
 
 			Integer contextStart = null, contextEnd = null;
-			final List<RpcBodyLine> evalRes = env.evaluateQuery(srcQuery);
-			if (evalRes != null && evalRes.size() >= 1 && evalRes.get(0).isNode()) {
-				final NodeLocator node = evalRes.get(0).asNode();
-				if (node.result.start != 0 && node.result.end != 0) {
-					contextStart = node.result.start;
-					contextEnd = node.result.end;
+			final QueryResult evalRes;
+			if (hasProblems) {
+				// Cannot reliably evaluate queries when problems exist
+				evalRes = null;
+			} else {
+				evalRes = env.evaluateQuery(srcQuery);
+			}
+			if (evalRes != null && env.info.baseAstClazz.isInstance(evalRes.value)) {
+				AstNode node = new AstNode(evalRes.value);
+				final Span span = node.getRecoveredSpan(env.info);
+				if (span.start != 0 && span.end != 0) {
+					contextStart = span.start;
+					contextEnd = span.end;
 				}
 			}
-
-			final String detail = (evalRes != null && !evalRes.isEmpty()) //
-					? TextProbeEnvironment.flattenBody(evalRes) //
+			final String detail = evalRes != null //
+					? env.flattenBody(evalRes) //
 					: srcQuery.pp();
 			out.add(new CompletionItem(item, item, CompletionItemKind.Variable.ordinal(), sortText, detail,
 					contextStart, contextEnd));
 		}
-
 	}
 }

@@ -1,6 +1,7 @@
 package codeprober.textprobe;
 
 import java.util.Arrays;
+import java.util.Objects;
 
 import codeprober.textprobe.ast.ASTNodeAnnotation.Attribute;
 import codeprober.textprobe.ast.PropertyAccess;
@@ -90,5 +91,23 @@ public class CompletionContext {
 		public Object cpr_getOutput() {
 			return Arrays.asList(query, access);
 		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (!(obj instanceof PropertyNameDetail)) {
+				return false;
+			}
+			final PropertyNameDetail other = (PropertyNameDetail) obj;
+			return Objects.equals(query, other.query) && Objects.equals(access, other.access);
+		}
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (!(obj instanceof CompletionContext)) {
+			return false;
+		}
+		final CompletionContext other = (CompletionContext) obj;
+		return Objects.equals(type, other.type) && Objects.equals(detail, other.detail);
 	}
 }

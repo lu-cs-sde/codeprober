@@ -12,23 +12,24 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 import codeprober.DefaultRequestHandler;
+import codeprober.protocol.AstCacheStrategy;
+import codeprober.protocol.PositionRecoveryStrategy;
 import codeprober.protocol.data.ListWorkspaceDirectoryReq;
 import codeprober.protocol.data.ListWorkspaceDirectoryRes;
+import codeprober.protocol.data.ParsingRequestData;
 import codeprober.protocol.data.ParsingSource;
-import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.WorkspaceEntry;
 import codeprober.requesthandler.LazyParser;
+import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.requesthandler.WorkspaceHandler;
-import codeprober.rpc.JsonRequestHandler;
-import codeprober.textprobe.TextProbeEnvironment;
-import codeprober.textprobe.TextProbeEnvironment.VariableLoadStatus;
 import codeprober.textprobe.Parser;
+import codeprober.textprobe.TextProbeEnvironment;
+import codeprober.textprobe.TextProbeEnvironment.QueryResult;
+import codeprober.textprobe.TextProbeEnvironment.VariableLoadStatus;
 import codeprober.textprobe.ast.Container;
 import codeprober.textprobe.ast.Document;
 import codeprober.textprobe.ast.Probe;
-import codeprober.textprobe.ast.Probe.Type;
 import codeprober.textprobe.ast.Query;
-import codeprober.textprobe.ast.VarDecl;
 import codeprober.toolglue.UnderlyingTool;
 
 public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
@@ -49,8 +50,15 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 
 	// name() is used by JUnit to label the test case
 	public String name() {
-		return srcFilePath + ":"
-				+ (assertion == null ? "Variable load checking" : ((assertion.start.line) + " -> " + assertion.pp()));
+		String suffix;
+		if (env == null) {
+			suffix = "Parser failure";
+		} else if (assertion == null) {
+			suffix = "Variable load checking";
+		} else {
+			suffix = (assertion.start.line) + " -> " + assertion.pp();
+		}
+		return srcFilePath + ":" + suffix;
 	}
 
 	@Override
@@ -69,6 +77,12 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 	}
 
 	public void doAssert(boolean expectPass) {
+		if (env == null) {
+			if (expectPass) {
+				fail("Parsing failures");
+			}
+			return;
+		}
 		if (env.getVariableStatus() == VariableLoadStatus.NONE) {
 			final Set<String> staticProblems = env.document.problems();
 			if (!staticProblems.isEmpty()) {
@@ -94,7 +108,7 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 			return;
 		}
 
-		final List<RpcBodyLine> result = env.evaluateQuery(assertion);
+		final QueryResult result = env.evaluateQuery(assertion);
 		if (result == null) {
 			if (expectPass) {
 				fail(env.errMsgs.isEmpty() ? "No matching nodes" : env.errMsgs.toString());
@@ -147,13 +161,24 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 
 	public static List<WorkspaceTestCase> listTextProbesInWorkspace(UnderlyingTool tool, File dir) throws IOException {
 		final WorkspaceHandler wsh = new WorkspaceHandler(dir);
-		final JsonRequestHandler requestHandler = new DefaultRequestHandler(tool, wsh);
+		final DefaultRequestHandler requestHandler = new DefaultRequestHandler(tool, wsh);
 		final List<WorkspaceTestCase> ret = new ArrayList<>();
 		listWorkspaceFilePaths(wsh, null, fullPath -> {
 			final ParsingSource psrc = ParsingSource.fromWorkspacePath(fullPath);
 
 			final Document doc = Parser.parse(LazyParser.extractText(psrc, wsh), '[', ']');
-			final TextProbeEnvironment env = new TextProbeEnvironment(requestHandler, wsh, psrc, doc, null, false);
+			if (doc.containers.isEmpty()) {
+				return;
+			}
+			final ParsedAst parsedAst = requestHandler.performParsedRequest(
+					lp -> lp.parse(new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD,
+							AstCacheStrategy.PARTIAL, psrc, null, ".tmp")));
+			if (parsedAst.info == null) {
+				// Failed parsing input file. Add dummy case for reporting parse error
+				ret.add(new WorkspaceTestCase(null, fullPath, null));
+				return;
+			}
+			final TextProbeEnvironment env = new TextProbeEnvironment(parsedAst.info, doc);
 			if (!doc.problems().isEmpty()) {
 				// There are static errors. Add dummy case
 				// for reporting them

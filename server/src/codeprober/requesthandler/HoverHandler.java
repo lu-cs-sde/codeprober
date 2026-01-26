@@ -6,6 +6,7 @@ import java.util.List;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
+import codeprober.locator.CreateLocator;
 import codeprober.locator.Span;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
@@ -17,8 +18,9 @@ import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.textprobe.CompletionContext;
 import codeprober.textprobe.CompletionContext.PropertyNameDetail;
-import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.Parser;
+import codeprober.textprobe.TextProbeEnvironment;
+import codeprober.textprobe.TextProbeEnvironment.QueryResult;
 import codeprober.textprobe.ast.Position;
 import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
@@ -45,11 +47,16 @@ public class HoverHandler {
 		if (customHover != null) {
 			return new HoverRes(customHover);
 		}
+		if (parsed.info == null) {
+			if (parsed.captures == null) {
+				return new HoverRes();
+			}
+			return new HoverRes(Arrays.asList(TextProbeEnvironment.flattenBody(parsed.captures)));
+		}
 
 		final String txt = LazyParser.extractText(req.src.src, wsHandler);
 		if (txt != null) {
-			final TextProbeEnvironment env = new TextProbeEnvironment(reqHandler, wsHandler, req.src.src,
-					Parser.parse(txt, '[', ']'), null, false);
+			final TextProbeEnvironment env = new TextProbeEnvironment(parsed.info, Parser.parse(txt, '[', ']'));
 
 			// Use the "completionContext" api to help identify what is being hovered
 			final CompletionContext compCtx = env.document.completionContextAt(req.line, req.column);
@@ -65,31 +72,33 @@ public class HoverHandler {
 					// Cannot reliably interact with variables when there are static errors
 					return new HoverRes();
 				}
-				final NodeLocator subject;
+				final AstNode subjNode;
 				switch (q.head.type) {
 				case VAR: {
 					// The var may be defined as [[$var:=SomeOtherType.foo.bar.baz]]
 					// In this case, $var may or may not be a node locator at all.
 					// Let's find out
-					final List<RpcBodyLine> varDef = env.evaluateQuery(q.head.asVar().decl().src);
+					final QueryResult varDef = env.evaluateQuery(q.head.asVar().decl().src);
 					if (varDef == null) {
-						subject = null;
-					} else if (varDef.size() >= 1 && varDef.get(0).type == RpcBodyLine.Type.node) {
-						subject = varDef.get(0).asNode();
+						subjNode = null;
+					} else if (parsed.info.baseAstClazz.isInstance(varDef.value)) {
+						subjNode = new AstNode(varDef.value);
 					} else {
-						// Not a node. We _could_ evaluate a shorter chain of steps. The query head is
-						// guaranteed to be a node, and some of the intermediate steps may also be
-						// nodes. In this case, the last step was not a node.
-						// In theory we could iteratively test evaluating with one fewer steps until we
-						// get a node. However, if the user is hovering something that isn't a node and
-						// we highlight a node, that could easily cause confusion. The solution: just
-						// don't highlight anything.
-						subject = null;
+						// Not a node, just return a string representation of the value
+						return new HoverRes(Arrays.asList(env.flattenBody(varDef)), q.head.start.getPackedBits(),
+								q.head.end.getPackedBits() + 1);
 					}
 					break;
 				}
 				case TYPE: {
-					subject = env.evaluateQueryHead(q.inflate().head, q.index);
+					final QueryResult thead = env.evaluateQueryHead(q.head, q.index);
+					if (thead == null) {
+						subjNode = null;
+					} else if (parsed.info.baseAstClazz.isInstance(thead.value)) {
+						subjNode = new AstNode(thead.value);
+					} else {
+						subjNode = null;
+					}
 					break;
 				}
 				default: {
@@ -97,7 +106,8 @@ public class HoverHandler {
 					return new HoverRes();
 				}
 				}
-				return hoverNodeLocator(q, q.head.start, q.head.end, subject);
+				final NodeLocator subjLoc = subjNode == null ? null : CreateLocator.fromNode(parsed.info, subjNode);
+				return hoverNodeLocator(q, q.head.start, q.head.end, subjLoc);
 			}
 
 			case PROPERTY_NAME:
@@ -137,28 +147,28 @@ public class HoverHandler {
 		return new HoverRes();
 	}
 
-	private static HoverRes hoverQuery(final TextProbeEnvironment env, final Query q) {
+	private static HoverRes hoverQuery(TextProbeEnvironment env, final Query q) {
 		final Position localStart = q.start;
 		final Position localEnd = q.tail.isEmpty() ? q.end : q.tail.get(q.tail.getNumChild() - 1).end;
-		List<RpcBodyLine> subRes = null;
+		QueryResult subRes = null;
 		if (env.document.problems().isEmpty()) {
-			subRes = env.evaluateQuery(q.inflate());
+			subRes = env.evaluateQuery(q);
 			if (subRes == null) {
 				return new HoverRes();
 			}
-			if (subRes.size() >= 1 && subRes.get(0).isNode()) {
-				final NodeLocator node = subRes.get(0).asNode();
+
+			if (env.info.baseAstClazz.isInstance(subRes.value)) {
+				final NodeLocator node = CreateLocator.fromNode(env.info, new AstNode(subRes.value));
 				return hoverNodeLocator(q, localStart, localEnd, node);
 			}
 		}
 		return new HoverRes(subRes == null //
 				? Collections.emptyList() //
-				: Arrays.asList(TextProbeEnvironment.flattenBody(subRes)), //
+				: Arrays.asList(env.flattenBody(subRes)), //
 				localStart.getPackedBits(), localEnd.getPackedBits() + 1);
 	}
 
-	private static HoverRes hoverNodeLocator(final Query q, Position localStart, Position localEnd,
-			final NodeLocator subject) {
+	private static HoverRes hoverNodeLocator(Query q, Position localStart, Position localEnd, NodeLocator subject) {
 		Integer remoteStart, remoteEnd;
 		if (subject == null || subject.result.start == 0 || subject.result.end == 0) {
 			remoteStart = null;

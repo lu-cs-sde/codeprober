@@ -1,0 +1,17 @@
+1 + 2 + 3 // [[$oneTwo:=Add[1]]] [[$ft:=Program.fluentTest]] [[$three:=Num[2]]]
+
+/*
+[[$str:=$oneTwo.value.toString]]
+[[$ch:=$oneTwo.getChildren]]
+
+[[$ft.of($str)!]]
+[[$ft.of($str)=ok]]
+[[$ft.of($str).contains("").contains("3")!]]
+[[$ft.of($str).not.contains("2")!]]
+[[$ft.of($str).not.contains("abc")!]]
+
+[[$ft.of($ch).contains($oneTwo.getChild(0))!]]
+[[$ft.of($ch).contains($oneTwo.getChild(1))!]]
+[[$ft.of($ch).not.contains($three)!]]
+[[$ft.of($ch).not.contains($ft)!]]
+*/

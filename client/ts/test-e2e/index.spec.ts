@@ -40,11 +40,13 @@ test.describe('CodeProber Integration Tests', () => {
         expect(content).not.toContain('Actual:');
       });
 
-      test('text probe with assertion', async ({ page }) => {
-        const { content } = await fillPageContent({ page, wantedContent: '(1+2) // [[Add.value=4]]', editor });
-        expect(content).not.toContain('= 3');
-        expect(content).toContain('Actual: 3');
-      });
+      [true, false].forEach((tilde) => {
+        test(`text probe with assertion, tilde=${tilde}`, async ({ page }) => {
+          const { content } = await fillPageContent({ page, wantedContent: `(1+2) // [[Add.value${tilde ? '~' : ''}=4]]`, editor });
+          expect(content).not.toContain('= 3');
+          expect(content).toContain('Actual: 3');
+        });
+      })
       test('run workspace tests', async ({ page, request }) => {
         await fillPageContent({ page, wantedContent: '(1+2)', editor });
 

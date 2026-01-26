@@ -17,7 +17,6 @@ public class EvaluateProperty extends Rpc {
 			public final Object captureTraces = opt(Boolean.class);
 			public final Object flushBeforeTraceCollection = opt(Boolean.class);
 			public final Object flattenForTextProbes = opt(Boolean.class);
-			public final Object attrChainArgs = opt(arr(arr(PropertyArg.class)));
 		};
 	}
 

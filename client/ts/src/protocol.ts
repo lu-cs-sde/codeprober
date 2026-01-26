@@ -64,7 +64,6 @@ interface EvaluatePropertyReq {
   captureTraces?: boolean;
   flushBeforeTraceCollection?: boolean;
   flattenForTextProbes?: boolean;
-  attrChainArgs?: PropertyArg[][];
 }
 interface EvaluatePropertyRes {
   response: PropertyEvaluationResult;
@@ -156,7 +155,6 @@ interface ListPropertiesReq {
   all: boolean;
   locator: NodeLocator;
   src: ParsingRequestData;
-  attrChain?: string[];
 }
 interface ListPropertiesRes {
   body: RpcBodyLine[];

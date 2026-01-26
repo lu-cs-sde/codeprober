@@ -1,6 +1,7 @@
 package codeprober.textprobe;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import codeprober.textprobe.ast.Argument;
@@ -283,12 +284,19 @@ public class Parser {
 		// Where val can be any string (including empty) or a Query starting with $
 
 		final Position eqPos = new Position(contentStart.line, contentStart.column + src.getOffset());
+		final Position contentEnd = new Position(end.line, end.column - 2);
 		// Check for optional ! and ~ modifiers
 		boolean exclamation = src.accept('!');
 		boolean tilde = src.accept('~');
 
 		// Must have equals sign
 		if (!src.accept('=')) {
+			if (src.isEOF() && exclamation && !tilde) {
+				// Ending with "!" is syntax sugar for "!=false"
+				return new Query(contentStart, contentEnd, queryRes.head, queryRes.index, queryRes.tail,
+						new QueryAssert(eqPos, eqPos, true, false, eqPos,
+								ExpectedValue.fromConstant(new Label(eqPos, eqPos, "false"))));
+			}
 			return null; // No equals sign, not an AssertQuery
 		}
 
@@ -317,7 +325,6 @@ public class Parser {
 		}
 
 		// Calculate content positions for AssertQuery
-		Position contentEnd = new Position(end.line, end.column - 2);
 		return new Query(contentStart, contentEnd, queryRes.head, queryRes.index, queryRes.tail,
 				new QueryAssert(eqPos, contentEnd, exclamation, tilde, eqPos, expectedValue));
 	}
@@ -348,11 +355,19 @@ public class Parser {
 			return null; // No := found
 		}
 
+		final Position contentStart = new Position(start.line, start.column + 2);
+		final Position contentEnd = new Position(end.line, end.column - 2);
+
 		// Rest of content must be a valid Query
 		int queryOffset = src.getOffset();
 		String queryContent = src.remaining();
 		if (queryContent.isEmpty()) {
-			return null; // No query content
+			// Situation: [[$name:=]]
+			// Treat this as a query with empty type label
+			final Position queryLoc = contentEnd; // new Position(start.line, start.column + 2 + queryOffset);
+			Query srcQuery = new Query(queryLoc, queryLoc, QueryHead.fromType(new Label(queryLoc, queryLoc, "")), null,
+					Collections.emptyList());
+			return new VarDecl(contentStart, contentEnd, nameLabel, srcQuery);
 		}
 
 		// Create adjusted positions for the query part
@@ -369,9 +384,6 @@ public class Parser {
 		// Create the Query object for the src
 		Query srcQuery = new Query(queryStart, queryEnd, queryResult.head, queryResult.index, queryResult.tail);
 
-		// Calculate content positions for VarDecl
-		Position contentStart = new Position(start.line, start.column + 2);
-		Position contentEnd = new Position(end.line, end.column - 2);
 		return new VarDecl(contentStart, contentEnd, nameLabel, srcQuery);
 	}
 }

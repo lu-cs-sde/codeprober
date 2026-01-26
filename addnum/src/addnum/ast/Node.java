@@ -73,4 +73,9 @@ public abstract class Node implements Iterable<Node> {
 	public Iterator<Node> iterator() {
 		return children.iterator();
 	}
+
+	@Override
+	public String toString() {
+		return getClass().getSimpleName();
+	}
 }

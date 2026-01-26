@@ -76,7 +76,7 @@ public class CodeProber {
 		if (parsedArgs.jarPath != null) {
 			underlyingTool.setProxyTarget(UnderlyingTool.fromJar(parsedArgs.jarPath));
 		}
-		final JsonRequestHandler defaultHandler = new DefaultRequestHandler(underlyingTool, parsedArgs.extraArgs,
+		final DefaultRequestHandler defaultHandler = new DefaultRequestHandler(underlyingTool, parsedArgs.extraArgs,
 				sessionLogger);
 		final JsonRequestHandler userFacingHandler;
 		flog(Arrays.toString(mainArgs));
@@ -196,8 +196,7 @@ public class CodeProber {
 			File workspace = WorkspaceHandler.getWorkspaceRoot(false);
 			if (workspace != null) {
 				// Test files in workspace
-				final RunWorkspaceTest.MergedResult res = RunWorkspaceTest.run(userFacingHandler, //
-						parsedArgs.workerProcessCount == null ? 0 : parsedArgs.workerProcessCount);
+				final RunWorkspaceTest.MergedResult res = RunWorkspaceTest.run(defaultHandler);
 				System.exit(res == RunWorkspaceTest.MergedResult.ALL_PASS ? 0 : 1);
 			} else {
 				// Run (legacy) tests inside the cpr.testDir

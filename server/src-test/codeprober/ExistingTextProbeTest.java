@@ -10,21 +10,19 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import codeprober.protocol.ClientRequest;
-import codeprober.protocol.data.CompleteReq;
 import codeprober.protocol.data.CompleteRes;
 import codeprober.protocol.data.CompletionItem;
 import codeprober.protocol.data.Decoration;
-import codeprober.protocol.data.GetDecorationsReq;
 import codeprober.protocol.data.GetDecorationsRes;
 import codeprober.protocol.data.ParsingSource;
+import codeprober.requesthandler.CompleteHandler;
+import codeprober.requesthandler.DecorationsHandler;
 import codeprober.requesthandler.LazyParser;
+import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.requesthandler.WorkspaceHandler;
-import codeprober.rpc.JsonRequestHandler;
 import codeprober.test.WorkspaceTestCase;
 import codeprober.textprobe.Parser;
 import codeprober.textprobe.TextProbeEnvironment;
@@ -52,12 +50,10 @@ public abstract class ExistingTextProbeTest {
 
 	public static class TextProbeFile {
 		public final String fullPath;
-		public final JsonRequestHandler requestHandler;
 		public final TextProbeEnvironment env;
 
-		public TextProbeFile(String fullPath, JsonRequestHandler requestHandler, TextProbeEnvironment env) {
+		public TextProbeFile(String fullPath, TextProbeEnvironment env) {
 			this.fullPath = fullPath;
-			this.requestHandler = requestHandler;
 			this.env = env;
 		}
 
@@ -69,7 +65,7 @@ public abstract class ExistingTextProbeTest {
 
 	public static Iterable<TextProbeFile> listTests(File workspace, UnderlyingTool tool, String expectedFileSuffix) {
 		final WorkspaceHandler wsh = new WorkspaceHandler(workspace);
-		final JsonRequestHandler requestHandler = new DefaultRequestHandler(tool, wsh);
+		final DefaultRequestHandler requestHandler = new DefaultRequestHandler(tool, wsh);
 		final List<TextProbeFile> ret = new ArrayList<>();
 		WorkspaceTestCase.listWorkspaceFilePaths(wsh, null, fullPath -> {
 			if (fullPath.contains("err_") || !fullPath.endsWith(expectedFileSuffix)) {
@@ -78,8 +74,14 @@ public abstract class ExistingTextProbeTest {
 			}
 			final ParsingSource psrc = ParsingSource.fromWorkspacePath(fullPath);
 			final Document doc = Parser.parse(LazyParser.extractText(psrc, wsh), '[', ']');
-			ret.add(new TextProbeFile(fullPath, requestHandler,
-					new TextProbeEnvironment(requestHandler, wsh, psrc, doc, null, false)));
+			ParsedAst parsedAst = requestHandler
+					.performParsedRequest(lp -> lp.parse(TextProbeEnvironment.createParsingRequestData(fullPath)));
+			if (parsedAst.info == null) {
+				// Parsing error, add file w/ null env to be able to report it.
+				ret.add(new TextProbeFile(fullPath, null));
+			} else {
+				ret.add(new TextProbeFile(fullPath, new TextProbeEnvironment(parsedAst.info, doc)));
+			}
 
 		});
 		return ret;
@@ -92,6 +94,9 @@ public abstract class ExistingTextProbeTest {
 	}
 
 	protected void run() {
+		if (tc.env == null) {
+			fail("Parsing error");
+		}
 		tc.env.document.traverseDescendants(desc -> {
 			if (desc instanceof Query) {
 				checkQueryCompletion((Query) desc);
@@ -100,11 +105,7 @@ public abstract class ExistingTextProbeTest {
 			return TraversalResult.CONTINUE;
 		});
 
-		final ClientRequest req = new ClientRequest( //
-				new GetDecorationsReq(tc.env.parsingRequestData).toJSON(), (upd) -> {
-				}, new AtomicBoolean(false), p -> {
-				});
-		final GetDecorationsRes res = GetDecorationsRes.fromJSON(tc.requestHandler.handleRequest(req));
+		final GetDecorationsRes res = DecorationsHandler.apply(tc.env);
 		assertNotNull(res.lines);
 
 		tc.env.document.traverseDescendants(desc -> {
@@ -220,11 +221,7 @@ public abstract class ExistingTextProbeTest {
 	}
 
 	private List<CompletionItem> completeAt(ASTNode context, int line, int col) {
-		final ClientRequest req = new ClientRequest( //
-				new CompleteReq(tc.env.parsingRequestData, line, col).toJSON(), (upd) -> {
-				}, new AtomicBoolean(false), p -> {
-				});
-		final CompleteRes res = CompleteRes.fromJSON(tc.requestHandler.handleRequest(req));
+		final CompleteRes res = CompleteHandler.completeTextProbes(tc.env, line, col);
 		assertNotNull(String.format("%s: %s", context.loc(), context.pp()), res.lines);
 		return res.lines;
 	}

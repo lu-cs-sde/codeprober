@@ -456,7 +456,7 @@ const createRow = (
             }
           });
       })
-      if (path === workspace.getActiveFile()) {
+      if (path === workspace.getActiveFile() || workspace.preOpenedFiles[path]) {
         click();
       }
       break;
@@ -655,10 +655,8 @@ const initWorkspace = async (args: WorkspaceInitArgs): Promise<Workspace | null>
       const parts = path.split('/');
       parts.forEach((_segment, idx) => {
         const subPath = parts.slice(0, idx + 1).join('/');
-        if (idx < parts.length - 1) {
-          workspace.preOpenedFiles[subPath] = true;
-          workspace.visibleRows[subPath]?.clickIfClosedDir();
-        }
+        workspace.preOpenedFiles[subPath] = true;
+        workspace.visibleRows[subPath]?.clickIfClosedDir();
       });
     },
     clientSideMetadataCache: {},

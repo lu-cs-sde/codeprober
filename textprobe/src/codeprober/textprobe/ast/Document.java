@@ -230,5 +230,4 @@ public class Document extends AbstractASTNode {
 		}
 		return null;
 	}
-
 }

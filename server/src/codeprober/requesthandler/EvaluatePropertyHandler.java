@@ -186,8 +186,6 @@ public class EvaluatePropertyHandler {
 					}
 				}
 			}
-
-//			return new EvaluatePropertyRes(PropertyEvaluationResult.fromSync(new SynchronousEvaluationResult(parsed.captures, 0, 0, 0, 0, 0, null, null, null)))
 		} else {
 			final TracingBuilder traceBuilder = new TracingBuilder(parsed.info);
 			final AtomicBoolean ignoreStdio = new AtomicBoolean(false);
@@ -291,31 +289,6 @@ public class EvaluatePropertyHandler {
 							}
 							break;
 						}
-						case "m:AttrChain": {
-							// A list of 1 or more attribute names to be evaluated in sequence
-							Object chainVal = match.node.underlyingAstNode;
-							if (req.property.args != null) {
-								chainVal = ListPropertiesHandler.evaluateAttrChain(parsed.info, chainVal,
-										req.property.args.stream().map(arg -> {
-											if (!arg.isString()) {
-												throw new IllegalArgumentException(
-														"All arguments to m:AttrChain must be strings, got "
-																+ arg.type);
-											}
-											return arg.asString();
-										}).collect(Collectors.toList()), req.attrChainArgs, body);
-
-								if (chainVal == ListPropertiesHandler.ATTR_CHAIN_FAILED) {
-									if (!req.captureStdout && shouldExpandListNodes) {
-										body.add(RpcBodyLine.fromPlain(
-												"Attribute evaluation chain failed, click 'Capture stdout' to see full error."));
-									}
-									return;
-								}
-							}
-							value = chainVal;
-							break;
-						}
 						default: {
 							value = "Invalid meta-attribute '" + queryAttrName + "'";
 							break;
@@ -377,27 +350,6 @@ public class EvaluatePropertyHandler {
 									EncodeResponseValue.shouldExpandListNodes = shouldExpandListNodes;
 									EncodeResponseValue.encodeTyped(parsed.info, body, diagnostics, value,
 											new HashSet<>());
-
-//									for (RpcBodyLine line : body) {
-//										System.out.println(body.size());
-////										System.out.println("> " + line.type);
-//									}
-//									System.out.println("-..-");
-//									for (RpcBodyLine line : body) {
-//										System.out.println("> " + line.toJSON());
-//									}
-//									System.out.println("--");
-//									if (!shouldExpandListNodes && maybeInlineArrays) {
-//										// Inline arrays
-//										for (int i = 0; i < body.size(); ++i) {
-//											final RpcBodyLine row = body.get(i);
-//											if (row.isArr()) {
-//												body.remove(i);
-//												body.addAll(i, row.asArr());
-//												i += row.asArr().size() - 1;
-//											}
-//										}
-//									}
 								} finally {
 									EncodeResponseValue.shouldExpandListNodes = true;
 								}

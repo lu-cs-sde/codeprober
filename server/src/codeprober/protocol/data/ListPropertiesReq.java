@@ -7,16 +7,11 @@ public class ListPropertiesReq implements codeprober.util.JsonUtil.ToJsonable {
   public final boolean all;
   public final NodeLocator locator;
   public final ParsingRequestData src;
-  public final java.util.List<String> attrChain;
   public ListPropertiesReq(boolean all, NodeLocator locator, ParsingRequestData src) {
-    this(all, locator, src, (java.util.List<String>)null);
-  }
-  public ListPropertiesReq(boolean all, NodeLocator locator, ParsingRequestData src, java.util.List<String> attrChain) {
     this.type = "ListProperties";
     this.all = all;
     this.locator = locator;
     this.src = src;
-    this.attrChain = attrChain;
   }
   public ListPropertiesReq(java.io.DataInputStream src) throws java.io.IOException {
     this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
@@ -26,7 +21,6 @@ public class ListPropertiesReq implements codeprober.util.JsonUtil.ToJsonable {
     this.all = src.readBoolean();
     this.locator = new NodeLocator(src);
     this.src = new ParsingRequestData(src);
-    this.attrChain = src.readBoolean() ? codeprober.util.JsonUtil.<String>readDataArr(src, () -> src.readUTF()) : null;
   }
 
   public static ListPropertiesReq fromJSON(JSONObject obj) {
@@ -35,7 +29,6 @@ public class ListPropertiesReq implements codeprober.util.JsonUtil.ToJsonable {
       obj.getBoolean("all")
     , NodeLocator.fromJSON(obj.getJSONObject("locator"))
     , ParsingRequestData.fromJSON(obj.getJSONObject("src"))
-    , obj.has("attrChain") ? (codeprober.util.JsonUtil.<String>mapArr(obj.getJSONArray("attrChain"), (arr1, idx1) -> arr1.getString(idx1))) : null
     );
   }
   public JSONObject toJSON() {
@@ -44,7 +37,6 @@ public class ListPropertiesReq implements codeprober.util.JsonUtil.ToJsonable {
     _ret.put("all", all);
     _ret.put("locator", locator.toJSON());
     _ret.put("src", src.toJSON());
-    if (attrChain != null) _ret.put("attrChain", new org.json.JSONArray(attrChain));
     return _ret;
   }
   public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
@@ -55,6 +47,5 @@ public class ListPropertiesReq implements codeprober.util.JsonUtil.ToJsonable {
     dst.writeBoolean(all);
     locator.writeTo(dst);
     src.writeTo(dst);
-    if (attrChain != null) { dst.writeBoolean(true); codeprober.util.JsonUtil.<String>writeDataArr(dst, attrChain, ent1 -> dst.writeUTF(ent1));; } else { dst.writeBoolean(false); }
   }
 }

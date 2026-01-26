@@ -166,7 +166,6 @@ public class TestData {
 			return (getClass().getSimpleName() + ":" + prop).hashCode();
 		}
 
-		@SuppressWarnings("serial")
 		public int throwRuntimeException() {
 			throw new RuntimeException("Simulated failure") {
 				@Override
@@ -204,6 +203,21 @@ public class TestData {
 	public static class Baz extends Node {
 		public Baz(int start, int end) {
 			super(start, end);
+		}
+
+		@Attribute
+		public String x() {
+			return "a";
+		}
+
+		@Attribute
+		public String y() {
+			return "b";
+		}
+
+		@Attribute
+		public Node ptr() {
+			return this;
 		}
 	}
 

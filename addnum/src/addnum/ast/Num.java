@@ -61,4 +61,9 @@ public class Num extends Node {
 		}
 		return asListOfOnes_value;
 	}
+
+	@Attribute
+	public String digitsOnMultipleLines() {
+		return String.join("\n", String.valueOf(val).split(""));
+	}
 }

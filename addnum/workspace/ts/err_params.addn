@@ -1,0 +1,7 @@
+123 // [[$n:=Num]]
+
+/*
+[[$n.equals()]]
+[[$n.value(123)]]
+[[$n.getChild("foo")]]
+*/

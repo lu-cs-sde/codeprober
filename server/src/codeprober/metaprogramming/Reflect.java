@@ -18,18 +18,29 @@ public class Reflect {
 	}
 
 	public static Object invokeN(Object astNode, String mth, Class<?>[] argTypes, Object[] argValues) {
+		return invokeN(astNode, findCompatibleMethod(astNode.getClass(), mth, argTypes), argValues);
+	}
+
+	public static Object invokeN(Object astNode, Method m, Object[] argValues) {
 		try {
-			final Method m = findCompatibleMethod(astNode.getClass(), mth, argTypes);
 			m.setAccessible(true);
 			final Object val = m.invoke(astNode, argValues);
 			return m.getReturnType() == Void.TYPE ? VOID_RETURN_VALUE : val;
-		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException
-				| SecurityException e) {
+		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | SecurityException e) {
 			throw new InvokeProblem(e);
 		}
 	}
 
-	private static Method findCompatibleMethod(Class<?> clazz, String methodName, Class<?>[] argTypes)
+	public static Method findCompatibleMethod(Class<?> clazz, String methodName, Class<?>[] argTypes)
+			throws InvokeProblem {
+		try {
+			return doFindCompatibleMethod(clazz, methodName, argTypes);
+		} catch (IllegalArgumentException | NoSuchMethodException | SecurityException e) {
+			throw new InvokeProblem(e);
+		}
+	}
+
+	private static Method doFindCompatibleMethod(Class<?> clazz, String methodName, Class<?>[] argTypes)
 			throws NoSuchMethodException {
 		// First try exact match (fast path)
 		try {
@@ -69,21 +80,33 @@ public class Reflect {
 	}
 
 	public static Object invoke0(Object astNode, String mth) {
+		return invoke0(astNode, findMostAccessibleMethod(astNode, mth));
+	}
+
+	public static Object invoke0(Object astNode, Method mth) {
 		try {
-			final Method m = findMostAccessibleMethod(astNode, mth); // astNode.getClass().getMethod(mth);
-			if (m == null) {
-				throw new NoSuchMethodException(mth);
-			}
-			m.setAccessible(true);
-			final Object val = m.invoke(astNode);
-			return m.getReturnType() == Void.TYPE ? VOID_RETURN_VALUE : val;
-		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException
-				| SecurityException e) {
+			mth.setAccessible(true);
+			final Object val = mth.invoke(astNode);
+			return mth.getReturnType() == Void.TYPE ? VOID_RETURN_VALUE : val;
+		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | SecurityException e) {
 			throw new InvokeProblem(e);
 		}
 	}
 
-	public static Method findMostAccessibleMethod(Object obj, String methodName, Class<?>... paramTypes) {
+	public static Method findMostAccessibleMethod(Object obj, String methodName)
+			throws InvokeProblem {
+		try {
+			final Method m = doFindMostAccessibleMethod(obj, methodName);
+			if (m == null) {
+				throw new NoSuchMethodException();
+			}
+			return m;
+		} catch (IllegalArgumentException | NoSuchMethodException | SecurityException e) {
+			throw new InvokeProblem(e);
+		}
+	}
+
+	private static Method doFindMostAccessibleMethod(Object obj, String methodName) {
 		if (obj == null) {
 			return null;
 		}
@@ -93,16 +116,16 @@ public class Reflect {
 
 		try {
 			// First, try to get the method from the actual class
-			candidate = clazz.getMethod(methodName, paramTypes);
+			candidate = clazz.getMethod(methodName);
 
 			// If the declaring class is not public, look for a better option
 			if (!Modifier.isPublic(candidate.getDeclaringClass().getModifiers())) {
-				Method better = findInInterfaces(clazz, methodName, paramTypes);
+				Method better = findInInterfaces(clazz, methodName);
 				if (better != null) {
 					candidate = better;
 				} else {
 					// Check superclasses for a public declaration
-					better = findInSuperclasses(clazz.getSuperclass(), methodName, paramTypes);
+					better = findInSuperclasses(clazz.getSuperclass(), methodName);
 					if (better != null && Modifier.isPublic(better.getDeclaringClass().getModifiers())) {
 						candidate = better;
 					}
@@ -110,17 +133,17 @@ public class Reflect {
 			}
 		} catch (NoSuchMethodException e) {
 			// Method not found via getMethod, try getDeclaredMethod and search hierarchy
-			candidate = findMethodInHierarchy(clazz, methodName, paramTypes);
+			candidate = findMethodInHierarchy(clazz, methodName);
 		}
 
 		return candidate;
 	}
 
-	private static Method findInInterfaces(Class<?> clazz, String methodName, Class<?>... paramTypes) {
+	private static Method findInInterfaces(Class<?> clazz, String methodName) {
 		// Check all interfaces (including inherited ones)
 		for (Class<?> iface : clazz.getInterfaces()) {
 			try {
-				Method method = iface.getMethod(methodName, paramTypes);
+				Method method = iface.getMethod(methodName);
 				if (Modifier.isPublic(method.getDeclaringClass().getModifiers())) {
 					return method;
 				}
@@ -129,7 +152,7 @@ public class Reflect {
 			}
 
 			// Recursively check parent interfaces
-			Method found = findInInterfaces(iface, methodName, paramTypes);
+			Method found = findInInterfaces(iface, methodName);
 			if (found != null)
 				return found;
 		}
@@ -137,16 +160,16 @@ public class Reflect {
 		// Also check superclass interfaces
 		Class<?> superclass = clazz.getSuperclass();
 		if (superclass != null) {
-			return findInInterfaces(superclass, methodName, paramTypes);
+			return findInInterfaces(superclass, methodName);
 		}
 
 		return null;
 	}
 
-	private static Method findInSuperclasses(Class<?> clazz, String methodName, Class<?>... paramTypes) {
+	private static Method findInSuperclasses(Class<?> clazz, String methodName) {
 		while (clazz != null) {
 			try {
-				Method method = clazz.getMethod(methodName, paramTypes);
+				Method method = clazz.getMethod(methodName);
 				if (Modifier.isPublic(method.getDeclaringClass().getModifiers())) {
 					return method;
 				}
@@ -158,13 +181,13 @@ public class Reflect {
 		return null;
 	}
 
-	private static Method findMethodInHierarchy(Class<?> clazz, String methodName, Class<?>... paramTypes) {
+	private static Method findMethodInHierarchy(Class<?> clazz, String methodName) {
 		// This handles cases where the method might not be public
 		Method result = null;
 
 		while (clazz != null) {
 			try {
-				Method m = clazz.getDeclaredMethod(methodName, paramTypes);
+				Method m = clazz.getDeclaredMethod(methodName);
 				if (result == null || Modifier.isPublic(m.getModifiers())) {
 					result = m;
 					if (Modifier.isPublic(m.getModifiers())
@@ -177,7 +200,7 @@ public class Reflect {
 			}
 
 			// Check interfaces at this level
-			Method ifaceMethod = findInInterfaces(clazz, methodName, paramTypes);
+			Method ifaceMethod = findInInterfaces(clazz, methodName);
 			if (ifaceMethod != null) {
 				return ifaceMethod;
 			}

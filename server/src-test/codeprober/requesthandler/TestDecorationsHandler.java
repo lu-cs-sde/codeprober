@@ -5,14 +5,12 @@ import static org.junit.Assert.assertNotNull;
 
 import org.junit.Test;
 
-import codeprober.DefaultRequestHandler;
 import codeprober.TestDefaultRequestHandler;
 import codeprober.ast.AstNode;
 import codeprober.ast.TestData;
 import codeprober.protocol.data.Decoration;
 import codeprober.protocol.data.GetDecorationsReq;
 import codeprober.protocol.data.GetDecorationsRes;
-import codeprober.toolglue.ParseResult;
 
 public class TestDecorationsHandler {
 
@@ -21,10 +19,7 @@ public class TestDecorationsHandler {
 		final GetDecorationsReq gdr = new GetDecorationsReq( //
 				TestDefaultRequestHandler.createParsingRequestData(src) //
 		);
-		final DefaultRequestHandler drh = new DefaultRequestHandler( //
-				(args) -> new ParseResult(simple) //
-		);
-		final GetDecorationsRes ret = DecorationsHandler.apply(gdr, drh, WorkspaceHandler.getDefault(),
+		final GetDecorationsRes ret = DecorationsHandler.apply(gdr, WorkspaceHandler.getDefault(),
 				TestEvaluatePropertyHandler.createHardcodedParser(TestData.getInfo(new AstNode(simple))));
 		assertNotNull(ret.lines);
 		assertEquals(1, ret.lines.size());
