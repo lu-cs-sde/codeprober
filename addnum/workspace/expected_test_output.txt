@@ -3,8 +3,8 @@
   ❌ ts/err_badattrchain.addn
      [1:22->1:26] No such attribute 'asNum' on addnum.ast.Num
   ❌ ts/err_badindex.addn
-     [1:11->1:16] Invalid index, outside expected range [0..2]
-     [1:33->1:42] Invalid index, outside expected range [0..1]
+     [1:11->1:16] Invalid index, outside expected range [0..1]
+     [1:33->1:42] Invalid index, outside expected range [0..0]
   ❌ ts/err_containscases.addn
      [6:25->6:29] No such attribute 'value' on java.util.ArrayList
      [7:23->7:27] No such attribute 'value' on java.util.ArrayList
