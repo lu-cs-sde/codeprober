@@ -59,7 +59,7 @@ public abstract class ExistingTextProbeTest {
 
 		@Override
 		public String toString() {
-			return fullPath + " [x" + env.document.containers.getNumChild() + "]";
+			return fullPath;
 		}
 	}
 
@@ -68,7 +68,7 @@ public abstract class ExistingTextProbeTest {
 		final DefaultRequestHandler requestHandler = new DefaultRequestHandler(tool, wsh);
 		final List<TextProbeFile> ret = new ArrayList<>();
 		WorkspaceTestCase.listWorkspaceFilePaths(wsh, null, fullPath -> {
-			if (fullPath.contains("err_") || !fullPath.endsWith(expectedFileSuffix)) {
+			if (!fullPath.endsWith(expectedFileSuffix)) {
 				// Ignore
 				return;
 			}
@@ -93,8 +93,16 @@ public abstract class ExistingTextProbeTest {
 		this.tc = tc;
 	}
 
+	private boolean isErrorFile() {
+		return tc.fullPath.contains("/err_");
+	}
+
 	protected void run() {
 		if (tc.env == null) {
+			if (isErrorFile()) {
+				// This was expected, just return
+				return;
+			}
 			fail("Parsing error");
 		}
 		tc.env.document.traverseDescendants(desc -> {
@@ -107,6 +115,10 @@ public abstract class ExistingTextProbeTest {
 
 		final GetDecorationsRes res = DecorationsHandler.apply(tc.env);
 		assertNotNull(res.lines);
+
+		if (isErrorFile()) {
+			return;
+		}
 
 		tc.env.document.traverseDescendants(desc -> {
 			if (desc instanceof Query) {
@@ -207,6 +219,12 @@ public abstract class ExistingTextProbeTest {
 	}
 
 	private void assertItemContains(ASTNode context, List<CompletionItem> actual, String... expected) {
+		if (isErrorFile()) {
+			// For error files, the 'actual' list is not interesting. We just want to know
+			// that no RuntimeException was thrown during complete. If we get here, then it
+			// succeeded. Skip doing an actual assert.
+			return;
+		}
 		final Set<String> expSet = new HashSet<>(Arrays.asList(expected));
 		final String errMsg = String.format("%s, Expected '%s' to be present, got [%s]", context.loc(),
 				expected.length == 1 ? expected[0] : Arrays.asList(expected),
@@ -222,7 +240,9 @@ public abstract class ExistingTextProbeTest {
 
 	private List<CompletionItem> completeAt(ASTNode context, int line, int col) {
 		final CompleteRes res = CompleteHandler.completeTextProbes(tc.env, line, col);
-		assertNotNull(String.format("%s: %s", context.loc(), context.pp()), res.lines);
+		if (!isErrorFile()) {
+			assertNotNull(String.format("%s: %s", context.loc(), context.pp()), res.lines);
+		}
 		return res.lines;
 	}
 }

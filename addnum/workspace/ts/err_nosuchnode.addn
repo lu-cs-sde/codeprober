@@ -1,1 +1,1 @@
-1 // [[Add.prettyPrint=123]] [[BadType]] [[$badvar]]
+1 // [[Add.prettyPrint=123]] [[BadType]] [[$badvar.attr]]

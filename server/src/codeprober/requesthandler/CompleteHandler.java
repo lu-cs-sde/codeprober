@@ -199,6 +199,10 @@ public class CompleteHandler {
 	}
 
 	private static CompleteRes completePropAccess(TextProbeEnvironment env, Query query) {
+		if (!env.document.problems().isEmpty()) {
+			// Cannot reliably evaluate queries when there are problems
+			return new CompleteRes();
+		}
 		final QueryResult qres = env.evaluateQuery(query);
 		if (qres == null || qres.value == null) {
 			return new CompleteRes();
