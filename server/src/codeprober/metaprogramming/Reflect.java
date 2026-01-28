@@ -1,5 +1,6 @@
 package codeprober.metaprogramming;
 
+import java.lang.invoke.MethodType;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -24,6 +25,33 @@ public class Reflect {
 	public static Object invokeN(Object astNode, Method m, Object[] argValues) {
 		try {
 			m.setAccessible(true);
+
+			// Handle varargs methods
+			if (m.isVarArgs()) {
+				final int paramCount = m.getParameterCount();
+				final int nonVarArgsCount = paramCount - 1;
+
+				// Create new array with proper structure for varargs
+				Object[] adjustedArgs = new Object[paramCount];
+
+				// Copy non-varargs parameters
+				for (int i = 0; i < nonVarArgsCount; i++) {
+					adjustedArgs[i] = argValues[i];
+				}
+
+				// Wrap varargs parameters in an array
+				final int varArgsCount = argValues.length - nonVarArgsCount;
+				final Class<?> varArgComponentType = m.getParameterTypes()[nonVarArgsCount].getComponentType();
+				final Object varArgsArray = java.lang.reflect.Array.newInstance(varArgComponentType, varArgsCount);
+
+				for (int i = 0; i < varArgsCount; i++) {
+					java.lang.reflect.Array.set(varArgsArray, i, argValues[nonVarArgsCount + i]);
+				}
+
+				adjustedArgs[nonVarArgsCount] = varArgsArray;
+				argValues = adjustedArgs;
+			}
+
 			final Object val = m.invoke(astNode, argValues);
 			return m.getReturnType() == Void.TYPE ? VOID_RETURN_VALUE : val;
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | SecurityException e) {
@@ -40,6 +68,10 @@ public class Reflect {
 		}
 	}
 
+	private static Class<?> boxPrimitive(Class<?> primitive) {
+		return MethodType.methodType(primitive).wrap().returnType();
+	}
+
 	private static Method doFindCompatibleMethod(Class<?> clazz, String methodName, Class<?>[] argTypes)
 			throws NoSuchMethodException {
 		// First try exact match (fast path)
@@ -53,20 +85,48 @@ public class Reflect {
 				}
 
 				final Class<?>[] paramTypes = method.getParameterTypes();
-				if (paramTypes.length != argTypes.length) {
-					continue;
+				final boolean isVarArgs = method.isVarArgs();
+
+				// Check length compatibility
+				if (isVarArgs) {
+					// For varargs, we need at least (paramTypes.length - 1) arguments
+					if (argTypes.length < paramTypes.length - 1) {
+						continue;
+					}
+				} else {
+					if (paramTypes.length != argTypes.length) {
+						continue;
+					}
 				}
 
 				boolean compatible = true;
-				for (int i = 0; i < paramTypes.length; i++) {
+
+				// Check non-varargs parameters
+				int nonVarArgsCount = isVarArgs ? paramTypes.length - 1 : paramTypes.length;
+				for (int i = 0; i < nonVarArgsCount; i++) {
 					if (!paramTypes[i].isAssignableFrom(argTypes[i])) {
 						// Check if argTypes[i] is a subtype of paramTypes[i]
-						if (paramTypes[i] == Object.class && argTypes[i].isPrimitive()) {
+						if (argTypes[i].isPrimitive() && paramTypes[i].isAssignableFrom(boxPrimitive(argTypes[i]))) {
 							// Allow, autoboxing will make this work even if `isAssignableFrom` says no.
 						} else {
 							compatible = false;
 						}
 						break;
+					}
+				}
+
+				// Check varargs parameters if applicable
+				if (compatible && isVarArgs) {
+					Class<?> varArgType = paramTypes[paramTypes.length - 1].getComponentType();
+					for (int i = nonVarArgsCount; i < argTypes.length; i++) {
+						if (!varArgType.isAssignableFrom(argTypes[i])) {
+							if (argTypes[i].isPrimitive() && varArgType.isAssignableFrom(boxPrimitive(argTypes[i]))) {
+								// Allow, autoboxing will make this work
+							} else {
+								compatible = false;
+								break;
+							}
+						}
 					}
 				}
 
@@ -86,6 +146,16 @@ public class Reflect {
 	public static Object invoke0(Object astNode, Method mth) {
 		try {
 			mth.setAccessible(true);
+
+			// Handle varargs methods with zero trailing arguments
+			if (mth.isVarArgs() && mth.getParameterCount() == 1) {
+				// Create an empty array of the appropriate type for the varargs parameter
+				final Class<?> varArgComponentType = mth.getParameterTypes()[0].getComponentType();
+				final Object emptyVarArgsArray = java.lang.reflect.Array.newInstance(varArgComponentType, 0);
+				final Object val = mth.invoke(astNode, emptyVarArgsArray);
+				return mth.getReturnType() == Void.TYPE ? VOID_RETURN_VALUE : val;
+			}
+
 			final Object val = mth.invoke(astNode);
 			return mth.getReturnType() == Void.TYPE ? VOID_RETURN_VALUE : val;
 		} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException | SecurityException e) {
@@ -93,8 +163,7 @@ public class Reflect {
 		}
 	}
 
-	public static Method findMostAccessibleMethod(Object obj, String methodName)
-			throws InvokeProblem {
+	public static Method findMostAccessibleMethod(Object obj, String methodName) throws InvokeProblem {
 		try {
 			final Method m = doFindMostAccessibleMethod(obj, methodName);
 			if (m == null) {
@@ -134,9 +203,25 @@ public class Reflect {
 		} catch (NoSuchMethodException e) {
 			// Method not found via getMethod, try getDeclaredMethod and search hierarchy
 			candidate = findMethodInHierarchy(clazz, methodName);
+
+			// If still not found, check for varargs methods that could match with zero args
+			if (candidate == null) {
+				candidate = findVarArgsMethodWithZeroArgs(clazz, methodName);
+			}
 		}
 
 		return candidate;
+	}
+
+	private static Method findVarArgsMethodWithZeroArgs(Class<?> clazz, String methodName) {
+		// Look for a varargs method where all parameters are varargs (i.e., only one
+		// parameter that is varargs)
+		for (Method method : clazz.getMethods()) {
+			if (method.getName().equals(methodName) && method.isVarArgs() && method.getParameterCount() == 1) {
+				return method;
+			}
+		}
+		return null;
 	}
 
 	private static Method findInInterfaces(Class<?> clazz, String methodName) {

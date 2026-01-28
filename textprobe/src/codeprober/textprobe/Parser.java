@@ -153,7 +153,7 @@ public class Parser {
 			// Try to parse an identifier
 			Label label = src.parseLabel(start.line, start.column);
 			if (label == null) {
-				if (!accesses.isEmpty() && (src.isEOF() || src.peek() == '=')) {
+				if (!accesses.isEmpty()) {
 					// The sytax is something like:
 					// [[A.b.]]
 					// The user has likely just typed the dot and would like a list of completion

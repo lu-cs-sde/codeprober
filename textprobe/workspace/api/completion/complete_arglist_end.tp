@@ -1,0 +1,28 @@
+{{A.b( )}} // [[$d:=Document]]
+{{A.b(1, )}}
+
+/* Line 1
+5-6: 'b'
+    [[ $d.completionContextAt(1, 5).asPropertyName.access.name.value=b]]
+    [[ $d.completionContextAt(1, 6)=$d.completionContextAt(1, 5)]]
+
+7-8: ' ' (space inside parentheses)
+    [[$d.completionContextAt(1, 7)=[NEW_PROPERTY_ARG, Query]]]
+    [[$d.completionContextAt(1, 8)=$d.completionContextAt(1, 8)]]
+    [[$d.completionContextAt(1, 9)=null]]
+*/
+
+/* Line 2
+5-6: 'b'
+    [[$d.completionContextAt(2, 5).asPropertyName.access.name.value=b]]
+    [[$d.completionContextAt(2, 6)=$d.completionContextAt(2, 5)]]
+
+7-8: '1'
+    [[$d.completionContextAt(2, 7)=null]]
+    [[$d.completionContextAt(2, 8)=null]]
+
+9-10: ' ' (space after last comma)
+    [[$d.completionContextAt(2, 9)=[NEW_PROPERTY_ARG, Query]]]
+    [[$d.completionContextAt(2, 10)=$d.completionContextAt(2, 9)]]
+    [[$d.completionContextAt(2, 11)=null]]
+*/

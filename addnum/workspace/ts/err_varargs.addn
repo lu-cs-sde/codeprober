@@ -1,0 +1,12 @@
+123 // [[$n:=Num]]
+
+/*
+[[$n.matchesAny("x")]]
+[[$n.matchesAny($n)]]
+[[$n.matchesAny(1, "y")]]
+[[$n.matchesAny("x", "y")]]
+
+[[$n.join()]]
+[[$n.join(123)]]
+[[$n.join(123, $n.value)]]
+*/

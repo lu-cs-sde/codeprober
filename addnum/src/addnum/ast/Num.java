@@ -66,4 +66,26 @@ public class Num extends Node {
 	public String digitsOnMultipleLines() {
 		return String.join("\n", String.valueOf(val).split(""));
 	}
+
+	@Attribute
+	public boolean matchesAny(Integer... vals) {
+		for (Integer i : vals) {
+			if (i.equals(val)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	@Attribute
+	public String join(String separator, Object... parts) {
+		final StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < parts.length; ++i) {
+			if (i > 0) {
+				sb.append(separator);
+			}
+			sb.append(parts[i]);
+		}
+		return sb.toString();
+	}
 }

@@ -6,7 +6,7 @@ public class Opt<T extends ASTNode> extends AbstractASTNode {
     this(null);
   }
   public Opt(T other) {
-    super();
+    super(other == null ? null : other.start, other == null ? null : other.end);
     this.child = other == null ? null : addChild(other);
   }
   public boolean isPresent() {

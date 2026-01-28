@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -293,12 +292,26 @@ public class TextProbeEnvironment {
 							continue;
 						}
 						final int formalParamCount = method.getParameterCount();
-						if (formalParamCount == actualArgCount) {
+						final boolean isVarargs = method.isVarArgs();
+						if (formalParamCount == actualArgCount
+								|| (isVarargs && actualArgCount >= formalParamCount - 1)) {
 							// Bingo! This means that the method exists, but expects different parameter
 							// types.
-							final String exp = Arrays.asList(method.getParameterTypes()).stream().map(x -> x.getName())
-									.collect(Collectors.joining(", "));
-							addErr(acc.name, String.format("Expected parameter types: %s", exp));
+							final Class<?>[] paramTypes = method.getParameterTypes();
+							StringBuilder exp = new StringBuilder();
+							for (int j = 0; j < paramTypes.length; ++j) {
+								if (j > 0) {
+									exp.append(", ");
+								}
+								if (isVarargs && j == paramTypes.length - 1) {
+									exp.append(String.format("%s...", paramTypes[j].getComponentType().getName()));
+								} else {
+									exp.append(paramTypes[j].getName());
+								}
+							}
+							addErr(acc.name, String.format(paramTypes.length > 1 || isVarargs //
+									? "Expected parameter types: [%s]" //
+									: "Expected parameter type: %s", exp));
 							return null;
 						}
 					}

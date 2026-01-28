@@ -1,5 +1,6 @@
 package codeprober.locator;
 
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,8 +17,14 @@ import codeprober.protocol.data.PropertyArg;
 
 public class AttrsInNode {
 
+	public static enum BaseInclusionFilter {
+		ATTRIBUTES_ONLY, //
+		ALMOST_ALL_NORMAL_METHODS, //
+		ALL_METHODS_INCLUDING_BOXED_PRIMITIVES_AND_VARARGS,
+	}
+
 	public static List<Property> getTyped(AstInfo info, AstNode node, List<String> whitelistFilter,
-			boolean includeAll) {
+			BaseInclusionFilter baseFilter) {
 		final List<Property> ret = new ArrayList<>();
 		if (whitelistFilter == null) {
 			whitelistFilter = new ArrayList<>();
@@ -27,6 +34,8 @@ public class AttrsInNode {
 		whitelistFilter
 				.addAll(Arrays.asList(new String[] { "getChild", "getParent", "getNumChild", "toString", "dumpTree" }));
 
+		final boolean includeAll = baseFilter != BaseInclusionFilter.ATTRIBUTES_ONLY;
+
 		for (Method m : node.underlyingAstNode.getClass().getMethods()) { // getMethods() rather than
 																			// getDeclaredMethods() to only get public
 																			// methods
@@ -34,10 +43,26 @@ public class AttrsInNode {
 					&& !whitelistFilter.contains(m.getName())) {
 				continue;
 			}
-			final List<PropertyArg> args = CreateType.fromParameters(info, m.getParameters());
+			List<PropertyArg> args = CreateType.fromParameters(info, m.getParameters());
 			if (args == null) {
+				if (baseFilter == BaseInclusionFilter.ALL_METHODS_INCLUDING_BOXED_PRIMITIVES_AND_VARARGS
+						&& m.isVarArgs()) {
+					List<Class<?>> rewritten = new ArrayList<>();
+					final Class<?>[] formalParams = m.getParameterTypes();
+					for (int i = 0; i < formalParams.length - 1; ++i) {
+						rewritten.add(unboxPrimitive(formalParams[i]));
+					}
+					final Class<?> varComponent = formalParams[formalParams.length - 1].getComponentType();
+					rewritten.add(unboxPrimitive(varComponent));
+					args = CreateType.fromClasses(info, rewritten.toArray(new Class<?>[rewritten.size()]));
+					if (args != null) {
+						args.set(args.size() - 1, PropertyArg.fromAny(PropertyArg.fromString(varComponent.getName())));
+					}
+				}
 //				System.out.println("skip due to bad param types " + m.getName());
-				continue;
+				if (args == null) {
+					continue;
+				}
 			}
 
 			ret.add(new Property(m.getName(), args, MethodKindDetector.getAstChildName(m),
@@ -100,5 +125,9 @@ public class AttrsInNode {
 			e.printStackTrace();
 		}
 		return null;
+	}
+
+	private static Class<?> unboxPrimitive(Class<?> primitive) {
+		return MethodType.methodType(primitive).unwrap().returnType();
 	}
 }

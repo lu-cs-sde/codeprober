@@ -11,7 +11,7 @@ import codeprober.textprobe.ast.VarDecl;
 public class CompletionContext {
 
 	public static enum Type {
-		QUERY_HEAD_TYPE, PROPERTY_NAME, QUERY_RESULT, VAR_DECL_NAME;
+		QUERY_HEAD_TYPE, PROPERTY_NAME, QUERY_RESULT, VAR_DECL_NAME, NEW_PROPERTY_ARG;
 	}
 
 	public final Type type;
@@ -28,6 +28,10 @@ public class CompletionContext {
 
 	public static CompletionContext fromType(Query h) {
 		return new CompletionContext(Type.QUERY_HEAD_TYPE, h);
+	}
+
+	public static CompletionContext fromNewPropertyArg(Query h) {
+		return new CompletionContext(Type.NEW_PROPERTY_ARG, h);
 	}
 
 	public static CompletionContext fromPropertyName(Query query, PropertyAccess name) {
@@ -49,6 +53,11 @@ public class CompletionContext {
 
 	@Attribute
 	public Query asQueryHead() {
+		return (Query) detail;
+	}
+
+	@Attribute
+	public Query asNewPropertyArg() {
 		return (Query) detail;
 	}
 

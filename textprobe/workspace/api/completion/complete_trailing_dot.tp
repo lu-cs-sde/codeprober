@@ -2,6 +2,7 @@
 {{A.b.=c}} // [[$abc:=Query]]
 {{X.y.}}
 {{$f:=G.h.}}
+{{A.b($f.)}}
 
 // [[$d:=Document]]
 
@@ -73,4 +74,29 @@
     [[$d.completionContextAt(4, 9).type=PROPERTY_NAME]]
     [[$d.completionContextAt(4, 9).asPropertyName.query.pp=G.h]]
     [[$d.completionContextAt(4, 10).type=PROPERTY_NAME]]
+*/
+
+/* Line 5 (A.b($f.))
+1->2: '{{'
+    [[$d.completionContextAt(5, 1)=null]]
+    [[$d.completionContextAt(5, 2)=null]]
+
+3-4: 'A.'
+    [[$d.completionContextAt(5, 3)=[QUERY_HEAD_TYPE, Query]]]
+    [[$d.completionContextAt(5, 4)=[QUERY_HEAD_TYPE, Query]]]
+
+5-6: 'b'
+    [[$d.completionContextAt(5, 5)=[PROPERTY_NAME, [Query, PropertyAccess]]]]
+    [[$d.completionContextAt(5, 6)=$d.completionContextAt(5, 5)]]
+
+7-9: '$f'
+    [[$d.completionContextAt(5, 7)=[QUERY_HEAD_TYPE, Query]]]
+    [[$d.completionContextAt(5, 8)=$d.completionContextAt(5, 7)]]
+    [[$d.completionContextAt(5, 9)=$d.completionContextAt(5, 7)]]
+
+10: '' (void after last dot)
+    [[$d.completionContextAt(5, 10)=[PROPERTY_NAME, [Query, null]]]]
+
+11: ')'
+    [[$d.completionContextAt(5, 11)=null]]
 */

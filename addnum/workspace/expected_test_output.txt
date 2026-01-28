@@ -45,7 +45,7 @@
   ❌ ts/err_params.addn
      [4:6->4:11] Expected 1 argument(s), got 0
      [5:6->5:10] Expected 0 argument(s), got 1
-     [6:6->6:13] Expected parameter types: int
+     [6:6->6:13] Expected parameter type: int
   ❌ ts/err_redefvar.addn
      [1:20->1:26] Duplicate variable 'x'
   ❌ ts/err_syntaxabuse.addn
@@ -56,6 +56,14 @@
      [3:12->3:25] Failed evaluating 'throwSomething' on class addnum.ast.Add
      [4:25->4:38] Failed evaluating 'throwSomething' on class addnum.ast.Add
      [5:12->5:25] Failed evaluating 'throwSomething' on class addnum.ast.Add
+  ❌ ts/err_varargs.addn
+     [4:6->4:15] Expected parameter types: [java.lang.Integer...]
+     [5:6->5:15] Expected parameter types: [java.lang.Integer...]
+     [6:6->6:15] Expected parameter types: [java.lang.Integer...]
+     [7:6->7:15] Expected parameter types: [java.lang.Integer...]
+     [9:6->9:9] Expected 2 argument(s), got 0
+     [10:6->10:9] Expected parameter types: [java.lang.String, java.lang.Object...]
+     [11:6->11:9] Expected parameter types: [java.lang.String, java.lang.Object...]
   ✅ ts/ok_add.addn
   ✅ ts/ok_containscases.addn
   ✅ ts/ok_fluent.addn
@@ -65,7 +73,8 @@
   ✅ ts/ok_nestedbrackets.addn
   ✅ ts/ok_nestedcall.addn
   ✅ ts/ok_num.addn
+  ✅ ts/ok_varargs.addn
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
   ✅ ts/ok_varvar.addn
-Done: 73 pass, 38 fail
+Done: 83 pass, 45 fail

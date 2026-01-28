@@ -57,4 +57,16 @@ public abstract class CreateType {
 		}
 		return ret;
 	}
+
+	public static List<PropertyArg> fromClasses(AstInfo info, Class<?>[] parameters) {
+		final List<PropertyArg> ret = new ArrayList<>();
+		for (Class<?> c : parameters) {
+			final PropertyArg arg = fromClass(c, info.baseAstClazz, null);
+			if (arg == null) {
+				return null;
+			}
+			ret.add(arg);
+		}
+		return ret;
+	}
 }

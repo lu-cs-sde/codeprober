@@ -176,37 +176,56 @@ public class Document extends AbstractASTNode {
 			}
 
 			if (acc.arguments.isPresent() && isInside.test(acc.arguments.get())) {
-				// Within argument list.
-				final ASTList<Argument> argList = acc.arguments.get();
-				if (argList.isEmpty()) {
-					System.out.println("Start on first arg");
-				} else {
-					// In an existing arg?
-					for (Argument arg : acc.arguments.get()) {
-						if (isInsideOrEnd.test(arg)) {
-							if (arg.type == ArgumentType.QUERY) {
-								return completeQuery(col, isInsideOrEnd, isInside, arg.asQuery());
-							}
+				// In an existing arg?
+				for (Argument arg : acc.arguments.get()) {
+					if (isInsideOrEnd.test(arg)) {
+						if (arg.type == ArgumentType.QUERY) {
+							return completeQuery(col, isInsideOrEnd, isInside, arg.asQuery());
+						}
+						return null;
+					}
+				}
+			}
+
+			if (acc.arguments.isPresent()) {
+				final ASTList<Argument> args = acc.arguments();
+				if (col > args.start.column && (args.isEmpty() || args.get(args.getNumChild() - 1).end.column < col)) {
+					// We are after the last arg, or inside an empty list.
+					// Question is: has the last arg been "closed" yet (with a ',')?
+					// Let's search backwards
+					final Container container = q.enclosingContainer();
+					final int contentsOffset = container.start.column + 2;
+					for (int searchCol = col - 1; searchCol >= q.start.column; --searchCol) {
+						final char c = container.contents.charAt(searchCol - contentsOffset);
+						switch (c) {
+						case ' ':
+							// Keep looking
+							continue;
+						case '(':
+						case ',':
+							// Got it!
+							return CompletionContext.fromNewPropertyArg(q);
+
+						default:
+							// Unknown, exit
 							return null;
 						}
 					}
-					// Perhaps at end of list? TODO backwards in string, see if a comma sign is found
-					return null;
 				}
 			}
-			System.out.println("Within a property, but could not find where exactly");
+			// Within a property, but could not find where exactly. Ignore
 			return null;
 		}
 		final Container container = q.enclosingContainer();
-		final String contents = container.contents;
+		final int contentsOffset = container.start.column + 2;
 		if (
 		//
-		(col == q.end.column + 1 && contents.endsWith("."))
+		(col == q.end.column + 1 && container.contents.charAt(q.end.column - contentsOffset) == '.')
 				//
 				|| (q.assertion.isPresent() //
-						&& q.start.column + contents.length() >= col //
+						&& q.start.column + container.contents.length() >= col //
 						&& col == q.assertion.get().start.column //
-						&& contents.charAt(q.assertion.get().start.column - 1 - q.start.column) == '.')) {
+						&& container.contents.charAt(q.assertion.get().start.column - 1 - q.start.column) == '.')) {
 			return CompletionContext.fromPropertyName(q, null);
 		}
 

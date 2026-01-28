@@ -8,6 +8,7 @@ import codeprober.AstInfo;
 import codeprober.locator.ApplyLocator;
 import codeprober.locator.ApplyLocator.ResolvedNode;
 import codeprober.locator.AttrsInNode;
+import codeprober.locator.AttrsInNode.BaseInclusionFilter;
 import codeprober.protocol.create.CreateType;
 import codeprober.protocol.data.ListPropertiesReq;
 import codeprober.protocol.data.ListPropertiesRes;
@@ -26,8 +27,11 @@ public class ListPropertiesHandler {
 		if (match == null) {
 			return new ListPropertiesRes(parsed.captures, null);
 		}
-		return new ListPropertiesRes(parsed.captures, AttrsInNode.getTyped(parsed.info, match.node,
-			AttrsInNode.extractFilter(parsed.info, match.node), req.all));
+		return new ListPropertiesRes(parsed.captures,
+				AttrsInNode.getTyped(parsed.info, match.node, AttrsInNode.extractFilter(parsed.info, match.node),
+						req.all //
+								? BaseInclusionFilter.ALMOST_ALL_NORMAL_METHODS
+								: BaseInclusionFilter.ATTRIBUTES_ONLY));
 	}
 
 	public static List<Property> extractPropertiesFromNonAstNode(AstInfo info, Object chainVal) {
@@ -60,6 +64,5 @@ public class ListPropertiesHandler {
 	}
 
 	public static final Object ATTR_CHAIN_FAILED = new Object();
-
 
 }

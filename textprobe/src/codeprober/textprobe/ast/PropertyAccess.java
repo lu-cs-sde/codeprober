@@ -33,8 +33,8 @@ public class PropertyAccess extends AbstractASTNode {
 	}
 
 	@Child(name = "arguments")
-	public Opt<ASTList<Argument>> arguments() {
-		return arguments;
+	public ASTList<Argument> arguments() {
+		return arguments.get();
 	}
 
 	@Override

@@ -1,0 +1,16 @@
+123 // [[$n:=Num]]
+
+/*
+[[$n.matchesAny=false]]
+[[$n.matchesAny(1)=false]]
+[[$n.matchesAny(123)=true]]
+[[$n.matchesAny(1, 2, 3)=false]]
+[[$n.matchesAny(1, 123)=true]]
+
+[[$n.join("")=]]
+[[$n.join("asd")=]]
+[[$n.join("", 1, 2, 3)=$n.value]]
+[[$n.join("2", 1, 3)=$n.value]]
+[[$n.join("::", "A", 5, $n.getClass.getName, ">")=A::5::addnum.ast.Num::>]]
+*/
+

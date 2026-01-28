@@ -12,12 +12,12 @@ public class ASTNode {
 	public final Position end;
 
 	public ASTNode(Position start, Position end) {
-		this.start = start;
-		this.end = end;
+		this.start = start != null ? start : Position.NIL;
+		this.end = end != null ? end : Position.NIL;
 	}
 
 	public ASTNode() {
-		this(Position.NIL, Position.NIL);
+		this(null, null);
 	}
 
 	public int cpr_getStartLine() {

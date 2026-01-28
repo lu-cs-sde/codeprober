@@ -9,12 +9,14 @@ import java.util.stream.Collectors;
 
 import codeprober.ast.AstNode;
 import codeprober.locator.AttrsInNode;
+import codeprober.locator.AttrsInNode.BaseInclusionFilter;
 import codeprober.locator.Span;
 import codeprober.protocol.data.CompleteReq;
 import codeprober.protocol.data.CompleteRes;
 import codeprober.protocol.data.CompletionItem;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.Property;
+import codeprober.protocol.data.PropertyArg;
 import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.textprobe.CompletionContext;
@@ -87,7 +89,7 @@ public class CompleteHandler {
 			return new CompleteRes();
 		}
 		switch (compCtx.type) {
-		case QUERY_HEAD_TYPE:
+		case QUERY_HEAD_TYPE: {
 			final Query qhead = compCtx.asQueryHead();
 			if (qhead != null && qhead.isArgument()) {
 				// Arguments inside other queries cannot be normal types. Only add the metavars
@@ -96,6 +98,13 @@ public class CompleteHandler {
 				return new CompleteRes(ret);
 			}
 			return completeTypes(env, line);
+		}
+
+		case NEW_PROPERTY_ARG: {
+			final List<CompletionItem> ret = new ArrayList<>();
+			addMetaVars(env, ret);
+			return new CompleteRes(ret);
+		}
 
 		case PROPERTY_NAME:
 			final PropertyNameDetail prop = compCtx.asPropertyName();
@@ -213,7 +222,7 @@ public class CompleteHandler {
 		if (env.info.baseAstClazz.isInstance(qres.value)) {
 			subject = new AstNode(qres.value);
 			rawAttrs = AttrsInNode.getTyped(env.info, subject, AttrsInNode.extractFilter(env.info, subject),
-					true /* all */);
+					BaseInclusionFilter.ALL_METHODS_INCLUDING_BOXED_PRIMITIVES_AND_VARARGS);
 		} else {
 			rawAttrs = ListPropertiesHandler.extractPropertiesFromNonAstNode(env.info, qres.value);
 		}
@@ -248,7 +257,27 @@ public class CompleteHandler {
 						})).map(x -> {
 							StringBuilder detail = new StringBuilder(x.name);
 							if (x.args != null && x.args.size() > 0) {
-								detail.append("()");
+								detail.append("(");
+								for (int i = 0; i < x.args.size(); ++i) {
+									if (i > 0) {
+										detail.append(", ");
+									}
+									final PropertyArg arg = x.args.get(i);
+									if (arg.type == PropertyArg.Type.any) {
+										final PropertyArg any = arg.asAny();
+										if (any.type == PropertyArg.Type.string) {
+											final String str = any.asString();
+											if (str.length() > 0) {
+												// Slight hack: this is the type of a varargs component
+												// Format it specially
+												detail.append(str + "...");
+												continue;
+											}
+										}
+									}
+									detail.append(arg.type);
+								}
+								detail.append(")");
 							}
 							String sortText = String.format("%s", SortTextPrefix.PROPNAME.getPrefix());
 							return new CompletionItem(x.name, x.name, CompletionItemKind.Function.ordinal(), sortText,
