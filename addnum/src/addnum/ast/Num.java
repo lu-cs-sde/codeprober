@@ -28,6 +28,12 @@ public class Num extends Node {
 		return val + "";
 	}
 
+	@Override
+	public void flushTreeCache() {
+		asAdd_value = null;
+		super.flushTreeCache();
+	}
+
 	private Node asAdd_value = null;
 
 	@Attribute(isNTA = true)

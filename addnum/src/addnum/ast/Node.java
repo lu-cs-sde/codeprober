@@ -14,6 +14,7 @@ public abstract class Node implements Iterable<Node> {
 	private final int start, end;
 	protected Node parent;
 	private final List<Node> children = new ArrayList<>();
+
 	public Node(int start, int end) {
 		this.start = start;
 		this.end = end;
@@ -31,6 +32,12 @@ public abstract class Node implements Iterable<Node> {
 
 	public Collection<Node> getChildren() {
 		return children;
+	}
+
+	public void flushTreeCache() {
+		for (Node child : this) {
+			child.flushTreeCache();
+		}
 	}
 
 	public abstract void prettyPrint(PrintStream out);
@@ -58,13 +65,14 @@ public abstract class Node implements Iterable<Node> {
 	public int getNumChild() {
 		return children.size();
 	}
+
 	public Node getChild(int idx) {
 		return children.get(idx);
 	}
 
 	public Program program() {
 		if (this instanceof Program) {
-			return (Program)this;
+			return (Program) this;
 		}
 		return parent.program(); // "Should never crash", as the topmost parent is always a Program node.
 	}
@@ -81,6 +89,6 @@ public abstract class Node implements Iterable<Node> {
 
 	@Override
 	public Node clone() throws CloneNotSupportedException {
-		return (Node)super.clone();
+		return (Node) super.clone();
 	}
 }

@@ -65,15 +65,7 @@ public class DecorationsHandler {
 		}
 
 		// Phase 2: Load variables
-		for (Container container : env.document.containers) {
-			final Probe probe = container.probe();
-			if (probe != null && probe.type == Type.VARDECL) {
-				final QueryResult rhs = env.evaluateQuery(probe.asVarDecl().src);
-				if (rhs != null) {
-					addDecoration.add(probe, "var", null);
-				}
-			}
-		}
+		env.loadVariables();
 		if (!env.errMsgs.isEmpty()) {
 			env.errMsgs.forEach(errMsg -> {
 				addDecoration.add(errMsg.context, "error", errMsg.message);
@@ -92,6 +84,13 @@ public class DecorationsHandler {
 				}
 			}
 			return new GetDecorationsRes(ret);
+		}
+		// Else, no error. Mark all var's with a var box
+		for (Container container : env.document.containers) {
+			final Probe probe = container.probe();
+			if (probe != null && probe.type == Type.VARDECL) {
+				addDecoration.add(probe, "var", null);
+			}
 		}
 
 		// Phase 3: Normal queries

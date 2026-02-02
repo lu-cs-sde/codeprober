@@ -28,6 +28,12 @@ public class Add extends Node {
 		return lhs().value() + rhs().value();
 	}
 
+	@Override
+	public void flushTreeCache() {
+		asNum_value = null;
+		super.flushTreeCache();
+	}
+
 	private Node asNum_value = null;
 
 	@Attribute(isNTA = true)
