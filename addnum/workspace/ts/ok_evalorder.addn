@@ -1,0 +1,15 @@
+123 // [[$n:=Num]]
+
+/*
+[[$a1:=$n.asAdd]]
+[[$n.flushTreeCache=null]]
+[[$a2:=$n.asAdd]]
+
+// a1=a2, because the first flushTreeCache doesn't run until after var defs
+[[$a1=$a2]]
+
+[[$varFlush:=$n.flushTreeCache]]
+[[$a3:=$n.asAdd]]
+// a1!=a3, because 'varFlush' runs before a3
+[[$a1!=$a3]]
+*/

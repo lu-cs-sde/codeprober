@@ -67,6 +67,7 @@
   ✅ ts/ok_add.addn
   ✅ ts/ok_clone.addn
   ✅ ts/ok_containscases.addn
+  ✅ ts/ok_evalorder.addn
   ✅ ts/ok_fluent.addn
   ✅ ts/ok_greet.addn
   ✅ ts/ok_large.addn
@@ -78,4 +79,4 @@
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
   ✅ ts/ok_varvar.addn
-Done: 84 pass, 45 fail
+Done: 87 pass, 45 fail
