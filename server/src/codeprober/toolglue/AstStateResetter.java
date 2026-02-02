@@ -48,4 +48,9 @@ public class AstStateResetter implements UnderlyingTool {
 		}
 		return result;
 	}
+
+	@Override
+	public String toString() {
+		return String.format("%s:%s", getClass().getSimpleName(), proxyTarget);
+	}
 }

@@ -2,7 +2,9 @@ package codeprober.requesthandler;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import codeprober.AstInfo;
 import codeprober.locator.ApplyLocator;
@@ -60,6 +62,13 @@ public class ListPropertiesHandler {
 				methods.add(new Property(name, args));
 			}
 		}
+		final Set<String> deduplicator = new HashSet<>();
+		methods.removeIf(x -> {
+			if (deduplicator.add(x.toJSON().toString())) {
+				return false;
+			}
+			return true;
+		});
 		return methods;
 	}
 

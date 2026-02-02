@@ -50,10 +50,12 @@ public abstract class ExistingTextProbeTest {
 
 	public static class TextProbeFile {
 		public final String fullPath;
+		public final UnderlyingTool tool;
 		public final TextProbeEnvironment env;
 
-		public TextProbeFile(String fullPath, TextProbeEnvironment env) {
+		public TextProbeFile(String fullPath, UnderlyingTool tool, TextProbeEnvironment env) {
 			this.fullPath = fullPath;
+			this.tool = tool;
 			this.env = env;
 		}
 
@@ -78,9 +80,9 @@ public abstract class ExistingTextProbeTest {
 					.performParsedRequest(lp -> lp.parse(TextProbeEnvironment.createParsingRequestData(fullPath)));
 			if (parsedAst.info == null) {
 				// Parsing error, add file w/ null env to be able to report it.
-				ret.add(new TextProbeFile(fullPath, null));
+				ret.add(new TextProbeFile(fullPath, tool, null));
 			} else {
-				ret.add(new TextProbeFile(fullPath, new TextProbeEnvironment(parsedAst.info, doc)));
+				ret.add(new TextProbeFile(fullPath, tool, new TextProbeEnvironment(parsedAst.info, doc)));
 			}
 
 		});
@@ -250,7 +252,7 @@ public abstract class ExistingTextProbeTest {
 					.collect(Collectors.toList());
 			final Set<String> uniqueLabels = new HashSet<>(labels);
 			if (uniqueLabels.size() != labels.size()) {
-				fail("Duplicate items in " + labels);
+				fail(String.format("At [%d:%d] for %s: duplicate items in %s", line, col, tc.tool, labels));
 			}
 		}
 		return res.lines;

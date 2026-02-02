@@ -24,4 +24,8 @@ public class UnderlyingJar implements UnderlyingTool {
 		return ASTProvider.parseAst(jarPath, args);
 	}
 
+	@Override
+	public String toString() {
+		return String.format("%s:%s", getClass().getSimpleName(), jarPath);
+	}
 }

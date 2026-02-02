@@ -12,7 +12,7 @@ rm DUMMY_FILE_TO_FORCE_DEV_BUILD
 echo "Build success"
 
 # -------------------------
-# Test normal JUnit tests
+# Test client
 cd client/ts
 npm ci
 npm run test
@@ -29,7 +29,7 @@ cd -
 echo "Client unit tests success"
 
 # -------------------------
-# Test normal JUnit tests
+# Test server
 echo "Building textprobe jar"
 cd textprobe
 ./build.sh

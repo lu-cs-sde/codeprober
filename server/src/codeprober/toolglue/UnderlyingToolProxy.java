@@ -25,4 +25,8 @@ public class UnderlyingToolProxy implements UnderlyingTool {
 						Arrays.asList(RpcBodyLine.fromStderr("Tool not specified yet, please upload yourtool.jar")));
 	}
 
+	@Override
+	public String toString() {
+		return String.format("%s:%s", getClass().getSimpleName(), target);
+	}
 }
