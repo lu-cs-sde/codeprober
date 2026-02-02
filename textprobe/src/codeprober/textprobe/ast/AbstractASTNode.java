@@ -3,7 +3,7 @@ package codeprober.textprobe.ast;
 import java.util.List;
 import java.util.ArrayList;
 
-public abstract class AbstractASTNode extends ASTNode {
+public abstract class AbstractASTNode extends ASTNode  {
 
 	protected final List<ASTNode> children = new ArrayList<>();
 

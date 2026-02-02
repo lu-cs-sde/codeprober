@@ -78,4 +78,9 @@ public abstract class Node implements Iterable<Node> {
 	public String toString() {
 		return getClass().getSimpleName();
 	}
+
+	@Override
+	public Node clone() throws CloneNotSupportedException {
+		return (Node)super.clone();
+	}
 }

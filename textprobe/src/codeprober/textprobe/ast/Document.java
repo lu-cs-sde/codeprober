@@ -11,6 +11,7 @@ import java.util.function.Predicate;
 
 import codeprober.textprobe.CompletionContext;
 import codeprober.textprobe.ast.ASTNodeAnnotation.Attribute;
+import codeprober.textprobe.ast.ASTNodeAnnotation.Child;
 import codeprober.textprobe.ast.Argument.ArgumentType;
 import codeprober.textprobe.ast.Probe.Type;
 
@@ -32,6 +33,11 @@ public class Document extends AbstractASTNode {
 	@Attribute
 	public Document doc() {
 		return this;
+	}
+
+	@Child(name="containers")
+	public ASTList<Container> containers() {
+		return containers;
 	}
 
 	@Attribute
@@ -216,22 +222,10 @@ public class Document extends AbstractASTNode {
 			// Within a property, but could not find where exactly. Ignore
 			return null;
 		}
-		final Container container = q.enclosingContainer();
-		final int contentsOffset = container.start.column + 2;
-		if (
-		//
-		(col == q.end.column + 1 && container.contents.charAt(q.end.column - contentsOffset) == '.')
-				//
-				|| (q.assertion.isPresent() //
-						&& q.start.column + container.contents.length() >= col //
-						&& col == q.assertion.get().start.column //
-						&& container.contents.charAt(q.assertion.get().start.column - 1 - q.start.column) == '.')) {
-			return CompletionContext.fromPropertyName(q, null);
-		}
 
 		if (q.assertion.isPresent()) {
 			final QueryAssert aq = q.assertion.get();
-			if (isInsideOrEnd.test(aq)) { // req.column >= aq.eq.column
+			if (isInsideOrEnd.test(aq) && col > aq.eq.column) {
 				if (!q.doc().problems().isEmpty()) {
 					// Cannot reliably evaluate queries when there are semantic errors
 					return null;
@@ -247,6 +241,24 @@ public class Document extends AbstractASTNode {
 				return CompletionContext.fromQueryResult(q);
 			}
 		}
+
+		final Container container = q.enclosingContainer();
+		final int contentsOffset = container.start.column + 2;
+		if (
+		//
+		(col == q.end.column + 1 && container.contents.charAt(q.end.column - contentsOffset) == '.')
+				//
+				|| (q.assertion.isPresent() //
+						&& q.start.column + container.contents.length() >= col //
+						&& col == q.assertion.get().start.column //
+						&& container.contents.charAt(q.assertion.get().start.column - 1 - q.start.column) == '.')) {
+			return CompletionContext.fromPropertyName(q, null);
+		}
 		return null;
+	}
+
+	@Attribute
+	public String pp() {
+		return "";
 	}
 }

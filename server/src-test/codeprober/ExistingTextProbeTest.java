@@ -243,6 +243,16 @@ public abstract class ExistingTextProbeTest {
 		if (!isErrorFile()) {
 			assertNotNull(String.format("%s: %s", context.loc(), context.pp()), res.lines);
 		}
+		if (res.lines != null) {
+
+			final List<String> labels = res.lines.stream() //
+					.map(x -> String.format("%s(%s)", x.label, x.detail)) //
+					.collect(Collectors.toList());
+			final Set<String> uniqueLabels = new HashSet<>(labels);
+			if (uniqueLabels.size() != labels.size()) {
+				fail("Duplicate items in " + labels);
+			}
+		}
 		return res.lines;
 	}
 }

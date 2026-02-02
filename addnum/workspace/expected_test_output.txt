@@ -65,6 +65,7 @@
      [10:6->10:9] Expected parameter types: [java.lang.String, java.lang.Object...]
      [11:6->11:9] Expected parameter types: [java.lang.String, java.lang.Object...]
   ✅ ts/ok_add.addn
+  ✅ ts/ok_clone.addn
   ✅ ts/ok_containscases.addn
   ✅ ts/ok_fluent.addn
   ✅ ts/ok_greet.addn
@@ -77,4 +78,4 @@
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
   ✅ ts/ok_varvar.addn
-Done: 83 pass, 45 fail
+Done: 84 pass, 45 fail

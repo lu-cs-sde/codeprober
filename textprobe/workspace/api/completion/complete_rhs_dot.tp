@@ -1,0 +1,19 @@
+{{$x:=A}} {{$v:=B}}  // [[$d:=Document]]
+{{$x.y=$v.}}
+{{$x.y=$v.w}}
+
+/*
+[[$rhsType:=$d.completionContextAt(2, 8)]]
+[[$rhsType=[QUERY_HEAD_TYPE, Query]]]
+[[$d.completionContextAt(2, 9)=$rhsType]]
+[[$d.completionContextAt(2, 10)=$rhsType]]
+
+[[$rhsProp:=$d.completionContextAt(2, 11)]]
+[[$rhsProp=[PROPERTY_NAME, [Query, null]]]]
+[[$rhsProp.asPropertyName.query.head.asVar.value=v]]
+[[$rhsProp.asPropertyName.access=null]]
+
+[[$d.completionContextAt(3, 11).asPropertyName.access.name.value=w]]
+
+[[$d.containers.getChild(0).probe.asVarDecl=$d.getVar("x")]]
+*/

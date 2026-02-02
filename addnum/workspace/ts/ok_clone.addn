@@ -1,0 +1,3 @@
+// Regression test for certain methods appearing twice in the code-completion list
+// if they were overridden with distinct return types
+123 // [[Num.clone.value=123]]

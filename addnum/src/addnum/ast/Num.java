@@ -88,4 +88,9 @@ public class Num extends Node {
 		}
 		return sb.toString();
 	}
+
+	@Override
+	public Num clone() {
+		return new Num(getStart(), getEnd(), val);
+	}
 }

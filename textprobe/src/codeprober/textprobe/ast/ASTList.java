@@ -35,6 +35,11 @@ public class ASTList<T extends ASTNode> extends AbstractASTNode implements Itera
 	}
 
 	@Override
+	public T getChild(int idx) {
+		return get(idx);
+	}
+
+	@Override
 	public Iterator<T> iterator() {
 		Iterator<ASTNode> real = super.children.iterator();
 		return new Iterator<T>() {

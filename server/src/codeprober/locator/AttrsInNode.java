@@ -5,7 +5,9 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import codeprober.AstInfo;
 import codeprober.ast.AstNode;
@@ -36,9 +38,8 @@ public class AttrsInNode {
 
 		final boolean includeAll = baseFilter != BaseInclusionFilter.ATTRIBUTES_ONLY;
 
-		for (Method m : node.underlyingAstNode.getClass().getMethods()) { // getMethods() rather than
-																			// getDeclaredMethods() to only get public
-																			// methods
+		// getMethods() rather than getDeclaredMethods() to only get public methods
+		for (Method m : node.underlyingAstNode.getClass().getMethods()) {
 			if (!includeAll && !MethodKindDetector.looksLikeAUserAccessibleJastaddRelatedMethod(m)
 					&& !whitelistFilter.contains(m.getName())) {
 				continue;
@@ -59,7 +60,6 @@ public class AttrsInNode {
 						args.set(args.size() - 1, PropertyArg.fromAny(PropertyArg.fromString(varComponent.getName())));
 					}
 				}
-//				System.out.println("skip due to bad param types " + m.getName());
 				if (args == null) {
 					continue;
 				}
@@ -100,6 +100,14 @@ public class AttrsInNode {
 		}
 
 		ret.sort((a, b) -> a.name.compareTo(b.name));
+
+		final Set<String> deduplicator = new HashSet<>();
+		ret.removeIf(x -> {
+			if (deduplicator.add(x.toJSON().toString())) {
+				return false;
+			}
+			return true;
+		});
 		return ret;
 	}
 
