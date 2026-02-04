@@ -55,10 +55,20 @@ window.defineEditor(
           );
           if (Array.isArray(compData?.suggestions)) {
             compData.suggestions.forEach(sug => {
-              // The insertText field is the content that should be inserted
-              // It is interpreted as "replaceText" by monaco though, meaning it replaces the existing content with insertText
-              // Therefore we must set insertText to the full insert string (=label).
-              sug.insertText = sug.label;
+              if (sug.insertStart && sug.insertEnd) {
+                // Got an explicit replace range, trust insertText as-is
+                sug.range = {
+                  startLineNumber: sug.insertStart >>> 12,
+                  startColumn: sug.insertStart & 0xFFF,
+                  endLineNumber: sug.insertEnd >>> 12,
+                  endColumn: sug.insertEnd & 0xFFF,
+                }
+              } else {
+                // The insertText field is the content that should be inserted
+                // It is interpreted as "replaceText" by monaco though, meaning it replaces the existing content with insertText
+                // Therefore we must set insertText to the full insert string (=label).
+                sug.insertText = sug.label;
+              }
             });
           }
           return compData;

@@ -67,6 +67,10 @@ public class HoverHandler {
 			switch (compCtx.type) {
 			case QUERY_HEAD_TYPE: {
 				final Query q = compCtx.asQueryHead();
+				if (q == null) {
+					// Query not created yet, nothing to hover
+					return new HoverRes();
+				}
 
 				if (q.head.type == Type.VAR && !env.document.problems().isEmpty()) {
 					// Cannot reliably interact with variables when there are static errors

@@ -34,6 +34,7 @@ import codeprober.textprobe.ast.ExpectedValue.Type;
 import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
 import codeprober.textprobe.ast.QueryHead;
+import codeprober.textprobe.ast.TypeQueryHead;
 import codeprober.textprobe.ast.VarDecl;
 import codeprober.toolglue.UnderlyingTool;
 
@@ -171,11 +172,12 @@ public abstract class ExistingTextProbeTest {
 			forEachColumn(head, col -> {
 				final List<CompletionItem> items = completeAt(head, head.start.line, col);
 
-				final String exp = String.format("%s%s", head.asType().value,
-						q.index == null ? "" : ("[" + q.index + "]"));
+				final TypeQueryHead ht = head.asType();
+				final String prefix = String.format("%s%s", ht.bumpUp ? "^" : "", ht.label.value);
+				final String exp = String.format("%s%s", prefix, q.index == null ? "" : ("[" + q.index + "]"));
 				if (q.index != null && q.index == 0) {
 					// It is also OK with a non-suffixed item
-					assertItemContains(head, items, exp, head.asType().value);
+					assertItemContains(head, items, exp, prefix);
 				} else {
 					assertItemContains(head, items, exp);
 				}

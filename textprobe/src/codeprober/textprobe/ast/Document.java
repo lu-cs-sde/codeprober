@@ -35,7 +35,7 @@ public class Document extends AbstractASTNode {
 		return this;
 	}
 
-	@Child(name="containers")
+	@Child(name = "containers")
 	public ASTList<Container> containers() {
 		return containers;
 	}
@@ -67,6 +67,27 @@ public class Document extends AbstractASTNode {
 			}
 		}
 		return null;
+	}
+
+	private Set<Integer> bumpedLines_value;
+
+	public Set<Integer> bumpedLines() {
+		if (bumpedLines_value == null) {
+			bumpedLines_value = new HashSet<>();
+			for (Container c : containers) {
+				Probe p = c.probe();
+				if (p == null) {
+					continue;
+				}
+				final QueryHead head = p.type == Probe.Type.QUERY //
+						? p.asQuery().head //
+						: (p.type == Probe.Type.VARDECL ? p.asVarDecl().src.head : null);
+				if (head != null && head.type == QueryHead.Type.TYPE && head.asType().bumpUp) {
+					bumpedLines_value.add(head.start.line);
+				}
+			}
+		}
+		return bumpedLines_value;
 	}
 
 	@Attribute
@@ -125,8 +146,8 @@ public class Document extends AbstractASTNode {
 			return null;
 		}
 
-		if (container.contents.isEmpty()) {
-			// We are inside an empty (perhaps newly created) container
+		if (container.contents.isEmpty() || container.contents.equals("^")) {
+			// We are inside an near-empty (perhaps newly created) container
 			// Complete types!
 			return CompletionContext.fromType(null);
 

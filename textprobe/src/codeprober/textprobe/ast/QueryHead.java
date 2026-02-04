@@ -15,7 +15,7 @@ public class QueryHead extends AbstractASTNode {
 		this.value = addChild(value);
 	}
 
-	public static QueryHead fromType(Label type) {
+	public static QueryHead fromType(TypeQueryHead type) {
 		return new QueryHead(Type.TYPE, type);
 	}
 
@@ -23,8 +23,8 @@ public class QueryHead extends AbstractASTNode {
 		return new QueryHead(Type.VAR, varName);
 	}
 
-	public Label asType() {
-		return (Label) value;
+	public TypeQueryHead asType() {
+		return (TypeQueryHead) value;
 	}
 
 	public VarUse asVar() {

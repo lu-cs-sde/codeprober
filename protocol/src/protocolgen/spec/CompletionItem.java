@@ -15,4 +15,7 @@ public class CompletionItem extends Streamable {
 	// each node.
 	public Object contextStart = opt(Integer.class);
 	public Object contextEnd = opt(Integer.class);
+	// The span of text that "insertText" is meant to replace
+	public Object insertStart = opt(Integer.class);
+	public Object insertEnd = opt(Integer.class);
 }

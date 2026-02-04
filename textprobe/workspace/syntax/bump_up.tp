@@ -1,0 +1,10 @@
+
+{{$x:=^B}} // [[TypeQueryHead.bumpedLine=1]]
+{{^C}}
+{{^D}} // [[TypeQueryHead.bumpedLine=1]] 
+
+{{^F}} // [[TypeQueryHead.bumpedLine=5]]
+{{G}}  // [[TypeQueryHead.bumpedLine=7]]
+
+{{}} // [[Container.probe=null]] [[Document.completionContextAt(9, 3).type=QUERY_HEAD_TYPE]]
+{{^}} // [[Container.probe=null]] [[Document.completionContextAt(10, 4).type=QUERY_HEAD_TYPE]]

@@ -15,6 +15,7 @@ import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
 import codeprober.textprobe.ast.QueryAssert;
 import codeprober.textprobe.ast.QueryHead;
+import codeprober.textprobe.ast.TypeQueryHead;
 import codeprober.textprobe.ast.VarDecl;
 import codeprober.textprobe.ast.VarUse;
 
@@ -140,6 +141,7 @@ public class Parser {
 	private static QueryParseResult parseQueryPattern(Position start, ParserSource src) {
 		List<PropertyAccess> accesses = new ArrayList<>();
 		Integer index = null;
+		boolean bumpUp = false;
 
 		while (!src.isEOF()) {
 			// Check if we're at a dot (if we already have labels)
@@ -147,6 +149,11 @@ public class Parser {
 				if (!src.accept('.')) {
 					// No more dots, stop parsing
 					break;
+				}
+			} else {
+				// First access, may be bumped
+				if (src.accept('^')) {
+					bumpUp = true;
 				}
 			}
 
@@ -168,6 +175,10 @@ public class Parser {
 			Position argStart = null;
 
 			if (accesses.isEmpty()) {
+				if (bumpUp && label.value.startsWith("$")) {
+					// Error, cannot bump var references
+					return null;
+				}
 				// First label may be followed by an indexing step
 				int save = src.mark();
 				if (src.accept('[')) {
@@ -271,8 +282,11 @@ public class Parser {
 					accesses.subList(1, accesses.size()), //
 					src.getOffset());
 		}
+
+		final Label typeLabel = new Label(head.start, firstAccess.end, head.value);
+		final Position typeStart = new Position(typeLabel.start.line, typeLabel.start.column + (bumpUp ? -1 : 0));
 		return new QueryParseResult( //
-				QueryHead.fromType(new Label(head.start, firstAccess.end, head.value)), //
+				QueryHead.fromType(new TypeQueryHead(typeStart, bumpUp, typeLabel)), //
 				index, //
 				accesses.subList(1, accesses.size()), //
 				src.getOffset());
@@ -361,11 +375,13 @@ public class Parser {
 		// Rest of content must be a valid Query
 		int queryOffset = src.getOffset();
 		String queryContent = src.remaining();
-		if (queryContent.isEmpty()) {
+		if (queryContent.isEmpty() || queryContent.equals("^")) {
+			final boolean bumpUp = queryContent.equals("^");
 			// Situation: [[$name:=]]
 			// Treat this as a query with empty type label
 			final Position queryLoc = contentEnd; // new Position(start.line, start.column + 2 + queryOffset);
-			Query srcQuery = new Query(queryLoc, queryLoc, QueryHead.fromType(new Label(queryLoc, queryLoc, "")), null,
+			Query srcQuery = new Query(queryLoc, queryLoc,
+					QueryHead.fromType(new TypeQueryHead(queryLoc, bumpUp, new Label(queryLoc, queryLoc, ""))), null,
 					Collections.emptyList());
 			return new VarDecl(contentStart, contentEnd, nameLabel, srcQuery);
 		}

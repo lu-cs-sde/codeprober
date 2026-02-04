@@ -37,6 +37,8 @@ interface CompletionItem {
   detail?: string;
   contextStart?: number;
   contextEnd?: number;
+  insertStart?: number;
+  insertEnd?: number;
 }
 interface Decoration {
   start: number;

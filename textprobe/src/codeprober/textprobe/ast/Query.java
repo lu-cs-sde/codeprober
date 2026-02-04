@@ -79,4 +79,18 @@ public class Query extends AbstractASTNode {
 			addErr.accept(head, "Cannot mix var ref and indexing");
 		}
 	}
+
+	@Attribute
+	public String source() {
+		final Container con = enclosingContainer();
+		if (con == null) {
+			return null;
+		}
+		final int relStart = start.column - con.start.column - 2; // 2 for '[['
+		final int len = end.column - start.column + 1;
+		if (con.contents.length() < relStart || relStart+len > con.contents.length()) {
+			return null;
+		}
+		return con.contents.substring(relStart, relStart + len);
+	}
 }

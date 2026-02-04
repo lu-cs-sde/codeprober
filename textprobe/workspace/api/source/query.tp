@@ -1,0 +1,6 @@
+{{A.b=c}} // [[Query.source=A.b=c]]
+{{$x:=A.b(123)}} // [[Query.source=A.b(123)]]
+{{A=}} // [[Query.source=A=]]
+{{$x:=}} // [[Query.source==]]
+{{$x:=A}} // [[Query.source=A]]
+{{$x:=^}} // [[Query.source=^]]

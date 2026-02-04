@@ -2,8 +2,10 @@ package codeprober.requesthandler;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
@@ -24,6 +26,7 @@ import codeprober.textprobe.CompletionContext.PropertyNameDetail;
 import codeprober.textprobe.Parser;
 import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.TextProbeEnvironment.QueryResult;
+import codeprober.textprobe.ast.Container;
 import codeprober.textprobe.ast.Position;
 import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
@@ -40,7 +43,7 @@ public class CompleteHandler {
 	}
 
 	private static enum SortTextPrefix {
-		METAVAR, TYPE, PROPNAME, QUERYRESULT;
+		METAVAR, TYPE, BUMPED_TYPE, PROPNAME, QUERYRESULT;
 
 		public String getPrefix() {
 			switch (this) {
@@ -50,6 +53,8 @@ public class CompleteHandler {
 				return "2";
 			case TYPE:
 				return "3";
+			case BUMPED_TYPE:
+				return "4";
 			case METAVAR:
 				return "5";
 			default:
@@ -97,7 +102,12 @@ public class CompleteHandler {
 				addMetaVars(env, ret);
 				return new CompleteRes(ret);
 			}
-			return completeTypes(env, line);
+			final Container container = env.document.containerAt(line, column);
+			if (container == null) {
+				System.err.println("Unexpected query head outside a container");
+				return new CompleteRes();
+			}
+			return completeTypes(env, line, container, qhead);
 		}
 
 		case NEW_PROPERTY_ARG: {
@@ -161,7 +171,38 @@ public class CompleteHandler {
 		}
 	}
 
-	private static CompleteRes completeTypes(TextProbeEnvironment env, int line) {
+	private static CompleteRes completeTypes(TextProbeEnvironment env, int line, Container container, Query query) {
+		List<CompletionItem> ret = new ArrayList<>();
+		final Set<String> alreadyAddedNodes = new HashSet<>();
+
+		final Set<Integer> bumps = env.document.bumpedLines();
+		// Only suggest un-bumped types if the line is free from bumps
+		String source = null;
+		if (query != null) {
+			source = query.source();
+		}
+		if (query == null) {
+			source = container.contents;
+		}
+		if (!source.startsWith("^") && !bumps.contains(line)) {
+			listTypeQueries(env, line, false, container, query, ret, alreadyAddedNodes);
+		}
+
+		if (line > 1) {
+			int bumpUp = line - 1;
+			while (bumpUp > 1 && bumps.contains(bumpUp)) {
+				--bumpUp;
+			}
+			listTypeQueries(env, bumpUp, true, container, query, ret, alreadyAddedNodes);
+		}
+
+		addMetaVars(env, ret);
+
+		return new CompleteRes(ret);
+	}
+
+	private static void listTypeQueries(TextProbeEnvironment env, int line, boolean isBumpedLine, Container container,
+			Query query, List<CompletionItem> ret, Set<String> alreadyAddedNodes) {
 		List<NodeLocator> items = new ArrayList<>();
 		Map<String, Integer> itemCount = new HashMap<>();
 
@@ -172,10 +213,12 @@ public class CompleteHandler {
 			itemCount.put(name, prevCount + 1);
 		}
 
-		List<CompletionItem> ret = new ArrayList<>();
 		Map<String, Integer> itemSuffixGen = new HashMap<>();
 		for (int idx = 0; idx < items.size(); ++idx) {
 			final NodeLocator nl = items.get(idx);
+			if (!alreadyAddedNodes.add(nl.toJSON().toString())) {
+				continue;
+			}
 			String item = extractTypeLabel(nl);
 			if (itemCount.get(item) > 1) {
 				// Need a unique suffix
@@ -196,15 +239,33 @@ public class CompleteHandler {
 						new Position(nl.result.start >>> 12, nl.result.start & 0xFFF).toString());
 			}
 
+			if (isBumpedLine) {
+				item = "^" + item;
+			}
+
 			// Sort in reverse list order -> deepest/narrowest nodes come on top, root nodes
 			// on bottom.
-			final String sortText = String.format("%s_%03d", SortTextPrefix.TYPE.getPrefix(), items.size() - idx);
+			final String sortText = String.format("%s_%03d",
+					(isBumpedLine ? SortTextPrefix.BUMPED_TYPE : SortTextPrefix.TYPE).getPrefix(), //
+					items.size() - idx);
+			int insertStart, insertEnd;
+			if (query == null) {
+				// Repace the entire container contents
+				insertStart = container.start.getPackedBits() + 2;
+				insertEnd = container.end.getPackedBits() - 2;
+			} else {
+				insertStart = query.head.start.getPackedBits();
+				insertEnd = query.head.end.getPackedBits();
+				final String src = query.source();
+				if (src != null && src.startsWith("=")) {
+					// Special case: it is an empty query. Adjust insert range accordingly
+					++insertStart;
+					++insertEnd;
+				}
+			}
 			ret.add(new CompletionItem(item, item, CompletionItemKind.Class.ordinal(), //
-					sortText, detail, contextStart, contextEnd));
+					sortText, detail, contextStart, contextEnd, insertStart, insertEnd));
 		}
-		addMetaVars(env, ret);
-
-		return new CompleteRes(ret);
 	}
 
 	private static CompleteRes completePropAccess(TextProbeEnvironment env, Query query) {

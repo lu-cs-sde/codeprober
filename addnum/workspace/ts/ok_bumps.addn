@@ -1,0 +1,9 @@
+1 + 
+      // [[$a:=^Add]]
+      // [[^Program=$p]]
+      // [[$p:=Program]]
+    2 // [[$n:=Num]]
+      // [[^Num=$n]]
+
+      // [[$a.value=3]]
+      // [[$n.value=2]]

@@ -37,6 +37,7 @@ import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
 import codeprober.textprobe.ast.QueryAssert;
 import codeprober.textprobe.ast.QueryHead;
+import codeprober.textprobe.ast.TypeQueryHead;
 import codeprober.textprobe.ast.VarDecl;
 
 public class TextProbeEnvironment {
@@ -170,9 +171,10 @@ public class TextProbeEnvironment {
 			return cachedVariableValues.get(vname);
 
 		case TYPE:
-			final String headType = head.asType().value;
+			final TypeQueryHead tqHead = head.asType();
 			final List<AstNode> nodes = NodesWithProperty
-					.get(info, info.ast, "", String.format("this<:%s&@lineSpan~=%d", headType, head.start.line), 128)
+					.get(info, info.ast, "",
+							String.format("this<:%s&@lineSpan~=%d", tqHead.label.value, tqHead.bumpedLine()), 128)
 					.stream() //
 					.filter(x -> x instanceof AstNode) //
 					.map(x -> (AstNode) x) //
@@ -193,11 +195,12 @@ public class TextProbeEnvironment {
 				} else {
 					addErr(head,
 							nodes.isEmpty() ? "No matching nodes"
-									: String.format("%d nodes %s. Add [idx] to disambiguate, e.g. \"%s[0]\"", //
+									: String.format("%d nodes %s. Add [idx] to disambiguate, e.g. \"%s%s[0]\"", //
 											nodes.size(), //
 											head.type == QueryHead.Type.VAR //
-													? String.format("in var \"%s\"", headType)
-													: String.format("type \"%s\"", headType),
+													? String.format("in var \"%s\"", tqHead.label.value)
+													: String.format("type \"%s\"", tqHead.label.value),
+											tqHead.bumpUp ? "^" : "", //
 											head.pp()));
 					return null;
 				}
