@@ -49,6 +49,8 @@
   ❌ ts/err_redefvar.addn
      [1:20->1:26] Duplicate variable 'x'
   ❌ ts/err_syntaxabuse.addn
+     [2:11->2:13] Expected: $a 
+                    Actual: Add
      [6:10->6:11] Expected:  a
                     Actual: Add
   ❌ ts/err_throw.addn
@@ -76,8 +78,9 @@
   ✅ ts/ok_nestedbrackets.addn
   ✅ ts/ok_nestedcall.addn
   ✅ ts/ok_num.addn
+  ✅ ts/ok_stringescapes.addn
   ✅ ts/ok_varargs.addn
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
   ✅ ts/ok_varvar.addn
-Done: 91 pass, 45 fail
+Done: 97 pass, 46 fail

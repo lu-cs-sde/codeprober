@@ -149,21 +149,32 @@ public class ParserSource {
 		}
 
 		offset++; // Skip opening quote
-		int start = offset;
 
-		// Find closing quote
+		final StringBuilder sb = new StringBuilder();
 		while (offset < src.length() && src.charAt(offset) != '"') {
-			// TODO: Handle escape sequences if needed
-			offset++;
+			final char c = src.charAt(offset++);
+			if (c == '\\') {
+				if (offset >= src.length()) {
+					return null; // Trailing backslash before EOF
+				}
+				char esc = src.charAt(offset++);
+				switch (esc) {
+					case 'n':  sb.append('\n'); break;
+					case '"':  sb.append('"');  break;
+					case '\\': sb.append('\\'); break;
+					default:   return null; // Unknown escape sequence
+				}
+			} else {
+				sb.append(c);
+			}
 		}
 
 		if (isEOF()) {
 			return null; // Unterminated string
 		}
 
-		String str = src.substring(start, offset);
 		offset++; // Skip closing quote
-		return str;
+		return sb.toString();
 	}
 
 	// Try to accept a specific character, consuming it if present

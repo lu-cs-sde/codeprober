@@ -1,0 +1,8 @@
+{{A.b=true}}   // [[Expr.type="STRING"]] [[Expr.asString="true"]]
+{{A.b=false}}  // [[Expr.type="STRING"]] [[Expr.asString="false"]]
+{{A.b=null}}   // [[Expr.type="STRING"]] [[Expr.asString="null"]]
+{{A.b=123}}    // [[Expr.type="INT"]]
+{{A.b=foo}}   
+// [[^Expr.type="QUERY"]]
+// [[^Expr.asQuery.head.type="TYPE"]]
+// [[^Expr.asQuery.head.asType.label.value="foo"]]

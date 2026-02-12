@@ -37,7 +37,8 @@ public class DecorationsHandler {
 			List<Decoration> ret = new ArrayList<>();
 			for (Container c : document.containers) {
 				if (c.probe() != null) {
-					ret.add(new Decoration(c.start.getPackedBits(), c.end.getPackedBits(), "error", "Failed parsing input"));
+					ret.add(new Decoration(c.start.getPackedBits(), c.end.getPackedBits(), "error",
+							"Failed parsing input"));
 				}
 			}
 			return new GetDecorationsRes(ret);
@@ -113,7 +114,7 @@ public class DecorationsHandler {
 				} else {
 					if (lhs != null) {
 						final String flat = env.flattenBody(lhs);
-						addDecoration.add(probe, "query", "= " + flat);
+						addDecoration.add(probe, "query", "= " + wrapLiteralValueInQuotesIfNecessary(flat));
 					}
 				}
 
@@ -133,5 +134,38 @@ public class DecorationsHandler {
 		env.errMsgs.forEach(errMsg -> addDecoration.add(errMsg.context, "error", errMsg.message));
 
 		return new GetDecorationsRes(ret);
+	}
+
+	public static String wrapLiteralValueInQuotesIfNecessary(String str) {
+		if (Parser.permitImplicitStringConversion) {
+			// No wrapping needed
+			return str;
+		}
+
+		switch (str) {
+		case "": // Fall-through
+		case "null":
+		case "true": // Fall-through
+		case "false": {
+			// OK as-is
+			return str;
+		}
+		default: {
+			try {
+				Integer.parseInt(str);
+				return str;
+			} catch (NumberFormatException ignore) {
+
+			}
+			// Escape escape-codes
+			str = str //
+					.replace("\\", "\\\\") //
+					.replace("\n", "\\n") //
+					.replace("\"", "\\\"");
+
+			// Needs to be wrapped in quotes
+			return String.format("\"%s\"", str);
+		}
+		}
 	}
 }

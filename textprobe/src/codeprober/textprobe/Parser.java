@@ -4,10 +4,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import codeprober.textprobe.ast.Argument;
 import codeprober.textprobe.ast.Container;
 import codeprober.textprobe.ast.Document;
-import codeprober.textprobe.ast.ExpectedValue;
+import codeprober.textprobe.ast.Expr;
 import codeprober.textprobe.ast.Label;
 import codeprober.textprobe.ast.Position;
 import codeprober.textprobe.ast.Probe;
@@ -20,6 +19,10 @@ import codeprober.textprobe.ast.VarDecl;
 import codeprober.textprobe.ast.VarUse;
 
 public class Parser {
+
+	// Defaults to true, must be explicitly disabled (for now)
+	public static boolean permitImplicitStringConversion = !"false"
+			.equals(System.getProperty("cpr.permitImplicitStringConversion"));
 
 	/**
 	 * Parse all text probes in the given strings. Parsing can never fail - for
@@ -125,13 +128,11 @@ public class Parser {
 		final QueryHead head;
 		final Integer index;
 		final List<PropertyAccess> tail;
-		final int endOffset; // Offset in content where parsing stopped
 
-		QueryParseResult(QueryHead head, Integer index, List<PropertyAccess> tail, int endOffset) {
+		QueryParseResult(QueryHead head, Integer index, List<PropertyAccess> tail) {
 			this.head = head;
 			this.index = index;
 			this.tail = tail;
-			this.endOffset = endOffset;
 		}
 	}
 
@@ -171,7 +172,7 @@ public class Parser {
 				return null;
 			}
 			Position accessEnd = label.end;
-			List<Argument> args = null;
+			List<Expr> args = null;
 			Position argStart = null;
 
 			if (accesses.isEmpty()) {
@@ -200,54 +201,55 @@ public class Parser {
 				src.skipWS();
 				while (!src.isEOF() && src.peek() != ')') {
 					// Parse an argument
-					Argument arg = null;
-
-					int argOffset = src.getOffset();
-					final char peek = src.peek();
-					switch (peek) {
-					case '"': {
-						String litStr = src.parseQuotedString();
-						if (litStr == null) {
-							return null;
-						}
-						Position strStart = new Position(start.line, start.column + argOffset + 1);
-						Position strEnd = new Position(start.line, start.column + src.getOffset() - 2);
-						arg = new Argument(new Label(strStart, strEnd, litStr));
-						break;
-					}
-					case '$': {
-						// Parse a Query argument
-						int queryStart = src.getOffset();
-						QueryParseResult queryResult = parseQueryPattern(start, src);
-						if (queryResult == null) {
-							return null; // Invalid query
-						}
-						final Position queryStartPos = new Position(start.line, start.column + queryStart);
-						final Position queryEndPos = new Position(start.line, start.column + src.getOffset() - 1);
-						final Query query = new Query(queryStartPos, queryEndPos, queryResult.head, queryResult.index,
-								queryResult.tail);
-						arg = new Argument(query);
-						break;
-					}
-					default: {
-						if (peek >= '0' && peek <= '9' || peek == '-') {
-							Integer litNum = src.parseInt();
-							if (litNum == null) {
-								return null;
-							}
-							Position numStart = new Position(start.line, start.column + argOffset);
-							Position numEnd = new Position(start.line, start.column + src.getOffset() - 1);
-							arg = new Argument(numStart, numEnd, litNum);
-						} else {
-							return null;
-						}
-						break;
-					}
+					Expr arg = parseExpr(start, src, true);
+					if (arg == null) {
+						return null;
 					}
 
-					if (arg != null) {
-						args.add(arg);
-					}
+//					int argOffset = src.getOffset();
+//					final char peek = src.peek();
+//					switch (peek) {
+//					case '"': {
+//						String litStr = src.parseQuotedString();
+//						if (litStr == null) {
+//							return null;
+//						}
+//						Position strStart = new Position(start.line, start.column + argOffset + 1);
+//						Position strEnd = new Position(start.line, start.column + src.getOffset() - 2);
+//						arg = new Argument(new Label(strStart, strEnd, litStr));
+//						break;
+//					}
+//					case '$': {
+//						// Parse a Query argument
+//						int queryStart = src.getOffset();
+//						QueryParseResult queryResult = parseQueryPattern(start, src);
+//						if (queryResult == null) {
+//							return null; // Invalid query
+//						}
+//						final Position queryStartPos = new Position(start.line, start.column + queryStart);
+//						final Position queryEndPos = new Position(start.line, start.column + src.getOffset() - 1);
+//						final Query query = new Query(queryStartPos, queryEndPos, queryResult.head, queryResult.index,
+//								queryResult.tail);
+//						arg = new Argument(query);
+//						break;
+//					}
+//					default: {
+//						if (peek >= '0' && peek <= '9' || peek == '-') {
+//							Integer litNum = src.parseInt();
+//							if (litNum == null) {
+//								return null;
+//							}
+//							Position numStart = new Position(start.line, start.column + argOffset);
+//							Position numEnd = new Position(start.line, start.column + src.getOffset() - 1);
+//							arg = new Argument(numStart, numEnd, litNum);
+//						} else {
+//							return null;
+//						}
+//						break;
+//					}
+//					}
+
+					args.add(arg);
 
 					src.skipWS();
 					if (src.peek() == ',') {
@@ -279,8 +281,7 @@ public class Parser {
 			return new QueryParseResult( //
 					QueryHead.fromVar(new VarUse(head.start, firstAccess.end, head.value.substring(1))), //
 					index, //
-					accesses.subList(1, accesses.size()), //
-					src.getOffset());
+					accesses.subList(1, accesses.size()));
 		}
 
 		final Label typeLabel = new Label(head.start, firstAccess.end, head.value);
@@ -288,8 +289,55 @@ public class Parser {
 		return new QueryParseResult( //
 				QueryHead.fromType(new TypeQueryHead(typeStart, bumpUp, typeLabel)), //
 				index, //
-				accesses.subList(1, accesses.size()), //
-				src.getOffset());
+				accesses.subList(1, accesses.size()));
+	}
+
+	private static Expr parseExpr(Position start, ParserSource src, boolean allowLiterals) {
+		int argOffset = src.getOffset();
+		final char peek = src.peek();
+		if (allowLiterals) {
+			if (peek == '"') {
+				String litStr = src.parseQuotedString();
+				if (litStr == null) {
+					src.reset(argOffset);
+					return null;
+				}
+				Position strStart = new Position(start.line, start.column + argOffset + 1);
+				Position strEnd = new Position(start.line, start.column + src.getOffset() - 2);
+				return Expr.fromString(strStart, strEnd, litStr);
+			}
+			if (peek >= '0' && peek <= '9' || peek == '-') {
+				Integer litNum = src.parseInt();
+				if (litNum == null) {
+					src.reset(argOffset);
+					return null;
+				}
+				Position numStart = new Position(start.line, start.column + argOffset);
+				Position numEnd = new Position(start.line, start.column + src.getOffset() - 1);
+				return Expr.fromInt(numStart, numEnd, litNum);
+			}
+			for (String kw : new String[] { "true", "false", "null" }) {
+				if (src.accept(kw)) {
+					Position strStart = new Position(start.line, start.column + argOffset + 1);
+					Position strEnd = new Position(start.line, start.column + src.getOffset() - 1);
+					return Expr.fromString(strStart, strEnd, kw);
+				}
+			}
+		} else if (peek != '$') {
+			return null;
+		}
+
+		// Else, maybe it is a query?
+		QueryParseResult queryResult = parseQueryPattern(start, src);
+		if (queryResult == null) {
+			src.reset(argOffset);
+			return null; // Nope
+		}
+		final Position queryStartPos = new Position(start.line, start.column + argOffset);
+		final Position queryEndPos = new Position(start.line, start.column + src.getOffset() - 1);
+		final Query query = new Query(queryStartPos, queryEndPos, queryResult.head, queryResult.index,
+				queryResult.tail);
+		return Expr.fromQuery(query);
 	}
 
 	private static Query parseAssertQuery(Position containerStart, Position contentStart, Position end,
@@ -308,8 +356,7 @@ public class Parser {
 			if (src.isEOF() && exclamation && !tilde) {
 				// Ending with "!" is syntax sugar for "!=false"
 				return new Query(contentStart, contentEnd, queryRes.head, queryRes.index, queryRes.tail,
-						new QueryAssert(eqPos, eqPos, true, false, eqPos,
-								ExpectedValue.fromConstant(new Label(eqPos, eqPos, "false"))));
+						new QueryAssert(eqPos, eqPos, true, false, eqPos, Expr.fromString(eqPos, eqPos, "false")));
 			}
 			return null; // No equals sign, not an AssertQuery
 		}
@@ -317,25 +364,27 @@ public class Parser {
 		// Rest of content is the expected value
 		int valueOffset = src.getOffset();
 		String valuePart = src.remaining();
-		Position valueStart = new Position(contentStart.line, contentStart.column + valueOffset);
-		Position valueEnd = new Position(contentStart.line, contentStart.column + valueOffset + valuePart.length() - 1);
 
-		ExpectedValue expectedValue;
+		Expr expectedValue = parseExpr(contentStart, src, !permitImplicitStringConversion);
+		if (!src.isEOF()) {
+			expectedValue = null;
+			src.reset(valueOffset);
+		}
 
-		// Check if the expected value starts with $ (QueryExpectedValue)
-		if (valuePart.startsWith("$")) {
-			// Parse as a Query
-			ParserSource valueSrc = new ParserSource(valuePart);
-			QueryParseResult queryResult = parseQueryPattern(valueStart, valueSrc);
-			if (queryResult == null || queryResult.endOffset < valuePart.length()) {
-				return null; // Invalid query or extra content
-			}
-			Query query = new Query(valueStart, valueEnd, queryResult.head, queryResult.index, queryResult.tail);
-			expectedValue = ExpectedValue.fromQuery(query);
-		} else {
-			// Parse as a constant (Label)
-			Label valueLabel = new Label(valueStart, valueEnd, valuePart);
-			expectedValue = ExpectedValue.fromConstant(valueLabel);
+		if (expectedValue == null && valuePart.equals("")) {
+			// Syntax sugar for equals empty string, no matter if
+			// permitImplicitStringConversion is true or false.
+			Position valueStart = new Position(contentStart.line, contentStart.column + valueOffset);
+			expectedValue = Expr.fromString(valueStart, valueStart, "");
+		}
+		if (expectedValue == null && permitImplicitStringConversion) {
+			Position valueStart = new Position(contentStart.line, contentStart.column + valueOffset);
+			Position valueEnd = new Position(contentStart.line,
+					contentStart.column + valueOffset + valuePart.length() - 1);
+			expectedValue = Expr.fromString(valueStart, valueEnd, valuePart);
+		}
+		if (expectedValue == null) {
+			return null;
 		}
 
 		// Calculate content positions for AssertQuery

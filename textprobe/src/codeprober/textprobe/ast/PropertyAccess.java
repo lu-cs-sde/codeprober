@@ -7,20 +7,20 @@ import codeprober.textprobe.ast.ASTNodeAnnotation.Child;
 
 public class PropertyAccess extends AbstractASTNode {
 	public final Label name;
-	public final Opt<ASTList<Argument>> arguments;
+	public final Opt<ASTList<Expr>> arguments;
 
 	public PropertyAccess(Position start, Position end, Label name) {
 		this(start, end, name, null, null);
 	}
 
-	public PropertyAccess(Position start, Position end, Label name, Position argStart, List<Argument> arguments) {
+	public PropertyAccess(Position start, Position end, Label name, Position argStart, List<Expr> arguments) {
 		super(start, end);
 		this.name = addChild(name);
 		if (argStart == null || arguments == null) {
 			this.arguments = addChild(new Opt<>());
 		} else {
-			final ASTList<Argument> argList = new ASTList<Argument>(argStart, end);
-			for (Argument arg : arguments) {
+			final ASTList<Expr> argList = new ASTList<>(argStart, end);
+			for (Expr arg : arguments) {
 				argList.add(arg);
 			}
 			this.arguments = addChild(new Opt<>(argList));
@@ -33,7 +33,7 @@ public class PropertyAccess extends AbstractASTNode {
 	}
 
 	@Child(name = "arguments")
-	public ASTList<Argument> arguments() {
+	public ASTList<Expr> arguments() {
 		return arguments.get();
 	}
 

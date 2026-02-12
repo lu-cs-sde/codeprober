@@ -12,7 +12,6 @@ import java.util.function.Predicate;
 import codeprober.textprobe.CompletionContext;
 import codeprober.textprobe.ast.ASTNodeAnnotation.Attribute;
 import codeprober.textprobe.ast.ASTNodeAnnotation.Child;
-import codeprober.textprobe.ast.Argument.ArgumentType;
 import codeprober.textprobe.ast.Probe.Type;
 
 public class Document extends AbstractASTNode {
@@ -204,9 +203,9 @@ public class Document extends AbstractASTNode {
 
 			if (acc.arguments.isPresent() && isInside.test(acc.arguments.get())) {
 				// In an existing arg?
-				for (Argument arg : acc.arguments.get()) {
+				for (Expr arg : acc.arguments.get()) {
 					if (isInsideOrEnd.test(arg)) {
-						if (arg.type == ArgumentType.QUERY) {
+						if (arg.type == Expr.Type.QUERY) {
 							return completeQuery(col, isInsideOrEnd, isInside, arg.asQuery());
 						}
 						return null;
@@ -215,7 +214,7 @@ public class Document extends AbstractASTNode {
 			}
 
 			if (acc.arguments.isPresent()) {
-				final ASTList<Argument> args = acc.arguments();
+				final ASTList<Expr> args = acc.arguments();
 				if (col > args.start.column && (args.isEmpty() || args.get(args.getNumChild() - 1).end.column < col)) {
 					// We are after the last arg, or inside an empty list.
 					// Question is: has the last arg been "closed" yet (with a ',')?
@@ -252,8 +251,8 @@ public class Document extends AbstractASTNode {
 					return null;
 				}
 
-				ExpectedValue exp = aq.expectedValue;
-				if (exp.type == ExpectedValue.Type.QUERY) {
+				Expr exp = aq.expectedValue;
+				if (exp.type == Expr.Type.QUERY) {
 					final Query rhsQuery = exp.asQuery();
 					return completeQuery(col, isInsideOrEnd, isInside, rhsQuery);
 				}

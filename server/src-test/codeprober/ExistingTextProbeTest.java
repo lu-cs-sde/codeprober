@@ -29,10 +29,10 @@ import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.ast.ASTNode;
 import codeprober.textprobe.ast.ASTNode.TraversalResult;
 import codeprober.textprobe.ast.Document;
-import codeprober.textprobe.ast.ExpectedValue;
-import codeprober.textprobe.ast.ExpectedValue.Type;
+import codeprober.textprobe.ast.Expr;
 import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
+import codeprober.textprobe.ast.QueryAssert;
 import codeprober.textprobe.ast.QueryHead;
 import codeprober.textprobe.ast.TypeQueryHead;
 import codeprober.textprobe.ast.VarDecl;
@@ -66,7 +66,7 @@ public abstract class ExistingTextProbeTest {
 		}
 	}
 
-	public static Iterable<TextProbeFile> listTests(File workspace, UnderlyingTool tool, String expectedFileSuffix) {
+	public static List<TextProbeFile> listTests(File workspace, UnderlyingTool tool, String expectedFileSuffix) {
 		final WorkspaceHandler wsh = new WorkspaceHandler(workspace);
 		final DefaultRequestHandler requestHandler = new DefaultRequestHandler(tool, wsh);
 		final List<TextProbeFile> ret = new ArrayList<>();
@@ -206,11 +206,20 @@ public abstract class ExistingTextProbeTest {
 				});
 			}
 
-			if (isNormalAssert && desc instanceof ExpectedValue) {
-
-				ExpectedValue cv = (ExpectedValue) desc;
-				if (cv.type == Type.CONSTANT) {
-					final String cval = cv.asConstant().value;
+			if (isNormalAssert && desc instanceof QueryAssert) {
+				final Expr cv = ((QueryAssert) desc).expectedValue();
+				if (cv != null) {
+					String cval;
+					switch (cv.type) {
+					case INT:
+						cval = String.valueOf(cv.asInt());
+						break;
+					case STRING:
+						cval = String.valueOf(cv.asString());
+						break;
+					default:
+						return TraversalResult.CONTINUE;
+					}
 					forEachColumn(cv, col -> {
 						assertItemContains(cv, completeAt(cv, cv.start.line, col), cval);
 					});

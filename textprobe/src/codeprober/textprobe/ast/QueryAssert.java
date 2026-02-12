@@ -7,9 +7,9 @@ public class QueryAssert extends AbstractASTNode {
 	public final boolean exclamation;
 	public final boolean tilde;
 	public final Position eq;
-	public final ExpectedValue expectedValue;
+	public final Expr expectedValue;
 
-	public QueryAssert(Position start, Position end, boolean exclamation, boolean tilde, Position eq, ExpectedValue expectedValue) {
+	public QueryAssert(Position start, Position end, boolean exclamation, boolean tilde, Position eq, Expr expectedValue) {
 		super(start, end);
 		this.exclamation = exclamation;
 		this.tilde = tilde;
@@ -17,8 +17,13 @@ public class QueryAssert extends AbstractASTNode {
 		this.expectedValue = addChild(expectedValue);
 	}
 
+	@Attribute
+	public Position eq() {
+		return eq;
+	}
+
 	@Child(name = "expectedValue")
-	public ExpectedValue expectedValue() {
+	public Expr expectedValue() {
 		return expectedValue;
 	}
 

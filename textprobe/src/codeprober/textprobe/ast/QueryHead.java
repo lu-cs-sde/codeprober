@@ -1,5 +1,7 @@
 package codeprober.textprobe.ast;
 
+import codeprober.textprobe.ast.ASTNodeAnnotation.Attribute;
+
 public class QueryHead extends AbstractASTNode {
 
 	public static enum Type {
@@ -21,6 +23,11 @@ public class QueryHead extends AbstractASTNode {
 
 	public static QueryHead fromVar(VarUse varName) {
 		return new QueryHead(Type.VAR, varName);
+	}
+
+	@Attribute
+	public Type type() {
+		return type;
 	}
 
 	public TypeQueryHead asType() {

@@ -1,0 +1,13 @@
+1 // [[$p:=Program]]
+
+// [[$p.greet("A\n").trim=Hello A]]
+// [[$p.greet("A\n").trim.equals("Hello A")=true]]
+// [[$p.greet("A\n").equals("Hello A\n")=true]]
+// [[$p.greet("A\"B\\C\nD").equals("Hello A\"B\\C\nD")=true]]
+
+// "Old" syntax
+//      [[$p.greet("A\"B\\C\nD")=[Hello A"B\C, D]]]
+//      [[$p.greet("A\n")=Hello A]]
+// "Future" syntax
+//      [[ $p.greet("A\"B\\C\nD")="Hello A\"B\\C\nD"]]
+//      [[ $p.greet("A\n")="Hello A\n"]]

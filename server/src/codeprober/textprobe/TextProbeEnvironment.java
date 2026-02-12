@@ -27,11 +27,12 @@ import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.ParsingRequestData;
 import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.RpcBodyLine;
+import codeprober.requesthandler.DecorationsHandler;
 import codeprober.textprobe.ast.ASTList;
 import codeprober.textprobe.ast.ASTNode;
-import codeprober.textprobe.ast.Argument;
 import codeprober.textprobe.ast.Container;
 import codeprober.textprobe.ast.Document;
+import codeprober.textprobe.ast.Expr;
 import codeprober.textprobe.ast.Probe;
 import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
@@ -240,13 +241,13 @@ public class TextProbeEnvironment {
 					headVal = Reflect.invoke0(headVal, acc.name.value);
 					headType = mth.getReturnType();
 				} else {
-					final ASTList<Argument> args = acc.arguments.get();
+					final ASTList<Expr> args = acc.arguments.get();
 
 					final List<Class<?>> argTypes = new ArrayList<>();
 					final List<Object> argValues = new ArrayList<>();
 
 					for (int j = 0; j < args.getNumChild(); ++j) {
-						final Argument arg = args.get(j);
+						final Expr arg = args.get(j);
 						switch (arg.type) {
 						case INT:
 							argTypes.add(Integer.TYPE);
@@ -367,8 +368,11 @@ public class TextProbeEnvironment {
 			}
 			break;
 		}
-		case CONSTANT:
-			rhsBody = new QueryResult(qassert.expectedValue.asConstant().value, String.class);
+		case INT:
+			rhsBody = new QueryResult(qassert.expectedValue.asInt(), Integer.TYPE);
+			break;
+		case STRING:
+			rhsBody = new QueryResult(qassert.expectedValue.asString(), String.class);
 			break;
 		default:
 			throw new IllegalArgumentException("Unknown ExpectedValue " + qassert.expectedValue.type);
@@ -389,14 +393,15 @@ public class TextProbeEnvironment {
 						flattenBody(lhsBody), qassert.exclamation ? "NOT to" : "   To", //
 						flattenBody(rhsBody));
 			} else {
-				addErr(qassert.expectedValue, prefix + "Actual: " + flattenBody(lhsBody));
+				addErr(qassert.expectedValue, prefix + "Actual: "
+						+ DecorationsHandler.wrapLiteralValueInQuotesIfNecessary(flattenBody(lhsBody)));
 			}
 			return false;
 		}
 
 		// Non-contains checking
 		final boolean rawComparison;
-		if (lhsBody.value instanceof String || rhsBody.value instanceof String) {
+		if (lhsBody.isStringOrInteger() || rhsBody.isStringOrInteger()) {
 			final String lhsStr = flattenBody(lhsBody);
 			final String rhsStr = flattenBody(rhsBody);
 			rawComparison = lhsStr.equals(rhsStr);
@@ -414,8 +419,8 @@ public class TextProbeEnvironment {
 		if (adjustedComparison) {
 			return true;
 		} else {
-			final String lhs = flattenBody(lhsBody);
-			final String rhs = flattenBody(rhsBody);
+			final String lhs = DecorationsHandler.wrapLiteralValueInQuotesIfNecessary(flattenBody(lhsBody));
+			final String rhs = DecorationsHandler.wrapLiteralValueInQuotesIfNecessary(flattenBody(rhsBody));
 
 			String msg = "";
 			if (printExpectedValuesInComparisonFailures) {
@@ -471,6 +476,9 @@ public class TextProbeEnvironment {
 	public String flattenBody(QueryResult qres) {
 		if (qres.value == null) {
 			return "null";
+		}
+		if (!Parser.permitImplicitStringConversion && qres.isStringOrInteger()) {
+			return String.valueOf(qres.value);
 		}
 		final boolean expandSave = EncodeResponseValue.shouldExpandListNodes;
 		EncodeResponseValue.shouldExpandListNodes = false;
@@ -542,6 +550,10 @@ public class TextProbeEnvironment {
 		public QueryResult(Object value, Class<?> clazz) {
 			this.value = value;
 			this.clazz = clazz;
+		}
+
+		public boolean isStringOrInteger() {
+			return value instanceof String || value instanceof Integer;
 		}
 	}
 }

@@ -27,6 +27,7 @@ import codeprober.textprobe.Parser;
 import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.TextProbeEnvironment.QueryResult;
 import codeprober.textprobe.ast.Container;
+import codeprober.textprobe.ast.Expr;
 import codeprober.textprobe.ast.Position;
 import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
@@ -142,15 +143,30 @@ public class CompleteHandler {
 			return completePropAccess(env, subQuery);
 
 		case QUERY_RESULT:
-			final QueryResult lhsEval = env.evaluateQuery(compCtx.asQueryResult());
+			final Query query = compCtx.asQueryResult();
+			final QueryResult lhsEval = env.evaluateQuery(query);
 			if (lhsEval == null) {
 				return new CompleteRes();
 			}
 			final List<CompletionItem> ret = new ArrayList<>();
-			final String flat = env.flattenBody(lhsEval);
+			final String flat = DecorationsHandler.wrapLiteralValueInQuotesIfNecessary(env.flattenBody(lhsEval));
+
 			final String sortText = String.format("%s", SortTextPrefix.QUERYRESULT.getPrefix());
 			ret.add(new CompletionItem(flat, flat, CompletionItemKind.Constant.ordinal(), sortText, "Query result"));
-			addMetaVars(env, ret);
+			if (query.assertion.isPresent() && query.assertion().expectedValue.type == Expr.Type.STRING
+					&& query.assertion().expectedValue.asString().equals("")) {
+				completeTypes(env, line, query.enclosingContainer(), null).lines.forEach(item -> {
+					if (item.insertStart != null && item.insertEnd != null) {
+						// Remove the start/end, not needed when current string is empty.
+						ret.add(new CompletionItem(item.label, item.insertText, item.kind, item.sortText, item.detail,
+								item.contextStart, item.contextEnd));
+					} else {
+						ret.add(item);
+					}
+				});
+			} else {
+				addMetaVars(env, ret);
+			}
 			return new CompleteRes(ret);
 
 		case VAR_DECL_NAME:
@@ -174,7 +190,6 @@ public class CompleteHandler {
 	private static CompleteRes completeTypes(TextProbeEnvironment env, int line, Container container, Query query) {
 		List<CompletionItem> ret = new ArrayList<>();
 		final Set<String> alreadyAddedNodes = new HashSet<>();
-
 		final Set<Integer> bumps = env.document.bumpedLines();
 		// Only suggest un-bumped types if the line is free from bumps
 		String source = null;
