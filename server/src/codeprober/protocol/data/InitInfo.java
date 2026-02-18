@@ -11,25 +11,29 @@ public class InitInfo implements codeprober.util.JsonUtil.ToJsonable {
   public final BackingFile backingFile;
   public final Boolean autoReloadOnDisconnect;
   public final Boolean supportsWorkspaceMetadata;
+  public final Integer autoAsyncTimeoutMs;
+  public InitInfo(protocolgen_spec_InitInfo_1 version, Integer changeBufferTime, Integer workerProcessCount, Boolean disableVersionCheckerByDefault, BackingFile backingFile, Boolean autoReloadOnDisconnect, Boolean supportsWorkspaceMetadata) {
+    this(version, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile, autoReloadOnDisconnect, supportsWorkspaceMetadata, (Integer)null);
+  }
   public InitInfo(protocolgen_spec_InitInfo_1 version, Integer changeBufferTime, Integer workerProcessCount, Boolean disableVersionCheckerByDefault, BackingFile backingFile, Boolean autoReloadOnDisconnect) {
-    this(version, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile, autoReloadOnDisconnect, (Boolean)null);
+    this(version, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile, autoReloadOnDisconnect, (Boolean)null, (Integer)null);
   }
   public InitInfo(protocolgen_spec_InitInfo_1 version, Integer changeBufferTime, Integer workerProcessCount, Boolean disableVersionCheckerByDefault, BackingFile backingFile) {
-    this(version, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile, (Boolean)null, (Boolean)null);
+    this(version, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, backingFile, (Boolean)null, (Boolean)null, (Integer)null);
   }
   public InitInfo(protocolgen_spec_InitInfo_1 version, Integer changeBufferTime, Integer workerProcessCount, Boolean disableVersionCheckerByDefault) {
-    this(version, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, (BackingFile)null, (Boolean)null, (Boolean)null);
+    this(version, changeBufferTime, workerProcessCount, disableVersionCheckerByDefault, (BackingFile)null, (Boolean)null, (Boolean)null, (Integer)null);
   }
   public InitInfo(protocolgen_spec_InitInfo_1 version, Integer changeBufferTime, Integer workerProcessCount) {
-    this(version, changeBufferTime, workerProcessCount, (Boolean)null, (BackingFile)null, (Boolean)null, (Boolean)null);
+    this(version, changeBufferTime, workerProcessCount, (Boolean)null, (BackingFile)null, (Boolean)null, (Boolean)null, (Integer)null);
   }
   public InitInfo(protocolgen_spec_InitInfo_1 version, Integer changeBufferTime) {
-    this(version, changeBufferTime, (Integer)null, (Boolean)null, (BackingFile)null, (Boolean)null, (Boolean)null);
+    this(version, changeBufferTime, (Integer)null, (Boolean)null, (BackingFile)null, (Boolean)null, (Boolean)null, (Integer)null);
   }
   public InitInfo(protocolgen_spec_InitInfo_1 version) {
-    this(version, (Integer)null, (Integer)null, (Boolean)null, (BackingFile)null, (Boolean)null, (Boolean)null);
+    this(version, (Integer)null, (Integer)null, (Boolean)null, (BackingFile)null, (Boolean)null, (Boolean)null, (Integer)null);
   }
-  public InitInfo(protocolgen_spec_InitInfo_1 version, Integer changeBufferTime, Integer workerProcessCount, Boolean disableVersionCheckerByDefault, BackingFile backingFile, Boolean autoReloadOnDisconnect, Boolean supportsWorkspaceMetadata) {
+  public InitInfo(protocolgen_spec_InitInfo_1 version, Integer changeBufferTime, Integer workerProcessCount, Boolean disableVersionCheckerByDefault, BackingFile backingFile, Boolean autoReloadOnDisconnect, Boolean supportsWorkspaceMetadata, Integer autoAsyncTimeoutMs) {
     this.type = "init";
     this.version = version;
     this.changeBufferTime = changeBufferTime;
@@ -38,6 +42,7 @@ public class InitInfo implements codeprober.util.JsonUtil.ToJsonable {
     this.backingFile = backingFile;
     this.autoReloadOnDisconnect = autoReloadOnDisconnect;
     this.supportsWorkspaceMetadata = supportsWorkspaceMetadata;
+    this.autoAsyncTimeoutMs = autoAsyncTimeoutMs;
   }
   public InitInfo(java.io.DataInputStream src) throws java.io.IOException {
     this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
@@ -51,6 +56,7 @@ public class InitInfo implements codeprober.util.JsonUtil.ToJsonable {
     this.backingFile = src.readBoolean() ? new BackingFile(src) : null;
     this.autoReloadOnDisconnect = src.readBoolean() ? src.readBoolean() : null;
     this.supportsWorkspaceMetadata = src.readBoolean() ? src.readBoolean() : null;
+    this.autoAsyncTimeoutMs = src.readBoolean() ? src.readInt() : null;
   }
 
   public static InitInfo fromJSON(JSONObject obj) {
@@ -63,6 +69,7 @@ public class InitInfo implements codeprober.util.JsonUtil.ToJsonable {
     , obj.has("backingFile") ? (BackingFile.fromJSON(obj.getJSONObject("backingFile"))) : null
     , obj.has("autoReloadOnDisconnect") ? (obj.getBoolean("autoReloadOnDisconnect")) : null
     , obj.has("supportsWorkspaceMetadata") ? (obj.getBoolean("supportsWorkspaceMetadata")) : null
+    , obj.has("autoAsyncTimeoutMs") ? (obj.getInt("autoAsyncTimeoutMs")) : null
     );
   }
   public JSONObject toJSON() {
@@ -75,6 +82,7 @@ public class InitInfo implements codeprober.util.JsonUtil.ToJsonable {
     if (backingFile != null) _ret.put("backingFile", backingFile.toJSON());
     if (autoReloadOnDisconnect != null) _ret.put("autoReloadOnDisconnect", autoReloadOnDisconnect);
     if (supportsWorkspaceMetadata != null) _ret.put("supportsWorkspaceMetadata", supportsWorkspaceMetadata);
+    if (autoAsyncTimeoutMs != null) _ret.put("autoAsyncTimeoutMs", autoAsyncTimeoutMs);
     return _ret;
   }
   public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
@@ -89,5 +97,6 @@ public class InitInfo implements codeprober.util.JsonUtil.ToJsonable {
     if (backingFile != null) { dst.writeBoolean(true); backingFile.writeTo(dst);; } else { dst.writeBoolean(false); }
     if (autoReloadOnDisconnect != null) { dst.writeBoolean(true); dst.writeBoolean(autoReloadOnDisconnect);; } else { dst.writeBoolean(false); }
     if (supportsWorkspaceMetadata != null) { dst.writeBoolean(true); dst.writeBoolean(supportsWorkspaceMetadata);; } else { dst.writeBoolean(false); }
+    if (autoAsyncTimeoutMs != null) { dst.writeBoolean(true); dst.writeInt(autoAsyncTimeoutMs);; } else { dst.writeBoolean(false); }
   }
 }

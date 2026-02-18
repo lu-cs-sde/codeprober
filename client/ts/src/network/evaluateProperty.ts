@@ -18,8 +18,9 @@ const evaluateProperty = (
   let activelyLoadingJob: JobId | null = null;
   const doStopJob = (jobId: JobId) => env.performTypedRpc<StopJobReq, StopJobRes>({
     type: 'Concurrent:StopJob',
-    job: jobId,
+    job: jobId.id,
   }).then(res => {
+    jobId.discard();
     if (res.err) {
       console.warn('Error when stopping job:', res.err);
       return false;
@@ -58,7 +59,7 @@ const evaluateProperty = (
           }
           env.performTypedRpc<PollWorkerStatusReq, PollWorkerStatusRes>({
             type: 'Concurrent:PollWorkerStatus',
-            job: jobId,
+            job: jobId.id,
           })
             .then(res => {
               if (res.ok) {
@@ -110,7 +111,7 @@ const evaluateProperty = (
 
       env.performTypedRpc<EvaluatePropertyReq, EvaluatePropertyRes>({
         ...req,
-        job: jobId,
+        job: jobId.id,
         jobLabel: `Probe: '${`${req.locator.result.label ?? req.locator.result.type}`.split('.').slice(-1)[0]}.${req.property.name}'`,
       })
         .then((data) => {
@@ -128,6 +129,7 @@ const evaluateProperty = (
           } else {
             // Sync work executed, done.
             clearTimeout(initialPollDelayTimer);
+            jobId.discard();
             isDone = true;
             resolve(data.response.value);
           }

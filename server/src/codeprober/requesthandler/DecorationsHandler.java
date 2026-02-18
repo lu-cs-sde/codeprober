@@ -32,6 +32,20 @@ public class DecorationsHandler {
 		if (document.containers.isEmpty()) {
 			return new GetDecorationsRes();
 		}
+		if (req.forceAllOK != null && req.forceAllOK) {
+			final List<Decoration> ret = new ArrayList<>();
+			for (Container c : document.containers) {
+				final Probe p = c.probe();
+				if (p != null) {
+					ret.add(new Decoration( //
+							c.start.getPackedBits(), c.end.getPackedBits(), //
+							"ok", "", p.start.getPackedBits(), //
+							p.end.getPackedBits()));
+
+				}
+			}
+			return new GetDecorationsRes(ret);
+		}
 		final ParsedAst parsedAst = parser.parse(req.src);
 		if (parsedAst.info == null) {
 			List<Decoration> ret = new ArrayList<>();

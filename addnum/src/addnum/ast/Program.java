@@ -72,4 +72,15 @@ public class Program extends Node {
 	public FluentTestHelper fluentTest() {
 		return new FluentTestHelper();
 	}
+
+
+	@Attribute
+	public String sleep(int ms) {
+		try {
+			Thread.sleep(ms);
+		} catch (InterruptedException e) {
+			// Ignore
+		}
+		return "Slept for " + ms;
+	}
 }

@@ -1,10 +1,10 @@
 import { adjustLocatorAndProperty } from '../../model/adjustLocator';
 import { findAllLocatorsWithinNestingPath } from '../../model/findLocatorWithNestingPath';
-import ModalEnv, { JobId } from '../../model/ModalEnv';
+import ModalEnv from '../../model/ModalEnv';
 import { createMutableLocator } from '../../model/UpdatableNodeLocator';
 import { NestedWindows, WindowStateDataProbe } from '../../model/WindowState';
 import evaluateProperty from '../../network/evaluateProperty';
-import { Diagnostic, NodeLocator, Property, RpcBodyLine, StopJobReq, StopJobRes } from '../../protocol';
+import { Diagnostic, NodeLocator, Property, RpcBodyLine } from '../../protocol';
 import displayProbeModal, { prettyPrintProbePropertyName, searchProbePropertyName } from '../popup/displayProbeModal';
 import { formatAttrBaseName } from '../popup/formatAttr';
 import startEndToSpan from '../startEndToSpan';
@@ -30,17 +30,6 @@ const createMinimizedProbeModal = (
   let loading = false;
   let isCleanedUp = false;
   let refreshOnDone = false;
-
-  const doStopJob = (jobId: JobId) => env.performTypedRpc<StopJobReq, StopJobRes>({
-    type: 'Concurrent:StopJob',
-    job: jobId,
-  }).then(res => {
-    if (res.err) {
-      console.warn('Error when stopping job:', res.err);
-      return false;
-    }
-    return true;
-  });
 
   const cleanup = () => {
     isCleanedUp = true;

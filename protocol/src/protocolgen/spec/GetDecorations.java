@@ -8,6 +8,7 @@ public class GetDecorations extends Rpc {
 		return new Streamable() {
 			public final Object type = "ide:decorations";
 			public final Object src = ParsingRequestData.class;
+			public final Object forceAllOK = opt(Boolean.class);
 		};
 	}
 
@@ -17,5 +18,4 @@ public class GetDecorations extends Rpc {
 			public final Object lines = opt(arr(Decoration.class));
 		};
 	}
-
 }

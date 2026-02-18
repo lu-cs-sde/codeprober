@@ -3,7 +3,7 @@
 1) Download [codeprober.jar](https://github.com/lu-cs-sde/codeprober/releases/latest) from the latest release.
 2) Start like this:
     ```
-    java -jar codeprober.jar your-analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
+    java -jar codeprober.jar [--test] [--concurrent=N] your-analyzer-or-compiler.jar [args-to-forward-to-compiler-on-each-request]
     ```
 
 For example, if you have codeprober.jar in your downloads directory, and your tool is called `compiler.jar` and is located in your home directory, then run:

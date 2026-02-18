@@ -4,7 +4,7 @@ import settings from '../settings';
 import createModalTitle, { createOverflowButton } from '../ui/create/createModalTitle';
 import showWindow from '../ui/create/showWindow';
 import UIElements from '../ui/UIElements';
-import TextProbeManager, { TextProbeCheckResults } from './TextProbeManager';
+import TextProbeManager, { getDecorations, TextProbeCheckResults } from './TextProbeManager';
 import ModalEnv from './ModalEnv';
 import WindowState from './WindowState';
 import ThreadPoolExecutor, { createThreadPoolExecutor } from './ThreadPoolExecutor';
@@ -80,6 +80,17 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: WorkspaceInstance,
     if (!contents) {
       return;
     }
+    const addLogEntry = (fullPath: string, text: string) => {
+      const logEntry = document.createElement('div');
+      logEntry.classList.add('workspace-test-failure-log-entry')
+      logEntry.innerText = text;
+
+      failureLog.appendChild(logEntry);
+      failureLog.style.display = 'flex';
+
+      logEntry.classList.add('clickHighlightOnHover');
+      logEntry.onclick = () => workspace.setActiveWorkspacePath(fullPath);
+    }
     for (let i = 0; i < contents.length; ++i) {
       const entry = contents[i];
       if (testRunMonitor.shouldStop) {
@@ -93,30 +104,31 @@ const displayTestModal = (args: WorkspaceInitArgs, workspace: WorkspaceInstance,
         case 'file': {
           const checkFile = async () => {
             const fullPath = entry.value.fullPath;
-            const res = await args.env.performTypedRpc<GetDecorationsReq, GetDecorationsRes>({
-              type: 'ide:decorations',
-              src: { ...baseParsingData, src: { type: 'workspacePath', value: fullPath }}
-            })
-            if (!res.lines) {
+            const res = await getDecorations(args.env, { ...baseParsingData, src: { type: 'workspacePath', value: fullPath }})
+            switch (res.type) {
+              case 'timeout': {
+                addLogEntry(fullPath, `Timeout when evaluating probes in this file`);
+                return;
+              }
+              case 'unexpected_error': {
+                addLogEntry(fullPath, `Error when evaluating probes in this file: ${res.value?.join(', ')}`);
+                return;
+              }
+            }
+            const lines = res.value.lines;
+            if (!lines) {
+              // No text probes in this file
               return;
             }
             const stats: TextProbeCheckResults = {
-              numPass: res.lines.filter(x => x.type === 'ok' || x.type === 'query').length,
-              numFail: res.lines.filter(x => x.type === 'error').length,
+              numPass: lines.filter(x => x.type === 'ok' || x.type === 'query').length,
+              numFail: lines.filter(x => x.type === 'error').length,
             };
             numPass += stats.numPass;
             numFail += stats.numFail;
             const debug = location.search.includes('debug=true');
             if (stats.numFail || debug) {
-              const logEntry = document.createElement('div');
-              logEntry.classList.add('workspace-test-failure-log-entry')
-              logEntry.innerText = `${stats.numFail} failure${stats.numFail > 1 ? 's' : ''}${debug ? `, ${stats.numPass} pass` : ''} in ${fullPath}`;
-
-              failureLog.appendChild(logEntry);
-              failureLog.style.display = 'flex';
-
-              logEntry.classList.add('clickHighlightOnHover');
-              logEntry.onclick = () => workspace.setActiveWorkspacePath(fullPath);
+              addLogEntry(fullPath, `${stats.numFail} failure${stats.numFail > 1 ? 's' : ''}${debug ? `, ${stats.numPass} pass` : ''} in ${fullPath}`);
             }
             workspace.knownTestResults[fullPath] = stats;
             statusLbl.innerText = `Running.. ${numPass} pass, ${numFail} fail`;

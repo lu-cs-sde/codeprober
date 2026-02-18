@@ -401,7 +401,7 @@ public class TextProbeEnvironment {
 
 		// Non-contains checking
 		final boolean rawComparison;
-		if (lhsBody.isStringOrInteger() || rhsBody.isStringOrInteger()) {
+		if (lhsBody.isStringCoercionCausingLiteral() || rhsBody.isStringCoercionCausingLiteral()) {
 			final String lhsStr = flattenBody(lhsBody);
 			final String rhsStr = flattenBody(rhsBody);
 			rawComparison = lhsStr.equals(rhsStr);
@@ -477,7 +477,7 @@ public class TextProbeEnvironment {
 		if (qres.value == null) {
 			return "null";
 		}
-		if (!Parser.permitImplicitStringConversion && qres.isStringOrInteger()) {
+		if (!Parser.permitImplicitStringConversion && qres.isStringCoercionCausingLiteral()) {
 			return String.valueOf(qres.value);
 		}
 		final boolean expandSave = EncodeResponseValue.shouldExpandListNodes;
@@ -552,8 +552,8 @@ public class TextProbeEnvironment {
 			this.clazz = clazz;
 		}
 
-		public boolean isStringOrInteger() {
-			return value instanceof String || value instanceof Integer;
+		public boolean isStringCoercionCausingLiteral() {
+			return value instanceof String || value instanceof Integer || value instanceof Boolean;
 		}
 	}
 }

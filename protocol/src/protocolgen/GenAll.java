@@ -3,6 +3,7 @@ package protocolgen;
 import java.util.ArrayList;
 import java.util.List;
 
+import protocolgen.spec.AsyncRequest;
 import protocolgen.spec.AsyncRpcUpdate;
 import protocolgen.spec.BackingFileUpdated;
 import protocolgen.spec.Complete;
@@ -81,6 +82,7 @@ public class GenAll {
 		// Coordinator -> Worker
 		rpcs.add(GetWorkerStatus.class);
 		rpcs.add(SubmitWorkerTask.class);
+		rpcs.add(AsyncRequest.class);
 
 		// Server->Client
 		serverToClient.add(Refresh.class);

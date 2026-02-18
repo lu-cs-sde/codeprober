@@ -1,3 +1,15 @@
+interface AsyncRequestReq {
+  type: "AsyncRequest";
+  src: { [key: string]: any };
+  job?: number;
+}
+interface AsyncRequestRes {
+  response: AsyncResult;
+}
+type AsyncResult = (
+    { type: 'job'; value: number; }
+  | { type: 'sync'; value: { [key: string]: any }; }
+);
 interface AsyncRpcUpdate {
   type: "asyncUpdate";
   job: number;
@@ -84,6 +96,7 @@ interface FindWorkspaceFilesRes {
 interface GetDecorationsReq {
   type: "ide:decorations";
   src: ParsingRequestData;
+  forceAllOK?: boolean;
 }
 interface GetDecorationsRes {
   lines?: Decoration[];
@@ -141,6 +154,7 @@ interface InitInfo {
   backingFile?: BackingFile;
   autoReloadOnDisconnect?: boolean;
   supportsWorkspaceMetadata?: boolean;
+  autoAsyncTimeoutMs?: number;
 }
 interface ListNodesReq {
   type: "ListNodes";
@@ -454,7 +468,10 @@ interface WsPutLongpollRes {
 
 
 export {
-   AsyncRpcUpdate
+   AsyncRequestReq
+ , AsyncRequestRes
+ , AsyncResult
+ , AsyncRpcUpdate
  , AsyncRpcUpdateValue
  , BackingFile
  , BackingFileUpdated

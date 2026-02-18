@@ -99,4 +99,9 @@ public class Num extends Node {
 	public Num clone() {
 		return new Num(getStart(), getEnd(), val);
 	}
+
+	@Attribute
+	public boolean isEven() {
+		return val % 2 == 0;
+	}
 }

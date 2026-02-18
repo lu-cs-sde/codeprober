@@ -39,6 +39,17 @@ test.describe('CodeProber Integration Tests', () => {
         expect(content).toContain('= 3');
         expect(content).not.toContain('Actual:');
       });
+      test('timeout error is visible', async ({ page }) => {
+        const { content } = await fillPageContent({ page, wantedContent: '(1+2) // [[Program.sleep(1000)=]]', editor})
+        await new Promise(res => setTimeout(res, 200));
+        expect(content).toContain('Timeout');
+        expect(content).not.toContain('Slept for');
+      });
+      test('timeout error is not visible', async ({ page }) => {
+        const { content } = await fillPageContent({ page, wantedContent: '(1+2) // [[Program.sleep(10)=]]', editor})
+        await new Promise(res => setTimeout(res, 100));
+        expect(content).toContain('Slept for 10');
+      });
 
       [true, false].forEach((tilde) => {
         test(`text probe with assertion, tilde=${tilde}`, async ({ page }) => {

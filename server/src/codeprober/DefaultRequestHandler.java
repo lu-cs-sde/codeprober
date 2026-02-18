@@ -28,6 +28,9 @@ import codeprober.metaprogramming.TypeIdentificationStyle;
 import codeprober.protocol.AstCacheStrategy;
 import codeprober.protocol.ClientRequest;
 import codeprober.protocol.PositionRecoveryStrategy;
+import codeprober.protocol.data.AsyncRequestReq;
+import codeprober.protocol.data.AsyncRequestRes;
+import codeprober.protocol.data.AsyncResult;
 import codeprober.protocol.data.CompleteReq;
 import codeprober.protocol.data.CompleteRes;
 import codeprober.protocol.data.EvaluatePropertyReq;
@@ -307,6 +310,12 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			@Override
 			protected UnlinkWorkspacePathRes handleUnlinkWorkspacePath(UnlinkWorkspacePathReq req) {
 				return workspaceHandler.handleUnlinkWorkspacePath(req);
+			}
+
+			@Override
+			protected AsyncRequestRes handleAsyncRequest(AsyncRequestReq req) {
+				final JSONObject unpackedRes = handle(req.src);
+				return new AsyncRequestRes(AsyncResult.fromSync(unpackedRes));
 			}
 		}.handle(request.data));
 		if (addLog.getAndSet(false)) {

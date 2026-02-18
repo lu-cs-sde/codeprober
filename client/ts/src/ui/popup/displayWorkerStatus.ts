@@ -14,9 +14,10 @@ const displayWorkerStatus = (
     setDisplayButtonDisabled(false);
 
     if (activeSubscription != null) {
+      activeSubscription.job.discard();
       env.performTypedRpc<UnsubscribeFromWorkerStatusReq, UnsubscribeFromWorkerStatusRes>({
         type: 'Concurrent:UnsubscribeFromWorkerStatus',
-        job: activeSubscription.job,
+        job: activeSubscription.job.id,
         subscriberId: activeSubscription.subscriberId,
       }).then(res => {
         if (!res.ok) {
@@ -62,7 +63,7 @@ const displayWorkerStatus = (
 
       env.performTypedRpc<SubscribeToWorkerStatusReq, SubscribeToWorkerStatusRes>({
         type: 'Concurrent:SubscribeToWorkerStatus',
-        job,
+        job: job.id,
       }).then(res => {
         activeSubscription = {
           job,

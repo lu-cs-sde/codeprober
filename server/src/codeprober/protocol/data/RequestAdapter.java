@@ -92,6 +92,9 @@ public abstract class RequestAdapter {
       case "Concurrent:SubmitTask": {
         return handleSubmitWorkerTask(SubmitWorkerTaskReq.fromJSON(request)).toJSON();
       }
+      case "AsyncRequest": {
+        return handleAsyncRequest(AsyncRequestReq.fromJSON(request)).toJSON();
+      }
       default: return null;
     }
   }
@@ -202,5 +205,9 @@ public abstract class RequestAdapter {
 
   protected SubmitWorkerTaskRes handleSubmitWorkerTask(SubmitWorkerTaskReq req) {
     throw new JSONException("Request SubmitWorkerTask is not implemented");
+  }
+
+  protected AsyncRequestRes handleAsyncRequest(AsyncRequestReq req) {
+    throw new JSONException("Request AsyncRequest is not implemented");
   }
 }

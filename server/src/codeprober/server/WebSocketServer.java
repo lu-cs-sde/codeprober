@@ -138,6 +138,17 @@ public class WebSocketServer {
 			}
 		}
 
+		int autoAsyncTimeoutMs = 3_000;
+		final String timeoutOverride = System.getProperty("cpr.autoAsyncTimeoutMs");
+		if (timeoutOverride != null) {
+			try {
+				autoAsyncTimeoutMs = Integer.parseInt(timeoutOverride);
+			} catch (NumberFormatException e) {
+				System.err.println("Invalid value supplied to 'cpr.autoAsyncTimeoutMs'");
+				e.printStackTrace();
+			}
+		}
+
 		return new InitInfo( //
 				new protocolgen_spec_InitInfo_1(vinfo.revision, vinfo.clean, buildTimeSeconds), //
 				bufferTime > 0 ? bufferTime : null, //
@@ -145,7 +156,9 @@ public class WebSocketServer {
 				disableVersionCheckerByDefault ? true : null, //
 				backingFile == null ? null : new BackingFile(backingFile.getPath(), backingFileContents), //
 				null, //
-				WorkspaceHandler.supportsStoringWorkspaceMetadata());
+				WorkspaceHandler.supportsStoringWorkspaceMetadata(), //
+				autoAsyncTimeoutMs //
+		);
 	}
 
 	static void handleRequest(Socket socket, ParsedArgs args, ServerToClientMessagePusher msgPusher,

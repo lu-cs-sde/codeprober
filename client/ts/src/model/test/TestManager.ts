@@ -1,4 +1,5 @@
-import { AsyncRpcUpdate, EvaluatePropertyReq, EvaluatePropertyRes, GetTestSuiteReq, GetTestSuiteRes, ListTestSuitesReq, ListTestSuitesRes, NestedTest, NodeLocator, ParsingRequestData, Property, PutTestSuiteReq, PutTestSuiteRes, RpcBodyLine, SynchronousEvaluationResult, TestCase, WorkerTaskDone } from '../../protocol';
+import evaluateProperty from '../../network/evaluateProperty';
+import { AsyncRpcUpdate, EvaluatePropertyRes, GetTestSuiteReq, GetTestSuiteRes, ListTestSuitesReq, ListTestSuitesRes, NestedTest, NodeLocator, ParsingRequestData, Property, PutTestSuiteReq, PutTestSuiteRes, RpcBodyLine, SynchronousEvaluationResult, TestCase, WorkerTaskDone } from '../../protocol';
 import settings from '../../settings';
 import findLocatorWithNestingPath from '../findLocatorWithNestingPath';
 import ModalEnv from '../ModalEnv';
@@ -293,10 +294,9 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
         // }
       };
 
-      const jobId = createJobId(handleUpdate);
       try {
         const env = getEnv();
-        const res = await env.performTypedRpc<EvaluatePropertyReq, EvaluatePropertyRes>({
+        const res = await evaluateProperty(env, {
           type: 'EvaluateProperty',
           property,
           locator,
@@ -304,12 +304,11 @@ const createTestManager = (getEnv: () => ModalEnv, createJobId: ModalEnv['create
           captureStdout: true, // settings.shouldCaptureStdio(),
           captureTraces: settings.shouldCaptureTraces() || false,
           flushBeforeTraceCollection: (settings.shouldCaptureTraces() && settings.shouldAutoflushTraces()) || false,
-          job: jobId,
           jobLabel: `Test > ${debugLabel}`,
-        });
-        if (res.response.type === 'sync') {
+        }).fetch();
+        if (res !== 'stopped') {
           // Non-concurrent server, handle request synchronously
-          resolve(res.response.value);
+          resolve(res);
         }
       } catch (e) {
         reject(e);

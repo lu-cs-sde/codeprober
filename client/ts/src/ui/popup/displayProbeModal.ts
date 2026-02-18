@@ -94,18 +94,6 @@ const displayProbeModal = (
     }
   }
   const { inlineWindowManager, shouldShowDiagnosticsToggler } = doCreateInlineWindowManager();
-  // const inline
-
-  const doStopJob = (jobId: JobId) => env.performTypedRpc<StopJobReq, StopJobRes>({
-    type: 'Concurrent:StopJob',
-    job: jobId,
-  }).then(res => {
-    if (res.err) {
-      console.warn('Error when stopping job:', res.err);
-      return false;
-    }
-    return true;
-  });
 
   const cleanup = () => {
     queryWindow.remove();

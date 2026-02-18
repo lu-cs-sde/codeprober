@@ -49,7 +49,7 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: `PORT=${port} java -Dcpr.workspace=addnum/workspace -jar codeprober.jar addnum/AddNum.jar`,
+    command: `PORT=${port} java -Dcpr.autoAsyncTimeoutMs=100 -Dcpr.workspace=addnum/workspace -jar codeprober.jar --concurrent=4 addnum/AddNum.jar`,
     port,
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000, // 2 minutes for server to start

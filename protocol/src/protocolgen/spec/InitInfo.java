@@ -17,4 +17,5 @@ public class InitInfo extends Streamable{
 	public final Object backingFile = opt(BackingFile.class);
 	public final Object autoReloadOnDisconnect = opt(Boolean.class);
 	public final Object supportsWorkspaceMetadata = opt(Boolean.class);
+	public final Object autoAsyncTimeoutMs = opt(Integer.class);
 }

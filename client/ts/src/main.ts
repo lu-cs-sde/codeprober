@@ -35,6 +35,7 @@ import { adjustSpan, adjustStartEnd } from './model/adjustTypeAtLoc';
 import { tealInit } from './languages/teal';
 import SpanFlasher, { createSpanFlasher } from './model/SpanFlasher';
 import startEndToSpan from './ui/startEndToSpan';
+import evaluateAsyncRequest from './model/evaluateAsyncRequest';
 
 const uiElements = new UIElements();
 
@@ -620,7 +621,7 @@ const doMain = (wsPort: number
       const createJobId: ModalEnv['createJobId'] = (updateHandler) => {
         const id = ++jobIdGenerator;
         jobUpdateHandlers[id] = updateHandler;
-        return id;
+        return { id, discard: () => delete jobUpdateHandlers[id], };
       };
       const testManager = createTestManager(() => modalEnv, createJobId);
       let jobIdGenerator = 0;
@@ -729,6 +730,7 @@ const doMain = (wsPort: number
         createCullingTaskSubmitter,
         testManager,
         createJobId,
+        autoAsyncTimeout: info.autoAsyncTimeoutMs ?? 3_000,
         getGlobalModalEnv: () => modalEnv,
         minimize: (data) => {
           const miniProbe = createMinimizedProbeModal(modalEnv, data.locator, data.property, data.nested, {
@@ -767,7 +769,15 @@ const doMain = (wsPort: number
               line: pos.line,
               column: pos.column,
             };
-            const result = await modalEnv.performTypedRpc<HoverReq, HoverRes>(req);
+
+            const asyncRes = await evaluateAsyncRequest<HoverReq, HoverRes>(modalEnv, req);
+            switch (asyncRes.type) {
+              case 'timeout':
+                return { contents: [{ value: '⚠️ Timeout when computing this value' }]}
+              case 'unexpected_error':
+                return null;
+            }
+            const result = asyncRes.value;
             if (!result.lines) {
               return null;
             }
@@ -796,10 +806,15 @@ const doMain = (wsPort: number
               line: pos.line,
               column: pos.column,
             };
-            const result = await modalEnv.performTypedRpc<CompleteReq, CompleteRes>(req);
-            const { lines } = result;
-            if (!lines) {
-              return null;
+            const asyncRes = await evaluateAsyncRequest<CompleteReq, CompleteRes>(modalEnv, req);
+            switch (asyncRes.type) {
+              case 'timeout':
+              case 'unexpected_error':
+                return null;
+            }
+            const result = asyncRes.value;
+            if (!result.lines) {
+              return;
             }
 
             let originFlasher: SpanFlasher | null = null;
@@ -809,7 +824,7 @@ const doMain = (wsPort: number
               originFlasher.flash([startEndToSpan(result.originContextStart, result.originContextEnd + 1)]);
             }
 
-            if (lines.some(x => x.contextStart && x.contextEnd)) {
+            if (result.lines.some(x => x.contextStart && x.contextEnd)) {
               // At least one line has a context
               itemFlasher = createSpanFlasher(modalEnv);
               let lastFlash: CompletionItem | null = null;
@@ -834,7 +849,7 @@ const doMain = (wsPort: number
               }
             }
 
-            return { suggestions: lines };
+            return { suggestions: result.lines };
           }
 
           default: {

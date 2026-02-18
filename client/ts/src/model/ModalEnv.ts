@@ -4,7 +4,7 @@ import { ShowWindowArgs, ShowWindowResult } from '../ui/create/showWindow';
 import WindowState, { WindowStateDataProbe } from './WindowState';
 import SourcedDiagnostic from './SourcedDiagnostic';
 
-type JobId = number;
+type JobId = { id: number; discard: () => void; };
 
 interface ModalEnv {
   showWindow: (args: ShowWindowArgs) => ShowWindowResult;
@@ -29,6 +29,7 @@ interface ModalEnv {
   createCullingTaskSubmitter: (minDelay?: number) => CullingTaskSubmitter;
   testManager: TestManager;
   createJobId: (updateHandler: (data: AsyncRpcUpdate) => void) => JobId;
+  autoAsyncTimeout: number;
   getGlobalModalEnv: () => ModalEnv;
   minimize: (data: WindowStateDataProbe) => void;
   workerProcessCount: number | undefined;

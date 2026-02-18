@@ -21,6 +21,9 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import codeprober.protocol.ClientRequest;
+import codeprober.protocol.data.AsyncRequestReq;
+import codeprober.protocol.data.AsyncRequestRes;
+import codeprober.protocol.data.AsyncResult;
 import codeprober.protocol.data.AsyncRpcUpdate;
 import codeprober.protocol.data.AsyncRpcUpdateValue;
 import codeprober.protocol.data.EvaluatePropertyReq;
@@ -209,25 +212,32 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 						// 'Fall down' to nonConcurrent handler below
 						throw new JSONException("Synchronous requests not supported");
 					}
-					final ActiveJob job = new ActiveJob(req.job, request);
-//					final JSONObject result = new JSONObject();
-//					result.put("job", job.jobId);
-//					result.put("status", "queued");
-					queuedJobs.add(job);
-
-					final EvaluatePropertyRes result = new EvaluatePropertyRes(
-							PropertyEvaluationResult.fromJob(req.job));
 					// TODO possible optimization: first find a worker with equal 'src'/'text' as
 					// previous request. Would help caching!
+					acceptJob(req.job);
+					return new EvaluatePropertyRes(PropertyEvaluationResult.fromJob(req.job));
+				}
+
+				protected AsyncRequestRes handleAsyncRequest(AsyncRequestReq req) {
+					if (req.job == null) {
+						throw new JSONException("Synchronous requests not supported");
+					}
+					acceptJob(req.job);
+					return new AsyncRequestRes(AsyncResult.fromJob(req.job));
+				}
+
+				private void acceptJob(long jobId) {
+					final ActiveJob job = new ActiveJob(jobId, request);
+					queuedJobs.add(job);
+
 					for (Worker w : workers) {
 						synchronized (w) {
 							if (w.maybeTakeWork()) {
-								return result;
+								return;
 							}
 						}
 					}
 					CodeProber.flog("Put into queue " + job.jobId);
-					return result;
 				}
 
 			}.handle(request.data);
@@ -469,7 +479,6 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 //			jobWrapper.put("id", msgId);
 //			jobWrapper.put("data", job.request.data);
 //			write(jobWrapper.toString());
-
 
 			// NOW
 			write(new TopRequestReq(msgId, new SubmitWorkerTaskReq(job.jobId, job.request.data).toJSON()));
