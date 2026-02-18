@@ -1,6 +1,9 @@
 import { test, expect, Page } from '@playwright/test';
 import { mkdirSync, statSync, writeFileSync, rmSync } from 'node:fs';
 
+// Keep this constant in sync with playwright.config.ts
+const basePort = 8989;
+
 test.describe('CodeProber Integration Tests', () => {
   test('should load index.html and receive a response', async ({ page }) => {
     // Navigate to the home page
@@ -40,14 +43,14 @@ test.describe('CodeProber Integration Tests', () => {
         expect(content).not.toContain('Actual:');
       });
       test('timeout error is visible', async ({ page }) => {
-        await fillPageContent({ page, wantedContent: '(1+2) // [[Program.sleep(1000)=]]', editor})
+        await fillPageContent({ page, wantedContent: '(1+2) // [[Program.sleep(1000)=]]', editor}, `http://localhost:${basePort+1}`)
         await new Promise(res => setTimeout(res, 200));
         const content = await extractCurrentContent(page);
         expect(content).toContain('Timeout');
         expect(content).not.toContain('Slept for');
       });
       test('timeout error is not visible', async ({ page }) => {
-        await fillPageContent({ page, wantedContent: '(1+2) // [[Program.sleep(10)=]]', editor})
+        await fillPageContent({ page, wantedContent: '(1+2) // [[Program.sleep(10)=]]', editor}, `http://localhost:${basePort+1}`)
         await new Promise(res => setTimeout(res, 100));
         const content = await extractCurrentContent(page);
         expect(content).toContain('Slept for 10');
@@ -152,7 +155,7 @@ test.describe('CodeProber Integration Tests', () => {
         await fillPageContent({ page, wantedContent: '(111+222\n)', editor });
 
         // Right click
-        await page.getByText('111').click({ button: 'right' });
+        await page.getByText('111').first().click({ button: 'right' });
 
         // 'Create Probe'
         if (editor === 'Monaco') {
@@ -206,11 +209,11 @@ test.describe('CodeProber Integration Tests', () => {
     wantedContent: string;
     editor: 'Monaco' | 'CodeMirror';
   }
-  async function fillPageContent(args: FillArgs) {
+  async function fillPageContent(args: FillArgs, customBase?: string) {
     const { editor, page, wantedContent } = args;
     // Listen for all console logs
     page.on('console', msg => console.log('[C]', msg.text()));
-    await page.goto(`/?editor=${editor}`);
+    await page.goto(`${customBase ?? ''}/?editor=${editor}`);
     await page.waitForLoadState('networkidle');
 
     // Wait for Monaco editor to initialize, which is indicated by the input element disappearing

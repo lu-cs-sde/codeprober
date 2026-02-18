@@ -1,6 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const port = 8989;
+const basePort = 8989;
+
+const createServerConfig = (port, extraSysProps='', extraCprArgs='') => ({
+  command: `PORT=${port} java ${extraSysProps} -Dcpr.workspace=addnum/workspace -jar codeprober.jar ${extraCprArgs} addnum/AddNum.jar`,
+  port,
+  reuseExistingServer: !process.env.CI,
+  timeout: 120 * 1000, // 2 minutes for server to start
+  cwd: '../..',
+  stdout: 'pipe', // Uncomment for debugging
+});
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -8,7 +17,7 @@ const port = 8989;
 export default defineConfig({
   testDir: './test-e2e',
   /* Run tests in files in parallel */
-  fullyParallel: true,
+  fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
@@ -20,7 +29,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: `http://localhost:${port}`,
+    baseURL: `http://localhost:${basePort}`,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -48,12 +57,8 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  webServer: {
-    command: `PORT=${port} java -Dcpr.autoAsyncTimeoutMs=100 -Dcpr.workspace=addnum/workspace -jar codeprober.jar --concurrent=4 addnum/AddNum.jar`,
-    port,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000, // 2 minutes for server to start
-    cwd: '../..',
-    stdout: 'pipe', // Uncomment for debugging
-  },
+  webServer: [
+    createServerConfig(basePort),
+    createServerConfig(basePort + 1, `-Dcpr.autoAsyncTimeoutMs=100`, `--concurrent=4`),
+  ],
 });
