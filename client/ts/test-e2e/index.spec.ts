@@ -238,11 +238,7 @@ test.describe('CodeProber Integration Tests', () => {
       );
 
       // Type our test content (this will replace the selected text)
-      const textarea = page.locator(editor === 'Monaco'
-          ? '#input-wrapper textarea'
-          : '.cm-editor .cm-content'
-      ).first();
-      await textarea.fill(wantedContent, { force: true });
+      await page.keyboard.type(wantedContent);
     } catch (error) {
       throw new Error(`Failed to interact with editor: ${error.message}`);
     }
