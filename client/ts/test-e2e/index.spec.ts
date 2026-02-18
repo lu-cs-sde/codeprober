@@ -40,14 +40,16 @@ test.describe('CodeProber Integration Tests', () => {
         expect(content).not.toContain('Actual:');
       });
       test('timeout error is visible', async ({ page }) => {
-        const { content } = await fillPageContent({ page, wantedContent: '(1+2) // [[Program.sleep(1000)=]]', editor})
+        await fillPageContent({ page, wantedContent: '(1+2) // [[Program.sleep(1000)=]]', editor})
         await new Promise(res => setTimeout(res, 200));
+        const content = await extractCurrentContent(page);
         expect(content).toContain('Timeout');
         expect(content).not.toContain('Slept for');
       });
       test('timeout error is not visible', async ({ page }) => {
-        const { content } = await fillPageContent({ page, wantedContent: '(1+2) // [[Program.sleep(10)=]]', editor})
+        await fillPageContent({ page, wantedContent: '(1+2) // [[Program.sleep(10)=]]', editor})
         await new Promise(res => setTimeout(res, 100));
+        const content = await extractCurrentContent(page);
         expect(content).toContain('Slept for 10');
       });
 
@@ -241,13 +243,13 @@ test.describe('CodeProber Integration Tests', () => {
     // Wait for the content to be processed
     await page.waitForTimeout(500);
 
-    const actualContent = (await page.evaluate(() => document.querySelector('#input-wrapper')?.textContent || ''))
-      .replaceAll(' ', ' ') // Normalize spaces
-    ;
-
+    const actualContent = await extractCurrentContent(page);
     // Verify that the initial text is not present in the editor
     expect(actualContent).not.toContain('Hello World!'); // Ensure we didn't leave old content
 
     return { content: actualContent };
   }
 });
+
+const extractCurrentContent = async (page) => (await page.evaluate(() => document.querySelector('#input-wrapper')?.textContent || ''))
+  .replaceAll(' ', ' '); // Normalize spaces
