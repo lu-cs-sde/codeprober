@@ -1,5 +1,6 @@
 package codeprober.requesthandler;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -10,6 +11,7 @@ import codeprober.locator.CreateLocator;
 import codeprober.locator.Span;
 import codeprober.metaprogramming.InvokeProblem;
 import codeprober.metaprogramming.Reflect;
+import codeprober.protocol.create.EncodeResponseValue;
 import codeprober.protocol.data.HoverReq;
 import codeprober.protocol.data.HoverRes;
 import codeprober.protocol.data.NodeLocator;
@@ -21,7 +23,9 @@ import codeprober.textprobe.CompletionContext.PropertyNameDetail;
 import codeprober.textprobe.Parser;
 import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.TextProbeEnvironment.QueryResult;
+import codeprober.textprobe.ast.Container;
 import codeprober.textprobe.ast.Position;
+import codeprober.textprobe.ast.Probe;
 import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
 import codeprober.textprobe.ast.QueryHead.Type;
@@ -64,6 +68,10 @@ public class HoverHandler {
 				// No hover to be done here
 				return new HoverRes();
 			}
+			// Pre-load certain nodes up to this point, so that cached variables are correct
+			if (env.document.problems().isEmpty()) {
+				HoverHandler.evaluateNodesBefore(req.line, req.column, env);
+			}
 			switch (compCtx.type) {
 			case QUERY_HEAD_TYPE: {
 				final Query q = compCtx.asQueryHead();
@@ -82,7 +90,7 @@ public class HoverHandler {
 					// The var may be defined as [[$var:=SomeOtherType.foo.bar.baz]]
 					// In this case, $var may or may not be a node locator at all.
 					// Let's find out
-					final QueryResult varDef = env.evaluateQuery(q.head.asVar().decl().src);
+					final QueryResult varDef = env.loadVariable(q.head.asVar().value);
 					if (varDef == null) {
 						subjNode = null;
 					} else if (parsed.info.baseAstClazz.isInstance(varDef.value)) {
@@ -111,7 +119,7 @@ public class HoverHandler {
 				}
 				}
 				final NodeLocator subjLoc = subjNode == null ? null : CreateLocator.fromNode(parsed.info, subjNode);
-				return hoverNodeLocator(q, q.head.start, q.head.end, subjLoc);
+				return hoverNodeLocator(q, q.head.start, q.head.end, subjNode, subjLoc);
 			}
 
 			case PROPERTY_NAME:
@@ -151,6 +159,38 @@ public class HoverHandler {
 		return new HoverRes();
 	}
 
+	public static boolean evaluateNodesBefore(int line, int col, TextProbeEnvironment env) {
+		for (Container c : env.document.containers) {
+			Probe p = c.probe();
+			if (p != null) {
+				final Position pos = p.end;
+				if (pos.line > line || (pos.line == line && pos.column < col)) {
+					// After the specified position, stop
+					return true;
+				}
+				switch (p.type) {
+				case QUERY: {
+					final Query q = p.asQuery();
+					final QueryResult lhs = env.evaluateQuery(q);
+					if (lhs != null && q.assertion.isPresent()) {
+						env.evaluateComparison(q, lhs);
+					}
+					break;
+				}
+				case VARDECL: {
+					env.loadVariable(p.asVarDecl().name.value);
+					break;
+				}
+				}
+				if (!env.errMsgs.isEmpty()) {
+					// Encountered error(s), stop
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
 	private static HoverRes hoverQuery(TextProbeEnvironment env, final Query q) {
 		final Position localStart = q.start;
 		final Position localEnd = q.tail.isEmpty() ? q.end : q.tail.get(q.tail.getNumChild() - 1).end;
@@ -162,8 +202,9 @@ public class HoverHandler {
 			}
 
 			if (env.info.baseAstClazz.isInstance(subRes.value)) {
-				final NodeLocator node = CreateLocator.fromNode(env.info, new AstNode(subRes.value));
-				return hoverNodeLocator(q, localStart, localEnd, node);
+				final AstNode an = new AstNode(subRes.value);
+				final NodeLocator node = CreateLocator.fromNode(env.info, an);
+				return hoverNodeLocator(q, localStart, localEnd, an, node);
 			}
 		}
 		return new HoverRes(subRes == null //
@@ -172,7 +213,14 @@ public class HoverHandler {
 				localStart.getPackedBits(), localEnd.getPackedBits() + 1);
 	}
 
-	private static HoverRes hoverNodeLocator(Query q, Position localStart, Position localEnd, NodeLocator subject) {
+	private static HoverRes hoverNodeLocator(Query q, Position localStart, Position localEnd, AstNode node,
+			NodeLocator subject) {
+		if (subject == null) {
+			List<RpcBodyLine> out = new ArrayList<>();
+			EncodeResponseValue.addCreateLocatorIssue(node, out);
+			return new HoverRes(Arrays.asList(TextProbeEnvironment.flattenBody(out)), localStart.getPackedBits(),
+					localEnd.getPackedBits() + 1, null, null);
+		}
 		Integer remoteStart, remoteEnd;
 		if (subject == null || subject.result.start == 0 || subject.result.end == 0) {
 			remoteStart = null;
@@ -181,9 +229,7 @@ public class HoverHandler {
 			remoteStart = subject.result.start;
 			remoteEnd = subject.result.end + 1;
 		}
-		return new HoverRes(subject == null //
-				? Collections.emptyList() //
-				: Arrays.asList(TextProbeEnvironment.flattenLine(RpcBodyLine.fromNode(subject))),
+		return new HoverRes(Arrays.asList(TextProbeEnvironment.flattenLine(RpcBodyLine.fromNode(subject))),
 				localStart.getPackedBits(), localEnd.getPackedBits() + 1, remoteStart, remoteEnd);
 	}
 

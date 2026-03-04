@@ -94,6 +94,9 @@ public class CompleteHandler {
 			// No completion to be done here
 			return new CompleteRes();
 		}
+		if (env.document.problems().isEmpty()) {
+			HoverHandler.evaluateNodesBefore(line, column, env);
+		}
 		switch (compCtx.type) {
 		case QUERY_HEAD_TYPE: {
 			final Query qhead = compCtx.asQueryHead();
@@ -379,7 +382,7 @@ public class CompleteHandler {
 				// Cannot reliably evaluate queries when problems exist
 				evalRes = null;
 			} else {
-				evalRes = env.evaluateQuery(srcQuery);
+				evalRes = env.loadVariable(metaVar);
 			}
 			if (evalRes != null && env.info.baseAstClazz.isInstance(evalRes.value)) {
 				AstNode node = new AstNode(evalRes.value);

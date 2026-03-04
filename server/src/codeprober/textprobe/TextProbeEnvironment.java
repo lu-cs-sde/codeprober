@@ -31,16 +31,13 @@ import codeprober.protocol.data.RpcBodyLine;
 import codeprober.requesthandler.DecorationsHandler;
 import codeprober.textprobe.ast.ASTList;
 import codeprober.textprobe.ast.ASTNode;
-import codeprober.textprobe.ast.Container;
 import codeprober.textprobe.ast.Document;
 import codeprober.textprobe.ast.Expr;
-import codeprober.textprobe.ast.Probe;
 import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
 import codeprober.textprobe.ast.QueryAssert;
 import codeprober.textprobe.ast.QueryHead;
 import codeprober.textprobe.ast.TypeQueryHead;
-import codeprober.textprobe.ast.VarDecl;
 
 public class TextProbeEnvironment {
 
@@ -93,7 +90,6 @@ public class TextProbeEnvironment {
 		}
 	}
 
-	private VariableLoadStatus varLoadStatus = VariableLoadStatus.NONE;
 	public final AstInfo info;
 
 	public final Document document;
@@ -120,29 +116,6 @@ public class TextProbeEnvironment {
 				mainArgsOverride == null ? null : Arrays.asList(mainArgsOverride.split("(?<!\\\\) ")), ".tmp");
 	}
 
-	public void loadVariables() {
-		final int preErr = errMsgs.size();
-		for (Container cont : document.containers) {
-			final Probe probe = cont.probe();
-			if (probe != null && probe.type == Probe.Type.VARDECL) {
-				final VarDecl vdec = probe.asVarDecl();
-				final String vname = vdec.name.value;
-				if (!cachedVariableValues.containsKey(vname)) {
-					cachedVariableValues.put(vname, evaluateQuery(vdec.src));
-				}
-			}
-		}
-		if (errMsgs.size() == preErr) {
-			varLoadStatus = VariableLoadStatus.LOAD_SUCCESS;
-		} else {
-			varLoadStatus = VariableLoadStatus.LOAD_ERR;
-		}
-	}
-
-	public VariableLoadStatus getVariableStatus() {
-		return varLoadStatus;
-	}
-
 	public List<NodeLocator> listNodes(int line, String attrPredicate, String tailPredicate) {
 		final List<Object> rawListing = NodesWithProperty.get(info, info.ast, attrPredicate, tailPredicate, 128);
 		final LocatorMergeMethod savedMergeMethod = CreateLocator.getMergeMethod();
@@ -163,18 +136,26 @@ public class TextProbeEnvironment {
 		errMsgs.add(new ErrorMessage(context, msg));
 	}
 
+	public QueryResult loadVariable(String vname) {
+		if (!cachedVariableValues.containsKey(vname)) {
+			cachedVariableValues.put(vname, evaluateQuery(document.varDecls().get(vname).src));
+		}
+		return cachedVariableValues.get(vname);
+	}
+
 	public QueryResult evaluateQueryHead(QueryHead head, Integer index) {
 
 		switch (head.type) {
-		case VAR:
+		case VAR: {
 			final String vname = head.asVar().value;
-			if (!cachedVariableValues.containsKey(vname)) {
-				final Query src = head.asVar().decl().src;
-				cachedVariableValues.put(vname, evaluateQuery(src));
+			final QueryResult vres = loadVariable(vname);
+			if (vres == null) {
+				addErr(head, String.format("Variable '%s' failed loading", vname));
 			}
-			return cachedVariableValues.get(vname);
+			return vres;
+		}
 
-		case TYPE:
+		case TYPE: {
 			final TypeQueryHead tqHead = head.asType();
 			final List<AstNode> nodes = NodesWithProperty
 					.get(info, info.ast, "",
@@ -209,6 +190,7 @@ public class TextProbeEnvironment {
 					return null;
 				}
 			}
+		}
 
 		default:
 			System.err.println("Unknown QueryHead type " + head.type);

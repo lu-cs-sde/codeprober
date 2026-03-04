@@ -30,7 +30,11 @@ public class RunAddNumTests {
 	@Test
 	public void run() {
 		if (tc.getSrcFilePath().contains("err_")) {
-			tc.assertFail();
+			if (tc.isVarDecl()) {
+				tc.assertPass();
+			} else {
+				tc.assertFail();
+			}
 		} else {
 			tc.assertPass();
 		}

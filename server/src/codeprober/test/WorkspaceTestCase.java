@@ -8,7 +8,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Consumer;
 
 import codeprober.DefaultRequestHandler;
@@ -22,10 +21,10 @@ import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.textprobe.Parser;
 import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.TextProbeEnvironment.QueryResult;
-import codeprober.textprobe.TextProbeEnvironment.VariableLoadStatus;
 import codeprober.textprobe.ast.Container;
 import codeprober.textprobe.ast.Document;
 import codeprober.textprobe.ast.Probe;
+import codeprober.textprobe.ast.Probe.Type;
 import codeprober.textprobe.ast.Query;
 import codeprober.toolglue.UnderlyingTool;
 
@@ -33,16 +32,20 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 
 	private final TextProbeEnvironment env;
 	private final String srcFilePath;
-	private final Query assertion;
+	private final Probe probe;
 
-	public WorkspaceTestCase(TextProbeEnvironment env, String srcFilePath, Query assertion) {
+	public WorkspaceTestCase(TextProbeEnvironment env, String srcFilePath, Probe probe) {
 		this.env = env;
 		this.srcFilePath = srcFilePath;
-		this.assertion = assertion;
+		this.probe = probe;
 	}
 
 	public String getSrcFilePath() {
 		return srcFilePath;
+	}
+
+	public boolean isVarDecl() {
+		return probe != null && probe.type == Type.VARDECL;
 	}
 
 	// name() is used by JUnit to label the test case
@@ -50,10 +53,10 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 		String suffix;
 		if (env == null) {
 			suffix = "Parser failure";
-		} else if (assertion == null) {
-			suffix = "Variable load checking";
+		} else if (probe == null) {
+			suffix = "Semantic Errors";
 		} else {
-			suffix = (assertion.start.line) + " -> " + assertion.pp();
+			suffix = (probe.start.line) + " -> " + probe.pp();
 		}
 		return srcFilePath + ":" + suffix;
 	}
@@ -64,13 +67,7 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 		if (cmp != 0) {
 			return cmp;
 		}
-		if ((assertion == null) != (o.assertion == null)) {
-			return assertion == null ? -1 : 1;
-		}
-		if (assertion == null) {
-			return 0;
-		}
-		return Integer.compare(assertion.start.line, o.assertion.start.line);
+		return Integer.compare(probe.start.line, o.probe.start.line);
 	}
 
 	public void doAssert(boolean expectPass) {
@@ -80,48 +77,43 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 			}
 			return;
 		}
-		if (env.getVariableStatus() == VariableLoadStatus.NONE) {
-			final Set<String> staticProblems = env.document.problems();
-			if (!staticProblems.isEmpty()) {
+		if (probe == null) {
+			if (expectPass) {
+				fail("Semantic Errors");
+			}
+			return;
+		}
+
+		switch (probe.type) {
+		case QUERY: {
+			final Query query = probe.asQuery();
+			final QueryResult result = env.evaluateQuery(query);
+			if (result == null) {
 				if (expectPass) {
-					fail("Document errors: " + staticProblems);
-				} else {
-					// OK
-					return;
+					fail(env.errMsgs.isEmpty() ? "No matching nodes" : env.errMsgs.toString());
 				}
+				return;
 			}
-			env.loadVariables();
-		}
-		if (env.getVariableStatus() == VariableLoadStatus.LOAD_ERR) {
+
+			if (!(query.assertion.isPresent())) {
+				return;
+			}
+
+			final boolean ok = env.evaluateComparison(query, result);
 			if (expectPass) {
-				fail("Failed loading variables: " + env.errMsgs);
+				assertTrue(env.errMsgs.toString(), ok);
+			} else {
+				assertFalse(env.errMsgs.toString(), ok);
 			}
-			return;
+			break;
 		}
-		if (assertion == null) {
-			if (!expectPass) {
-				fail("Expected variable loading to fail");
+		case VARDECL: {
+			final boolean didFail = env.loadVariable(probe.asVarDecl().name.value) == null;
+			if (didFail == expectPass) {
+				assertFalse(env.errMsgs.toString(), true);
 			}
-			return;
+			break;
 		}
-
-		final QueryResult result = env.evaluateQuery(assertion);
-		if (result == null) {
-			if (expectPass) {
-				fail(env.errMsgs.isEmpty() ? "No matching nodes" : env.errMsgs.toString());
-			}
-			return;
-		}
-
-		if (!(assertion.assertion.isPresent())) {
-			return;
-		}
-
-		final boolean ok = env.evaluateComparison(assertion, result);
-		if (expectPass) {
-			assertTrue(env.errMsgs.toString(), ok);
-		} else {
-			assertFalse(env.errMsgs.toString(), ok);
 		}
 	}
 
@@ -156,17 +148,18 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 		}
 	}
 
-
 	public static List<WorkspaceTestCase> listTextProbesInWorkspace(UnderlyingTool tool, File dir) throws IOException {
-		return listTextProbesInWorkspace(tool, dir, (String[])null);
+		return listTextProbesInWorkspace(tool, dir, (String[]) null);
 	}
 
-	public static List<WorkspaceTestCase> listTextProbesInWorkspace(UnderlyingTool tool, File dir, String[] mainArgs) throws IOException {
+	public static List<WorkspaceTestCase> listTextProbesInWorkspace(UnderlyingTool tool, File dir, String[] mainArgs)
+			throws IOException {
 		final WorkspaceHandler wsh = new WorkspaceHandler(dir);
 		return listTextProbesInWorkspace(tool, dir, new DefaultRequestHandler(tool, mainArgs, null, wsh));
 	}
 
-	public static List<WorkspaceTestCase> listTextProbesInWorkspace(UnderlyingTool tool, File dir, DefaultRequestHandler requestHandler) throws IOException {
+	public static List<WorkspaceTestCase> listTextProbesInWorkspace(UnderlyingTool tool, File dir,
+			DefaultRequestHandler requestHandler) throws IOException {
 		final WorkspaceHandler wsh = requestHandler.getWorkspaceHandler();
 		final List<WorkspaceTestCase> ret = new ArrayList<>();
 		listWorkspaceFilePaths(wsh, null, fullPath -> {
@@ -176,8 +169,8 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 			if (doc.containers.isEmpty()) {
 				return;
 			}
-			final ParsedAst parsedAst = requestHandler.performParsedRequest(
-					lp -> lp.parse(TextProbeEnvironment.createParsingRequestData(fullPath)));
+			final ParsedAst parsedAst = requestHandler
+					.performParsedRequest(lp -> lp.parse(TextProbeEnvironment.createParsingRequestData(fullPath)));
 			if (parsedAst.info == null) {
 				// Failed parsing input file. Add dummy case for reporting parse error
 				ret.add(new WorkspaceTestCase(null, fullPath, null));
@@ -189,29 +182,11 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 				// for reporting them
 				ret.add(new WorkspaceTestCase(env, fullPath, null));
 			} else {
-				boolean anyQuery = false;
-				boolean anyVar = false;
 				for (Container c : doc.containers) {
 					Probe probe = c.probe();
-					if (probe == null) {
-						return;
+					if (probe != null) {
+						ret.add(new WorkspaceTestCase(env, fullPath, probe));
 					}
-					switch (probe.type) {
-					case QUERY:
-						anyQuery = true;
-						ret.add(new WorkspaceTestCase(env, fullPath, probe.asQuery()));
-						break;
-					case VARDECL:
-						anyVar = true;
-						break;
-					default:
-						System.err.print("Unknown probe type " + probe.type);
-					}
-				}
-				if (!anyQuery && anyVar) {
-					// No explicit queries, but we still want to evaluate varDecl's.
-					// Create case with null query
-					ret.add(new WorkspaceTestCase(env, fullPath, null));
 				}
 			}
 		});

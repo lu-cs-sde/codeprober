@@ -145,18 +145,7 @@ public class EncodeResponseValue {
 					if (failedCreatingLocatorOverride != null) {
 						failedCreatingLocatorOverride.accept(node.underlyingAstNode, out);
 					} else {
-						out.add(RpcBodyLine.fromPlain("Couldn't create locator for " + node.underlyingAstNode));
-						out.add(RpcBodyLine.fromPlain(
-								"This could indicate a caching issue, where a detached AST node is stored "));
-						out.add(RpcBodyLine
-								.fromPlain("somewhere even after a re-parse or flushTreeCache() is called."));
-						out.add(RpcBodyLine.fromPlain("Try setting the 'AST caching strategy' to 'None' or 'Purge'."));
-						out.add(RpcBodyLine.fromPlain(
-								"If that helps, then you maybe have a caching problem somewhere in the AST."));
-						out.add(RpcBodyLine.fromPlain(
-								"If that doesn't help, then please look at any error messages in the terminal where you started codeprober.jar."));
-						out.add(RpcBodyLine.fromPlain(
-								"If that doesn't help either, then you may have found a bug. Please report it!"));
+						addCreateLocatorIssue(node, out);
 					}
 				}
 				return;
@@ -286,6 +275,21 @@ public class EncodeResponseValue {
 			}
 			out.add(RpcBodyLine.fromPlain(line));
 		}
+	}
+
+	public static void addCreateLocatorIssue(AstNode node, List<RpcBodyLine> out) {
+		out.add(RpcBodyLine.fromPlain("Couldn't create locator for " + node.underlyingAstNode));
+		out.add(RpcBodyLine.fromPlain(
+				"This could indicate a caching issue, where a detached AST node is stored "));
+		out.add(RpcBodyLine
+				.fromPlain("somewhere even after a re-parse or flushTreeCache() is called."));
+		out.add(RpcBodyLine.fromPlain("Try setting the 'AST caching strategy' to 'None' or 'Purge'."));
+		out.add(RpcBodyLine.fromPlain(
+				"If that helps, then you maybe have a caching problem somewhere in the AST."));
+		out.add(RpcBodyLine.fromPlain(
+				"If that doesn't help, then please look at any error messages in the terminal where you started codeprober.jar."));
+		out.add(RpcBodyLine.fromPlain(
+				"If that doesn't help either, then you may have found a bug. Please report it!"));
 	}
 
 	private static class LineSorterHelper implements Comparable<LineSorterHelper> {

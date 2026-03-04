@@ -89,12 +89,15 @@ public class Document extends AbstractASTNode {
 		return bumpedLines_value;
 	}
 
+	private Set<String> problems_value;
+
 	@Attribute
 	public Set<String> problems() {
-		Set<String> ret = new TreeSet<>();
-		BiConsumer<ASTNode, String> addErr = (node, msg) -> ret.add(String.format("%s %s", node.loc(), msg));
-		collectProblems(addErr);
-		return ret;
+		if (problems_value == null) {
+			problems_value = new TreeSet<>();
+			collectProblems((node, msg) -> problems_value.add(String.format("%s %s", node.loc(), msg)));
+		}
+		return problems_value;
 	}
 
 	@Override

@@ -108,32 +108,31 @@ public abstract class ExistingTextProbeTest {
 			}
 			fail("Parsing error");
 		}
+
+		final GetDecorationsRes res = DecorationsHandler.apply(tc.env);
+		assertNotNull(res.lines);
+
+		if (!isErrorFile()) {
+			tc.env.document.traverseDescendants(desc -> {
+				if (desc instanceof Query) {
+					assertDecorations(res.lines, desc, "ok", "query");
+					return TraversalResult.SKIP_SUBTREE;
+				}
+
+				if (desc instanceof VarDecl) {
+					assertDecorations(res.lines, desc, "var");
+					return TraversalResult.SKIP_SUBTREE;
+				}
+
+				return TraversalResult.CONTINUE;
+			});
+		}
+
 		tc.env.document.traverseDescendants(desc -> {
 			if (desc instanceof Query) {
 				checkQueryCompletion((Query) desc);
 				return TraversalResult.SKIP_SUBTREE;
 			}
-			return TraversalResult.CONTINUE;
-		});
-
-		final GetDecorationsRes res = DecorationsHandler.apply(tc.env);
-		assertNotNull(res.lines);
-
-		if (isErrorFile()) {
-			return;
-		}
-
-		tc.env.document.traverseDescendants(desc -> {
-			if (desc instanceof Query) {
-				assertDecorations(res.lines, desc, "ok", "query");
-				return TraversalResult.SKIP_SUBTREE;
-			}
-
-			if (desc instanceof VarDecl) {
-				assertDecorations(res.lines, desc, "var");
-				return TraversalResult.SKIP_SUBTREE;
-			}
-
 			return TraversalResult.CONTINUE;
 		});
 	}
@@ -215,7 +214,7 @@ public abstract class ExistingTextProbeTest {
 						cval = String.valueOf(cv.asInt());
 						break;
 					case STRING:
-						cval = String.valueOf(cv.asString());
+						cval = DecorationsHandler.wrapLiteralValueInQuotesIfNecessary(String.valueOf(cv.asString()));
 						break;
 					default:
 						return TraversalResult.CONTINUE;
