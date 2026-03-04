@@ -55,10 +55,14 @@ public class DecorationsHandler {
 							"Failed parsing input"));
 				}
 			}
-			return new GetDecorationsRes(ret);
+			return new GetDecorationsRes(ret, true);
 		}
 		final TextProbeEnvironment env = new TextProbeEnvironment(parsedAst.info, document);
-		env.printExpectedValuesInComparisonFailures = false;
+		if (req.includeExpectedValues != null && req.includeExpectedValues) {
+			env.printExpectedValuesInComparisonFailures = true;
+		} else {
+			env.printExpectedValuesInComparisonFailures = false;
+		}
 		return apply(env);
 	}
 

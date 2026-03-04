@@ -97,9 +97,11 @@ interface GetDecorationsReq {
   type: "ide:decorations";
   src: ParsingRequestData;
   forceAllOK?: boolean;
+  includeExpectedValues?: boolean;
 }
 interface GetDecorationsRes {
   lines?: Decoration[];
+  didFailParsingFile?: boolean;
 }
 interface GetTestSuiteReq {
   type: "Test:GetTestSuite";

@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -109,12 +110,14 @@ public class TextProbeEnvironment {
 	public static ParsingRequestData createParsingRequestData(String workspacePath) {
 		final String posRecoveryOverride = System.getProperty("cpr.posRecoveryStrategy");
 		final String cacheStrategyOverride = System.getProperty("cpr.astCacheStrategy");
+		final String mainArgsOverride = System.getProperty("cpr.mainArgs");
 		return new ParsingRequestData(
 				posRecoveryOverride != null ? PositionRecoveryStrategy.valueOf(posRecoveryOverride)
 						: PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD,
 				cacheStrategyOverride != null ? AstCacheStrategy.valueOf(cacheStrategyOverride)
 						: AstCacheStrategy.PARTIAL,
-				ParsingSource.fromWorkspacePath(workspacePath), null, ".tmp");
+				ParsingSource.fromWorkspacePath(workspacePath),
+				mainArgsOverride == null ? null : Arrays.asList(mainArgsOverride.split("(?<!\\\\) ")), ".tmp");
 	}
 
 	public void loadVariables() {

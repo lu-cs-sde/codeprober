@@ -37,10 +37,10 @@ import codeprober.server.WebSocketServer;
 import codeprober.toolglue.UnderlyingTool;
 import codeprober.toolglue.UnderlyingToolProxy;
 import codeprober.util.DirectoryMonitor;
-import codeprober.util.RunWorkspaceTest;
 import codeprober.util.FileMonitor;
 import codeprober.util.ParsedArgs;
 import codeprober.util.ParsedArgs.ConcurrencyMode;
+import codeprober.util.RunWorkspaceTest;
 import codeprober.util.SessionLogger;
 import codeprober.util.VersionInfo;
 import codeprober.util.WorkspaceDirectoryMonitor;
@@ -196,7 +196,9 @@ public class CodeProber {
 			File workspace = WorkspaceHandler.getWorkspaceRoot(false);
 			if (workspace != null) {
 				// Test files in workspace
-				final RunWorkspaceTest.MergedResult res = RunWorkspaceTest.run(defaultHandler);
+				final RunWorkspaceTest.MergedResult res = RunWorkspaceTest.run(userFacingHandler,
+						WorkspaceHandler.getDefault(),
+						parsedArgs.workerProcessCount == null ? 0 : parsedArgs.workerProcessCount);
 				System.exit(res == RunWorkspaceTest.MergedResult.ALL_PASS ? 0 : 1);
 			} else {
 				// Run (legacy) tests inside the cpr.testDir

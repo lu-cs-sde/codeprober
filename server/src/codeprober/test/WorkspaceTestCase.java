@@ -12,11 +12,8 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 import codeprober.DefaultRequestHandler;
-import codeprober.protocol.AstCacheStrategy;
-import codeprober.protocol.PositionRecoveryStrategy;
 import codeprober.protocol.data.ListWorkspaceDirectoryReq;
 import codeprober.protocol.data.ListWorkspaceDirectoryRes;
-import codeprober.protocol.data.ParsingRequestData;
 import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.WorkspaceEntry;
 import codeprober.requesthandler.LazyParser;
@@ -159,9 +156,18 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 		}
 	}
 
+
 	public static List<WorkspaceTestCase> listTextProbesInWorkspace(UnderlyingTool tool, File dir) throws IOException {
+		return listTextProbesInWorkspace(tool, dir, (String[])null);
+	}
+
+	public static List<WorkspaceTestCase> listTextProbesInWorkspace(UnderlyingTool tool, File dir, String[] mainArgs) throws IOException {
 		final WorkspaceHandler wsh = new WorkspaceHandler(dir);
-		final DefaultRequestHandler requestHandler = new DefaultRequestHandler(tool, wsh);
+		return listTextProbesInWorkspace(tool, dir, new DefaultRequestHandler(tool, mainArgs, null, wsh));
+	}
+
+	public static List<WorkspaceTestCase> listTextProbesInWorkspace(UnderlyingTool tool, File dir, DefaultRequestHandler requestHandler) throws IOException {
+		final WorkspaceHandler wsh = requestHandler.getWorkspaceHandler();
 		final List<WorkspaceTestCase> ret = new ArrayList<>();
 		listWorkspaceFilePaths(wsh, null, fullPath -> {
 			final ParsingSource psrc = ParsingSource.fromWorkspacePath(fullPath);
@@ -171,8 +177,7 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 				return;
 			}
 			final ParsedAst parsedAst = requestHandler.performParsedRequest(
-					lp -> lp.parse(new ParsingRequestData(PositionRecoveryStrategy.ALTERNATE_PARENT_CHILD,
-							AstCacheStrategy.PARTIAL, psrc, null, ".tmp")));
+					lp -> lp.parse(TextProbeEnvironment.createParsingRequestData(fullPath)));
 			if (parsedAst.info == null) {
 				// Failed parsing input file. Add dummy case for reporting parse error
 				ret.add(new WorkspaceTestCase(null, fullPath, null));

@@ -65,8 +65,9 @@ public class TestRunWorkspaceTest {
 
 	private MergedResult run(WorkspaceFile... files) {
 		final WorkspaceHandler wsHandler = createWorkspaceHandler(files);
-		return RunWorkspaceTest
-				.run(new DefaultRequestHandler(p -> new ParseResult(TestData.getMultipleAmbiguousLevels()), wsHandler));
+		return RunWorkspaceTest.run(
+				new DefaultRequestHandler(p -> new ParseResult(TestData.getMultipleAmbiguousLevels()), wsHandler),
+				wsHandler, 0);
 	}
 
 	@Test
@@ -86,14 +87,12 @@ public class TestRunWorkspaceTest {
 
 	@Test
 	public void testSingleFileProbeFail() {
-		assertEquals(MergedResult.SOME_FAIL,
-				run(new WorkspaceFile("foo.txt", "bar [[Baz.x=b]]")));
+		assertEquals(MergedResult.SOME_FAIL, run(new WorkspaceFile("foo.txt", "bar [[Baz.x=b]]")));
 	}
 
 	@Test
 	public void testSingleFileWithPointerSteps() {
-		assertEquals(MergedResult.ALL_PASS,
-				run(new WorkspaceFile("foo.txt", "bar [[Baz.ptr.ptr.ptr.ptr.y=b]]")));
+		assertEquals(MergedResult.ALL_PASS, run(new WorkspaceFile("foo.txt", "bar [[Baz.ptr.ptr.ptr.ptr.y=b]]")));
 	}
 
 	@Test

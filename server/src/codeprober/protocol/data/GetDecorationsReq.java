@@ -6,13 +6,18 @@ public class GetDecorationsReq implements codeprober.util.JsonUtil.ToJsonable {
   public final String type;
   public final ParsingRequestData src;
   public final Boolean forceAllOK;
-  public GetDecorationsReq(ParsingRequestData src) {
-    this(src, (Boolean)null);
-  }
+  public final Boolean includeExpectedValues;
   public GetDecorationsReq(ParsingRequestData src, Boolean forceAllOK) {
+    this(src, forceAllOK, (Boolean)null);
+  }
+  public GetDecorationsReq(ParsingRequestData src) {
+    this(src, (Boolean)null, (Boolean)null);
+  }
+  public GetDecorationsReq(ParsingRequestData src, Boolean forceAllOK, Boolean includeExpectedValues) {
     this.type = "ide:decorations";
     this.src = src;
     this.forceAllOK = forceAllOK;
+    this.includeExpectedValues = includeExpectedValues;
   }
   public GetDecorationsReq(java.io.DataInputStream src) throws java.io.IOException {
     this(new codeprober.protocol.BinaryInputStream.DataInputStreamWrapper(src));
@@ -21,6 +26,7 @@ public class GetDecorationsReq implements codeprober.util.JsonUtil.ToJsonable {
     this.type = "ide:decorations";
     this.src = new ParsingRequestData(src);
     this.forceAllOK = src.readBoolean() ? src.readBoolean() : null;
+    this.includeExpectedValues = src.readBoolean() ? src.readBoolean() : null;
   }
 
   public static GetDecorationsReq fromJSON(JSONObject obj) {
@@ -28,6 +34,7 @@ public class GetDecorationsReq implements codeprober.util.JsonUtil.ToJsonable {
     return new GetDecorationsReq(
       ParsingRequestData.fromJSON(obj.getJSONObject("src"))
     , obj.has("forceAllOK") ? (obj.getBoolean("forceAllOK")) : null
+    , obj.has("includeExpectedValues") ? (obj.getBoolean("includeExpectedValues")) : null
     );
   }
   public JSONObject toJSON() {
@@ -35,6 +42,7 @@ public class GetDecorationsReq implements codeprober.util.JsonUtil.ToJsonable {
     _ret.put("type", type);
     _ret.put("src", src.toJSON());
     if (forceAllOK != null) _ret.put("forceAllOK", forceAllOK);
+    if (includeExpectedValues != null) _ret.put("includeExpectedValues", includeExpectedValues);
     return _ret;
   }
   public void writeTo(java.io.DataOutputStream dst) throws java.io.IOException {
@@ -44,5 +52,6 @@ public class GetDecorationsReq implements codeprober.util.JsonUtil.ToJsonable {
     
     src.writeTo(dst);
     if (forceAllOK != null) { dst.writeBoolean(true); dst.writeBoolean(forceAllOK);; } else { dst.writeBoolean(false); }
+    if (includeExpectedValues != null) { dst.writeBoolean(true); dst.writeBoolean(includeExpectedValues);; } else { dst.writeBoolean(false); }
   }
 }
