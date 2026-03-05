@@ -1,5 +1,5 @@
-{{A.b=true}}   // [[Expr.type="STRING"]] [[Expr.asString="true"]]
-{{A.b=false}}  // [[Expr.type="STRING"]] [[Expr.asString="false"]]
+{{A.b=true}}   // [[Expr.type="BOOLEAN"]] [[Expr.asBoolean="true"]] [[Expr.asBoolean=true]]
+{{A.b=false}}  // [[Expr.type="BOOLEAN"]] [[Expr.asBoolean="false"]] [[Expr.asBoolean=false]]
 {{A.b=null}}   // [[Expr.type="STRING"]] [[Expr.asString="null"]]
 {{A.b=123}}    // [[Expr.type="INT"]]
 {{A.b=foo}}   

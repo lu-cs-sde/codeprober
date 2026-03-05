@@ -216,6 +216,9 @@ public abstract class ExistingTextProbeTest {
 					case STRING:
 						cval = DecorationsHandler.wrapLiteralValueInQuotesIfNecessary(String.valueOf(cv.asString()));
 						break;
+					case BOOLEAN:
+						cval = String.valueOf(cv.asBoolean());
+						break;
 					default:
 						return TraversalResult.CONTINUE;
 					}

@@ -244,6 +244,11 @@ public class TextProbeEnvironment {
 							argValues.add(arg.asString());
 							break;
 
+						case BOOLEAN:
+							argTypes.add(Boolean.TYPE);
+							argValues.add(arg.asBoolean());
+							break;
+
 						case QUERY:
 							final QueryResult qval = evaluateQuery(arg.asQuery());
 							if (qval == null) {
@@ -358,6 +363,9 @@ public class TextProbeEnvironment {
 			break;
 		case STRING:
 			rhsBody = new QueryResult(qassert.expectedValue.asString(), String.class);
+			break;
+		case BOOLEAN:
+			rhsBody = new QueryResult(qassert.expectedValue.asBoolean(), Boolean.TYPE);
 			break;
 		default:
 			throw new IllegalArgumentException("Unknown ExpectedValue " + qassert.expectedValue.type);

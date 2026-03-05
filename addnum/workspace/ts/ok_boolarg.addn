@@ -1,0 +1,3 @@
+123 // [[$n:=Num]]
+// [[$n.valueToString(true)=7b]]
+// [[$n.valueToString(false)=123]]

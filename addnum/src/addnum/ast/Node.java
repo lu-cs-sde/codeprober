@@ -87,6 +87,12 @@ public abstract class Node implements Iterable<Node> {
 		return getClass().getSimpleName();
 	}
 
+	public String valueToString(boolean hex) {
+		return hex //
+				? Integer.toHexString(value()) //
+				: Integer.toString(value());
+	}
+
 	@Override
 	public Node clone() throws CloneNotSupportedException {
 		return (Node) super.clone();

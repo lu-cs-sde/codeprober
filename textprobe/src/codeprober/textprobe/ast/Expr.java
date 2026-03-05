@@ -5,7 +5,7 @@ import codeprober.textprobe.ast.ASTNodeAnnotation.Child;
 public class Expr extends AbstractASTNode {
 
 	public static enum Type {
-		INT, STRING, QUERY,
+		INT, STRING, BOOLEAN, QUERY,
 	}
 
 	public final Type type;
@@ -31,6 +31,10 @@ public class Expr extends AbstractASTNode {
 		return new Expr(Type.STRING, start, end, value);
 	}
 
+	public static Expr fromBoolean(Position start, Position end, boolean value) {
+		return new Expr(Type.BOOLEAN, start, end, value);
+	}
+
 	public static Expr fromQuery(Query value) {
 		return new Expr(Type.QUERY, value);
 	}
@@ -48,6 +52,10 @@ public class Expr extends AbstractASTNode {
 		return (String) value;
 	}
 
+	public boolean asBoolean() {
+		return (boolean) value;
+	}
+
 	public Query asQuery() {
 		return (Query) value;
 	}
@@ -59,6 +67,8 @@ public class Expr extends AbstractASTNode {
 			return String.valueOf(asInt());
 		case STRING:
 			return "\"" + asString() + "\"";
+		case BOOLEAN:
+			return String.valueOf(asBoolean());
 		case QUERY:
 			return asQuery().pp();
 		default:

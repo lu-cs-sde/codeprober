@@ -329,6 +329,7 @@ public class CompleteHandler {
 							case any: // a.k.a "Object"
 							case integer:
 							case string:
+							case bool:
 								return true;
 							default:
 								return false;

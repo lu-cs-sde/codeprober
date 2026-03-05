@@ -316,9 +316,16 @@ public class Parser {
 				Position numEnd = new Position(start.line, start.column + src.getOffset() - 1);
 				return Expr.fromInt(numStart, numEnd, litNum);
 			}
-			for (String kw : new String[] { "true", "false", "null" }) {
+			for (String boolLit : new String[] { "true", "false" }) {
+				if (src.accept(boolLit)) {
+					Position strStart = new Position(start.line, start.column + argOffset);
+					Position strEnd = new Position(start.line, start.column + src.getOffset() - 1);
+					return Expr.fromBoolean(strStart, strEnd, boolLit.equals("true"));
+				}
+			}
+			for (String kw : new String[] { "null" }) {
 				if (src.accept(kw)) {
-					Position strStart = new Position(start.line, start.column + argOffset + 1);
+					Position strStart = new Position(start.line, start.column + argOffset);
 					Position strEnd = new Position(start.line, start.column + src.getOffset() - 1);
 					return Expr.fromString(strStart, strEnd, kw);
 				}

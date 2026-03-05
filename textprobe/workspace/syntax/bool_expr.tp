@@ -1,0 +1,2 @@
+{{A.b(true)}} // [[Expr.type=BOOLEAN]] [[Expr.loc=[1:7->1:10]]]
+{{A.b(false)}} // [[Expr.type=BOOLEAN]] [[Expr.loc=[2:7->2:11]]]
