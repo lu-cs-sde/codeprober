@@ -17,7 +17,6 @@ import codeprober.protocol.data.HoverRes;
 import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.requesthandler.LazyParser.ParsedAst;
-import codeprober.rpc.JsonRequestHandler;
 import codeprober.textprobe.CompletionContext;
 import codeprober.textprobe.CompletionContext.PropertyNameDetail;
 import codeprober.textprobe.Parser;
@@ -44,8 +43,7 @@ public class HoverHandler {
 		}
 	}
 
-	public static HoverRes apply(HoverReq req, JsonRequestHandler reqHandler, LazyParser parser,
-			WorkspaceHandler wsHandler) {
+	public static HoverRes apply(HoverReq req, LazyParser parser, WorkspaceHandler wsHandler) {
 		final ParsedAst parsed = parser.parse(req.src);
 		final List<String> customHover = extract0(parsed, "cpr_ide_hover", req.line, req.column);
 		if (customHover != null) {
@@ -215,7 +213,7 @@ public class HoverHandler {
 
 	private static HoverRes hoverNodeLocator(Query q, Position localStart, Position localEnd, AstNode node,
 			NodeLocator subject) {
-		if (subject == null) {
+		if (subject == null && node != null) {
 			List<RpcBodyLine> out = new ArrayList<>();
 			EncodeResponseValue.addCreateLocatorIssue(node, out);
 			return new HoverRes(Arrays.asList(TextProbeEnvironment.flattenBody(out)), localStart.getPackedBits(),
@@ -229,7 +227,9 @@ public class HoverHandler {
 			remoteStart = subject.result.start;
 			remoteEnd = subject.result.end + 1;
 		}
-		return new HoverRes(Arrays.asList(TextProbeEnvironment.flattenLine(RpcBodyLine.fromNode(subject))),
+		return new HoverRes(subject == null //
+				? Collections.emptyList() //
+				: Arrays.asList(TextProbeEnvironment.flattenLine(RpcBodyLine.fromNode(subject))),
 				localStart.getPackedBits(), localEnd.getPackedBits() + 1, remoteStart, remoteEnd);
 	}
 

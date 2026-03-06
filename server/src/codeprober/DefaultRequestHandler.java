@@ -260,7 +260,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 			@Override
 			protected HoverRes handleHover(HoverReq req) {
-				return HoverHandler.apply(req, DefaultRequestHandler.this, lp, workspaceHandler);
+				return HoverHandler.apply(req, lp, workspaceHandler);
 			}
 
 			@Override
