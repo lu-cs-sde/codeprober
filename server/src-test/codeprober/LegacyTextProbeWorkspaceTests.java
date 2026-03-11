@@ -14,7 +14,7 @@ import codeprober.toolglue.UnderlyingTool;
 import codeprober.util.ASTProvider;
 
 @RunWith(Parameterized.class)
-public class FutureTextProbeWorkspaceTests extends ExistingTextProbeTest {
+public class LegacyTextProbeWorkspaceTests extends ExistingTextProbeTest {
 
 	static String propKey = "cpr.permitImplicitStringConversion";
 
@@ -23,7 +23,7 @@ public class FutureTextProbeWorkspaceTests extends ExistingTextProbeTest {
 		try {
 			// Disable implicit conversion
 			install();
-			// Clear cache in case the non-future version of this test class ran first
+			// Clear cache in case the non-legacy version of this test class ran first
 			ASTProvider.purgeCache();
 			return ExistingTextProbeTest.listTests( //
 					new File("../textprobe/workspace"), //
@@ -31,7 +31,7 @@ public class FutureTextProbeWorkspaceTests extends ExistingTextProbeTest {
 					".tp" //
 			) //
 					.stream() //
-					.filter(x -> x.fullPath.startsWith("future_syntax")) //
+					.filter(x -> x.fullPath.startsWith("legacy_syntax")) //
 					.collect(Collectors.toList());
 		} finally {
 			restore();
@@ -39,18 +39,18 @@ public class FutureTextProbeWorkspaceTests extends ExistingTextProbeTest {
 		}
 	}
 
-	public FutureTextProbeWorkspaceTests(TextProbeFile tc) {
+	public LegacyTextProbeWorkspaceTests(TextProbeFile tc) {
 		super(tc);
 	}
 
 	private static void install() {
-		Parser.permitImplicitStringConversion = false;
-		System.setProperty(propKey, "false");
+		Parser.permitImplicitStringConversion = true;
+		System.setProperty(propKey, "true");
 	}
 
 	private static void restore() {
-		Parser.permitImplicitStringConversion = true;
-		System.setProperty(propKey, "true");
+		Parser.permitImplicitStringConversion = false;
+		System.setProperty(propKey, "false");
 	}
 
 	@Test

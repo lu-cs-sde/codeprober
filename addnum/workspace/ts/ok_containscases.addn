@@ -6,15 +6,15 @@
 
 // Accessing methods on an array is fine
 // [[$rn.getChildren.size=2]]
-// [[$rn.getChildren.iterator.next.prettyPrint=(1 + 2)]]
+// [[$rn.getChildren.iterator.next.prettyPrint="(1 + 2)"]]
 
 // Lists with multiple children
 // Imprecise, string-based comparison
-//   [[$rn.getChildren=[Add, Num]]]
-//   [[$rn.lhs.getChildren=[Num, Num]]]
+//   [[$rn.getChildren="[Add, Num]"]]
+//   [[$rn.lhs.getChildren="[Num, Num]"]]
 // Imprecise string-contains-based comparison
-//   [[$rn.getChildren~=Add]]
-//   [[$rn.getChildren~=Num]]
+//   [[$rn.getChildren~="Add"]]
+//   [[$rn.getChildren~="Num"]]
 //   [[$rn.getChildren!=$one]]
 //   [[$rn.getChildren~=$three]]
 //   [[$rn.getChildren~=$four]]
@@ -30,7 +30,7 @@
 //   [[$rn.getChildren!=[$three, $four]]]
 
 // rhs is a Num node
-// [[$rn.rhs=Num]]
+// [[$rn.rhs="Num"]]
 // `=` and `!=` can check exactly _which_ Num node
 // [[$rn.rhs!=$one]]
 // [[$rn.rhs=$four]]

@@ -25,7 +25,7 @@ public class ExistingTextProbeWorkspaceTests extends ExistingTextProbeTest {
 				".tp" //
 		) //
 				.stream() //
-				.filter(x -> !x.fullPath.startsWith("future_syntax")) //
+				.filter(x -> !x.fullPath.startsWith("legacy_syntax")) //
 				.collect(Collectors.toList());
 	}
 

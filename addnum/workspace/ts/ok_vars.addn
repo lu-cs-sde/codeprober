@@ -15,5 +15,5 @@
 // [[$eight.lhs.lhs=$one]]
 // [[$eight.lhs.rhs=$three.rhs]]
 
-// [[$eight.prettyPrint=((1 + 2) + 5)]]
-// [[$pretty=((1 + 2) + 5)]]
+// [[$eight.prettyPrint="((1 + 2) + 5)"]]
+// [[$pretty="((1 + 2) + 5)"]]

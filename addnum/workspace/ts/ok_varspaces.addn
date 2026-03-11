@@ -1,6 +1,6 @@
 1
  // [[Add.value=3]]
- // [[Add.value!=3 ]] <-- trailing space is OK, becomes 'expected'
+ // [[Add.value!="3 "]] <-- trailing space is OK, becomes 'expected'
  // [[ Add.value]] <-- leading space
 
  // [[Add=$a]]

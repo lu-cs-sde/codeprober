@@ -165,7 +165,7 @@ public class TextProbeEnvironment {
 					.map(x -> (AstNode) x) //
 					.collect(Collectors.toList());
 
-			if (index != null) {
+			if (index != null && nodes.size() != 0) {
 				if (index >= 0 && index < nodes.size()) {
 					final Object node = nodes.get(index).underlyingAstNode;
 					return new QueryResult(node, node.getClass());

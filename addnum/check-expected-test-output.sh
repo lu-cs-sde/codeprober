@@ -4,6 +4,8 @@
 java \
   -Dcpr.workspace=workspace \
   -Dcpr.workspaceFilePattern="ts/.*" \
+  -Dcpr.permitImplicitStringConversion=false \
+  -Dcpr.futureSyntax=true \
   -jar ../codeprober.jar \
   --test AddNum.jar \
   | tail -n +2 \

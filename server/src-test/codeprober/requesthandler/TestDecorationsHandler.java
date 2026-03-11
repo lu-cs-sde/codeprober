@@ -28,7 +28,7 @@ public class TestDecorationsHandler {
 
 	@Test
 	public void testOk() {
-		final String src = "[[Foo.foobarAttr~=Foo and Bar]]";
+		final String src = "[[Foo.foobarAttr~=\"Foo and Bar\"]]";
 		final Decoration line = evaluateSimple(src);
 		assertEquals("ok", line.type);
 		assertEquals((1 << 12) + 1, line.start);
@@ -37,7 +37,7 @@ public class TestDecorationsHandler {
 
 	@Test
 	public void testError() {
-		final String src = "[[Foo.badAttr!=This attr doesn't exist!]]";
+		final String src = "[[Foo.badAttr!=\"This attr doesn't exist!\"]]";
 		final Decoration line = evaluateSimple(src);
 		assertEquals("error", line.type);
 		assertEquals((1 << 12) + 1, line.start);

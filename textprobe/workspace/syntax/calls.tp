@@ -2,7 +2,7 @@
 {{X.y("abc", 456, "def", )=$z}} // [[$y:=PropertyAccess]]
 
 /*
-    [[$b.pp=b(123)]]
+    [[$b.pp="b(123)"]]
     [[$b.arguments.loc=[1:6->1:10]]]
     [[$num:=$b.arguments.get(0)]]
     [[$num.pp=123]]
@@ -10,9 +10,9 @@
 */
 
 /*
-    [[$y.pp=y("abc", 456, "def")]]
+    [[$y.pp="y(\"abc\", 456, \"def\")"]]
     [[$yArgs:=$y.arguments]]
-    [[$yArgs.get(0).pp="abc"]] [[$yArgs.get(0).loc=[2:8->2:10]]]
-    [[$yArgs.get(1).pp=456]]   [[$yArgs.get(1).loc=[2:14->2:16]]]
-    [[$yArgs.get(2).pp="def"]] [[$yArgs.get(2).loc=[2:20->2:22]]]
+    [[$yArgs.get(0).pp="\"abc\""]] [[$yArgs.get(0).loc="[2:8->2:10]"]]
+    [[$yArgs.get(1).pp=456]]   [[$yArgs.get(1).loc="[2:14->2:16]"]]
+    [[$yArgs.get(2).pp="\"def\""]] [[$yArgs.get(2).loc="[2:20->2:22]"]]
 */

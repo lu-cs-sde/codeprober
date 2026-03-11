@@ -9,11 +9,11 @@
 [[$d.completionContextAt(2, 10)=$rhsType]]
 
 [[$rhsProp:=$d.completionContextAt(2, 11)]]
-[[$rhsProp=[PROPERTY_NAME, [Query, null]]]]
-[[$rhsProp.asPropertyName.query.head.asVar.value=v]]
+[[$rhsProp="[PROPERTY_NAME, [Query, null]]"]]
+[[$rhsProp.asPropertyName.query.head.asVar.value="v"]]
 [[$rhsProp.asPropertyName.access=null]]
 
-[[$d.completionContextAt(3, 11).asPropertyName.access.name.value=w]]
+[[$d.completionContextAt(3, 11).asPropertyName.access.name.value="w"]]
 
 [[$d.containers.getChild(0).probe.asVarDecl=$d.getVar("x")]]
 */

@@ -5,24 +5,25 @@
   ❌ ts/err_badindex.addn
      [1:11->1:16] Invalid index, outside expected range [0..1]
      [1:33->1:42] Invalid index, outside expected range [0..0]
+     [2:7->2:24] No matching nodes
   ❌ ts/err_containscases.addn
      [6:25->6:29] No such attribute 'value' on java.util.ArrayList
      [7:23->7:27] No such attribute 'value' on java.util.ArrayList
      [8:22->8:26] No such attribute 'value' on java.util.ArrayList
-     [11:22->11:36] Expected: [$three, $four]
-                      Actual: [Add, Num]
-     [14:14->14:17] Expected: Num
-                      Actual: Num (same string representation, but .equals() returned false)
-     [15:15->15:19] Expected NOT: Num
-                          Actual: Num
+     [11:23->11:37] Expected: "[$three, $four]"
+                      Actual: "[Add, Num]"
+     [14:14->14:17] Expected: "Num"
+                      Actual: "Num" (same string representation, but .equals() returned false)
+     [15:15->15:19] Expected NOT: "Num"
+                          Actual: "Num"
      [18:18->18:29] Expected: 3
                       Actual: 7
      [19:36->19:47] Expected: 7
-                      Actual: (0 + 7)
+                      Actual: "(0 + 7)"
   ❌ ts/err_empty.addn - Failed parsing file
   ❌ ts/err_fluent.addn
-     [7:17->7:18] Expected NOT: ok
-                        Actual: ok
+     [7:18->7:19] Expected NOT: "ok"
+                        Actual: "ok"
      [8:29->8:41] Actual: 3
      [9:16->9:30] Actual: 3
      [10:20->10:32] Actual: 3
@@ -32,7 +33,7 @@
      [15:15->15:30] Actual: [Num, Num]
      [16:15->16:27] Actual: [Num, Num]
      [18:32->18:32] Expected: 4
-                      Actual: [3, 3, 3]
+                      Actual: "3\n3\n3"
   ❌ ts/err_nosuchnode.addn
      [1:44->1:50] No such var 'badvar'
   ❌ ts/err_nosuchvar.addn
@@ -49,10 +50,10 @@
   ❌ ts/err_redefvar.addn
      [1:20->1:26] Duplicate variable 'x'
   ❌ ts/err_syntaxabuse.addn
-     [2:11->2:13] Expected: $a 
-                    Actual: Add
-     [6:10->6:11] Expected:  a
-                    Actual: Add
+     [2:12->2:14] Expected: "$a "
+                    Actual: "Add"
+     [4:11->4:12] Expected: " a"
+                    Actual: "Add"
   ❌ ts/err_throw.addn
      [2:25->2:38] Failed evaluating 'throwSomething' on class addnum.ast.Add
      [3:12->3:25] Failed evaluating 'throwSomething' on class addnum.ast.Add
@@ -85,4 +86,4 @@
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
   ✅ ts/ok_varvar.addn
-Done: 101 pass, 46 fail
+Done: 101 pass, 47 fail

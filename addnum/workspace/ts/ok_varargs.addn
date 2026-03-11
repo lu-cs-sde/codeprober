@@ -11,6 +11,6 @@
 [[$n.join("asd")=]]
 [[$n.join("", 1, 2, 3)=$n.value]]
 [[$n.join("2", 1, 3)=$n.value]]
-[[$n.join("::", "A", 5, $n.getClass.getName, ">")=A::5::addnum.ast.Num::>]]
+[[$n.join("::", "A", 5, $n.getClass.getName, ">")="A::5::addnum.ast.Num::>"]]
 */
 

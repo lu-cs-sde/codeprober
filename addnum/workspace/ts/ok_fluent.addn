@@ -5,7 +5,7 @@
 [[$ch:=$oneTwo.getChildren]]
 
 [[$ft.of($str)!]]
-[[$ft.of($str)=ok]]
+[[$ft.of($str)="ok"]]
 [[$ft.of($str).contains("").contains("3")!]]
 [[$ft.of($str).not.contains("2")!]]
 [[$ft.of($str).not.contains("abc")!]]

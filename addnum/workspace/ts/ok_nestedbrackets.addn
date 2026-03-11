@@ -10,9 +10,9 @@
 		// [[Add]=Add]]
 		
 		// ok
-		// [[Add!=[[Add]]]]] 
+		// [[Add!="[[Add]]]"]] 
 
 		// ok
-		// [[Add!=[[Add!=Add]]
+		// [[Add!="[[Add!=Add"]]
 
 +2

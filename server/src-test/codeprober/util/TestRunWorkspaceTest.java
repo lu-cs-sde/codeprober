@@ -82,25 +82,25 @@ public class TestRunWorkspaceTest {
 
 	@Test
 	public void testSingleFileProbePass() {
-		assertEquals(MergedResult.ALL_PASS, run(new WorkspaceFile("foo.txt", "bar [[Baz.x=a]]")));
+		assertEquals(MergedResult.ALL_PASS, run(new WorkspaceFile("foo.txt", "bar [[Baz.x=\"a\"]]")));
 	}
 
 	@Test
 	public void testSingleFileProbeFail() {
-		assertEquals(MergedResult.SOME_FAIL, run(new WorkspaceFile("foo.txt", "bar [[Baz.x=b]]")));
+		assertEquals(MergedResult.SOME_FAIL, run(new WorkspaceFile("foo.txt", "bar [[Baz.x=\"b\"]]")));
 	}
 
 	@Test
 	public void testSingleFileWithPointerSteps() {
-		assertEquals(MergedResult.ALL_PASS, run(new WorkspaceFile("foo.txt", "bar [[Baz.ptr.ptr.ptr.ptr.y=b]]")));
+		assertEquals(MergedResult.ALL_PASS, run(new WorkspaceFile("foo.txt", "bar [[Baz.ptr.ptr.ptr.ptr.y=\"b\"]]")));
 	}
 
 	@Test
 	public void testMultipleFilesWithPointerSteps() {
 		assertEquals(MergedResult.ALL_PASS, run(//
-				new WorkspaceFile("foo.txt", "bar [[Baz.ptr.ptr.ptr.ptr.y=b]]"), //
-				new WorkspaceFile("bar.txt", "bar [[Baz.ptr.ptr.ptr.ptr.y=b]]"), //
-				new WorkspaceFile("baz.txt", "bar [[Baz.ptr.ptr.ptr.ptr.y=b]]") //
+				new WorkspaceFile("foo.txt", "bar [[Baz.ptr.ptr.ptr.ptr.y=\"b\"]]"), //
+				new WorkspaceFile("bar.txt", "bar [[Baz.ptr.ptr.ptr.ptr.y=\"b\"]]"), //
+				new WorkspaceFile("baz.txt", "bar [[Baz.ptr.ptr.ptr.ptr.y=\"b\"]]") //
 		));
 	}
 }

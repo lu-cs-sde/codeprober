@@ -6,9 +6,9 @@
 [[$middle.loc=[2:8->2:17]]]
 [[$inner.loc=[2:13->2:16]]]
 
-[[$outer.tail.get(0).name.value=f]]
-[[$middle.tail.get(0).name.value=g]]
-[[$inner.tail.get(0).name.value=h]]
+[[$outer.tail.get(0).name.value="f"]]
+[[$middle.tail.get(0).name.value="g"]]
+[[$inner.tail.get(0).name.value="h"]]
 
 [[$outer.isArgument=false]]
 [[$middle.isArgument=true]]

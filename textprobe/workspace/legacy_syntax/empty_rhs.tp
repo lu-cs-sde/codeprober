@@ -1,0 +1,20 @@
+{{A.b=}} // [[$c:=Container]] [[$q:=Query]] [[$a:=QueryAssert]]
+/*
+    [[$d:=Document]]
+    [[$d.completionContextAt(1, 6)=[PROPERTY_NAME, [Query, PropertyAccess]]]]
+    [[$d.completionContextAt(1, 7)=[QUERY_RESULT, Query]]]
+    [[$d.completionContextAt(1, 8)=null]]
+
+    [[$c.contents=A.b=]]
+    [[$q.loc=[1:3->1:6]]]
+    [[$q.source=A.b=]]
+    [[$a.loc=[1:6->1:6]]]
+
+    [[$a.expectedValue.asString=]]
+    [[$a.expectedValue.loc=[1:7->1:7]]]
+*/
+
+{{$x:=}}
+// [[^VarDecl.loc=[17:3->17:6]]]
+// [[^Query.loc=[17:6->17:6]]]
+// [[^Query.head.type=TYPE]]

@@ -4,7 +4,7 @@
 [[$str:=$oneTwo.value.toString]]
 [[$ch:=$oneTwo.getChildren]]
 
-[[$ft.of($str)!=ok]]
+[[$ft.of($str)!="ok"]]
 [[$ft.of($str).contains("").contains("2")!]]
 [[$ft.of($str).contains("abc").contains("")!]]
 [[$ft.of($str).not.contains("3")!]]

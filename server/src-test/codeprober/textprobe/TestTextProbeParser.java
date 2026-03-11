@@ -9,6 +9,7 @@ import java.util.List;
 import org.junit.Test;
 
 import codeprober.textprobe.ast.Container;
+import codeprober.textprobe.ast.Expr;
 import codeprober.textprobe.ast.Probe;
 import codeprober.textprobe.ast.Query;
 import codeprober.textprobe.ast.VarDecl;
@@ -60,7 +61,7 @@ public class TestTextProbeParser {
 
 	@Test
 	public void testAssert() {
-		final ParsedTextProbes ptp = doParse("[[Foo.bar.baz=y]]");
+		final ParsedTextProbes ptp = doParse("[[Foo.bar.baz=\"y\"]]");
 		assertEquals(0, ptp.assignments.size());
 		assertEquals(1, ptp.assertions.size());
 
@@ -78,7 +79,7 @@ public class TestTextProbeParser {
 
 	@Test
 	public void testAssertVar() {
-		final ParsedTextProbes ptp = doParse("[[$x=y]]");
+		final ParsedTextProbes ptp = doParse("[[$x=\"y\"]]");
 		assertEquals(0, ptp.assignments.size());
 		assertEquals(1, ptp.assertions.size());
 
@@ -99,19 +100,20 @@ public class TestTextProbeParser {
 		assertEquals(1, ptp.assertions.size());
 
 		final Query tam = ptp.assertions.get(0);
-		assertEquals("$x[123].y=\"z\"", tam.pp());
+		assertEquals("$x[123].y=z", tam.pp());
 		assertEquals("$x", tam.head.pp());
 		assertEquals(Integer.valueOf(123), tam.index);
 		assertEquals(1, tam.tail.getNumChild());
 		assertEquals("y", tam.tail.getChild(0).pp());
 		assertFalse(tam.assertion.get().tilde);
 		assertFalse(tam.assertion.get().exclamation);
-		assertEquals("\"z\"", tam.assertion.get().expectedValue.pp());
+		assertEquals("z", tam.assertion.get().expectedValue.pp());
+		assertEquals(Expr.Type.QUERY, tam.assertion.get().expectedValue.type);
 	}
 
 	@Test
 	public void testNestedBracketsBothOpenAndClose() {
-		final ParsedTextProbes ptp = doParse("[[A.b=[[2]]]]");
+		final ParsedTextProbes ptp = doParse("[[A.b=\"[[2]]\"]]");
 		assertEquals(1, ptp.assertions.size());
 		assertEquals(0, ptp.assignments.size());
 		assertEquals("A.b=\"[[2]]\"", ptp.assertions.get(0).pp());
@@ -120,7 +122,7 @@ public class TestTextProbeParser {
 	@Test
 	public void testNestedBracketsOnlyOpen() {
 		// Same as testNestedBracketsBothOpenAndClose, but no duplicated "]]".
-		final ParsedTextProbes ptp = doParse("[[A.b=[[2]]");
+		final ParsedTextProbes ptp = doParse("[[A.b=\"[[2\"]]");
 		assertEquals(1, ptp.assertions.size());
 		assertEquals(0, ptp.assignments.size());
 

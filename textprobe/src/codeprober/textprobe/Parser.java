@@ -20,9 +20,11 @@ import codeprober.textprobe.ast.VarUse;
 
 public class Parser {
 
-	// Defaults to true, must be explicitly disabled (for now)
-	public static boolean permitImplicitStringConversion = !"false"
+	// Defaults to false, must be explicitly enabled
+	public static boolean permitImplicitStringConversion = "true"
 			.equals(System.getProperty("cpr.permitImplicitStringConversion"));
+
+	public static boolean llParser = "true".equals(System.getProperty("cpr.llTextProbeParser"));
 
 	/**
 	 * Parse all text probes in the given strings. Parsing can never fail - for
@@ -40,6 +42,9 @@ public class Parser {
 	 *
 	 */
 	public static Document parse(String s, char startBracket, char endBracket) {
+		if (llParser) {
+			return LLParser.parse(s, startBracket, endBracket);
+		}
 		final String[] lines = s.split("\n");
 		List<Container> containers = new ArrayList<>();
 
@@ -169,6 +174,15 @@ public class Parser {
 					// Break out and return as normal
 					break;
 				}
+				// Else, the syntax is something lile:
+				// [[]]
+				if (bumpUp) {
+					// The user has started on an ID! Add an empty label as placeholder
+					final Position lblStart = new Position(start.line, start.column + src.getOffset());
+					final Position lblEnd = new Position(lblStart.line, lblStart.column - 1);
+					accesses.add(new PropertyAccess(lblStart, lblEnd, new Label(lblStart, lblEnd, "")));
+					break;
+				}
 				return null;
 			}
 			Position accessEnd = label.end;
@@ -205,50 +219,6 @@ public class Parser {
 					if (arg == null) {
 						return null;
 					}
-
-//					int argOffset = src.getOffset();
-//					final char peek = src.peek();
-//					switch (peek) {
-//					case '"': {
-//						String litStr = src.parseQuotedString();
-//						if (litStr == null) {
-//							return null;
-//						}
-//						Position strStart = new Position(start.line, start.column + argOffset + 1);
-//						Position strEnd = new Position(start.line, start.column + src.getOffset() - 2);
-//						arg = new Argument(new Label(strStart, strEnd, litStr));
-//						break;
-//					}
-//					case '$': {
-//						// Parse a Query argument
-//						int queryStart = src.getOffset();
-//						QueryParseResult queryResult = parseQueryPattern(start, src);
-//						if (queryResult == null) {
-//							return null; // Invalid query
-//						}
-//						final Position queryStartPos = new Position(start.line, start.column + queryStart);
-//						final Position queryEndPos = new Position(start.line, start.column + src.getOffset() - 1);
-//						final Query query = new Query(queryStartPos, queryEndPos, queryResult.head, queryResult.index,
-//								queryResult.tail);
-//						arg = new Argument(query);
-//						break;
-//					}
-//					default: {
-//						if (peek >= '0' && peek <= '9' || peek == '-') {
-//							Integer litNum = src.parseInt();
-//							if (litNum == null) {
-//								return null;
-//							}
-//							Position numStart = new Position(start.line, start.column + argOffset);
-//							Position numEnd = new Position(start.line, start.column + src.getOffset() - 1);
-//							arg = new Argument(numStart, numEnd, litNum);
-//						} else {
-//							return null;
-//						}
-//						break;
-//					}
-//					}
-
 					args.add(arg);
 
 					src.skipWS();
