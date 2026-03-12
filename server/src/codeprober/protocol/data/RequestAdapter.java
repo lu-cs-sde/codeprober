@@ -47,6 +47,9 @@ public abstract class RequestAdapter {
       case "Concurrent:PollWorkerStatus": {
         return handlePollWorkerStatus(PollWorkerStatusReq.fromJSON(request)).toJSON();
       }
+      case "BlessFile": {
+        return handleBlessFile(BlessFileReq.fromJSON(request)).toJSON();
+      }
       case "GetWorkspaceFile": {
         return handleGetWorkspaceFile(GetWorkspaceFileReq.fromJSON(request)).toJSON();
       }
@@ -145,6 +148,10 @@ public abstract class RequestAdapter {
 
   protected PollWorkerStatusRes handlePollWorkerStatus(PollWorkerStatusReq req) {
     throw new JSONException("Request PollWorkerStatus is not implemented");
+  }
+
+  protected BlessFileRes handleBlessFile(BlessFileReq req) {
+    throw new JSONException("Request BlessFile is not implemented");
   }
 
   protected GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {

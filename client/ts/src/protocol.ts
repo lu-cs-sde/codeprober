@@ -30,6 +30,15 @@ interface BackingFileUpdated {
   type: "backing_file_update";
   contents: string;
 }
+interface BlessFileReq {
+  type: "BlessFile";
+  src: ParsingRequestData;
+  mode: ('DRY_RUN'| 'UPDATE_IN_PLACE'| 'ECHO_RESULT');
+}
+interface BlessFileRes {
+  numUpdatedProbes?: number;
+  result?: string;
+}
 interface CompleteReq {
   type: "ide:complete";
   src: ParsingRequestData;
@@ -477,6 +486,8 @@ export {
  , AsyncRpcUpdateValue
  , BackingFile
  , BackingFileUpdated
+ , BlessFileReq
+ , BlessFileRes
  , CompleteReq
  , CompleteRes
  , CompletionItem

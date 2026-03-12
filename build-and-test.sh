@@ -83,6 +83,10 @@ cd addnum
 if [ "$?" -ne "0" ]; then
   exit 1
 fi
+./test-bless.sh
+if [ "$?" -ne "0" ]; then
+  exit 1
+fi
 cd -
 
 echo "AddNum test suites success"

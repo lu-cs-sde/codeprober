@@ -31,6 +31,8 @@ import codeprober.protocol.PositionRecoveryStrategy;
 import codeprober.protocol.data.AsyncRequestReq;
 import codeprober.protocol.data.AsyncRequestRes;
 import codeprober.protocol.data.AsyncResult;
+import codeprober.protocol.data.BlessFileReq;
+import codeprober.protocol.data.BlessFileRes;
 import codeprober.protocol.data.CompleteReq;
 import codeprober.protocol.data.CompleteRes;
 import codeprober.protocol.data.EvaluatePropertyReq;
@@ -68,6 +70,7 @@ import codeprober.protocol.data.RequestAdapter;
 import codeprober.protocol.data.RpcBodyLine;
 import codeprober.protocol.data.UnlinkWorkspacePathReq;
 import codeprober.protocol.data.UnlinkWorkspacePathRes;
+import codeprober.requesthandler.BlessFileHandler;
 import codeprober.requesthandler.CompleteHandler;
 import codeprober.requesthandler.DecorationsHandler;
 import codeprober.requesthandler.EvaluatePropertyHandler;
@@ -271,7 +274,12 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 			@Override
 			protected GetDecorationsRes handleGetDecorations(GetDecorationsReq req) {
 				return DecorationsHandler.apply(req, workspaceHandler, lp);
-			};
+			}
+
+			@Override
+			protected BlessFileRes handleBlessFile(BlessFileReq req) {
+				return BlessFileHandler.apply(req, workspaceHandler, lp);
+			}
 
 			@Override
 			protected GetWorkspaceFileRes handleGetWorkspaceFile(GetWorkspaceFileReq req) {

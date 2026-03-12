@@ -6,6 +6,7 @@ import java.util.List;
 import protocolgen.spec.AsyncRequest;
 import protocolgen.spec.AsyncRpcUpdate;
 import protocolgen.spec.BackingFileUpdated;
+import protocolgen.spec.BlessFile;
 import protocolgen.spec.Complete;
 import protocolgen.spec.EvaluateProperty;
 import protocolgen.spec.FindWorkspaceFiles;
@@ -59,6 +60,7 @@ public class GenAll {
 		rpcs.add(UnsubscribeFromWorkerStatus.class);
 		rpcs.add(StopJob.class);
 		rpcs.add(PollWorkerStatus.class);
+		rpcs.add(BlessFile.class);
 
 		// Client->Server, Workspace
 		rpcs.add(GetWorkspaceFile.class);
