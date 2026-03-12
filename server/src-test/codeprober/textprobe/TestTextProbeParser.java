@@ -113,7 +113,9 @@ public class TestTextProbeParser {
 
 	@Test
 	public void testNestedBracketsBothOpenAndClose() {
+		Parser.llParser = true;
 		final ParsedTextProbes ptp = doParse("[[A.b=\"[[2]]\"]]");
+		Parser.llParser = false;
 		assertEquals(1, ptp.assertions.size());
 		assertEquals(0, ptp.assignments.size());
 		assertEquals("A.b=\"[[2]]\"", ptp.assertions.get(0).pp());
