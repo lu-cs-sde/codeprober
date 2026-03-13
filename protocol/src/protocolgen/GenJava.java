@@ -9,6 +9,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -353,7 +354,6 @@ public class GenJava {
 			throws Exception {
 		System.out.println("== GEN JAVA");
 
-//		final Rpc<?, ?> ln = new ListNodes();
 		final GenJava gt = new GenJava();
 		for (Class<? extends Streamable> c : serverToClient) {
 			gt.requestedTypes.add(gt.new NormalRequestedType(c.newInstance()));
@@ -470,7 +470,7 @@ public class GenJava {
 		}
 	}
 
-	private Set<RequestedType> requestedTypes = new HashSet<>();
+	private Set<RequestedType> requestedTypes = new LinkedHashSet<>();
 	private int idGenerator = 0;
 
 	private File getDstDir() throws Exception {

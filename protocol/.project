@@ -14,6 +14,13 @@
 	<natures>
 		<nature>org.eclipse.jdt.core.javanature</nature>
 	</natures>
+  <linkedResources>
+        <link>
+                <name>codeprober.jar</name>
+                <type>1</type>
+<locationURI>PARENT-1-PROJECT_LOC/codeprober.jar</locationURI>
+        </link>
+</linkedResources>
 	<filteredResources>
 		<filter>
 			<id>1731509980247</id>
