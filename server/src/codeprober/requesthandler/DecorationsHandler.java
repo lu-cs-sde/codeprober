@@ -6,13 +6,13 @@ import java.util.List;
 import codeprober.protocol.data.Decoration;
 import codeprober.protocol.data.GetDecorationsReq;
 import codeprober.protocol.data.GetDecorationsRes;
-import codeprober.requesthandler.LazyParser.ParsedAst;
+import codeprober.textprobe.FilteredTextProbeParser;
+import codeprober.textprobe.FilteredTextProbeParser.FilteredParse;
 import codeprober.textprobe.Parser;
 import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.TextProbeEnvironment.QueryResult;
 import codeprober.textprobe.ast.ASTNode;
 import codeprober.textprobe.ast.Container;
-import codeprober.textprobe.ast.Document;
 import codeprober.textprobe.ast.Probe;
 import codeprober.textprobe.ast.Query;
 
@@ -27,13 +27,14 @@ public class DecorationsHandler {
 		if (txt == null) {
 			return new GetDecorationsRes();
 		}
-		final Document document = Parser.parse(txt, '[', ']');
-		if (document.containers.isEmpty()) {
+		final FilteredParse fparse = FilteredTextProbeParser.parse(txt, parser, req.src);
+		if (fparse.document == null) {
+			// No containers in this file
 			return new GetDecorationsRes();
 		}
 		if (req.forceAllOK != null && req.forceAllOK) {
 			final List<Decoration> ret = new ArrayList<>();
-			for (Container c : document.containers) {
+			for (Container c : fparse.document.containers) {
 				final Probe p = c.probe();
 				if (p != null) {
 					ret.add(new Decoration( //
@@ -45,10 +46,9 @@ public class DecorationsHandler {
 			}
 			return new GetDecorationsRes(ret);
 		}
-		final ParsedAst parsedAst = parser.parse(req.src);
-		if (parsedAst.info == null) {
+		if (fparse.ast == null) {
 			List<Decoration> ret = new ArrayList<>();
-			for (Container c : document.containers) {
+			for (Container c : fparse.document.containers) {
 				if (c.probe() != null) {
 					ret.add(new Decoration(c.start.getPackedBits(), c.end.getPackedBits(), "error",
 							"Failed parsing input"));
@@ -56,7 +56,7 @@ public class DecorationsHandler {
 			}
 			return new GetDecorationsRes(ret, true);
 		}
-		final TextProbeEnvironment env = new TextProbeEnvironment(parsedAst.info, document);
+		final TextProbeEnvironment env = new TextProbeEnvironment(fparse.ast.info, fparse.document);
 		if (req.includeExpectedValues != null && req.includeExpectedValues) {
 			env.printExpectedValuesInComparisonFailures = true;
 		} else {

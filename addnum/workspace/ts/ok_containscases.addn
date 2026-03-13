@@ -6,7 +6,7 @@
 
 // Accessing methods on an array is fine
 // [[$rn.getChildren.size=2]]
-// [[$rn.getChildren.iterator.next.prettyPrint="(1 + 2)"]]
+// [[$rn.getChildren.iterator.next.prettyPrint="1 + 2"]]
 
 // Lists with multiple children
 // Imprecise, string-based comparison

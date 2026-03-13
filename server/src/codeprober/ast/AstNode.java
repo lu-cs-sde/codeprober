@@ -447,15 +447,20 @@ public class AstNode {
 	}
 
 	public boolean isInsideExternalFile(AstInfo info) {
-		if (info.hasOverride0(underlyingAstNode.getClass(), "cpr_isInsideExternalFile")) {
-			final Object res = Reflect.invoke0(underlyingAstNode, "cpr_isInsideExternalFile");
-			if (res instanceof Boolean) {
-				return ((Boolean) res).booleanValue();
-			}
-			System.out.println("Got non-boolean from cpr_isInsideExternalFile: " + res);
-			return false;
+		final Boolean ret =isInsideExternalFileRaw(info);
+		return ret != null && ret;
+	}
+
+	public Boolean isInsideExternalFileRaw(AstInfo info) {
+		if (!info.hasOverride0(underlyingAstNode.getClass(), "cpr_isInsideExternalFile")) {
+			return null;
 		}
-		return false;
+		final Object res = Reflect.invoke0(underlyingAstNode, "cpr_isInsideExternalFile");
+		if (res instanceof Boolean) {
+			return ((Boolean) res).booleanValue();
+		}
+		System.out.println("Got non-boolean from cpr_isInsideExternalFile: " + res);
+		return null;
 	}
 
 	public String getNodeLabel() {

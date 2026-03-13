@@ -21,14 +21,13 @@ import codeprober.protocol.data.ParsingSource;
 import codeprober.requesthandler.CompleteHandler;
 import codeprober.requesthandler.DecorationsHandler;
 import codeprober.requesthandler.LazyParser;
-import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.requesthandler.WorkspaceHandler;
 import codeprober.test.WorkspaceTestCase;
-import codeprober.textprobe.Parser;
+import codeprober.textprobe.FilteredTextProbeParser;
+import codeprober.textprobe.FilteredTextProbeParser.FilteredParse;
 import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.ast.ASTNode;
 import codeprober.textprobe.ast.ASTNode.TraversalResult;
-import codeprober.textprobe.ast.Document;
 import codeprober.textprobe.ast.Expr;
 import codeprober.textprobe.ast.PropertyAccess;
 import codeprober.textprobe.ast.Query;
@@ -76,14 +75,18 @@ public abstract class ExistingTextProbeTest {
 				return;
 			}
 			final ParsingSource psrc = ParsingSource.fromWorkspacePath(fullPath);
-			final Document doc = Parser.parse(LazyParser.extractText(psrc, wsh), '[', ']');
-			ParsedAst parsedAst = requestHandler
-					.performParsedRequest(lp -> lp.parse(TextProbeEnvironment.createParsingRequestData(fullPath)));
-			if (parsedAst.info == null) {
+			final FilteredParse fp = FilteredTextProbeParser.parse(LazyParser.extractText(psrc, wsh),
+					() -> requestHandler.performParsedRequest(
+							lp -> lp.parse(TextProbeEnvironment.createParsingRequestData(fullPath))));
+			if (fp.document == null) {
+				// No containers, ignore
+				return;
+			}
+			if (fp.ast == null) {
 				// Parsing error, add file w/ null env to be able to report it.
 				ret.add(new TextProbeFile(fullPath, tool, null));
 			} else {
-				ret.add(new TextProbeFile(fullPath, tool, new TextProbeEnvironment(parsedAst.info, doc)));
+				ret.add(new TextProbeFile(fullPath, tool, new TextProbeEnvironment(fp.ast.info, fp.document)));
 			}
 
 		});

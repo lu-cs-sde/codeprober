@@ -1,9 +1,9 @@
 package codeprober.textprobe.ast;
 
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
 
-public abstract class AbstractASTNode extends ASTNode  {
+public abstract class AbstractASTNode extends ASTNode {
 
 	protected final List<ASTNode> children = new ArrayList<>();
 

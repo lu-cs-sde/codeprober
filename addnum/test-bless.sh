@@ -19,7 +19,7 @@ fi
 
 after_state=$(cat workspace/bless_test.addn)
 
-if [ "$after_state" != "1+2 // [[Add.value=3]] [[Add.prettyPrint=\"(1 + 2)\"]]" ]; then
+if [ "$after_state" != "1+2 // [[Add.value=3]] [[Add.prettyPrint=\"1 + 2\"]]" ]; then
   echo "Unexpected file contents after bless: $after_state"
   exit 1
 fi

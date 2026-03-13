@@ -19,7 +19,7 @@
      [18:18->18:29] Expected: 3
                       Actual: 7
      [19:36->19:47] Expected: 7
-                      Actual: "(0 + 7)"
+                      Actual: "0 + 7"
   ❌ ts/err_empty.addn - Failed parsing file
   ❌ ts/err_fluent.addn
      [7:18->7:19] Expected NOT: "ok"
@@ -68,6 +68,7 @@
      [10:6->10:9] Expected parameter types: [java.lang.String, java.lang.Object...]
      [11:6->11:9] Expected parameter types: [java.lang.String, java.lang.Object...]
   ✅ ts/ok_add.addn
+  ✅ ts/ok_ambiguousbrackets.addn
   ✅ ts/ok_boolarg.addn
   ✅ ts/ok_boolstrcomparison.addn
   ✅ ts/ok_bumps.addn
@@ -86,4 +87,4 @@
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
   ✅ ts/ok_varvar.addn
-Done: 99 pass, 47 fail
+Done: 102 pass, 47 fail

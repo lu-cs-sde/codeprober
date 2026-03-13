@@ -16,13 +16,12 @@ import codeprober.protocol.data.ListWorkspaceDirectoryRes;
 import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.WorkspaceEntry;
 import codeprober.requesthandler.LazyParser;
-import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.requesthandler.WorkspaceHandler;
-import codeprober.textprobe.Parser;
+import codeprober.textprobe.FilteredTextProbeParser;
+import codeprober.textprobe.FilteredTextProbeParser.FilteredParse;
 import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.TextProbeEnvironment.QueryResult;
 import codeprober.textprobe.ast.Container;
-import codeprober.textprobe.ast.Document;
 import codeprober.textprobe.ast.Probe;
 import codeprober.textprobe.ast.Probe.Type;
 import codeprober.textprobe.ast.Query;
@@ -165,24 +164,24 @@ public class WorkspaceTestCase implements Comparable<WorkspaceTestCase> {
 		listWorkspaceFilePaths(wsh, null, fullPath -> {
 			final ParsingSource psrc = ParsingSource.fromWorkspacePath(fullPath);
 
-			final Document doc = Parser.parse(LazyParser.extractText(psrc, wsh), '[', ']');
-			if (doc.containers.isEmpty()) {
+			final FilteredParse fp = FilteredTextProbeParser.parse(LazyParser.extractText(psrc, wsh),
+					() -> requestHandler.performParsedRequest(
+							lp -> lp.parse(TextProbeEnvironment.createParsingRequestData(fullPath))));
+			if (fp.document == null) {
 				return;
 			}
-			final ParsedAst parsedAst = requestHandler
-					.performParsedRequest(lp -> lp.parse(TextProbeEnvironment.createParsingRequestData(fullPath)));
-			if (parsedAst.info == null) {
+			if (fp.ast == null) {
 				// Failed parsing input file. Add dummy case for reporting parse error
 				ret.add(new WorkspaceTestCase(null, fullPath, null));
 				return;
 			}
-			final TextProbeEnvironment env = new TextProbeEnvironment(parsedAst.info, doc);
-			if (!doc.problems().isEmpty()) {
+			final TextProbeEnvironment env = new TextProbeEnvironment(fp.ast.info, fp.document);
+			if (!fp.document.problems().isEmpty()) {
 				// There are static errors. Add dummy case
 				// for reporting them
 				ret.add(new WorkspaceTestCase(env, fullPath, null));
 			} else {
-				for (Container c : doc.containers) {
+				for (Container c : fp.document.containers) {
 					Probe probe = c.probe();
 					if (probe != null) {
 						ret.add(new WorkspaceTestCase(env, fullPath, probe));

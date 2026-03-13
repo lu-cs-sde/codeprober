@@ -57,11 +57,9 @@ public class Add extends Node {
 
 	@Override
 	public void prettyPrint(PrintStream out) {
-		out.append("(");
 		lhs().prettyPrint(out);
 		out.append(" + ");
 		rhs().prettyPrint(out);
-		out.append(")");
 	}
 
 	public String cpr_ppInfix(int idx) {

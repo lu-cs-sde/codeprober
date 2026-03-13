@@ -10,8 +10,8 @@ import codeprober.protocol.data.BlessFileRes;
 import codeprober.protocol.data.ParsingSource;
 import codeprober.protocol.data.PutWorkspaceContentReq;
 import codeprober.protocol.data.PutWorkspaceContentRes;
-import codeprober.requesthandler.LazyParser.ParsedAst;
-import codeprober.textprobe.Parser;
+import codeprober.textprobe.FilteredTextProbeParser;
+import codeprober.textprobe.FilteredTextProbeParser.FilteredParse;
 import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.TextProbeEnvironment.QueryResult;
 import codeprober.textprobe.ast.Container;
@@ -30,23 +30,23 @@ public class BlessFileHandler {
 		if (txt == null) {
 			return new BlessFileRes();
 		}
-		final Document document = Parser.parse(txt, '[', ']');
-		if (document.containers.isEmpty()) {
+		final FilteredParse fp = FilteredTextProbeParser.parse(txt, parser, req.src);
+		final Document doc = fp.document;
+		if (doc == null) {
 			return new BlessFileRes(0);
 		}
 
-		final ParsedAst parsedAst = parser.parse(req.src);
-		if (parsedAst.info == null) {
+		if (fp.ast == null) {
 			return new BlessFileRes(null, "Failed parsing file");
 		}
-		final TextProbeEnvironment env = new TextProbeEnvironment(parsedAst.info, document);
+		final TextProbeEnvironment env = new TextProbeEnvironment(fp.ast.info, doc);
 
-		if (!document.problems().isEmpty()) {
-			return new BlessFileRes(null, encodeMultiLine(document.problems()));
+		if (!doc.problems().isEmpty()) {
+			return new BlessFileRes(null, encodeMultiLine(doc.problems()));
 		}
 
 		final List<PendingUpdate> updates = new ArrayList<>();
-		for (Container c : document.containers) {
+		for (Container c : doc.containers) {
 			final Probe probe = c.probe();
 			if (probe == null || probe.type != Type.QUERY) {
 				continue;
@@ -93,7 +93,8 @@ public class BlessFileHandler {
 			if (req.src.src.type != ParsingSource.Type.workspacePath) {
 				return new BlessFileRes(null, "Can only 'update in place' workspace paths");
 			}
-			final PutWorkspaceContentRes putRes = workspaceHandler.handlePutWorkspaceContent(new PutWorkspaceContentReq(req.src.src.asWorkspacePath(), apply(txt, updates)));
+			final PutWorkspaceContentRes putRes = workspaceHandler.handlePutWorkspaceContent(
+					new PutWorkspaceContentReq(req.src.src.asWorkspacePath(), apply(txt, updates)));
 			if (putRes.ok) {
 				return new BlessFileRes(updates.size(), null);
 			}

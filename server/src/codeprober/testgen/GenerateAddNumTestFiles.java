@@ -93,7 +93,7 @@ public class GenerateAddNumTestFiles {
 
 	private static TestCase genPrettyPrintNestedAdd() {
 		return simpleRootTest("(1 + 2 + 3).prettyPrint", "1 + 2 + 3",
-				new Property("prettyPrint", Collections.emptyList(), null), "((1 + 2) + 3)");
+				new Property("prettyPrint", Collections.emptyList(), null), "1 + 2 + 3");
 	}
 
 	private static NodeLocator childLocator(String type, int start, int end, Integer... childIndexes) {
@@ -124,12 +124,13 @@ public class GenerateAddNumTestFiles {
 	}
 
 	private static TestCase genNested() {
-		final TALStep innerAddStep = new TALStep("addnum.ast.Add", null, (1 << 12) + 6, (1 << 12) + 10, 2, false);
+		final TALStep innerAddStep = new TALStep("addnum.ast.Add", null, (1 << 12) + 6, (1 << 12) + 10, 3, false);
 		final NodeLocator asNumLocator = new NodeLocator(
-				new TALStep("addnum.ast.Num", null, innerAddStep.start, innerAddStep.end, 3, false), Arrays.asList( //
+				new TALStep("addnum.ast.Num", null, innerAddStep.start, innerAddStep.end, 4, false), Arrays.asList( //
 						// This uses a naive locator since it is part of the probe output
 						NodeLocatorStep.fromChild(0), // Program -> root add
-						NodeLocatorStep.fromChild(1), // root Add -> inner add
+						NodeLocatorStep.fromChild(1), // root Add -> group
+						NodeLocatorStep.fromChild(0), // group -> inner Add
 						NodeLocatorStep.fromNta(new FNStep(new Property("asNum", Collections.emptyList(), null))) //
 				));
 
@@ -151,7 +152,7 @@ public class GenerateAddNumTestFiles {
 	}
 
 	private static TestCase genIntentionalTestFailure() {
-		return simpleRootTest("(1+3).value() - intentionally created to fail", "1 + 2",
+		return simpleRootTest("(1+2).value() - intentionally created to fail", "1 + 2",
 				new Property("value", Collections.emptyList(), null), "5");
 	}
 }

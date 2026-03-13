@@ -19,10 +19,11 @@ import codeprober.protocol.data.RpcBodyLine;
 import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.textprobe.CompletionContext;
 import codeprober.textprobe.CompletionContext.PropertyNameDetail;
-import codeprober.textprobe.Parser;
+import codeprober.textprobe.FilteredTextProbeParser;
 import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.TextProbeEnvironment.QueryResult;
 import codeprober.textprobe.ast.Container;
+import codeprober.textprobe.ast.Document;
 import codeprober.textprobe.ast.Position;
 import codeprober.textprobe.ast.Probe;
 import codeprober.textprobe.ast.PropertyAccess;
@@ -58,7 +59,11 @@ public class HoverHandler {
 
 		final String txt = LazyParser.extractText(req.src.src, wsHandler);
 		if (txt != null) {
-			final TextProbeEnvironment env = new TextProbeEnvironment(parsed.info, Parser.parse(txt, '[', ']'));
+			final Document filteredDoc = FilteredTextProbeParser.parse(txt, parsed).document;
+			if (filteredDoc == null) {
+				return new HoverRes();
+			}
+			final TextProbeEnvironment env = new TextProbeEnvironment(parsed.info, filteredDoc);
 
 			// Use the "completionContext" api to help identify what is being hovered
 			final CompletionContext compCtx = env.document.completionContextAt(req.line, req.column);

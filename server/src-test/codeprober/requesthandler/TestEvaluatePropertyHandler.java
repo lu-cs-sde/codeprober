@@ -30,7 +30,7 @@ import codeprober.protocol.data.RpcBodyLine;
 
 public class TestEvaluatePropertyHandler {
 
-	protected static LazyParser createHardcodedParser(AstInfo result) {
+	public static LazyParser createHardcodedParser(AstInfo result) {
 		return createHardcodedParser(result, new AtomicBoolean());
 	}
 

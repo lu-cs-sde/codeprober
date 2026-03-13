@@ -3,9 +3,11 @@ package addnum;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.stream.Collectors;
 
 import addnum.ast.Add;
+import addnum.ast.Group;
 import addnum.ast.Node;
 import addnum.ast.Num;
 import addnum.ast.Program;
@@ -99,14 +101,17 @@ public class AddNum {
 		}
 	}
 
-	private void ensureNext(char c) {
+	private void ensureNext(char... expecteds) {
 		final char ch = src.charAt(parseIndex);
-		if (ch == c) {
-			++parseIndex;
-			++column;
-			return;
+		for (char c : expecteds) {
+
+			if (ch == c) {
+				++parseIndex;
+				++column;
+				return;
+			}
 		}
-		err("Expected '" + c + "', got '" + ch + "'");
+		err("Expected any of [" + Arrays.asList(expecteds) + "], got '" + ch + "'");
 	}
 
 	private Node parseTop() {
@@ -135,13 +140,23 @@ public class AddNum {
 			return parseNum();
 		}
 
-		if (ch == '(') {
-			ensureNext('(');
+		if (ch == '(' || ch == '[') {
+			final int start = makePos();
+			ensureNext('(', '[');
 			final Node ret = parseTop();
 			skipWhitespace();
-			ensureNext(')');
-			++column;
-			return ret;
+			final int end = makePos();
+			ensureNext(')', ']');
+			return new Group(start, end, ret);
+		}
+		if (ch == 'o' && parseIndex < src.length() - 2 //
+				&& src.charAt(parseIndex + 1) == 'n' //
+				&& src.charAt(parseIndex + 2) == 'e') {
+			final int start = makePos();
+			ensureNext('o');
+			ensureNext('n');
+			ensureNext('e');
+			return new Num(start, makePos() - 1, 1);
 		}
 
 		return err("Unexpected char '" + ch + "' (numeric: " + (int) ch + ")");

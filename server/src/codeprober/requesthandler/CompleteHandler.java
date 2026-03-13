@@ -23,10 +23,11 @@ import codeprober.requesthandler.LazyParser.ParsedAst;
 import codeprober.rpc.JsonRequestHandler;
 import codeprober.textprobe.CompletionContext;
 import codeprober.textprobe.CompletionContext.PropertyNameDetail;
-import codeprober.textprobe.Parser;
+import codeprober.textprobe.FilteredTextProbeParser;
 import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.textprobe.TextProbeEnvironment.QueryResult;
 import codeprober.textprobe.ast.Container;
+import codeprober.textprobe.ast.Document;
 import codeprober.textprobe.ast.Expr;
 import codeprober.textprobe.ast.Position;
 import codeprober.textprobe.ast.PropertyAccess;
@@ -81,7 +82,11 @@ public class CompleteHandler {
 		// Else, perhaps text probe logic
 		final String txt = LazyParser.extractText(req.src.src, wsHandler);
 		if (txt != null) {
-			final TextProbeEnvironment env = new TextProbeEnvironment(parsed.info, Parser.parse(txt, '[', ']'));
+			final Document filteredDoc = FilteredTextProbeParser.parse(txt, parsed).document;
+			if (filteredDoc == null) {
+				return new CompleteRes();
+			}
+			final TextProbeEnvironment env = new TextProbeEnvironment(parsed.info, filteredDoc);
 			return completeTextProbes(env, req.line, req.column);
 		}
 
