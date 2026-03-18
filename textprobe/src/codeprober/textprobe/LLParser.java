@@ -380,23 +380,22 @@ public class LLParser {
 		if (exclamation == null && tilde == null && eq == null) {
 			return new Query(head.start, nonAssertEnd, head, idx, propList);
 		}
-
-		Expr expected = parseExpr();
-		if (expected == null) {
-			if (exclamation != null && tilde == null && eq == null) {
+		if (eq == null) {
+			if (exclamation != null && tilde == null) {
 				// Shorthand "!", equal to "!=false"
 				return new Query(head.start, exclamation.end, head, idx, propList,
 						new QueryAssert(exclamation.start, exclamation.end, true, false, exclamation.start, //
 								Expr.fromString(exclamation.start, exclamation.end, "false") //
-						));
+								));
 			}
-			if (eq != null) {
-				// Syntax sugar for equals empty string, no matter if
-				// permitImplicitStringConversion is true or false.
-				expected = Expr.fromString(startPos(), startPos(), "");
-			} else {
-				return null;
-			}
+			return null;
+		}
+
+		Expr expected = parseExpr();
+		if (expected == null) {
+			// Syntax sugar for equals empty string, no matter if
+			// permitImplicitStringConversion is true or false.
+			expected = Expr.fromString(startPos(), startPos(), "");
 		}
 		final QueryAssert qa = new QueryAssert( //
 				exclamation != null ? exclamation.start : (tilde != null ? tilde.start : eq.start), //
