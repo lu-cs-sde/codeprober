@@ -41,9 +41,11 @@ import codeprober.textprobe.ast.TypeQueryHead;
 
 public class TextProbeEnvironment {
 
-	public static enum VariableLoadStatus {
-		NONE, LOAD_SUCCESS, LOAD_ERR,
-	};
+	public static final String autoLabelPropertiesKey = "cpr.autoLabelProperties";
+
+	public static boolean autoLabelProperties() {
+		return "true".equals(System.getProperty(autoLabelPropertiesKey, "false"));
+	}
 
 	public static class ErrorMessage {
 		public final ASTNode context;
@@ -221,15 +223,22 @@ public class TextProbeEnvironment {
 				return null;
 			}
 			try {
-				if (!acc.arguments.isPresent()) {
+				if (!acc.arguments.isPresent() || acc.arguments().isEmpty()) {
 					if (acc.name.value.startsWith("l:")) {
 						headVal = Reflect.invokeN(headVal, "cpr_lInvoke", new Class<?>[] { String.class },
 								new Object[] { acc.name.value.substring(2) });
 						headType = headVal == null ? Object.class : headVal.getClass();
 					} else {
-						final Method mth = Reflect.findMostAccessibleMethod(headVal, acc.name.value);
-						headVal = Reflect.invoke0(headVal, acc.name.value);
-						headType = mth.getReturnType();
+						if (autoLabelProperties()
+								&& AstNode.propertyListShow(info, headVal).contains("l:" + acc.name.value)) {
+							headVal = Reflect.invokeN(headVal, "cpr_lInvoke", new Class<?>[] { String.class },
+									new Object[] { acc.name.value });
+							headType = headVal == null ? Object.class : headVal.getClass();
+						} else {
+							final Method mth = Reflect.findMostAccessibleMethod(headVal, acc.name.value);
+							headVal = Reflect.invoke0(headVal, acc.name.value);
+							headType = mth.getReturnType();
+						}
 					}
 				} else {
 					final ASTList<Expr> args = acc.arguments.get();

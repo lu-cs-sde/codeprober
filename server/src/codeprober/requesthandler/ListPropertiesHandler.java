@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 
 import codeprober.AstInfo;
+import codeprober.ast.AstNode;
 import codeprober.locator.ApplyLocator;
 import codeprober.locator.ApplyLocator.ResolvedNode;
 import codeprober.locator.AttrsInNode;
@@ -37,7 +38,23 @@ public class ListPropertiesHandler {
 	}
 
 	public static List<Property> extractPropertiesFromNonAstNode(AstInfo info, Object chainVal) {
+		return extractPropertiesFromNonAstNode(info, chainVal, false);
+	}
+
+	public static List<Property> extractPropertiesFromNonAstNode(AstInfo info, Object chainVal,
+			boolean autoLabelProperties) {
 		List<Property> methods = new ArrayList<>();
+
+		final List<String> props = AstNode.propertyListShow(info, chainVal);
+		for (String prop : props) {
+			if (prop.startsWith("l:")) {
+				final String propName = autoLabelProperties ? prop.substring("l:".length()) : prop;
+				methods.add(new Property(propName, new ArrayList<>(), null, null));
+			} else {
+				// Handled by the more general for loop over all methods below
+			}
+		}
+
 		for (Method m : chainVal.getClass().getMethods()) {
 			if (m.getReturnType() == Void.TYPE) {
 				continue;

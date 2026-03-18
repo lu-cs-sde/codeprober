@@ -268,7 +268,7 @@ public class DefaultRequestHandler implements JsonRequestHandler {
 
 			@Override
 			protected CompleteRes handleComplete(CompleteReq req) {
-				return CompleteHandler.apply(req, DefaultRequestHandler.this, lp, workspaceHandler);
+				return CompleteHandler.apply(req, lp, workspaceHandler);
 			}
 
 			@Override

@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 const basePort = 8989;
 
 const createServerConfig = (port, extraSysProps='', extraCprArgs='') => ({
-  command: `PORT=${port} java ${extraSysProps} -Dcpr.workspace=addnum/workspace -jar codeprober.jar ${extraCprArgs} addnum/AddNum.jar`,
+  command: `PORT=${port} java ${extraSysProps} -Dcpr.autoLabelProperties=true -Dcpr.workspace=addnum/workspace -jar codeprober.jar ${extraCprArgs} addnum/AddNum.jar`,
   port,
   reuseExistingServer: !process.env.CI,
   timeout: 120 * 1000, // 2 minutes for server to start

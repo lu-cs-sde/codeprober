@@ -20,7 +20,6 @@ import codeprober.protocol.data.NodeLocator;
 import codeprober.protocol.data.Property;
 import codeprober.protocol.data.PropertyArg;
 import codeprober.requesthandler.LazyParser.ParsedAst;
-import codeprober.rpc.JsonRequestHandler;
 import codeprober.textprobe.CompletionContext;
 import codeprober.textprobe.CompletionContext.PropertyNameDetail;
 import codeprober.textprobe.FilteredTextProbeParser;
@@ -66,7 +65,7 @@ public class CompleteHandler {
 		}
 	}
 
-	public static CompleteRes apply(CompleteReq req, JsonRequestHandler reqHandler, LazyParser parser,
+	public static CompleteRes apply(CompleteReq req, LazyParser parser,
 			WorkspaceHandler wsHandler) {
 		final ParsedAst parsed = parser.parse(req.src);
 		final List<String> customComplete = HoverHandler.extract0(parsed, "cpr_ide_complete", req.line, req.column);
@@ -306,9 +305,11 @@ public class CompleteHandler {
 		if (env.info.baseAstClazz.isInstance(qres.value)) {
 			subject = new AstNode(qres.value);
 			rawAttrs = AttrsInNode.getTyped(env.info, subject, AttrsInNode.extractFilter(env.info, subject),
-					BaseInclusionFilter.ALL_METHODS_INCLUDING_BOXED_PRIMITIVES_AND_VARARGS);
+					BaseInclusionFilter.ALL_METHODS_INCLUDING_BOXED_PRIMITIVES_AND_VARARGS,
+					TextProbeEnvironment.autoLabelProperties());
 		} else {
-			rawAttrs = ListPropertiesHandler.extractPropertiesFromNonAstNode(env.info, qres.value);
+			rawAttrs = ListPropertiesHandler.extractPropertiesFromNonAstNode(env.info, qres.value,
+					TextProbeEnvironment.autoLabelProperties());
 		}
 
 		Integer remoteContextStart, remoteContextEnd;

@@ -104,4 +104,17 @@ public class Num extends Node {
 	public boolean isEven() {
 		return val % 2 == 0;
 	}
+
+	public String[] cpr_propertyListShow() {
+		return new String[] { "l:maxInt" };
+	}
+
+	public Object cpr_lInvoke(String prop) {
+		switch (prop) {
+		case "maxInt":
+			return Integer.MAX_VALUE;
+		default:
+			throw new IllegalArgumentException("Invalid prop " + prop);
+		}
+	}
 }

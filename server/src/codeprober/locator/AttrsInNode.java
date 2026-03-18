@@ -27,6 +27,11 @@ public class AttrsInNode {
 
 	public static List<Property> getTyped(AstInfo info, AstNode node, List<String> whitelistFilter,
 			BaseInclusionFilter baseFilter) {
+		return getTyped(info, node, whitelistFilter, baseFilter, false);
+	}
+
+	public static List<Property> getTyped(AstInfo info, AstNode node, List<String> whitelistFilter,
+			BaseInclusionFilter baseFilter, boolean autoLabelProperties) {
 		final List<Property> ret = new ArrayList<>();
 		if (whitelistFilter == null) {
 			whitelistFilter = new ArrayList<>();
@@ -95,7 +100,9 @@ public class AttrsInNode {
 						e.printStackTrace();
 					}
 				}
-				ret.add(new Property(filter, new ArrayList<>(), childName, relatedAspect));
+
+				final String propName = autoLabelProperties ? filter.substring("l:".length()) : filter;
+				ret.add(new Property(propName, new ArrayList<>(), childName, relatedAspect));
 			}
 		}
 

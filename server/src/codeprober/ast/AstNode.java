@@ -447,7 +447,7 @@ public class AstNode {
 	}
 
 	public boolean isInsideExternalFile(AstInfo info) {
-		final Boolean ret =isInsideExternalFileRaw(info);
+		final Boolean ret = isInsideExternalFileRaw(info);
 		return ret != null && ret;
 	}
 
@@ -482,10 +482,14 @@ public class AstNode {
 	}
 
 	public List<String> propertyListShow(AstInfo info) {
+		return propertyListShow(info, underlyingAstNode);
+	}
+
+	public static List<String> propertyListShow(AstInfo info, Object instance) {
 		final String mth = "cpr_propertyListShow";
-		if (info.hasOverride0(underlyingAstNode.getClass(), mth)) {
+		if (info.hasOverride0(instance.getClass(), mth)) {
 			try {
-				final Object override = Reflect.invoke0(underlyingAstNode, mth);
+				final Object override = Reflect.invoke0(instance, mth);
 				if (override instanceof Collection<?>) {
 					@SuppressWarnings("unchecked")
 					final Collection<String> cast = (Collection<String>) override;

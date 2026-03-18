@@ -3,11 +3,13 @@ package codeprober;
 import java.io.File;
 import java.io.IOException;
 
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import codeprober.textprobe.TextProbeEnvironment;
 import codeprober.toolglue.UnderlyingTool;
 
 @RunWith(Parameterized.class)
@@ -26,6 +28,12 @@ public class ExistingAddNumWorkspaceTests extends ExistingTextProbeTest {
 	@Test
 	@Override
 	public void run() {
+		System.setProperty(TextProbeEnvironment.autoLabelPropertiesKey, "true");
 		super.run();
+	}
+
+	@After
+	public void restore() {
+		System.clearProperty(TextProbeEnvironment.autoLabelPropertiesKey);
 	}
 }

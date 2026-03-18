@@ -77,6 +77,7 @@
   ✅ ts/ok_evalorder.addn
   ✅ ts/ok_fluent.addn
   ✅ ts/ok_greet.addn
+  ✅ ts/ok_labeled.addn
   ✅ ts/ok_large.addn
   ✅ ts/ok_listvar.addn
   ✅ ts/ok_nestedbrackets.addn
@@ -87,4 +88,4 @@
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
   ✅ ts/ok_varvar.addn
-Done: 102 pass, 47 fail
+Done: 103 pass, 47 fail

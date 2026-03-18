@@ -5,6 +5,7 @@ java \
   -Dcpr.workspace=workspace \
   -Dcpr.workspaceFilePattern="ts/.*" \
   -Dcpr.permitImplicitStringConversion=false \
+  -Dcpr.autoLabelProperties=true \
   -jar ../codeprober.jar \
   --test AddNum.jar \
   | tail -n +2 \

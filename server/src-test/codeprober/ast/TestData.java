@@ -15,6 +15,7 @@ import codeprober.protocol.PositionRecoveryStrategy;
 
 public class TestData {
 
+
 	public static class Node {
 		private final int start;
 		private final int end;
@@ -166,6 +167,10 @@ public class TestData {
 			return (getClass().getSimpleName() + ":" + prop).hashCode();
 		}
 
+		public String[] cpr_propertyListShow() {
+			return new String[] { "l:propLabel" };
+		}
+
 		public int throwRuntimeException() {
 			throw new RuntimeException("Simulated failure") {
 				@Override
@@ -173,6 +178,11 @@ public class TestData {
 					// Noop to avoid cluttering the test logs with this
 				}
 			};
+		}
+
+		@Attribute
+		public NonNode nonNode() {
+			return new NonNode();
 		}
 	}
 
@@ -300,6 +310,17 @@ public class TestData {
 
 		public Integer getEndColumn() {
 			return noPrefixVal;
+		}
+	}
+
+	public static class NonNode {
+
+		public Object cpr_lInvoke(String prop) {
+			return "lbl_" + prop;
+		}
+
+		public String[] cpr_propertyListShow() {
+			return new String[] { "l:nonNodeProp" };
 		}
 	}
 
