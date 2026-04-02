@@ -24,6 +24,7 @@ interface Settings {
   locationStyle?: TextSpanStyle | null;
   textProbeStyle?: TextProbeStyle | null;
   hideSettingsPanel?: boolean;
+  hideWorkspacePanel?: boolean;
   groupPropertiesByAspect?: boolean;
   autoShortenPropertyNames?: boolean;
   activeWorkspacePath?: string;
@@ -186,6 +187,9 @@ const settings = {
 
   shouldHideSettingsPanel: () => settings.get()?.hideSettingsPanel ?? false,
   setShouldHideSettingsPanel: (shouldHide: boolean) => settings.set({ ...settings.get(), hideSettingsPanel: shouldHide }),
+
+  shouldHideWorkspacePanel: () => settings.get()?.hideWorkspacePanel ?? false,
+  setShouldHideWorkspacePanel: (shouldHide: boolean) => settings.set({ ...settings.get(), hideWorkspacePanel: shouldHide }),
 
   shouldGroupPropertiesByAspect: () => settings.get()?.groupPropertiesByAspect ?? true,
   setShouldGroupPropertiesByAspect: (shouldHide: boolean) => settings.set({ ...settings.get(), groupPropertiesByAspect: shouldHide }),

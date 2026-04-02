@@ -174,6 +174,19 @@ test.describe('CodeProber Integration Tests', () => {
 
         expect(await page.textContent('.modalWindow pre')).toContain('333');
       });
+      test('workspace panel can be hidden and revealed', async ({ page }) => {
+        await fillPageContent({ page, wantedContent: '(1+2)', editor });
+
+        const workspaceText = page.getByText('Workspace');
+        await expect(workspaceText).toBeVisible();
+
+        await page.click('#workspace-hider');
+        await expect(workspaceText).toBeHidden();
+
+        await page.click('#workspace-revealer');
+        await expect(workspaceText).toBeVisible();
+      });
+
       test('create a new empty file', async ({ page }) => {
         await fillPageContent({ page, wantedContent: '(1+2)', editor });
 

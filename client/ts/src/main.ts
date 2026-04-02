@@ -53,6 +53,9 @@ const doMain = (wsPort: number
   if (settings.shouldHideSettingsPanel() && !window.location.search.includes('fullscreen=true')) {
     document.body.classList.add('hide-settings');
   }
+  if (settings.shouldHideWorkspacePanel()) {
+    document.body.classList.add('hide-workspace');
+  }
   if (!settings.shouldEnableTesting()) {
     uiElements.showTests.style.display = 'none';
   }
@@ -537,6 +540,14 @@ const doMain = (wsPort: number
       uiElements.settingsRevealer.onclick = () => {
         document.body.classList.remove('hide-settings');
         settings.setShouldHideSettingsPanel(false);
+      };
+      uiElements.workspaceHider.onclick = () => {
+        document.body.classList.add('hide-workspace');
+        settings.setShouldHideWorkspacePanel(true);
+      };
+      uiElements.workspaceRevealer.onclick = () => {
+        document.body.classList.remove('hide-workspace');
+        settings.setShouldHideWorkspacePanel(false);
       };
 
       const syntaxHighlightingSelector = uiElements.syntaxHighlightingSelector;

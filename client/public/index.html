@@ -90,11 +90,19 @@
 <body onload="initCodeProber()" data-theme-light="false">
   <div id="root" style="display: none;">
     <span id="workspace-header" style="display: none;">
-      <span>Workspace</span>
-      <div>
-        <button class="dim-button" id="workspace-find-file">Find File</button>
-        <button class="dim-button" id="workspace-test-runner">Run Tests</button>
-      </div>
+      <span id="workspace-header-open">
+        <span>
+          <button class="dim-button" id="workspace-hider" title="Hide workspace panel">«</button>
+        <span>Workspace</span>
+        </span>
+        <div>
+          <button class="dim-button" id="workspace-find-file">Find File</button>
+          <button class="dim-button" id="workspace-test-runner">Run Tests</button>
+        </div>
+      </span>
+      <span id="workspace-header-closed">
+        <button class="dim-button" id="workspace-revealer" title="Reveal workspace panel">📂</button>
+      </span>
     </span>
     <span id="input-header">
       <span>Input</span>

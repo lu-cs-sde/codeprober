@@ -211,7 +211,40 @@ body.hide-settings #workspace-wrapper { grid-area: w2 }
 #workspace-header {
   display: flex;
   flex-direction: row;
+}
+#workspace-hider {
+  margin-right: 0.125rem;
+}
+#workspace-header-open {
+  display: flex;
+  flex-direction: row;
   justify-content: space-between;
+  width: 100%;
+}
+#workspace-header-closed { display: none; }
+body.hide-workspace #workspace-header-open { display: none; }
+body.hide-workspace #workspace-header-closed {
+  display: block;
+  align-self: flex-start;
+  margin-right: 0.5rem;
+}
+body.hide-workspace #workspace-wrapper { display: none !important; }
+
+/* When workspace is hidden, explicitly place all grid items to prevent shifting */
+body.hide-workspace.workspace-visible:not(.hide-settings) #root {
+  grid-template-columns: auto 3fr 1fr;
+  grid-template-areas: "w1 a b"
+                       "w2 c d";
+}
+body.hide-workspace.workspace-visible:not(.hide-settings) #workspace-header { grid-area: w1; }
+body.hide-workspace.workspace-visible:not(.hide-settings) #input-header { grid-area: a; }
+body.hide-workspace.workspace-visible:not(.hide-settings) #settings-header-wrapper { grid-area: b; }
+body.hide-workspace.workspace-visible:not(.hide-settings) #input-wrapper { grid-area: c; }
+body.hide-workspace.workspace-visible:not(.hide-settings) #control-panel { grid-area: d; }
+
+/* Combined hide-workspace + hide-settings: auto col 1 */
+body.hide-workspace.hide-settings.workspace-visible #root {
+  grid-template-columns: auto 1fr 1.5rem;
 }
 #workspace-find-file,
 #workspace-test-runner {

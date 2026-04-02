@@ -59,6 +59,8 @@ class UIElements {
   get versionInfo() { return document.getElementById('version') as HTMLDivElement; }
   get settingsHider() { return document.getElementById('settings-hider') as HTMLButtonElement; }
   get settingsRevealer() { return document.getElementById('settings-revealer') as HTMLButtonElement; }
+  get workspaceHider() { return document.getElementById('workspace-hider') as HTMLButtonElement; }
+  get workspaceRevealer() { return document.getElementById('workspace-revealer') as HTMLButtonElement; }
   get showTests() { return document.getElementById('show-tests') as HTMLButtonElement; }
   get minimizedProbeArea() { return document.getElementById('minimized-probe-area') as HTMLDivElement; }
 }

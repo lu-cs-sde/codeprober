@@ -57,6 +57,8 @@ const installASTEditor = () => {
                 const uiElements = new UIElements();
                 uiElements.settingsHider.addEventListener('click', () => args.onFinishedResize?.());
                 uiElements.settingsRevealer.addEventListener('click', () => args.onFinishedResize?.());
+                uiElements.workspaceHider.addEventListener('click', () => args.onFinishedResize?.());
+                uiElements.workspaceRevealer.addEventListener('click', () => args.onFinishedResize?.());
 
                 return {
                   bumpIntoScreen: () => {},
