@@ -1,6 +1,5 @@
 import ModalEnv from '../../model/ModalEnv';
 import UpdatableNodeLocator from '../../model/UpdatableNodeLocator';
-import { NodeLocator } from '../../protocol';
 import startEndToSpan from '../startEndToSpan';
 
 interface StickyHighlightController {

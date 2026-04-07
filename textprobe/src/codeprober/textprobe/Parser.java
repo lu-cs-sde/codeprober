@@ -333,7 +333,7 @@ public class Parser {
 			if (src.isEOF() && exclamation && !tilde) {
 				// Ending with "!" is syntax sugar for "!=false"
 				return new Query(contentStart, contentEnd, queryRes.head, queryRes.index, queryRes.tail,
-						new QueryAssert(eqPos, eqPos, true, false, eqPos, Expr.fromString(eqPos, eqPos, "false")));
+						new QueryAssert(eqPos, eqPos, true, false, eqPos, Expr.fromBoolean(eqPos, eqPos, false)));
 			}
 			return null; // No equals sign, not an AssertQuery
 		}

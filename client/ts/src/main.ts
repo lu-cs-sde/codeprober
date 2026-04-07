@@ -197,17 +197,21 @@ const doMain = (wsPort: number
         (async () => {
           console.log('Going to try reconnecting..');
           for (let i = 0; i < 5; ++i) {
-            // Give server a very short time to restart
-            await new Promise(res => setTimeout(res, 100));
+            // Give server a very short time to restart, increase delay each iteration
+            await new Promise(res => setTimeout(res, 333 * (i + 1)));
 
-            const res = await fetch('index.html');
-            if (res.status === 200) {
-              location.reload();
-              return;
+            try {
+              const res = await fetch('index.html');
+              if (res.status === 200) {
+                location.reload();
+                return;
+              }
+            } catch (e) {
+              console.log('Failed reconnect attempt', i, '...');
             }
           }
-          console.log('Checked if server performed a quick restart, but is still offline after 500ms. Staying disconnected');
-        })().catch(console.warn);
+          console.log('Checked if server performed a quick restart, but is still offline after 10s. Staying disconnected');
+        })().catch(e => console.warn('Failed all reconnect attempts', e));
       }
     }
     const wsHandler = ((): WebsocketHandler => {

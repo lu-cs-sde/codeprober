@@ -1,7 +1,7 @@
 {{A.b!}} // [[$q:=Query]]
 
 /*
-[[$q.pp="A.b!=\"false\""]]
+[[$q.pp="A.b!=false"]]
 
 [[$a:=$q.assertion]]
     [[$a!=null]]
@@ -9,9 +9,9 @@
     [[$a.negate=true]]
     [[$a.contains=false]]
     [[$a.expectedValue.loc=$a.loc]]
-    [[$a.expectedValue.type="STRING"]]
+    [[$a.expectedValue.type="BOOLEAN"]]
 
-[[$ev:=$a.expectedValue.asString]]
+[[$ev:=$a.expectedValue.asBoolean]]
     [[$ev!=null]]
     [[$ev=false]]
 */

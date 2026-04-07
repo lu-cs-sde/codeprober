@@ -385,7 +385,7 @@ public class LLParser {
 				// Shorthand "!", equal to "!=false"
 				return new Query(head.start, exclamation.end, head, idx, propList,
 						new QueryAssert(exclamation.start, exclamation.end, true, false, exclamation.start, //
-								Expr.fromString(exclamation.start, exclamation.end, "false") //
+								Expr.fromBoolean(exclamation.start, exclamation.end, false) //
 								));
 			}
 			return null;
