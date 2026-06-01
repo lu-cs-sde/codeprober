@@ -52,13 +52,20 @@ Using the [system property](../config/system_properties.md) `-Dcpr.workspace`, y
 ### Text Probe
 ![](../media/text_probe.png)
 
-CodeProber interprets text in the format `[[A.b.c]]` as a "text probe". Text probes are evaluated by CodeProber, and the results are rendered in a blue box the editor. If you additionally add `=d`, it will treat the probe as an assertion, and show a green or red box depending on if the assertion passed or not. For example, in the image it evaluated `AddExpr.constant` and compared it with `3`. The comparison succeeded, so the box is green.
+CodeProber interprets text in the format `[[A.b.c]]` as a "text probe". Text probes are evaluated by CodeProber, and the results are rendered in a blue box the editor. If you additionally add `="d"`, it will treat the probe as an assertion, and show a green or red box depending on if the assertion passed or not. For example, in the image it evaluated `AddExpr.constant` and compared it with `3`. The comparison succeeded, so the box is green.
+
+Expected values need to be wrapped in string quotes (e.g. `"abc"`), unless they are integers, booleans (`true`/`false`), or `null`.
 
 Three comparison operators are available: `=`, `!=` and `~=`. They perform equals, not-equals and contains (as in String.contains) comparison respectively. Contains can for example be useful when checking error messages, as they are often quite long and you may not want to check them in their entirety.
 
 For example, a full error message may be `[fileName:lineNumber] Expected int, got boolean in arg 0 to funcName (ERR-CODE 12345)`.
 This information is nice to give the end user, but may be a bit verbose to include everywhere in your test files.
-Therefore, you can write `[[CallExpr.errors~=Expected int, got boolean]]`, which checks that the error message contains the string "Expected int, got boolean" somewhere, and ignores the rest of the message.
+Therefore, you can write `[[CallExpr.errors~="Expected int, got boolean"]]`, which checks that the error message contains the string "Expected int, got boolean" somewhere, and ignores the rest of the message.
+
+Text probes should be placed within comments in your files, in order to avoid them affecting "normal" code.
+However, note that CodeProber is unaware of the syntax of your tool, and it can therefore not distinguish between normal code and comments.
+If you place text probes outside of a comment, then both your tool and CodeProber will try to parse it simultaneously, which will cause confusing behavior.
+In short: make sure to prefix your text probes with `//`, `#`, `--`, or whichever symbol is appropriate for your language.
 
 ### Testing
 ![](../media/cli_testing.png)

@@ -73,18 +73,14 @@ public class Document extends AbstractASTNode {
 	public Set<Integer> bumpedLines() {
 		if (bumpedLines_value == null) {
 			bumpedLines_value = new HashSet<>();
-			for (Container c : containers) {
-				Probe p = c.probe();
-				if (p == null) {
-					continue;
+			forEachDescendant(desc -> {
+				if (desc instanceof QueryHead) {
+					final QueryHead head = (QueryHead) desc;
+					if (head.type == QueryHead.Type.TYPE && head.asType().bumpUp) {
+						bumpedLines_value.add(head.start.line);
+					}
 				}
-				final QueryHead head = p.type == Probe.Type.QUERY //
-						? p.asQuery().head //
-						: (p.type == Probe.Type.VARDECL ? p.asVarDecl().src.head : null);
-				if (head != null && head.type == QueryHead.Type.TYPE && head.asType().bumpUp) {
-					bumpedLines_value.add(head.start.line);
-				}
-			}
+			});
 		}
 		return bumpedLines_value;
 	}

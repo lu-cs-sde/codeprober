@@ -142,4 +142,23 @@ public class TestTextProbeParser {
 		assertEquals("Foo", tam.head.pp());
 		assertFalse(tam.assertion.isPresent());
 	}
+
+	@Test
+	public void testColonInIdentifier() {
+		final boolean wasPermitted = Parser.permitImplicitStringConversion;
+		try {
+			for (boolean permitImplicitStrings : new boolean[] { false, true }) {
+				Parser.permitImplicitStringConversion = permitImplicitStrings;
+				ParsedTextProbes ptp = doParse("[[A.l:b]]");
+				assertEquals(1, ptp.assertions.size());
+				assertEquals(0, ptp.assignments.size());
+
+				final Query tam = ptp.assertions.get(0);
+				assertEquals(1, tam.tail.getNumChild());
+				assertEquals("l:b", tam.tail.get(0).name.value);
+			}
+		} finally {
+			Parser.permitImplicitStringConversion = wasPermitted;
+		}
+	}
 }

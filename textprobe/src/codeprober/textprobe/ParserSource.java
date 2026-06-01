@@ -80,6 +80,11 @@ public class ParserSource {
 			offset++;
 		}
 
+		// Colon is not a valid ID ender, just valid in the middle
+		while (src.charAt(offset - 1) == ':') {
+			--offset;
+		}
+
 		return src.substring(start, offset);
 	}
 
@@ -99,6 +104,7 @@ public class ParserSource {
 		}
 		switch (c) {
 		case '_':
+		case ':':
 			return true;
 		default:
 			return false;
@@ -159,10 +165,17 @@ public class ParserSource {
 				}
 				char esc = src.charAt(offset++);
 				switch (esc) {
-					case 'n':  sb.append('\n'); break;
-					case '"':  sb.append('"');  break;
-					case '\\': sb.append('\\'); break;
-					default:   return null; // Unknown escape sequence
+				case 'n':
+					sb.append('\n');
+					break;
+				case '"':
+					sb.append('"');
+					break;
+				case '\\':
+					sb.append('\\');
+					break;
+				default:
+					return null; // Unknown escape sequence
 				}
 			} else {
 				sb.append(c);

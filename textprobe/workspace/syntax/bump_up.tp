@@ -12,3 +12,9 @@
 {{^X.y=^Z}}
 // [[^Query[0].pp="^X.y=^Z"]]
 // [[^Query[1].pp="^Z"]]
+
+{{A.b(^C)}} // [[TypeQueryHead[1].bumpedLine!=TypeQueryHead[1].cpr_getStartLine]]
+
+{{A}}
+// [[$d.equals(^Query)=false]]
+// [[$d:=Document]]

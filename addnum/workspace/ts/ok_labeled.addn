@@ -1,1 +1,1 @@
-1 // [[Num.maxInt=2147483647]] [[Num.maxInt=Num.maxInt()]]
+1 // [[Num.maxInt=2147483647]] [[Num.maxInt=Num.maxInt()]] [[Num.l:maxInt.equals(Num.maxInt)]]
