@@ -31,6 +31,7 @@ import codeprober.protocol.data.Property;
 import codeprober.protocol.data.PropertyArg;
 import codeprober.protocol.data.TALStep;
 import codeprober.util.BenchmarkTimer;
+import codeprober.util.Util;
 
 public class CreateLocator {
 
@@ -516,9 +517,11 @@ public class CreateLocator {
 						isTheProxyNode = true;
 					}
 				} catch (NoSuchFieldException e) {
-					System.out.println(
-							"Failed to guess values proxy name for " + m + ", thought it was " + guessedProxyName);
-					e.printStackTrace();
+					if (Util.verbose) {
+						System.out.println(
+								"Failed to guess values proxy name for " + m + ", thought it was " + guessedProxyName);
+						e.printStackTrace();
+					}
 				}
 			}
 
@@ -526,12 +529,13 @@ public class CreateLocator {
 			try {
 				f = m.getDeclaringClass().getDeclaredField(guessedCacheName);
 			} catch (NoSuchFieldException e) {
-				System.out
-						.println("Failed to guess values field name for " + m + ", thought it was " + guessedCacheName);
-
-				System.out.println("reguess: " + guessedCacheName);
-				System.out.println("gens: " + Arrays.toString(genParams));
-				e.printStackTrace();
+				if (Util.verbose) {
+					System.out.println(
+							"Failed to guess values field name for " + m + ", thought it was " + guessedCacheName);
+					System.out.println("reguess: " + guessedCacheName);
+					System.out.println("gens: " + Arrays.toString(genParams));
+					e.printStackTrace();
+				}
 				continue;
 			}
 			f.setAccessible(true);

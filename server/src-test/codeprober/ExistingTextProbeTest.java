@@ -204,7 +204,13 @@ public abstract class ExistingTextProbeTest {
 			if (desc instanceof PropertyAccess) {
 				PropertyAccess acc = (PropertyAccess) desc;
 				forEachColumn(acc.name, col -> {
-					assertItemContains(acc.name, completeAt(acc.name, acc.start.line, col), acc.name.value);
+					final List<CompletionItem> items = completeAt(acc.name, acc.start.line, col);
+					final String prop = acc.name.value;
+					if (prop.startsWith("l:")) {
+						assertItemContains(acc.name, items, prop, prop.substring("l:".length()));
+					} else {
+						assertItemContains(acc.name, items, prop);
+					}
 				});
 			}
 

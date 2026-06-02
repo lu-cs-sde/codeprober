@@ -65,8 +65,7 @@ public class CompleteHandler {
 		}
 	}
 
-	public static CompleteRes apply(CompleteReq req, LazyParser parser,
-			WorkspaceHandler wsHandler) {
+	public static CompleteRes apply(CompleteReq req, LazyParser parser, WorkspaceHandler wsHandler) {
 		final ParsedAst parsed = parser.parse(req.src);
 		final List<String> customComplete = HoverHandler.extract0(parsed, "cpr_ide_complete", req.line, req.column);
 		if (customComplete != null) {
@@ -105,10 +104,7 @@ public class CompleteHandler {
 		case QUERY_HEAD_TYPE: {
 			final Query qhead = compCtx.asQueryHead();
 			if (qhead != null && qhead.isArgument()) {
-				// Arguments inside other queries cannot be normal types. Only add the metavars
-				final List<CompletionItem> ret = new ArrayList<>();
-				addMetaVars(env, ret);
-				return new CompleteRes(ret);
+				return completeTypes(env, line, qhead.enclosingContainer(), qhead);
 			}
 			final Container container = env.document.containerAt(line, column);
 			if (container == null) {
@@ -119,9 +115,18 @@ public class CompleteHandler {
 		}
 
 		case NEW_PROPERTY_ARG: {
-			final List<CompletionItem> ret = new ArrayList<>();
-			addMetaVars(env, ret);
-			return new CompleteRes(ret);
+			final Query q = compCtx.asNewPropertyArg();
+			final CompleteRes npa = completeTypes(env, line, q.enclosingContainer(), q);
+			if (npa == null) {
+				return null;
+			}
+			// 'completeTypes' doesn't handle insertSpans of new args correctly, so we'll
+			// replace them.
+			final int insertOverride = (line << 12) + column;
+			return new CompleteRes(npa.lines.stream().map(x -> {
+				return new CompletionItem(x.label, x.insertText, x.kind, x.sortText, x.detail, x.contextStart,
+						x.contextEnd, insertOverride, insertOverride);
+			}).collect(Collectors.toList()));
 		}
 
 		case PROPERTY_NAME:
@@ -203,7 +208,7 @@ public class CompleteHandler {
 		if (query != null) {
 			source = query.source();
 		}
-		if (query == null) {
+		if (source == null) {
 			source = container.contents;
 		}
 		if (!source.startsWith("^") && !bumps.contains(line)) {
