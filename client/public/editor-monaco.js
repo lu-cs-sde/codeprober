@@ -73,7 +73,7 @@ window.defineEditor(
           }
           return compData;
         },
-        triggerCharacters: ['.', '[', '='],
+        triggerCharacters: ['.', '[', '=', '('],
         resolveCompletionItem: (item) => {
           if (window.OnCompletionItemFocused) {
             window.OnCompletionItemFocused(item);

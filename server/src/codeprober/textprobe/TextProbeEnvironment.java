@@ -420,7 +420,19 @@ public class TextProbeEnvironment {
 			rawComparison = true;
 		} else {
 			// Finally, regular .equals() checking
-			rawComparison = lhsBody.value.equals(rhsBody.value);
+			final Object lhsValueUnpacked;
+			if (info.hasOverride0(lhsBody.clazz, "cpr_getOutput")) {
+				lhsValueUnpacked = Reflect.invoke0(lhsBody.value, "cpr_getOutput");
+			} else {
+				lhsValueUnpacked = lhsBody.value;
+			}
+			final Object rhsValueUnpacked;
+			if (info.hasOverride0(rhsBody.clazz, "cpr_getOutput")) {
+				rhsValueUnpacked = Reflect.invoke0(rhsBody.value, "cpr_getOutput");
+			} else {
+				rhsValueUnpacked = rhsBody.value;
+			}
+			rawComparison = Objects.equals(lhsValueUnpacked, rhsValueUnpacked);
 		}
 
 		final boolean adjustedComparison = qassert.exclamation ? !rawComparison : rawComparison;

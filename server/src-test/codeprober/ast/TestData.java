@@ -322,6 +322,10 @@ public class TestData {
 		public String[] cpr_propertyListShow() {
 			return new String[] { "l:nonNodeProp" };
 		}
+
+		public Object cpr_getOutput() {
+			return "Hello";
+		}
 	}
 
 	private static int lc(int line, int col) {

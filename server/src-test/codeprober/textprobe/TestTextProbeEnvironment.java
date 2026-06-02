@@ -2,6 +2,7 @@ package codeprober.textprobe;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.After;
@@ -26,7 +27,7 @@ public class TestTextProbeEnvironment {
 	private void setupSingle(String src) {
 		info = TestData.getInfo(new AstNode(TestData.getSimple()));
 		tpe = new TextProbeEnvironment(info, LLParser.parse(src, '[', ']'));
-		containers = tpe.document.containers;;
+		containers = tpe.document.containers;
 		assertEquals(1, containers.getNumChild());
 		probe = containers.get(0).probe();
 	}
@@ -59,6 +60,18 @@ public class TestTextProbeEnvironment {
 		final Query query = probe.asQuery();
 		final QueryResult lhs = tpe.evaluateQuery(query);
 		assertEquals(new TestData.Foo(0, 0).cpr_lInvoke("propLabel"), lhs.value);
+	}
+
+	@Test
+	public void testComparesUsingGetOutput() {
+		// NonNode does not implement equals
+		assertNotEquals(new TestData.NonNode(), new TestData.NonNode());
+		// ...but it does implement cpr_getOutput, so it should be equal in a text probe
+		setupSingle("[[Foo.nonNode=Foo.nonNode]]");
+		final Query query = probe.asQuery();
+		final QueryResult lhs = tpe.evaluateQuery(query);
+		assertEquals(TestData.NonNode.class, lhs.value.getClass());
+		assertTrue(tpe.evaluateComparison(query, lhs));
 	}
 
 	@After

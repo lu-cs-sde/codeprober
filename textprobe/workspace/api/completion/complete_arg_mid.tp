@@ -1,0 +1,23 @@
+{{A.b(C)}}
+{{X.y(^Z)}}
+{{F.g()}}
+// [[$d:=Document]]
+/*
+[[$c:=$d.completionContextAt(1, 7)]]
+[[$c.type="QUERY_HEAD_TYPE"]]
+[[$c.asQueryHead.pp="C"]]
+[[$d.completionContextAt(1, 8)=$c]]
+[[$d.completionContextAt(1, 9)=null]]
+*/
+/*
+[[$z:=$d.completionContextAt(2, 7)]]
+[[$z.type="QUERY_HEAD_TYPE"]]
+[[$z.asQueryHead.pp="^Z"]]
+[[$z=$d.completionContextAt(2, 8)]]
+[[$z=$d.completionContextAt(2, 9)]]
+*/
+/*
+[[$d.completionContextAt(3, 6).type="PROPERTY_NAME"]]
+[[$d.completionContextAt(3, 7).type="NEW_PROPERTY_ARG"]]
+[[$d.completionContextAt(3, 8)=null]]
+*/
