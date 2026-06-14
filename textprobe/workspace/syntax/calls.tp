@@ -3,10 +3,10 @@
 
 /*
     [[$b.pp="b(123)"]]
-    [[$b.arguments.loc=[1:6->1:10]]]
+    [[$b.arguments.loc="[1:6->1:10]"]]
     [[$num:=$b.arguments.get(0)]]
     [[$num.pp=123]]
-    [[$num.loc=[1:7->1:9]]]
+    [[$num.loc="[1:7->1:9]"]]
 */
 
 /*

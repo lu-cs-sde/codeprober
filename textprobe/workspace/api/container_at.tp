@@ -3,7 +3,7 @@
 
 /*
     -- Check bounds
-    [[$a.loc=[2:1->2:7]]]
+    [[$a.loc="[2:1->2:7]"]]
 
     -- In bounds
     [[Document.containerAt(2, 1)=$a]]

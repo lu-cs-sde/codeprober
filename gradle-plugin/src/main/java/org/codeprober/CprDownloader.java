@@ -103,6 +103,10 @@ public class CprDownloader {
 
     // Version and url is up-to-date. However, if version is null/"latest", we may need to redownload anyway
     final File dlLocation = getCprDownloadLocation();
+    if (!dlLocation.exists()) {
+      System.out.println("Metadata states CodeProber is already downloaded, but it does not exist. need to re-download codeprober.jar");
+      return false;
+    }
     if (cprVersion == null && shouldPeriodicallyCheckForNewVersions) {
       final long age = System.currentTimeMillis() - dlLocation.lastModified();
       if (age > (7 * 24 * 60 * 60 * 1000)) {

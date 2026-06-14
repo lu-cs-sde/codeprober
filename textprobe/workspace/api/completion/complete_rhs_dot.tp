@@ -4,7 +4,7 @@
 
 /*
 [[$rhsType:=$d.completionContextAt(2, 8)]]
-[[$rhsType=[QUERY_HEAD_TYPE, Query]]]
+[[$rhsType="[QUERY_HEAD_TYPE, Query]"]]
 [[$d.completionContextAt(2, 9)=$rhsType]]
 [[$d.completionContextAt(2, 10)=$rhsType]]
 
