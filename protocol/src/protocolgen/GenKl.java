@@ -73,17 +73,17 @@ public class GenKl {
 	private void generateParseSrc(StringBuilder out) {
 		out.append("struct ParseSrc: JsonValue src {\n");
 		out.append("  JsonObject? namedGetObj(String name): src.obj?.getObj(name) ?: fail;\n");
-		out.append("  int? namedGetInt(String name): int(src.obj?.getNum(name) ?: fail);\n");
-		out.append("  long? namedGetLong(String name): long(src.obj?.getNum(name) ?: fail);\n");
+		out.append("  int? namedGetInt(String name): src.obj?.getNum(name)?.asInt;\n");
+		out.append("  long? namedGetLong(String name): src.obj?.getNum(name)?.asLong;\n");
 		out.append("  String? namedGetStr(String name): src.obj?.getStr(name);\n");
 		out.append("  bool? namedGetBool(String name): src.obj?.getBool(name);\n");
 		out.append("  JsonObject? getObj(): src.obj;\n");
-		out.append("  int? getInt(): int(src.num ?: fail);\n");
-		out.append("  long? getLong(): long(src.num ?: fail);\n");
+		out.append("  int? getInt(): src.num?.asInt;\n");
+		out.append("  long? getLong(): src.num?.asLong;\n");
 		out.append("  String? getStr(): src.str;\n");
 		out.append("  bool? getBool(): src.boolean;\n");
-		out.append("  <T> List<T>? getList(.T(ParseSrc) extractor): src.arr?.mapf<T>(inner: extractor(new(inner)));\n");
-		out.append("  <T> List<T>? namedGetList(String name, .T?(ParseSrc) extractor): src.obj?.getArr(name)?.mapf<T>(inner: extractor(new(inner)));\n");
+		out.append("  [T] List[T]? getList(.T(ParseSrc) extractor): src.arr?.mapf[T](inner: extractor(new(inner)));\n");
+		out.append("  [T] List[T]? namedGetList(String name, .T?(ParseSrc) extractor): src.obj?.getArr(name)?.mapf[T](inner: extractor(new(inner)));\n");
 		out.append(parseSrcContents.toString());
 		out.append("}\n");
 	}
@@ -114,7 +114,7 @@ public class GenKl {
 			out.append("  void on" + info.userReadableName +"~(." + info.responseType +"?(" + info.payloadType +") newHandler) { lHandle" + info.userReadableName + " = newHandler; }\n");
 		}
 		out.append("\n");
-		out.append("  String? handleMessage~(JsonObject obj) {\n");
+		out.append("  JsonObject? handleMessage~(JsonObject obj) {\n");
 		out.append("    $str = obj.getStr(\"type\") ?: fail(\"Missing 'type' in message obj\");\n");
 		out.append("    switch (str) {\n");
 		for (RequestHandleInfo info : requestsToHandle) {
@@ -124,7 +124,7 @@ public class GenKl {
 			}
 			out.append(" {\n");
 			out.append("        $handler = lHandle" + info.userReadableName +" ?: fail(\"No handler registered for " + info.userReadableName + "\"); \n");
-			out.append("        return handler("+ info.payloadType+".parse(new(.obj: obj)) ?: fail(\"Failed parsing message for request " + info.userReadableName +"\"))?.json?.compactStr;\n");
+			out.append("        return handler("+ info.payloadType+".parse(new(.obj: obj)) ?: fail(\"Failed parsing message for request " + info.userReadableName +"\"))?.jsonObj;\n");
 			out.append("      }\n");
 		}
 		out.append("      default: fail(\"Unknown message type '$str'\");\n");
@@ -300,7 +300,8 @@ public class GenKl {
 		out.println("struct " + sn + "Res:");
 		genKlDef(out, "  ", rpc.getResponseType());
 		out.println("{");
-		out.println("  JsonValue getJson(): .obj: .o(dst -> {");
+		out.println("  JsonValue getJson(): .obj: this.jsonObj;");
+		out.println("  JsonObject getJsonObj(): .o(dst -> {");
 		for (String cmd : out.encodeCmds) {
 			out.println("    " + cmd);
 		}
@@ -378,11 +379,11 @@ public class GenKl {
 			} else if (clazz == Integer.class) {
 				out.print("int");
 				out.parseCmds.add("getInt() ?: fail");
-				out.encodeCmds.add("dst.set(.num: float( VAL));");
+				out.encodeCmds.add("dst.set(.numi( VAL));");
 			} else if (clazz == Long.class) {
 				out.print("long");
 				out.parseCmds.add("getLong() ?: fail");
-				out.encodeCmds.add("dst.set(.num: float( VAL));");
+				out.encodeCmds.add("dst.set(.numl( VAL));");
 			} else if (clazz == Boolean.class) {
 				out.print("bool");
 				out.parseCmds.add("getBool() ?: fail");
@@ -498,24 +499,28 @@ public class GenKl {
 			}
 			final int prePSize = out.parseCmds.size();
 			final int preESize = out.encodeCmds.size();
-			out.print("List<");
+			out.print("List[");
 			final String preRes = out.sb.toString();
 			genTypescriptRef(out, prefix, l.get(0));
 			final String posRes = out.sb.toString();
-			out.print(">");
-
+			out.print("]");
 			if (out.parseCmds.size() != prePSize) {
 				// Added a parseable field, rewrite it to use a list variant
 				final String typeRef = posRes.substring(preRes.length());
-				final String cmd = out.parseCmds.remove(prePSize);
-				out.parseCmds.add("getList<" + typeRef + ">(:." + cmd + ") ?: fail");
+				String cmd = out.parseCmds.remove(prePSize);
+				if (cmd.startsWith("get") && cmd.indexOf("()") != -1) {
+					// Replace ".getX() ?: fail" with ".x ?: fail"
+					int paren = cmd.indexOf("()");
+					cmd = cmd.substring(3, 4).toLowerCase(java.util.Locale.ENGLISH) + cmd.substring(4, paren) + cmd.substring(paren + 2);
+				}
+				out.parseCmds.add("getList[" + typeRef + "](:." + cmd + ") ?: fail");
 			}
 			if (out.encodeCmds.size() != preESize) {
 				// Added a encodable field, rewrite it to use a list variant
 				final String cmd = out.encodeCmds.remove(preESize);
 				out.encodeCmds.add(cmd
 					.replace(" VAL", " inner")
-					.replace(".set(", ".set(.arr: VAL.map<JsonValue>(inner: ")
+					.replace(".set(", ".set(.arr: VAL.map[JsonValue](inner: ")
 					.replace(");", "));")
 				);
 			}
