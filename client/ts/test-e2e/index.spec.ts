@@ -64,7 +64,7 @@ test.describe('CodeProber Integration Tests', () => {
         });
       })
       test('run workspace tests', async ({ page, request }) => {
-        await fillPageContent({ page, wantedContent: '(1+2)', editor });
+        await fillPageContent({ page, editor });
 
         await page.click('#workspace-test-runner');
         await page.waitForLoadState('networkidle');
@@ -91,7 +91,7 @@ test.describe('CodeProber Integration Tests', () => {
       test('reacts to workspace changes', async ({ page, request }) => {
         const wsEntryName = generateWorkspaceEntryName();
 
-        await fillPageContent({ page, wantedContent: '(1+2)', editor });
+        await fillPageContent({ page, editor });
 
 
         await expect(page.getByText(wsEntryName)).toBeHidden();
@@ -175,7 +175,7 @@ test.describe('CodeProber Integration Tests', () => {
         expect(await page.textContent('.modalWindow pre')).toContain('333');
       });
       test('workspace panel can be hidden and revealed', async ({ page }) => {
-        await fillPageContent({ page, wantedContent: '(1+2)', editor });
+        await fillPageContent({ page, editor });
 
         const workspaceText = page.getByText('Workspace');
         await expect(workspaceText).toBeVisible();
@@ -187,8 +187,74 @@ test.describe('CodeProber Integration Tests', () => {
         await expect(workspaceText).toBeVisible();
       });
 
+      test('overflow menu opens and closes on outside click', async ({ page }) => {
+        await fillPageContent({ page, editor });
+
+        // Triple-dot button on a workspace row
+        const overflowButton = page.locator('.workspace-row-header > img').first();
+        await expect(overflowButton).toBeVisible();
+
+        // Open the overflow menu
+        await overflowButton.click();
+        const menuRow = page.locator('.modalWindow .context-menu-row', { hasText: 'Rename' });
+        await expect(menuRow).toBeVisible();
+
+        // Clicking clearly outside the menu (the editor) closes it
+        await page.click('#input-wrapper');
+        await expect(menuRow).toBeHidden();
+      });
+
+      test('overflow menu closes even when the click is consumed by another element', async ({ page }) => {
+        await fillPageContent({ page, editor });
+
+        const overflowButton = page.locator('.workspace-row-header > img').first();
+        await expect(overflowButton).toBeVisible();
+
+        // Open the overflow menu
+        await overflowButton.click();
+        const menuRow = page.locator('.modalWindow .context-menu-row', { hasText: 'Rename' });
+        await expect(menuRow).toHaveCount(1)
+
+        // Open it "again". Previously, this would result in two context menus visible. It should just be one.
+        await overflowButton.click();
+        await expect(menuRow).toHaveCount(1)
+      });
+
+      test('overflow menu keyboard navigation triggers the Rename prompt', async ({ page }) => {
+        await fillPageContent({ page, editor });
+
+        const overflowButton = page.locator('.workspace-row-header > img').first();
+        await expect(overflowButton).toBeVisible();
+
+        // Capture the native prompt() dialog. Register the handler *before*
+        // triggering it, and dismiss immediately so the blocking prompt does
+        // not stall the page. window.prompt is not in the DOM, so this dialog
+        // event is the only way to observe it.
+        let dialogType: string | null = null;
+        let dialogMessage: string | null = null;
+        page.once('dialog', async (dialog) => {
+          dialogType = dialog.type();
+          dialogMessage = dialog.message();
+          await dialog.dismiss();
+        });
+
+        // Open the menu and wait until it is shown.
+        await overflowButton.click();
+        const contextMenu = page.locator('.modalWindow:has(.context-menu)');
+        const menuRow = contextMenu.locator('.context-menu-row', { hasText: 'Rename' });
+        await expect(menuRow).toBeVisible();
+        await expect(contextMenu).toBeFocused();
+
+        // ArrowDown focuses the first row (Rename), Enter activates it.
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('Enter');
+
+        await expect.poll(() => dialogType).toBe('prompt');
+        expect(dialogMessage).toContain('Enter new name');
+      });
+
       test('create a new empty file', async ({ page }) => {
-        await fillPageContent({ page, wantedContent: '(1+2)', editor });
+        await fillPageContent({ page, editor });
 
         // The temp file should be active and contain (1+2)
         const activeTempFile = page.locator('.workspace-row.workspace-unsaved.workspace-row-active');
@@ -219,11 +285,11 @@ test.describe('CodeProber Integration Tests', () => {
 
   type FillArgs = {
     page: Page;
-    wantedContent: string;
+    wantedContent?: string;
     editor: 'Monaco' | 'CodeMirror';
   }
   async function fillPageContent(args: FillArgs, customBase?: string) {
-    const { editor, page, wantedContent } = args;
+    const { editor, page, wantedContent = '(1+2)' } = args;
     // Listen for all console logs
     page.on('console', msg => console.log('[C]', msg.text()));
     await page.goto(`${customBase ?? ''}/?editor=${editor}`);

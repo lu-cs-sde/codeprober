@@ -72,6 +72,7 @@ const createInlineArea = (args: {
         args.render(localDiv, {
           cancelToken: lastCancelToken,
           bringToFront: () => {}, // TODO bring this from somewhere
+          root: expansionAreaInsideTheRoot,
         });
       };
       renderFn();

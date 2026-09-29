@@ -14,6 +14,7 @@ import { Property, ListPropertiesReq, ListPropertiesRes, RpcBodyLine } from '../
 import startEndToSpan from '../startEndToSpan';
 import UpdatableNodeLocator from '../../model/UpdatableNodeLocator';
 import { installLazyHoverDialog } from '../create/installLazyHoverDialog';
+import createKeyboardListNavigationController from '../create/createKeyboardListNavigationController';
 
 interface OptionalArgs {
   initialFilter?: string;
@@ -165,6 +166,7 @@ const displayAttributeModal = (
 
         const nodesList: HTMLDivElement[] = [];
         const filterInput = document.createElement('input');
+        const navCtrl = createKeyboardListNavigationController({ focusParent: () => filterInput.focus(), listItems: nodesList });
         filterInput.placeholder = 'Filter';
         filterInput.classList.add('attr-modal-filter');
         if (!filter) {
@@ -180,10 +182,7 @@ const displayAttributeModal = (
           if (e.key === 'Enter') {
             submit();
           } else if (e.key === 'ArrowDown') {
-            if (nodesList.length > 0) {
-              nodesList[0]?.focus();
-              e.preventDefault();
-            }
+            navCtrl.focusFirst(e);
           }
         }
         if (isFirstRender) {
@@ -265,7 +264,6 @@ const displayAttributeModal = (
               }
             }
             const node = document.createElement('div');
-            const ourNodeIndex = nodesList.length;
             nodesList.push(node);
             node.tabIndex = 0;
             node.onmousedown = (e) => { e.stopPropagation(); }
@@ -299,21 +297,7 @@ const displayAttributeModal = (
             }
 
             node.onclick = () => showProbe(attr);
-            node.onkeydown = (e) => {
-              if (e.key === 'Enter') {
-                showProbe(attr);
-              } else if (e.key === 'ArrowDown' && ourNodeIndex !== (nodesList.length - 1)) {
-                e.preventDefault();
-                nodesList[ourNodeIndex+1]?.focus();
-              } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                if (ourNodeIndex > 0) {
-                  nodesList[ourNodeIndex-1]?.focus();
-                } else {
-                  filterInput.focus();
-                }
-              }
-            }
+            navCtrl.register(node, () => showProbe(attr));
             sortedAttrs.appendChild(node);
           };
 

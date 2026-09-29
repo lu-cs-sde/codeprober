@@ -1,6 +1,7 @@
 import ModalEnv from '../../model/ModalEnv';
 import Workspace from '../../model/Workspace';
 import { FindWorkspaceFilesReq, FindWorkspaceFilesRes } from '../../protocol';
+import createKeyboardListNavigationController from '../create/createKeyboardListNavigationController';
 
 let lastTypedQuery = '';
 const displayFuzzyWorkspaceFileFinder = (env: ModalEnv, workspace: Workspace, showShortcutHint: boolean) => {
@@ -26,15 +27,15 @@ const displayFuzzyWorkspaceFileFinder = (env: ModalEnv, workspace: Workspace, sh
   let requestInProgress = false;
   let nextRequestQuery: string | null = null;
   const rowList: HTMLDivElement[] = [];
+  const navCtrl = createKeyboardListNavigationController({ focusParent: () => input.focus(), listItems: rowList });
 
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       if (rowList.length === 1) {
         rowList[0].click();
       }
-    } else if (e.key === 'ArrowDown' && rowList.length) {
-      e.preventDefault();
-      rowList[0].focus();
+    } else if (e.key === 'ArrowDown') {
+      navCtrl.focusFirst(e);
     }
   })
   const cleanupResultArea = () => {
@@ -93,21 +94,7 @@ const displayFuzzyWorkspaceFileFinder = (env: ModalEnv, workspace: Workspace, sh
           workspace.setActiveWorkspacePath(match);
         }
         row.onclick = onclick;
-        row.onkeydown = (e) => {
-          if (e.key === 'Enter') {
-            onclick();
-          } else if (e.key === 'ArrowDown' && matchIndex !== (matches.length - 1)) {
-            e.preventDefault();
-            rowList[matchIndex+1]?.focus();
-          } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            if (matchIndex > 0) {
-              rowList[matchIndex-1]?.focus();
-            } else {
-              input.focus();
-            }
-          }
-        }
+        navCtrl.register(row, onclick);
       })
     })()
       .catch(err => {

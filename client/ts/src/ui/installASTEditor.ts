@@ -49,7 +49,7 @@ const installASTEditor = () => {
                 const render = () => {
                   lastCancelToken.cancelled = true;
                   lastCancelToken = {};
-                  args.render(inw, { cancelToken: lastCancelToken, bringToFront: () => {} });
+                  args.render(inw, { cancelToken: lastCancelToken, bringToFront: () => {}, root: inw });
                 };
                 render();
 

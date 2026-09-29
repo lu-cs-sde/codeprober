@@ -502,7 +502,8 @@ body[data-theme-light="true"] .modalEditButton {
 .stream-arg-msg { color: var(--syntax-int); }
 
 .bg-syntax-attr-dim,
-.syntax-attr-dim-focus:focus {
+.syntax-attr-dim-focus:focus,
+.context-menu-row:focus {
   background: var(--syntax-attr-dim);
 }
 
@@ -831,8 +832,11 @@ body[data-theme-light="true"] .dim-button:active {
 }
 
 
-
+.context-menu {
+  padding: 2px;
+}
 .context-menu-row {
+  /* margin: 1px; */
   display: flex;
   flex-direction: row;
   justify-content: space-between;

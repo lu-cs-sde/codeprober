@@ -6,7 +6,7 @@ interface CancelToken {
 }
 
 interface ShowWindowArgs {
-  render: (container: HTMLElement, info: { cancelToken: CancelToken; bringToFront: () => void; }) => void;
+  render: (container: HTMLElement, info: { cancelToken: CancelToken; bringToFront: () => void; root: HTMLElement }) => void;
   onForceClose: () => void,
   pos?: ModalPosition | null;
   size?: { width: number, height: number },
@@ -59,7 +59,7 @@ const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
   contentRoot.style.left = '0px';
   const maxHeight = "90vh";
   contentRoot.style.maxHeight = maxHeight;
-  render(contentRoot, { cancelToken: lastCancelToken, bringToFront });
+  render(contentRoot, { cancelToken: lastCancelToken, bringToFront, root });
   root.appendChild(contentRoot);
 
 
@@ -123,7 +123,7 @@ const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
       lastCancelToken.cancelled = true;
       lastCancelToken = {};
       // root.innerHTML = '';
-      render(contentRoot, { cancelToken: lastCancelToken, bringToFront });
+      render(contentRoot, { cancelToken: lastCancelToken, bringToFront, root });
     },
     getPos: dragToMove.getPos,
     getSize: () => ({ width: root.clientWidth, height: root.clientHeight }),
