@@ -303,7 +303,7 @@ public abstract class LaunchCodeProber extends JavaExec {
         String url = new String(bytes, needle.length(), bytes.length - needle.length() /* Use default encoding on purpose */).trim();
         System.out.println("CodeProber is running.. Press Ctrl+C to stop it.");
         if (getOverriddenOpenBrowser()) {
-          // final String url = line.substring("CPRGRADLE_URL=".length()).trim();
+          System.setProperty("apple.awt.UIElement", "true");
           try {
             java.awt.Desktop.getDesktop().browse(new URI(url));
           } catch (Exception e) {

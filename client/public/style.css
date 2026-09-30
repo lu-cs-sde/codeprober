@@ -836,7 +836,6 @@ body[data-theme-light="true"] .dim-button:active {
   padding: 2px;
 }
 .context-menu-row {
-  /* margin: 1px; */
   display: flex;
   flex-direction: row;
   justify-content: space-between;
