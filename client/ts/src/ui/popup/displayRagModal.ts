@@ -10,6 +10,7 @@ import ModalEnv from '../../model/ModalEnv';
 import { ListNodesReq, ListNodesRes } from '../../protocol';
 import { createMutableLocator } from '../../model/UpdatableNodeLocator';
 import SourcedDiagnostic from '../../model/SourcedDiagnostic';
+import createKeyboardListNavigationController from '../create/createKeyboardListNavigationController';
 
 const displayRagModal = (env: ModalEnv, line: number, col: number) => {
   const queryId = `rag-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
@@ -21,7 +22,10 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
     delete env.probeMarkers[queryId];
     popup.remove();
     env.updateMarkers();
+    env.updateSpanHighlight(null);
   };
+
+  let focusFirstRow: null | ((e: KeyboardEvent) => void) = null;
 
   const popup = showWindow({
     rootStyle: `
@@ -29,12 +33,20 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
         min-height: 4rem;
       `,
     onForceClose: cleanup,
-    render: (root, { cancelToken }) => {
-      root.style.display = 'contents';
+    render: (container, { cancelToken, root: modalWindowRoot }) => {
+      container.style.display = 'contents';
       const spinner = createLoadingSpinner();
       spinner.classList.add('absoluteCenter');
-      root.appendChild(spinner);
+      container.appendChild(spinner);
 
+      if (!focusFirstRow) {
+        focusFirstRow = () => {};
+        modalWindowRoot.addEventListener('keydown', e => {
+          if (e.target === modalWindowRoot && e.key === 'ArrowDown') {
+            focusFirstRow?.(e);
+          }
+        });
+      }
       const createTitle = (status: 'ok' | 'err') => createModalTitle({
         shouldAutoCloseOnWorkspaceSwitch: true,
         renderLeft: (container) => {
@@ -55,8 +67,8 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
       })
         .then((parsed) => {
           if (cancelToken.cancelled) { return; }
-          while (root.firstChild) root.removeChild(root.firstChild);
-          root.style.minHeight = '4rem';
+          while (container.firstChild) container.removeChild(container.firstChild);
+          container.style.minHeight = '4rem';
 
           let shouldRefreshMarkers = localDiagnostics.length > 0;
           localDiagnostics.length = 0;
@@ -68,37 +80,51 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
           }
 
           if (!parsed.nodes) {
-            root.appendChild(createTitle('err'));
+            container.appendChild(createTitle('err'));
             if (parsed.body?.length) {
-              root.appendChild(encodeRpcBodyLines(env, parsed.body));
+              container.appendChild(encodeRpcBodyLines(env, parsed.body));
               return;
             }
             throw new Error(`Couldn't find expected line or body in output '${JSON.stringify(parsed)}'`);
           }
-          root.appendChild(createTitle('ok'));
+          container.appendChild(createTitle('ok'));
           const rowsContainer = document.createElement('div');
           rowsContainer.style.padding = '2px';
-          root.appendChild(rowsContainer);
+          container.appendChild(rowsContainer);
+          const rowList: HTMLDivElement[] = [];
+          const navCtrl = createKeyboardListNavigationController({
+            focusParent: () => { /* noop */ },
+            listItems: rowList
+          });
+          focusFirstRow = navCtrl.focusFirst;
+
           parsed.nodes.forEach((locator, entIdx) => {
             const { start, end, type, label } = locator.result;
             const span = { lineStart: (start >>> 12), colStart: (start & 0xFFF), lineEnd: (end >>> 12), colEnd: (end & 0xFFF) };
             const node = document.createElement('div');
             node.classList.add('clickHighlightOnHover');
+            node.classList.add('nodelist-row');
             node.style.padding = `0 0.25rem`;
             if (entIdx !== 0) {
               node.style.borderTop = '1px solid gray';
             }
-            node.innerText = `${label ?? trimTypeName(type)}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
+            node.innerText = `${label ?? trimTypeName(type)}${start === 0 && end === 0 ? ` ⚠️<No position>` : ''}`;
             registerOnHover(node, on => env.updateSpanHighlight(on ? span : null));
             node.onmousedown = (e) => { e.stopPropagation(); }
 
             registerNodeSelector(node, () => locator );
-            node.onclick = () => {
+            const onclick = () => {
               cleanup();
               env.updateSpanHighlight(null);
               displayAttributeModal(env, popup.getPos(), createMutableLocator(locator));
             };
+            node.onclick = onclick;
             rowsContainer.appendChild(node);
+            rowList.push(node)
+            node.tabIndex = 0;
+            navCtrl.register(node, onclick, {
+              onFocus: (active) => env.updateSpanHighlight(active ? span : null),
+            });
           });
         })
         .catch(err => {
@@ -106,10 +132,10 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
           // TODO handle this better, show an informative, refresh-aware modal that doesn't autoclose
           // When starting it might be nice to open a modal and then tinker with settings until it refreshes successfully
           console.warn('query failed', err);
-          while (root.firstChild) root.removeChild(root.firstChild);
+          while (container.firstChild) container.removeChild(container.firstChild);
 
 
-          root.appendChild(createTitle('err'));
+          container.appendChild(createTitle('err'));
 
           const errMsg = document.createElement('div');
 
@@ -121,8 +147,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
           errMsg.style.color = '#F88';
           errMsg.style.padding = '0.25rem';
           errMsg.innerText = 'Parsing failed..\nPerhaps a custom file suffix\nor main args override would help?\nLook at your terminal for more information.';
-          root.appendChild(errMsg);
-          // setTimeout(() => cleanup(), 1000);
+          container.appendChild(errMsg);
         })
     }
   });

@@ -24,7 +24,6 @@ const createOverflowButton = (
   overflowButton.onclick = () => {
 
     let modalContainer: HTMLElement | null = null;
-    let modalRoot: HTMLElement | undefined;
     const cleanup = () => {
       contextMenu.remove();
       window.removeEventListener('mousedown', onWindowMouseDown, true);
@@ -46,7 +45,6 @@ const createOverflowButton = (
       onForceClose: cleanup,
       render: (container, { root: modalWindowRoot }) => {
         modalContainer = container;
-        modalRoot = modalWindowRoot;
         if (isFirstRender) {
           isFirstRender = false;
           navCtrl = createKeyboardListNavigationController({ focusParent: () => modalWindowRoot.focus(), listItems: rowList })
@@ -92,7 +90,6 @@ const createOverflowButton = (
       },
     });
     window.addEventListener('mousedown', onWindowMouseDown, true);
-    modalRoot?.focus();
   }
   return overflowButton;
 };

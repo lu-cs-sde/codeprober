@@ -16,6 +16,7 @@ interface ShowWindowArgs {
   onFinishedResize?: () => void;
   resizable?: boolean;
   debugLabel?: string;
+  autoFocus?: boolean;
 }
 
 interface ShowWindowResult {
@@ -27,7 +28,7 @@ interface ShowWindowResult {
 }
 
 const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
-  const { render, pos: initialPos, size: initialSize, rootStyle, resizable } = args;
+  const { render, pos: initialPos, size: initialSize, rootStyle, resizable, autoFocus=true } = args;
   const root = document.createElement('div');
   root.tabIndex = 0;
   root.classList.add('modalWindow');
@@ -112,6 +113,9 @@ const showWindow = (args: ShowWindowArgs): ShowWindowResult => {
   }
 
   document.body.appendChild(root);
+  if (autoFocus) {
+    root.focus();
+  }
   const dragToMove = attachDragToMove(root, initialPos, args.onFinishedMove);
   return {
     remove: () => {

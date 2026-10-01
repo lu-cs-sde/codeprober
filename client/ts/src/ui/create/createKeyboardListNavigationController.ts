@@ -4,14 +4,23 @@ interface KeyboardListNavigationControllerArgs {
   listItems: HTMLElement[];
 }
 interface KeyboardListNavigationController {
-  register: (row: HTMLElement, onEnter: () => void) => void;
+  register: (
+    row: HTMLElement,
+    onEnter: () => void,
+    extras?: {
+      onFocus: (active: boolean) => void
+    },
+  ) => void;
   focusFirst: (e: KeyboardEvent) => void;
 }
 
 const createKeyboardListNavigationController = (args: KeyboardListNavigationControllerArgs): KeyboardListNavigationController => {
-  return {
-    register: (row, onEnter) => {
-      const ourNodeIndex = args.listItems.indexOf(row);
+  const register: KeyboardListNavigationController['register'] = (row, onEnter, extras) => {
+    const ourNodeIndex = args.listItems.indexOf(row);
+    if (extras?.onFocus) {
+      row.addEventListener('focus', () => extras?.onFocus(true));
+      row.addEventListener('blur', () => extras?.onFocus(false));
+    }
       if (ourNodeIndex === -1) {
         throw new Error("Row is not in array of items");
       }
@@ -30,7 +39,9 @@ const createKeyboardListNavigationController = (args: KeyboardListNavigationCont
           }
         }
       }
-    },
+    };
+  return {
+    register,
     focusFirst: (e) => {
       if (args.listItems.length) {
         args.listItems[0].focus();

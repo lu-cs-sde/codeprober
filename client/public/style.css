@@ -424,6 +424,7 @@ body.locator-request-active  .nodeLocatorContainer:hover::after {
 .modalWindow:focus,
 .modalWindow:focus-within {
   border-color: #aff;
+  outline: none;
 }
 
 .modalWindowColoring {
@@ -503,7 +504,8 @@ body[data-theme-light="true"] .modalEditButton {
 
 .bg-syntax-attr-dim,
 .syntax-attr-dim-focus:focus,
-.context-menu-row:focus {
+.context-menu-row:focus,
+.nodelist-row:focus {
   background: var(--syntax-attr-dim);
 }
 
