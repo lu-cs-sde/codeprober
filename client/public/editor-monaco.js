@@ -438,19 +438,34 @@ window.defineEditor(
       },
     });
     editor.addAction({
-      id: 'cpr-shortcut-query',
+      id: 'cpr-shortcut-query-root',
       label: '',
       precondition: null,
       run: (ed) => {
         const pos = ed.getPosition();
         window.RagQuery && window.RagQuery(pos.lineNumber, pos.column, true);
-        // console.log('ed @ ', ed, '||', ed.getPosition());
       },
       keybindings: [
         monaco.KeyMod.chord(
           monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
           monaco.KeyCode.KeyP
         ),
+      ],
+    });
+    editor.addAction({
+      id: 'cpr-shortcut-query-cursor',
+      label: '',
+      precondition: null,
+      run: (ed) => {
+        const pos = ed.getPosition();
+        window.RagQuery && window.RagQuery(pos.lineNumber, pos.column, false);
+      },
+      keybindings: [
+        monaco.KeyMod.chord(
+          monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
+          monaco.KeyCode.KeyC
+        ),
+        monaco.KeyCode.F2,
       ],
     });
 

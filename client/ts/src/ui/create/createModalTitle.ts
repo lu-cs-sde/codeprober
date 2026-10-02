@@ -98,6 +98,7 @@ const createModalTitle = (args: CreateModalTitleArgs) => {
   const { renderLeft, extraActions, onClose } = args;
   const titleRowHolder = document.createElement('div');
   titleRowHolder.classList.add('modalTitle');
+  titleRowHolder.tabIndex = -1;
 
   const titleRowLeft = document.createElement('div');
   titleRowLeft.style.margin = 'auto 0';

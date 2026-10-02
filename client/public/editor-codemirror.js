@@ -258,7 +258,15 @@ window.defineEditor(
             {
               key: 'Mod-k p',
               run: () => performRagQuery(true),
-            }
+            },
+            {
+              key: 'Mod-k c',
+              run: () => performRagQuery(false),
+            },
+            {
+              key: 'F2',
+              run: () => performRagQuery(false),
+            },
           ]),
           themeCompartment.of(vscodeDark),
           langCompartment.of(selectSyntaxHighlightExtension(initialSyntaxHighlight)),

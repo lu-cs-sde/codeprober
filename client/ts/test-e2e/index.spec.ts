@@ -151,7 +151,7 @@ test.describe('CodeProber Integration Tests', () => {
         }
       });
 
-      test('create a probe', async ({ page,  }) => {
+      test('create a probe with clicking', async ({ page,  }) => {
         await fillPageContent({ page, wantedContent: '(111+222\n)', editor });
 
         // Right click
@@ -174,6 +174,29 @@ test.describe('CodeProber Integration Tests', () => {
 
         expect(await page.textContent('.modalWindow pre')).toContain('333');
       });
+      test('create a probe with keyboard navigation', async ({ page }) => {
+        await fillPageContent({ page, wantedContent: '(111+222\n)', editor });
+
+        // Left click to place cursor
+        await page.getByText('111').first().click({ button: 'left' });
+        // F2 is the keyboard equivalent of right click -> Create Probe
+        await page.keyboard.press('F2');
+        await page.waitForTimeout(500);
+
+        // 'Add'
+        await page.keyboard.press('ArrowDown'); // First row: Num
+        await page.keyboard.press('ArrowDown'); // Second row: Add
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(500);
+
+        await page.keyboard.insertText('value');
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(500);
+
+        expect(await page.textContent('.modalWindow pre')).toContain('333');
+      });
+
       test('workspace panel can be hidden and revealed', async ({ page }) => {
         await fillPageContent({ page, editor });
 
