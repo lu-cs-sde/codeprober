@@ -15,6 +15,7 @@ import startEndToSpan from '../startEndToSpan';
 import UpdatableNodeLocator from '../../model/UpdatableNodeLocator';
 import { installLazyHoverDialog } from '../create/installLazyHoverDialog';
 import createKeyboardListNavigationController from '../create/createKeyboardListNavigationController';
+import fuzzyMatchAndSort from '../../model/util/fuzzyMatchAndSort';
 
 interface OptionalArgs {
   initialFilter?: string;
@@ -208,29 +209,14 @@ const displayAttributeModal = (
             console.log('attrs disappeared after a successful load??')
             return;
           }
-          function escapeRegex(string: string) {
-            return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-          }
 
-
-          const reg = filter ? new RegExp(`.*${[...filter].map(part => part.trim()).filter(Boolean).map(part => escapeRegex(part)).join('.*')}.*`, 'i') : null;
-          const match = (attr: Property) => {
-            if (!reg) {
-              return !!attr.astChildName;
-            }
-            const combinedName = `${(groupByAspect ? (attr.aspect || 'No Aspect') : '')} ${attr.astChildName || ''} ${doFormatAttr(attr)}`;
-            return reg.test(combinedName);
-          }
-
-          const matches: Property[] = [];
-          const misses: Property[] = [];
-          attrs.forEach(prop => {
-            if (match(prop)) {
-              matches.push(prop);
-            } else {
-              misses.push(prop);
-            }
-          })
+          const fuzzyMatches = fuzzyMatchAndSort(
+            attrs.map(attr => ({
+              attr,
+              name: `${(groupByAspect ? (attr.aspect || 'No Aspect') : '')} ${attr.astChildName || ''} ${doFormatAttr(attr)}`,
+            })),
+            filter
+          );
 
           const showProbe = (attr: Property) => {
             cleanup();
@@ -309,11 +295,14 @@ const displayAttributeModal = (
             sortedAttrs.appendChild(submitExpl);
           };
 
-          matches.forEach((attr, idx) => buildNode(attr, idx > 0, matches.length === 1));
+          const matches = fuzzyMatches[0]?.matched ? fuzzyMatches.slice(0, fuzzyMatches.findIndex(x => !x.matched)) : [];
+          const misses = fuzzyMatches.slice(matches.length);
+
+          matches.forEach((attr, idx) => buildNode(attr.item.attr, idx > 0, matches.length === 1));
           if (matches.length && misses.length) {
             if (matches.length === 1) {
               addSubmitExplanation('Press enter to select');
-              submit = () => showProbe(matches[0]);
+              submit = () => showProbe(matches[0].item.attr);
             }
             const sep = document.createElement('div');
             sep.classList.add('search-list-separator')
@@ -344,7 +333,7 @@ const displayAttributeModal = (
             sortedAttrs.appendChild(sep);
           }
           lastAspect = '';
-          misses.forEach((attr, idx) => buildNode(attr, idx > 0, !matches.length && misses.length === 1));
+          misses.forEach((attr, idx) => buildNode(attr.item.attr, idx > 0, !matches.length && misses.length === 1));
         };
         resortList();
         root.appendChild(sortedAttrs);
