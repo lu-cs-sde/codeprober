@@ -12,7 +12,7 @@ import { createMutableLocator } from '../../model/UpdatableNodeLocator';
 import SourcedDiagnostic from '../../model/SourcedDiagnostic';
 import createKeyboardListNavigationController from '../create/createKeyboardListNavigationController';
 
-const displayRagModal = (env: ModalEnv, line: number, col: number) => {
+const displayRagModal = (env: ModalEnv, pos: ModalPosition | null, line: number, col: number) => {
   const queryId = `rag-${Math.floor(Number.MAX_SAFE_INTEGER * Math.random())}`;
   const localDiagnostics: SourcedDiagnostic[] = [];
   env.probeMarkers[queryId] = localDiagnostics;
@@ -32,6 +32,7 @@ const displayRagModal = (env: ModalEnv, line: number, col: number) => {
         min-width: 12rem;
         min-height: 4rem;
       `,
+    pos,
     onForceClose: cleanup,
     render: (container, { cancelToken, root: modalWindowRoot }) => {
       container.style.display = 'contents';

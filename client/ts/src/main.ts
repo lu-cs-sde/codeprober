@@ -903,13 +903,12 @@ const doMain = (wsPort: number
           default: return console.error('Unknown help type', type);
         }
       }
-      window.RagQuery = (line, col, autoSelectRoot) => {
+      window.RagQuery = (line, col, autoSelectRoot, position) => {
         if (autoSelectRoot) {
           const node: TALStep = { type: '<ROOT>', start: (line << 12) + col - 1, end: (line << 12) + col + 1, depth: 0 };
-          displayAttributeModal(modalEnv, null, createMutableLocator({ result: node, steps: [] }));
+          displayAttributeModal(modalEnv, position ?? null, createMutableLocator({ result: node, steps: [] }));
         } else {
-          displayRagModal(modalEnv, line, col);
-
+          displayRagModal(modalEnv, position ?? null, line, col);
         }
       }
     };

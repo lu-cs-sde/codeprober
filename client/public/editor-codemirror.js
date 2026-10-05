@@ -261,11 +261,11 @@ window.defineEditor(
             },
             {
               key: 'Mod-k c',
-              run: () => performRagQuery(false),
+              run: () => performRagQuery(false, true),
             },
             {
               key: 'F2',
-              run: () => performRagQuery(false),
+              run: () => performRagQuery(false, true),
             },
           ]),
           themeCompartment.of(vscodeDark),
@@ -551,11 +551,19 @@ window.defineEditor(
       });
     }
 
-    const performRagQuery = (autoOpenRoot = false) => {
+    const performRagQuery = (autoOpenRoot = false, useCursorPos = false) => {
       const docPos = editor.state.selection.main.head;
       const line = editor.state.doc.lineAt(docPos);
       const col = docPos - line.from + 1;
-      window.RagQuery && window.RagQuery(line.number, col, autoOpenRoot);
+      let pos = undefined;
+      if (useCursorPos) {
+          const screenPos = editor.coordsAtPos(docPos);
+          pos = {
+            x: screenPos.left + editor.defaultCharacterWidth,
+            y: screenPos.top + editor.defaultLineHeight,
+          };
+      }
+      window.RagQuery && window.RagQuery(line.number, col, autoOpenRoot, pos);
     }
     const contextMenu = document.createElement('div');
     contextMenu.classList.add('codemirror_context_menu');

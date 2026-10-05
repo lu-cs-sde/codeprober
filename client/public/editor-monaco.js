@@ -457,8 +457,16 @@ window.defineEditor(
       label: '',
       precondition: null,
       run: (ed) => {
-        const pos = ed.getPosition();
-        window.RagQuery && window.RagQuery(pos.lineNumber, pos.column, false);
+        const docPos = ed.getPosition();
+        const screenPos = editor.getScrolledVisiblePosition(docPos);
+        const inwBox = inw.getBoundingClientRect();
+        const fontInfo = editor.getOption(monaco.editor.EditorOption.fontInfo);
+        window.RagQuery && window.RagQuery(docPos.lineNumber, docPos.column, false,
+          {
+            x: screenPos.left + inwBox.left + fontInfo.spaceWidth,
+            y: screenPos.top + inwBox.top + fontInfo.lineHeight
+          },
+        );
       },
       keybindings: [
         monaco.KeyMod.chord(

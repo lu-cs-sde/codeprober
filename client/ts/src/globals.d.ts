@@ -63,7 +63,7 @@ interface MonacoSpan {
   endColumn: number;
 }
 interface Window {
-  RagQuery: (line: number, col: number, autoSelectRoot?: boolean) => void;
+  RagQuery: (line: number, col: number, autoSelectRoot?: boolean, position: { x: number, y: number }) => void;
   displayHelp: (type: HelpType | 'probe-statistics' | 'worker-status') => void;
   initCodeProber: () => void;
   MiniEditorMain: () => void;
