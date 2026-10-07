@@ -175,6 +175,18 @@ public class CodeProber {
 								asyncMsg -> writeToCoordinator.accept(asyncMsg.toJSON()), connectionIsAlive, (p) -> {
 								})));
 					}
+
+					@Override
+					protected void onEof() {
+						// Parent process died, but we are still somehow running
+						// This can happen when using the gradle plugin on Windows and pressing Ctrl+C.
+						// Processes spawned by the gradle daemon are detached processes, and don't
+						// necessarily automatically get cleaned up when Ctrl+C is used. To combat this,
+						// ConcurrentCoordinator has a shutdown hook that closes its subprocesses.
+						// However, on Windows, this hook does not run. Result: worker processes linger
+						// forever. Solution: just exit.
+						System.exit(0);
+					}
 				}.runForever();
 			}).start();
 			return; // not break, avoid starting websocket/http servers

@@ -377,6 +377,20 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 
 					}
 				}
+
+				@Override
+				protected void onEof() {
+					if (!destroyed.get()) {
+						System.err.println("Worker process unexpectedly stopped");
+						// We could consider replacing this worker, like when a StopJobReq arrives.
+						// It may be useful in cases. However, something catastrophic must have happened
+						// for the worker to have stopped, or it was manually stopped by the user or OS.
+						// Either way, there is an inherent risk in starting a new worker and re-running
+						// the currently running job.
+						// Safest option: just exit
+						System.exit(1);
+					}
+				}
 			};
 			final Thread stdoutThread = new Thread(stdoutReader::runForever);
 			stdoutThread.start();
@@ -385,6 +399,15 @@ public class ConcurrentCoordinator implements JsonRequestHandler {
 				@Override
 				protected void onMessage(String data) {
 					System.out.println("Got worker stdErr msg: " + data);
+				}
+
+				@Override
+				protected void onEof() {
+					if (!destroyed.get()) {
+						System.err.println("Worker process unexpectedly stopped");
+						// See other onEof above for motivation on why to exit
+						System.exit(1);
+					}
 				}
 			};
 			final Thread stderrThread = new Thread(() -> {

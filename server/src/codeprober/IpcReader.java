@@ -16,7 +16,7 @@ public abstract class IpcReader {
 	private ByteArrayOutputStream baos = new ByteArrayOutputStream();
 	private int messageLength = 0;
 	private IpcReaderState state = IpcReaderState.NEUTRAL;
-	private boolean hasClosedSrc;
+	private volatile boolean hasClosedSrc;
 
 	public IpcReader(InputStream src) {
 		super();
@@ -34,6 +34,8 @@ public abstract class IpcReader {
 	}
 
 	protected abstract void onMessage(String data);
+
+	protected abstract void onEof();
 
 	private void onGarbageEnd() {
 //		final byte[] data = baos.toByteArray();
@@ -108,7 +110,11 @@ public abstract class IpcReader {
 		try {
 			while (!hasClosedSrc) {
 				final int read = src.read(buf);
-
+				if (read == -1) {
+					hasClosedSrc = true;
+					onEof();
+					return;
+				}
 				for (int i = 0; i < read; i++) {
 					handleByte(buf[i]);
 				}
