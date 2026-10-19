@@ -17,3 +17,7 @@
 // Contains-checking with strings on RHS, where RHS starts with $
 //   [[$rn.value=$three.value]]
 //   [[$rn.asNum.asAdd.prettyPrint=$seven.value]]
+
+// Failing contains-checks are reported as errors
+//   [[$rn.value~="99"]]
+//   [[$rn.value!~=$seven.value]]

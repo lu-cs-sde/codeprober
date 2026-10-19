@@ -20,6 +20,10 @@
                       Actual: 7
      [19:36->19:47] Expected: 7
                       Actual: "0 + 7"
+     [22:20->22:21] Expected to contain: 99
+                      Actual: 7
+     [23:20->23:31] Expected NOT to contain: 7
+                      Actual: 7
   ❌ ts/err_empty.addn - Failed parsing file
   ❌ ts/err_fluent.addn
      [7:18->7:19] Expected NOT: "ok"
@@ -88,4 +92,4 @@
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
   ✅ ts/ok_varvar.addn
-Done: 105 pass, 47 fail
+Done: 105 pass, 49 fail

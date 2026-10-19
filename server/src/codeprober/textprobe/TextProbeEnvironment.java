@@ -397,13 +397,12 @@ public class TextProbeEnvironment {
 			}
 			String prefix = "";
 			if (printExpectedValuesInComparisonFailures) {
-				prefix = String.format("Expected: %s %s contain: %s\n", //
-						flattenBody(lhsBody), qassert.exclamation ? "NOT to" : "   To", //
-						flattenBody(rhsBody));
-			} else {
-				addErr(qassert.expectedValue, prefix + "Actual: "
-						+ DecorationsHandler.wrapLiteralValueInQuotesIfNecessary(flattenBody(lhsBody)));
+				prefix = String.format("Expected %s contain: %s\n  ", //
+						qassert.exclamation ? "NOT to" : "to", //
+						DecorationsHandler.wrapLiteralValueInQuotesIfNecessary(flattenBody(rhsBody)));
 			}
+			addErr(qassert.expectedValue, prefix + "Actual: "
+					+ DecorationsHandler.wrapLiteralValueInQuotesIfNecessary(flattenBody(lhsBody)));
 			return false;
 		}
 
