@@ -59,6 +59,13 @@
      [3:12->3:25] Failed evaluating 'throwSomething' on class addnum.ast.Add
      [4:25->4:38] Failed evaluating 'throwSomething' on class addnum.ast.Add
      [5:12->5:25] Failed evaluating 'throwSomething' on class addnum.ast.Add
+  ❌ ts/err_tilde.addn
+     [1:21->1:21] Expected to contain 4
+                  Actual: 3
+     [1:39->1:42] Expected to contain "3\n3"
+                  Actual: 3
+     [1:80->1:80] Expected NOT to contain 3
+                  Actual: 3
   ❌ ts/err_varargs.addn
      [4:6->4:15] Expected parameter types: [java.lang.Integer...]
      [5:6->5:15] Expected parameter types: [java.lang.Integer...]
@@ -88,4 +95,4 @@
   ✅ ts/ok_vars.addn
   ✅ ts/ok_varspaces.addn
   ✅ ts/ok_varvar.addn
-Done: 105 pass, 47 fail
+Done: 106 pass, 50 fail
