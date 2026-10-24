@@ -295,15 +295,17 @@ const displayAttributeModal = (
             sortedAttrs.appendChild(submitExpl);
           };
 
-          const matches = fuzzyMatches[0]?.matched ? fuzzyMatches.slice(0, fuzzyMatches.findIndex(x => !x.matched)) : [];
+          const firstMiss = fuzzyMatches.findIndex(x => !x.matched);
+          const matches = fuzzyMatches.slice(0, firstMiss === -1 ? fuzzyMatches.length : firstMiss);
           const misses = fuzzyMatches.slice(matches.length);
 
-          matches.forEach((attr, idx) => buildNode(attr.item.attr, idx > 0, matches.length === 1));
+          const selectedMatch = matches[0];
+          matches.forEach((attr, idx) => buildNode(attr.item.attr, idx > 0, idx === 0));
+          if (selectedMatch) {
+            addSubmitExplanation(`Press enter to select '${doFormatAttr(selectedMatch.item.attr)}'`);
+            submit = () => showProbe(selectedMatch.item.attr);
+          }
           if (matches.length && misses.length) {
-            if (matches.length === 1) {
-              addSubmitExplanation('Press enter to select');
-              submit = () => showProbe(matches[0].item.attr);
-            }
             const sep = document.createElement('div');
             sep.classList.add('search-list-separator')
             sortedAttrs.appendChild(sep);

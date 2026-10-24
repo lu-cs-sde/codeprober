@@ -197,6 +197,54 @@ test.describe('CodeProber Integration Tests', () => {
         expect(await page.textContent('.modalWindow pre')).toContain('333');
       });
 
+      ['pr', 'value', ''].forEach(filter => {
+        test(`Enter selects the first fuzzy match for filter '${filter}'`, async ({ page }) => {
+          await fillPageContent({ page, wantedContent: '(111+222\n)', editor });
+          await page.getByText('111').first().click();
+          await page.keyboard.press('F2');
+          await page.locator('.modalWindow .nodelist-row', { hasText: 'Add' }).click();
+
+          const input = page.locator('.attr-modal-filter');
+          await expect(input).toBeFocused();
+          await input.fill(filter);
+          const selected = page.locator('.syntax-attr-dim-focus.bg-syntax-attr-dim');
+          await expect(selected).toHaveCount(1);
+          const expectedName = await selected.innerText();
+          if (filter === 'pr') {
+            // Several names match, and the upstream sorter ranks prettyPrint first.
+            await expect(selected).toHaveText('prettyPrint');
+            await expect(page.locator('.search-list-separator')).toHaveCount(1);
+            const matchCount = await page.locator('.syntax-attr-dim-focus').evaluateAll(rows => {
+              const separator = document.querySelector('.search-list-separator')!;
+              return rows.filter(row => !!(row.compareDocumentPosition(separator) & Node.DOCUMENT_POSITION_FOLLOWING)).length;
+            });
+            expect(matchCount).toBeGreaterThan(1);
+          } else if (!filter) {
+            // Every name matches an empty filter, so there is no separator.
+            await expect(page.locator('.search-list-separator')).toHaveCount(0);
+          }
+          await input.press('Enter');
+          await expect(input).toBeHidden();
+          await expect(page.locator('.modalTitle')).toContainText(expectedName);
+          if (filter === 'pr' || filter === 'value') {
+            await expect(page.locator('.modalWindow pre')).toContainText(filter === 'pr' ? '111 + 222' : '333');
+          }
+        });
+      });
+
+      test('Enter leaves the attribute filter open when there are no matches', async ({ page }) => {
+        await fillPageContent({ page, wantedContent: '(111+222\n)', editor });
+        await page.getByText('111').first().click();
+        await page.keyboard.press('F2');
+        await page.locator('.modalWindow .nodelist-row', { hasText: 'Add' }).click();
+        const input = page.locator('.attr-modal-filter');
+        await expect(input).toBeFocused();
+        await input.fill('noSuchAttribute');
+        await input.press('Enter');
+        await expect(input).toBeVisible();
+        await expect(page.locator('.syntax-attr-dim-focus.bg-syntax-attr-dim')).toHaveCount(0);
+      });
+
       test('workspace panel can be hidden and revealed', async ({ page }) => {
         await fillPageContent({ page, editor });
 
