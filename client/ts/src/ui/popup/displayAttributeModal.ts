@@ -256,6 +256,9 @@ const displayAttributeModal = (
             node.style.whiteSpace = 'break-spaces';
             node.style.maxWidth = '100%';
             node.style.wordBreak = 'break-all';
+            node.style.display = 'flex';
+            node.style.flexDirection = 'row';
+            node.style.justifyContent = 'space-between';
             node.classList.add('syntax-attr-dim-focus');
             node.classList.add('clickHighlightOnHover');
             node.style.padding = '0 0.25rem';
@@ -263,12 +266,18 @@ const displayAttributeModal = (
               node.style.borderTop = `1px solid gray`;
             }
             if (highlight) {
-              node.classList.add('bg-syntax-attr-dim');
+              node.classList.add('bg-syntax-attr-dim-conditional');
+              submit = () => showProbe(attr);
             }
             const shortFmt = doFormatAttr(attr);
             const txtNode = document.createElement('span');
             txtNode.innerText = shortFmt;
             node.appendChild(txtNode);
+
+            const enterHint = node.appendChild(document.createElement('div'));
+            enterHint.classList.add('attr-modal-enter-hint')
+            enterHint.appendChild(document.createElement('span')).innerText = `↵`;
+            enterHint.appendChild(document.createTextNode(' to select'));
 
             const longFmt = doFormatAttr(attr, false);
             if (shortFmt != longFmt) {
@@ -295,15 +304,12 @@ const displayAttributeModal = (
             sortedAttrs.appendChild(submitExpl);
           };
 
-          const matches = fuzzyMatches[0]?.matched ? fuzzyMatches.slice(0, fuzzyMatches.findIndex(x => !x.matched)) : [];
+          const firstMiss = fuzzyMatches.findIndex(x => !x.matched);
+          const matches = fuzzyMatches.slice(0, firstMiss === -1 ? fuzzyMatches.length : firstMiss);
           const misses = fuzzyMatches.slice(matches.length);
 
-          matches.forEach((attr, idx) => buildNode(attr.item.attr, idx > 0, matches.length === 1));
+          matches.forEach((attr, idx) => buildNode(attr.item.attr, idx > 0, idx === 0));
           if (matches.length && misses.length) {
-            if (matches.length === 1) {
-              addSubmitExplanation('Press enter to select');
-              submit = () => showProbe(matches[0].item.attr);
-            }
             const sep = document.createElement('div');
             sep.classList.add('search-list-separator')
             sortedAttrs.appendChild(sep);

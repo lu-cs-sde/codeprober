@@ -502,7 +502,31 @@ body[data-theme-light="true"] .modalEditButton {
 .syntax-int { color: var(--syntax-int); }
 .stream-arg-msg { color: var(--syntax-int); }
 
-.bg-syntax-attr-dim,
+.attr-modal-filter:focus ~ div .bg-syntax-attr-dim-conditional {
+  background: var(--syntax-attr-dim);
+}
+.attr-modal-enter-hint {
+  font-size: 0.75rem;
+  margin: auto 0;
+  color: var(--syntax-attr);
+  flex-shrink: 0;
+  visibility: hidden; /* hide hint by default */
+}
+/* Reveal the hint if the input field is focused, and there is a first match */
+.attr-modal-filter:focus ~ div .bg-syntax-attr-dim-conditional:first-of-type .attr-modal-enter-hint,
+/* or, if the row itself is focused */
+.syntax-attr-dim-focus:focus .attr-modal-enter-hint {
+  visibility: visible;
+}
+.attr-modal-enter-hint span {
+  /* Make the vertical position of the enter symbol look nicer.  */
+  vertical-align: sub;
+}
+.subWindow .attr-modal-enter-hint span  {
+  /* Vertical position does not need fixing within nested modals for some reason. */
+  vertical-align: unset;
+}
+
 .syntax-attr-dim-focus:focus,
 .context-menu-row:focus,
 .nodelist-row:focus {
