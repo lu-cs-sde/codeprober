@@ -25,12 +25,14 @@ const createKeyboardListNavigationController = (args: KeyboardListNavigationCont
         throw new Error("Row is not in array of items");
       }
       row.onkeydown = (e) => {
-        e.preventDefault();
         if (e.key === 'Enter') {
+          e.preventDefault();
           onEnter();
         } else if (e.key === 'ArrowDown' && ourNodeIndex !== (args.listItems.length - 1)) {
+          e.preventDefault();
           args.listItems[ourNodeIndex+1]?.focus();
         } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
           if (ourNodeIndex > 0) {
             args.listItems[ourNodeIndex-1]?.focus();
           } else {

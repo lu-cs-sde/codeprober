@@ -174,28 +174,31 @@ test.describe('CodeProber Integration Tests', () => {
 
         expect(await page.textContent('.modalWindow pre')).toContain('333');
       });
-      test('create a probe with keyboard navigation', async ({ page }) => {
-        await fillPageContent({ page, wantedContent: '(111+222\n)', editor });
 
-        // Left click to place cursor
-        await page.getByText('111').first().click({ button: 'left' });
-        // F2 is the keyboard equivalent of right click -> Create Probe
-        await page.keyboard.press('F2');
-        await page.waitForTimeout(500);
+      ['ArrowDown', 'Tab'].forEach(downKey => {
+        test(`create a probe with keyboard navigation, going down using ${downKey}`, async ({ page }) => {
+          await fillPageContent({ page, wantedContent: '(111+222\n)', editor });
 
-        // 'Add'
-        await page.keyboard.press('ArrowDown'); // First row: Num
-        await page.keyboard.press('ArrowDown'); // Second row: Add
-        await page.keyboard.press('Enter');
-        await page.waitForTimeout(500);
+          // Left click to place cursor
+          await page.getByText('111').first().click({ button: 'left' });
+          // F2 is the keyboard equivalent of right click -> Create Probe
+          await page.keyboard.press('F2');
+          await page.waitForTimeout(500);
 
-        await page.keyboard.insertText('value');
-        await page.keyboard.press('ArrowDown');
-        await page.keyboard.press('Enter');
-        await page.waitForTimeout(500);
+          // 'Add'
+          await page.keyboard.press(downKey); // First row: Num
+          await page.keyboard.press(downKey); // Second row: Add
+          await page.keyboard.press('Enter');
+          await page.waitForTimeout(500);
 
-        expect(await page.textContent('.modalWindow pre')).toContain('333');
-      });
+          await page.keyboard.insertText('value');
+          await page.keyboard.press(downKey);
+          await page.keyboard.press('Enter');
+          await page.waitForTimeout(500);
+
+          expect(await page.textContent('.modalWindow pre')).toContain('333');
+        });
+      })
 
       const prepareAttrModalTest = async (page: Page) => {
         await fillPageContent({ page, wantedContent: '(111+222\n)', editor });
